@@ -19,13 +19,16 @@ reviewed per-asset specifications
 GPT Image / Codex / local models / human / procedural
           |
           v
-human selection -> cleanup -> slicing -> atlasing -> normalization
+authorized selection -> cleanup -> slicing -> atlasing -> normalization
           |
           v
 technical QA + licenses + hashes
           |
           v
-processed assets loaded by raylib
+asset manifest v2 --build-renderpack--> runtime-only renderpack
+                                      |
+                                      v
+                          processed assets loaded by raylib
 ```
 
 Models, prompts, references, weights, and generation tools belong to authoring.
@@ -45,8 +48,23 @@ worldforge validate-assets assets/manifest.json \
 ```
 
 The command creates directories for specifications, references, recipes, raw
-generated results, and processed files. It generates nothing until the art and
-audio direction is approved.
+generated results, and processed files. It enables only `openai` by default in
+`generation_policy`; a project explicitly opts into `modly` if it chooses local
+models. It generates nothing until the art and audio direction is approved.
+
+After every asset is processed and the release profile passes:
+
+```bash
+worldforge build-renderpack assets/manifest.json \
+  --worldpack build/world.worldpack.json \
+  --output build/runtime/renderpack.json
+
+isoworld --pack build/world.worldpack.json \
+  --renderpack build/runtime/renderpack.json
+```
+
+The compiler copies referenced processed files below `build/runtime/`, verifies
+them with the runtime loader, and strips production-only evidence.
 
 ## Production order
 
@@ -69,25 +87,48 @@ audio direction is approved.
   props, portraits, UI, and controlled variations.
 - **Codex**: derive inventories from data, prepare briefs, automate slicing and
   atlasing, generate metadata, review consistency, and build conversion/QA tools.
-- **Local models**: image or pixel-art generation/editing, audio, voice, music,
-  SFX, and specialized processing when licenses are compatible.
+- **Local models through Modly**: optional image, pixel-art, audio, voice,
+  music, SFX, or processing extensions. A local asset records the Modly
+  extension ID/version and workflow. Direct local-model invocation is invalid.
 - **Procedural/human**: maps, particles, shaders, typography, editing, and final
   polish.
 
 Origins are interchangeable. The asset contract and processed file are stable.
+
+## Generation routes
+
+`openai` is the authoring route for GPT, Codex, and GPT Image. `modly` is the
+optional authoring route for local models. Both operate outside the game and
+produce candidates under `assets/generated/`. The manifest requires recipes,
+model identifiers, and versions for assisted output. Modly additionally
+requires:
+
+- `extension_id`
+- `extension_version`
+- `workflow_file`
+
+No OpenAI SDK, Modly runtime, extension, model, weights, provider credentials,
+or prompt is copied into the renderpack.
 
 ## Required record per asset
 
 - ID and type: `sprite`, `spritesheet`, `tileset`, `portrait`, `ui`, `vfx`,
   `sfx`, `music`, `font`, or `shader`.
 - Specification and acceptance criteria.
+- Machine-readable runtime format and file budget; visual assets also declare
+  exact width/height, while audio declares sample rate and channels. PNG/WAV
+  outputs are checked against those values before packaging.
 - Origin: human, GPT Image, Codex, local model, procedural, or third party.
 - Model, version, and recipe/prompt for assisted generation.
 - References and permission to use them.
 - Final asset, source, model, weight, and dataset licenses. Mark non-applicable
   fields explicitly as `not_applicable`.
-- Human approver.
-- Runtime path and SHA-256 of the processed file.
+- Human or project-authorized lead approver.
+- Authorized-reference records with file, permission, and license when used.
+- Non-empty QA report plus explicit in-engine and raylib-load results.
+- One or more typed outputs: texture, clipset, audio, font, or shader, with
+  runtime path, media type, and SHA-256.
+- Semantic bindings from world/runtime slots to asset IDs and clips.
 
 ## Validation profiles
 
@@ -99,7 +140,8 @@ Origins are interchangeable. The asset contract and processed file are stable.
 
 Specifications define cell size, foot pivot, directions, actions, frames, FPS,
 row/column order, padding, alpha, palette, and shadow rules. Processing produces
-the atlas and clip JSON; runtime never guesses layout from implicit conventions.
+the texture and an `isoworld.clipset` JSON. Clip frames use deterministic integer
+tick durations; runtime never guesses layout from implicit conventions.
 
 ## SFX and music
 

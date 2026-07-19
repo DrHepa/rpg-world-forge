@@ -12,6 +12,8 @@ Check:
 - Audio loudness, clicks, truncated tails, repetition, and masking.
 - Path, name, format, metadata, and technical budget.
 - Complete provenance, permissions, and licenses.
+- Successful `build-renderpack`, runtime hash verification, raylib load, clip
+  bounds, semantic binding, and resource cleanup.
 
 Classify every finding as blocker, required fix, or observation. Final approval
 always belongs to a person or the project's authorized lead reviewer.

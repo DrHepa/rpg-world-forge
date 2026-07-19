@@ -15,6 +15,7 @@ from worldforge.map_import import (
 )
 from worldforge.narrative_analysis import analyze_project, write_analysis
 from worldforge.project import SourceProjectError, load_source_project
+from worldforge.renderpack import RenderPackBuildError, build_renderpack
 from worldforge.runtime_audit import audit_runtime
 from worldforge.scaffold import ScaffoldError, create_world_project
 from worldforge.validation import validate_project
@@ -72,6 +73,14 @@ def build_parser() -> argparse.ArgumentParser:
     validate_assets.add_argument("manifest", type=Path)
     validate_assets.add_argument("--profile", choices=("draft", "release"), default="draft")
     validate_assets.add_argument("--worldpack", type=Path)
+
+    renderpack = commands.add_parser(
+        "build-renderpack",
+        help="compile approved processed assets into a runtime-only renderpack",
+    )
+    renderpack.add_argument("manifest", type=Path)
+    renderpack.add_argument("--worldpack", type=Path, required=True)
+    renderpack.add_argument("--output", type=Path, required=True)
 
     validate = commands.add_parser("validate", help="validate source data and references")
     validate.add_argument("manifest", type=Path)
@@ -178,6 +187,14 @@ def main() -> int:
             print(f"OK assets={args.manifest} profile={args.profile}")
             return 0
 
+        if args.command == "build-renderpack":
+            payload = build_renderpack(args.manifest, args.worldpack, args.output)
+            print(
+                f"OK output={args.output} world={payload['world_id']} "
+                f"assets={len(payload['assets'])} hash={payload['content_hash']}"
+            )
+            return 0
+
         if args.command == "validate":
             project = load_source_project(args.manifest)
             issues = validate_project(project, profile=args.profile)
@@ -265,6 +282,9 @@ def main() -> int:
     except CompilationError as exc:
         for issue in exc.issues:
             print(f"ERROR {issue}")
+        return 1
+    except RenderPackBuildError as exc:
+        print(f"ERROR {exc}")
         return 1
 
 

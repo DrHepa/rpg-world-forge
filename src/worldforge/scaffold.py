@@ -218,6 +218,11 @@ def create_world_project(
             "lead_agent": "gpt",
             "approval_mode": "lead_agent",
             "runtime_ai": False,
+            "asset_generation": {
+                "enabled_routes": ["openai"],
+                "local_model_route": "modly",
+                "runtime_inference": False,
+            },
             "tool_repository": "rpg-world-forge",
         },
     )
@@ -270,6 +275,8 @@ def create_world_project(
         "- AI is permitted only during offline authoring and asset production.\n"
         "- Runtime receives compiled data and processed assets, never models, "
         "prompts, provider SDKs, credentials or inference calls.\n"
+        "- OpenAI and optional Modly extensions are authoring routes; every local "
+        "model must run through a recorded Modly extension workflow.\n"
         "- Do not invent unresolved canon when evidence or a user decision is required.\n"
         "- Characters may use only facts allowed by their knowledge boundaries.\n"
         "- Every narrative choice must map to implementable state, events and effects.\n"
@@ -287,7 +294,10 @@ def create_world_project(
         "worldforge validate source/manifest.json --profile draft\n"
         f"worldforge compile source/manifest.json --output build/{world_id}.worldpack.json\n"
         f"worldforge init-assets build/{world_id}.worldpack.json --output assets/manifest.json\n"
-        f"isoworld --pack build/{world_id}.worldpack.json\n"
+        f"worldforge build-renderpack assets/manifest.json --worldpack "
+        f"build/{world_id}.worldpack.json --output build/runtime/renderpack.json\n"
+        f"isoworld --pack build/{world_id}.worldpack.json --renderpack "
+        "build/runtime/renderpack.json\n"
         "```\n",
         encoding="utf-8",
     )

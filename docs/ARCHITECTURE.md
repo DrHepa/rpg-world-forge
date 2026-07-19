@@ -13,8 +13,17 @@ per-world design session (human + optional AI)
                     v
               static JSON worldpack
                     |
-                    v
-       raylib runtime without AI, API, or network
+                    +--------> asset-production manifest
+                    |          (authoring evidence only)
+                    |                    |
+                    |                    v
+                    |             runtime renderpack
+                    |          (processed files + bindings)
+                    |                    |
+                    +--------------------+
+                                         v
+                           raylib runtime without AI,
+                              API, models, or network
 ```
 
 AI is not a game subsystem. It does not decide dialogue, quests, routes, or
@@ -64,6 +73,13 @@ save/replay -> world ID + content hash + state/action digest
 5. `ui`: presentation in the worldpack's language; no domain rules.
 6. `worldforge`: authoring/build tools that runtime never imports.
 
+The worldpack owns simulation and narrative semantics. The renderpack owns the
+replaceable mapping from semantic slots such as `actor:hero` or
+`tile_type:ground` to processed textures, deterministic clipsets, fonts,
+shaders, SFX, and music. The asset-production manifest is never loaded by the
+game because it may contain recipes, model identifiers, extension workflows,
+references, and licensing evidence.
+
 ## Creative-process control plane
 
 Every generated game repository contains `.worldforge/`. GPT reads its status,
@@ -86,5 +102,7 @@ paths; only the lead GPT integrates canon.
 - Each world declares its visible language and localization policy.
 - Release worldpacks contain no `TODO`, `TBD`, template braces, or broken refs.
 - Runtime contains no names, roster sizes, or lore from a particular game.
+- Local model execution is allowed only through an external Modly extension;
+  the OpenAI route is likewise external authoring, never runtime inference.
 - Game repositories live outside the forge and distribute only approved
   runtime code, worldpacks, and processed assets.

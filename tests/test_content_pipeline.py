@@ -265,7 +265,7 @@ class ContentPipelineTests(unittest.TestCase):
             self.assertIn("release requires processed status", messages)
             self.assertIn("provenance is required", messages)
             self.assertIn("license record is required", messages)
-            self.assertIn("human approval is required", messages)
+            self.assertIn("authorized approval is required", messages)
 
     def test_asset_plan_detects_changed_canon(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

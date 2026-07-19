@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rpg-world-forge.local/schemas/asset-manifest.schema.json",
-  "title": "RPG World Forge asset manifest",
+  "title": "RPG World Forge asset-production manifest v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,79 +10,228 @@
     "world_id",
     "world_content_hash",
     "phase",
-    "assets"
+    "generation_policy",
+    "assets",
+    "bindings"
   ],
   "properties": {
-    "format": {
-      "const": "rpg-world-forge.asset_manifest"
-    },
-    "format_version": {
-      "const": 1
-    },
-    "world_id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]{1,63}$"
-    },
-    "world_content_hash": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "phase": {
-      "enum": [
-        "art_direction",
-        "production",
-        "release"
-      ]
+    "format": {"const": "rpg-world-forge.asset_manifest"},
+    "format_version": {"const": 2},
+    "world_id": {"$ref": "#/$defs/id"},
+    "world_content_hash": {"$ref": "#/$defs/sha256"},
+    "phase": {"enum": ["art_direction", "production", "release"]},
+    "generation_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled_routes", "local_model_route"],
+      "properties": {
+        "enabled_routes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["openai", "modly"]}
+        },
+        "local_model_route": {"const": "modly"}
+      }
     },
     "assets": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "kind",
-          "status",
-          "specification_file"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9_]{1,63}$"
-          },
-          "kind": {
-            "enum": [
-              "font",
-              "music",
-              "portrait",
-              "shader",
-              "sfx",
-              "sprite",
-              "spritesheet",
-              "tileset",
-              "ui",
-              "vfx"
-            ]
-          },
-          "status": {
-            "enum": [
-              "planned",
-              "generated",
-              "approved",
-              "processed"
-            ]
-          },
-          "specification_file": {
-            "type": "string",
-            "minLength": 1
-          },
-          "runtime_file": {
-            "type": "string"
-          },
-          "sha256": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          }
+      "items": {"$ref": "#/$defs/asset"}
+    },
+    "bindings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/binding"}
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "runtime_file", "sha256", "media_type"],
+      "properties": {
+        "role": {
+          "enum": [
+            "audio",
+            "clipset",
+            "font",
+            "fragment_shader",
+            "texture",
+            "vertex_shader"
+          ]
+        },
+        "runtime_file": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "media_type": {
+          "enum": [
+            "application/json",
+            "audio/mpeg",
+            "audio/ogg",
+            "audio/wav",
+            "font/otf",
+            "font/ttf",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "text/x-glsl"
+          ]
         }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"role": {"const": "audio"}}},
+          "then": {"properties": {"media_type": {"enum": ["audio/mpeg", "audio/ogg", "audio/wav"]}}}
+        },
+        {
+          "if": {"properties": {"role": {"const": "clipset"}}},
+          "then": {"properties": {"media_type": {"const": "application/json"}}}
+        },
+        {
+          "if": {"properties": {"role": {"const": "font"}}},
+          "then": {"properties": {"media_type": {"enum": ["font/otf", "font/ttf"]}}}
+        },
+        {
+          "if": {"properties": {"role": {"const": "texture"}}},
+          "then": {"properties": {"media_type": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}
+        },
+        {
+          "if": {"properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}},
+          "then": {"properties": {"media_type": {"const": "text/x-glsl"}}}
+        }
+      ]
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["origin"],
+      "properties": {
+        "origin": {
+          "enum": [
+            "codex_assisted",
+            "gpt_image",
+            "human",
+            "local_model",
+            "procedural",
+            "third_party"
+          ]
+        },
+        "generation_route": {"enum": ["openai", "modly"]},
+        "model_id": {"type": "string", "minLength": 1},
+        "model_version": {"type": "string", "minLength": 1},
+        "recipe_file": {"type": "string", "minLength": 1},
+        "extension_id": {"type": "string", "minLength": 1},
+        "extension_version": {"type": "string", "minLength": 1},
+        "workflow_file": {"type": "string", "minLength": 1}
+      }
+    },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_license",
+        "source_license",
+        "model_license",
+        "weights_license",
+        "dataset_license"
+      ],
+      "properties": {
+        "asset_license": {"type": "string", "minLength": 1},
+        "source_license": {"type": "string", "minLength": 1},
+        "model_license": {"type": "string", "minLength": 1},
+        "weights_license": {"type": "string", "minLength": 1},
+        "dataset_license": {"type": "string", "minLength": 1}
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "status", "specification_file"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {
+          "enum": [
+            "font",
+            "music",
+            "portrait",
+            "shader",
+            "sfx",
+            "sprite",
+            "spritesheet",
+            "tileset",
+            "ui",
+            "vfx"
+          ]
+        },
+        "status": {"enum": ["planned", "generated", "approved", "processed"]},
+        "specification_file": {"type": "string", "minLength": 1},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "license": {"$ref": "#/$defs/license"},
+        "approved_by": {"type": "string", "minLength": 1},
+        "references": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["file", "permission", "license"],
+            "properties": {
+              "file": {"type": "string", "minLength": 1},
+              "permission": {"type": "string", "minLength": 1},
+              "license": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "qa": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["report_file", "in_engine_passed", "raylib_load_passed"],
+          "properties": {
+            "report_file": {"type": "string", "minLength": 1},
+            "in_engine_passed": {"const": true},
+            "raylib_load_passed": {"const": true}
+          }
+        },
+        "outputs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/output"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"enum": ["generated", "approved", "processed"]}}
+          },
+          "then": {"required": ["provenance"]}
+        },
+        {
+          "if": {"properties": {"status": {"enum": ["approved", "processed"]}}},
+          "then": {"required": ["license", "approved_by"]}
+        },
+        {
+          "if": {"properties": {"status": {"const": "processed"}}},
+          "then": {"required": ["outputs", "qa"]}
+        }
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "asset_id"],
+      "properties": {
+        "slot": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$"
+        },
+        "asset_id": {"$ref": "#/$defs/id"},
+        "clip": {"$ref": "#/$defs/id"},
+        "moving_clip": {"$ref": "#/$defs/id"},
+        "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 16},
+        "layer": {"type": "integer", "minimum": -1000, "maximum": 1000}
       }
     }
   }

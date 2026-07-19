@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from worldforge.integrity import declared_hash_matches
+
 
 @dataclass(frozen=True, slots=True)
 class Phase:
@@ -66,6 +68,7 @@ def initial_status(world_id: str) -> dict[str, Any]:
         "worldpack_hash": None,
         "worldpack_path": None,
         "asset_manifest": None,
+        "renderpack": None,
     }
 
 
@@ -155,6 +158,8 @@ def validate_phase_report(
             else:
                 if payload.get("format") != "isoworld.worldpack":
                     errors.append("P10 requires a compatible worldpack")
+                if not declared_hash_matches(payload):
+                    errors.append("P10 worldpack content hash does not match its contents")
                 if payload.get("content_hash") != reported_hash:
                     errors.append("worldpack_hash does not match the compiled file")
         if not isinstance(reported_hash, str) or not SHA256_PATTERN.fullmatch(reported_hash):
@@ -177,6 +182,17 @@ def validate_phase_report(
                     worldpack_path=worldpack_path,
                 )
                 errors.extend(f"asset release: {issue}" for issue in asset_issues)
+                renderpack_path = _safe_deliverable(root, report.get("renderpack_path"))
+                if renderpack_path is None or not renderpack_path.is_file():
+                    errors.append("P13 requires an existing renderpack_path inside the project")
+                else:
+                    try:
+                        from isoworld.content.loader import load_worldpack
+                        from isoworld.content.renderpack import load_renderpack
+
+                        load_renderpack(renderpack_path, load_worldpack(worldpack_path))
+                    except ValueError as exc:
+                        errors.append(f"P13 renderpack is invalid: {exc}")
 
     if current == "p14_handoff":
         handoff = _safe_deliverable(root, report.get("handoff_path"))
@@ -210,6 +226,7 @@ def complete_phase(project_root: str | Path, report_path: str | Path) -> dict[st
         status["worldpack_path"] = report["worldpack_path"]
     elif current == "p13_asset_production":
         status["asset_manifest"] = report["asset_manifest_path"]
+        status["renderpack"] = report["renderpack_path"]
 
     report_target = root / ".worldforge/phase_reports" / f"{current}.json"
     _write_object(report_target, report)
@@ -244,8 +261,10 @@ def reopen_phase(
         status["worldpack_hash"] = None
         status["worldpack_path"] = None
         status["asset_manifest"] = None
+        status["renderpack"] = None
     elif reopen_index <= PHASE_INDEX["p13_asset_production"]:
         status["asset_manifest"] = None
+        status["renderpack"] = None
 
     log_path = root / ".worldforge/reopen_log.json"
     if log_path.exists():

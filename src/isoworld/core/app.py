@@ -3,11 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from isoworld.content.models import WorldPack
+from isoworld.content.renderpack import RenderPack
 from isoworld.core.fixed_step import FixedStep
 from isoworld.persistence import load_game, save_game
-from isoworld.render.iso import screen_to_world
 from isoworld.render.render_state import RenderState, build_render_state
 from isoworld.render.renderer import IsometricRenderer
+from isoworld.render.resources import RaylibAssetRegistry
 from isoworld.world.narrative import available_dialogue_choices
 from isoworld.world.simulation import Simulation
 from isoworld.world.state import GameAction, WorldState
@@ -19,20 +20,31 @@ class GameApp:
         pack: WorldPack,
         state: WorldState | None = None,
         quick_save_path: Path | None = None,
+        renderpack: RenderPack | None = None,
     ) -> None:
         self.pack = pack
         self.simulation = Simulation(pack, state)
-        initial = build_render_state(self.simulation.state, pack)
+        self._render_revision = 0
+        initial = build_render_state(self.simulation.state, pack, revision=self._render_revision)
         self._render_front: RenderState = initial
         self._render_back: RenderState = initial
         self.clock = FixedStep(tick_rate=20)
         self.renderer = IsometricRenderer()
         self.quick_save_path = quick_save_path
+        self.renderpack = renderpack
+        self._resources: RaylibAssetRegistry | None = None
         self._quit_requested = False
 
     def _sync_render_state(self) -> None:
-        self._render_back = build_render_state(self.simulation.state, self.pack)
+        self._render_revision += 1
+        self._render_back = build_render_state(
+            self.simulation.state,
+            self.pack,
+            revision=self._render_revision,
+        )
         self._render_front, self._render_back = self._render_back, self._render_front
+        if self._resources is not None:
+            self._resources.sync_audio(self._render_front)
 
     def _update(self, _dt: float) -> None:
         self.simulation.tick()
@@ -138,12 +150,7 @@ class GameApp:
 
         if pr.is_mouse_button_pressed(pr.MOUSE_BUTTON_LEFT):  # type: ignore[attr-defined]
             mouse = pr.get_mouse_position()  # type: ignore[attr-defined]
-            world_x, world_y = screen_to_world(
-                mouse.x - self.renderer.screen_width * 0.5,
-                mouse.y - 110.0,
-                self.renderer.tile_width,
-                self.renderer.tile_height,
-            )
+            world_x, world_y = self.renderer.grid_from_screen(pr, mouse)
             active = self.simulation.state.actor(self.simulation.state.active_actor_id)
             self.simulation.dispatch(
                 GameAction(
@@ -181,13 +188,27 @@ class GameApp:
         pr.init_window(renderer.screen_width, renderer.screen_height, self.pack.title)
         pr.set_exit_key(0)
         pr.set_target_fps(60)
+        resources = (
+            RaylibAssetRegistry(pr, self.renderpack) if self.renderpack is not None else None
+        )
         try:
+            if resources is not None:
+                resources.load()
+                renderer.attach_resources(resources)
+                self._resources = resources
             while not self._quit_requested and not pr.window_should_close():
+                renderer.handle_camera_input(pr)
                 self._handle_input(pr)
                 self.clock.advance(pr.get_frame_time(), self._update)
+                if resources is not None:
+                    resources.sync_audio(self._render_front)
                 pr.begin_drawing()
                 renderer.draw(pr, self._render_front)
                 pr.end_drawing()
         finally:
+            if resources is not None:
+                self._resources = None
+                resources.close()
+                renderer.attach_resources(None)
             pr.close_window()
         return 0

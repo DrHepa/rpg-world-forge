@@ -19,6 +19,7 @@ Every phase report must answer:
 - Timeline events without satisfiable prerequisites.
 - Narrative effects that cannot be represented by state/events.
 - Assets without specifications, provenance or compatible license evidence.
+- Local-model assets without a named/versioned Modly extension and workflow.
 - Generated content copied directly into runtime without review/compilation.
 - Model/API/credential dependency in the game runtime.
 
@@ -29,8 +30,9 @@ reachability/softlock report and an impact list for known uncertainties.
 
 ## Asset-release gate
 
-P13 additionally requires processed status, human approval, file existence,
-matching SHA-256, complete license fields and in-engine QA for every asset.
+P13 additionally requires processed status, authorized approval, typed output
+files, matching media signatures and SHA-256, complete license fields, semantic
+bindings, a successfully compiled renderpack and in-engine QA for every asset.
 
 ## Handoff gate
 

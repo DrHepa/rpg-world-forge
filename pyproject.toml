@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rpg-world-forge"
-version = "0.3.0"
+version = "0.4.0"
 description = "World-agnostic GPT-led RPG authoring forge with a deterministic Python/raylib runtime"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,7 +26,7 @@ Repository = "https://github.com/DrHepa/rpg-world-forge"
 Issues = "https://github.com/DrHepa/rpg-world-forge/issues"
 
 [project.optional-dependencies]
-game = ["raylib>=5.0,<6"]
+game = ["raylib>=6.0.1,<7"]
 dev = ["ruff>=0.6,<1"]
 
 [project.scripts]

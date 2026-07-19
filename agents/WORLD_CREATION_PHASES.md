@@ -75,7 +75,8 @@ provider-agnostic specifications and acceptance tests before generation.
 
 ## P13 — Asset production and QA
 
-Use GPT Image, Codex, local models, procedural tools or human work offline.
+Use GPT Image/Codex through the OpenAI route, optional local models exclusively
+through Modly extensions, procedural tools, or human work offline.
 Record provenance/licenses, process deterministic runtime files and validate
 them in-engine.
 

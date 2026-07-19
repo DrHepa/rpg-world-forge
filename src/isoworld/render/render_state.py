@@ -9,6 +9,7 @@ from isoworld.world.state import WorldState
 
 @dataclass(frozen=True, slots=True)
 class TileView:
+    tile_type_id: str
     x: int
     y: int
     elevation: int
@@ -36,22 +37,33 @@ class InteractionView:
 
 
 @dataclass(frozen=True, slots=True)
+class EventView:
+    kind: str
+    actor_id: str | None
+    subject_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class OverlayView:
     title: str
     lines: tuple[str, ...]
     choices: tuple[str, ...]
     help_text: str
+    speaker_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class RenderState:
+    revision: int
     world_title: str
+    map_id: str
     map_title: str
     tick: int
     time_text: str
     tiles: tuple[TileView, ...]
     actors: tuple[ActorView, ...]
     interactions: tuple[InteractionView, ...]
+    events: tuple[EventView, ...]
     hud_lines: tuple[str, ...]
     overlay: OverlayView | None
 
@@ -72,11 +84,12 @@ def _wrap_text(value: str, width: int = 72) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def build_render_state(state: WorldState, pack: WorldPack) -> RenderState:
+def build_render_state(state: WorldState, pack: WorldPack, *, revision: int = 0) -> RenderState:
     active = state.actor(state.active_actor_id)
     world_map = pack.maps[active.map_id]
     tiles = tuple(
         TileView(
+            tile_type_id=world_map.tile_id_at(x, y),
             x=x,
             y=y,
             elevation=pack.tile_types[world_map.tile_id_at(x, y)].height,
@@ -145,6 +158,7 @@ def build_render_state(state: WorldState, pack: WorldPack) -> RenderState:
             lines=_wrap_text(scene.text),
             choices=(),
             help_text=pack.ui["scene_help"],
+            speaker_id=None,
         )
     elif state.dialogue is not None:
         from isoworld.world.narrative import available_dialogue_choices
@@ -158,15 +172,21 @@ def build_render_state(state: WorldState, pack: WorldPack) -> RenderState:
             lines=_wrap_text(node.text),
             choices=tuple(f"{index}. {choice.text}" for index, choice in enumerate(choices, 1)),
             help_text=pack.ui["dialogue_help"],
+            speaker_id=node.speaker_id,
         )
     return RenderState(
+        revision=revision,
         world_title=pack.title,
+        map_id=world_map.id,
         map_title=world_map.display_name,
         tick=state.tick,
         time_text=time_text,
         tiles=tiles,
         actors=actors,
         interactions=interactions,
+        events=tuple(
+            EventView(event.kind, event.actor_id, event.subject_id) for event in state.recent_events
+        ),
         hud_lines=hud_lines,
         overlay=overlay,
     )

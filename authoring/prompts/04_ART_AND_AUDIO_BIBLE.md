@@ -24,3 +24,7 @@ applicable decisions, not vague adjectives.
 
 Flag every decision that cannot be derived from canon. Do not begin mass
 production until both bibles are approved.
+
+Record whether production enables `openai`, `modly`, or both. OpenAI covers
+GPT/Codex/GPT Image. Modly is optional and is the only permitted route for local
+models; name the intended extensions without making them part of runtime.

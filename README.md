@@ -17,7 +17,7 @@ knowledge boundaries. Its output is never accepted directly: a human or the
 authorized lead agent reviews it, `worldforge` validates it, and the build step
 compiles it into a static worldpack consumed by the runtime.
 
-## Current systemic slice (M2)
+## Current systemic slice (M2.5)
 
 - Fixed-step game loop rendered through pyray.
 - Isometric projection and semantic terrain (ground, water, and rock).
@@ -37,6 +37,14 @@ compiles it into a static worldpack consumed by the runtime.
 - Offline narrative reachability, producer, and softlock analysis.
 - Offline content compiler and cross-reference validator.
 - Offline asset pipeline with provenance and license tracking.
+- Asset manifest v2 with typed specifications, multi-file processed outputs,
+  semantic bindings, and strict OpenAI/optional-Modly generation routes.
+- Runtime-only hashed renderpacks compiled without prompts, model data,
+  workflows, credentials, or production evidence.
+- Pyray resource registry for textures, clipsets, fonts, shaders, SFX, and
+  streamed music with deterministic cleanup.
+- Texture-backed isometric tiles/actors, tick-based animation, depth layers,
+  portraits, event audio, and zoom/pan camera with primitive fallbacks.
 - A 15-phase workflow with GPT as lead agent and verifiable quality gates.
 - Runtime audit that rejects AI SDK imports.
 - Headless tests that do not open a window.
@@ -124,6 +132,14 @@ worldforge analyze-narrative ../my-world/source/manifest.json \
   --fail-on warning
 worldforge init-assets ../my-world/build/my_world.worldpack.json \
   --output ../my-world/assets/manifest.json
+
+# After approved production and release validation:
+worldforge build-renderpack ../my-world/assets/manifest.json \
+  --worldpack ../my-world/build/my_world.worldpack.json \
+  --output ../my-world/build/runtime/renderpack.json
+
+isoworld --pack ../my-world/build/my_world.worldpack.json \
+  --renderpack ../my-world/build/runtime/renderpack.json
 ```
 
 ## Import a map
@@ -183,6 +199,9 @@ M1 runtime contracts and limits are documented in
 M2 narrative contracts and limits are documented in
 [M2_NARRATIVE.md](docs/M2_NARRATIVE.md), with its security and implementation
 review in [AUDIT_M2_2026-07-19.md](docs/AUDIT_M2_2026-07-19.md).
+M2.5 presentation and renderpack contracts are documented in
+[M2_5_PRESENTATION.md](docs/M2_5_PRESENTATION.md), with the implementation audit
+in [AUDIT_M2_5_2026-07-19.md](docs/AUDIT_M2_5_2026-07-19.md).
 Visual and audio production is described in
 [ASSET_PIPELINE.md](docs/ASSET_PIPELINE.md). The GPT and multi-agent protocol is
 documented in [agents/README.md](agents/README.md).

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/clipset.schema.json",
+  "title": "Deterministic texture clipset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "clips"],
+  "properties": {
+    "format": {"const": "isoworld.clipset"},
+    "format_version": {"const": 1},
+    "clips": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/clip"}
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height", "duration_ticks"],
+      "properties": {
+        "x": {"type": "integer", "minimum": 0},
+        "y": {"type": "integer", "minimum": 0},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "duration_ticks": {"type": "integer", "minimum": 1, "maximum": 10000}
+      }
+    },
+    "clip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "pivot", "loop", "frames"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "pivot": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"type": "number"}
+        },
+        "loop": {"type": "boolean"},
+        "frames": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/frame"}
+        }
+      }
+    }
+  }
+}

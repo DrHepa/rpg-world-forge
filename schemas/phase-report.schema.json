@@ -91,6 +91,10 @@
       "type": "string",
       "minLength": 1
     },
+    "renderpack_path": {
+      "type": "string",
+      "minLength": 1
+    },
     "handoff_path": {
       "type": "string",
       "minLength": 1

@@ -25,6 +25,17 @@
 - [x] Event-reactive quests and time-windowed scenes.
 - [x] Reachability and softlock analysis.
 
+## M2.5 - Presentation and asset runtime foundation (complete)
+
+- [x] Asset-production manifest v2 with typed specifications and multi-file outputs.
+- [x] Canon-integrity verification before asset planning and release.
+- [x] Runtime-only renderpack compiler with semantic bindings and copied processed files.
+- [x] Deterministic clipsets, pivots, animation frames, scale, and depth layers.
+- [x] Pyray texture/font/shader/audio lifecycle and domain-event SFX/music bridge.
+- [x] Camera zoom/pan, depth-sorted isometric entities, portraits, and primitive fallbacks.
+- [x] OpenAI authoring route and optional Modly-only route for local models.
+- [x] Headless integration tests and a real hidden-window raylib CI smoke test.
+
 ## M3 - Living world
 
 - Construction affecting navigation, economy, and scenes.
@@ -43,6 +54,6 @@
 
 - Derive inventories from canon-locked worldpacks.
 - Manage art/audio bibles and per-asset specifications.
-- Offline adapters for GPT Image, Codex, and local models.
+- Offline adapters for GPT Image/Codex and optional local generation through Modly extensions.
 - Deterministic spritesheet, tileset, atlas, SFX, and music processing.
 - In-engine QA, provenance, licenses, and release hashes.

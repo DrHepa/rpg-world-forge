@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/renderpack.schema.json",
+  "title": "Compiled runtime-only renderpack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "world_id",
+    "world_content_hash",
+    "assets",
+    "bindings",
+    "content_hash"
+  ],
+  "properties": {
+    "format": {"const": "isoworld.renderpack"},
+    "format_version": {"const": 1},
+    "world_id": {"$ref": "#/$defs/id"},
+    "world_content_hash": {"$ref": "#/$defs/sha256"},
+    "content_hash": {"$ref": "#/$defs/sha256"},
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/asset"}
+    },
+    "bindings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/binding"}
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "sha256", "media_type"],
+      "properties": {
+        "role": {
+          "enum": [
+            "audio",
+            "clipset",
+            "font",
+            "fragment_shader",
+            "texture",
+            "vertex_shader"
+          ]
+        },
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "media_type": {
+          "enum": [
+            "application/json",
+            "audio/mpeg",
+            "audio/ogg",
+            "audio/wav",
+            "font/otf",
+            "font/ttf",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "text/x-glsl"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"role": {"const": "audio"}}},
+          "then": {"properties": {"media_type": {"enum": ["audio/mpeg", "audio/ogg", "audio/wav"]}}}
+        },
+        {
+          "if": {"properties": {"role": {"const": "clipset"}}},
+          "then": {"properties": {"media_type": {"const": "application/json"}}}
+        },
+        {
+          "if": {"properties": {"role": {"const": "font"}}},
+          "then": {"properties": {"media_type": {"enum": ["font/otf", "font/ttf"]}}}
+        },
+        {
+          "if": {"properties": {"role": {"const": "texture"}}},
+          "then": {"properties": {"media_type": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}
+        },
+        {
+          "if": {"properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}},
+          "then": {"properties": {"media_type": {"const": "text/x-glsl"}}}
+        }
+      ]
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "files"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {
+          "enum": [
+            "font",
+            "music",
+            "portrait",
+            "shader",
+            "sfx",
+            "sprite",
+            "spritesheet",
+            "tileset",
+            "ui",
+            "vfx"
+          ]
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/file"}
+        }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "asset_id"],
+      "properties": {
+        "slot": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$"
+        },
+        "asset_id": {"$ref": "#/$defs/id"},
+        "clip": {"$ref": "#/$defs/id"},
+        "moving_clip": {"$ref": "#/$defs/id"},
+        "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 16},
+        "layer": {"type": "integer", "minimum": -1000, "maximum": 1000}
+      }
+    }
+  }
+}

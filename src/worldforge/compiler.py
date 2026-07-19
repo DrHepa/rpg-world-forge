@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
+from worldforge.integrity import canonical_payload_hash
 from worldforge.project import SourceProject, load_source_project
 from worldforge.validation import ValidationIssue, validate_project
 
@@ -28,8 +28,7 @@ def build_worldpack(project: SourceProject) -> dict[str, Any]:
             for name, items in sorted(project.collections.items())
         },
     }
-    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    payload["content_hash"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    payload["content_hash"] = canonical_payload_hash(payload)
     return payload
 
 
