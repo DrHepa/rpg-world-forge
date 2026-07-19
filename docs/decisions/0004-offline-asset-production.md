@@ -8,7 +8,8 @@
 Sprite, spritesheet, tile, portrait, UI, VFX, music, and SFX production starts
 from a validated, hashed worldpack. It may use GPT Image, Codex, local models,
 procedural tools, or human work, always outside runtime and inside the generated
-game repository.
+world-authoring repository. Processed results enter a separate game repository
+only through an immutable released bundle.
 
 Each asset retains its specification, provider/origin, model and version,
 references, prompt or recipe, license, human review, and approved-file hash. The

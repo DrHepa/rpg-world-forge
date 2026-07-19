@@ -14,12 +14,16 @@ Read:
 3. [QUALITY_GATES.md](QUALITY_GATES.md)
 4. The relevant role card under `roles/`.
 
-Every generated game repository also contains:
+Every generated world-authoring repository also contains:
 
-- `AGENTS.md`: game-specific operating rules.
+- `AGENTS.md`: world-authoring operating rules.
 - `.worldforge/project.json`: identity, policy and lead agent.
 - `.worldforge/status.json`: current and completed phases.
 - `.worldforge/DECISIONS.md`: durable decisions and superseded choices.
 - `.worldforge/TASKS.md`: backlog and active work.
 - `.worldforge/claims/`: optional multi-agent file ownership.
 - `.worldforge/phase_reports/`: gate evidence for completed phases.
+
+Independent game repositories contain none of this control plane. Reusable
+skills remain in the Forge, and Forge-side agents operate on game repositories
+through explicit external paths and clean materialization contracts.

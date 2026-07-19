@@ -8,7 +8,8 @@ workflows, deterministic runtime systems and neutral examples.
 1. Read `AGENTS.md` and the relevant ADRs.
 2. Open or reference a focused issue.
 3. State the paths and contracts the change will affect.
-4. Keep game-specific canon and assets in the generated game's repository.
+4. Keep world-specific canon and production assets in its independent
+   world-authoring repository; game repositories import only immutable bundles.
 
 ## Pull requests
 

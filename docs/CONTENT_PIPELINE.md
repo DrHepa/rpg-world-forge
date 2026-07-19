@@ -10,11 +10,12 @@
 4. **Review**: accept, rewrite, or reject each proposal.
 5. **Validation**: check schemas, IDs, references, and knowledge boundaries.
 6. **Compilation**: produce a deterministic, content-hashed worldpack.
-7. **Game QA**: run headless tests and a playable vertical slice.
+7. **Bundle/reference-runtime QA**: run headless contract tests and an optional
+   playable preview before release to a separate game repository.
 
 These stages are expanded into P00-P14 in
 `agents/WORLD_CREATION_PHASES.md`. Active phase state and evidence belong to the
-generated game repository, not the forge.
+generated world-authoring repository, not the Forge or the game repository.
 
 AI is optional during design and simulation. `worldforge` does not call a model;
 it turns approved sources into safe game data.
@@ -74,10 +75,14 @@ exact semantics and accepted limits.
 
 ## Sources and artifacts
 
-- `<game-repo>/source/`: editable material for the independent world.
-- `<game-repo>/build/`: generated artifacts; never hand-edited.
-- `<game-repo>/assets/`: specifications, sources, and approved results with
+- `<world-repo>/source/`: editable material for the independent world.
+- `<world-repo>/build/`: generated artifacts; never hand-edited.
+- `<world-repo>/assets/`: specifications, sources, and approved results with
   separate provenance and license records.
+
+Only an immutable runtime bundle crosses into a game repository. The editable
+directories above, `.worldforge/`, `AGENTS.md`, prompts, candidates, and
+production evidence never do.
 
 For external resources, track source-code, model, weight, dataset, and final
 asset licenses separately. An MIT or Apache-2.0 repository does not

@@ -119,6 +119,19 @@ class ContentPipelineTests(unittest.TestCase):
             self.assertTrue((target / "AGENTS.md").is_file())
             self.assertTrue((target / ".worldforge/status.json").is_file())
             self.assertTrue((target / "source/timeline/README.md").is_file())
+            project_metadata = json.loads(
+                (target / ".worldforge/project.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual("world", project_metadata["project_kind"])
+            self.assertIn(
+                "world-authoring repository",
+                (target / "AGENTS.md").read_text(encoding="utf-8"),
+            )
+            readme = (target / "README.md").read_text(encoding="utf-8")
+            self.assertIn("World-authoring project", readme)
+            self.assertNotIn("Game project created", readme)
+            self.assertFalse((target / ".agents").exists())
+            self.assertFalse((target / "src").exists())
 
     def test_new_world_can_begin_without_inventing_a_character(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

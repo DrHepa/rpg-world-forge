@@ -7,6 +7,7 @@ from pathlib import Path
 from worldforge.assets import AssetManifestError, init_asset_manifest, validate_asset_manifest
 from worldforge.claims import validate_claims
 from worldforge.compiler import CompilationError, compile_project
+from worldforge.game_boundary import GameBoundaryError, audit_game_repository
 from worldforge.map_import import (
     MapImportError,
     import_map_file,
@@ -114,6 +115,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit = commands.add_parser("audit-runtime", help="reject AI SDK imports in runtime")
     audit.add_argument("runtime_root", type=Path)
+    audit_game = commands.add_parser(
+        "audit-game",
+        help="reject Forge, world-authoring, and AI leakage in a game repository",
+    )
+    audit_game.add_argument("game_root", type=Path)
     return parser
 
 
@@ -257,12 +263,21 @@ def main() -> int:
             )
             return 0
 
-        findings = audit_runtime(args.runtime_root)
+        if args.command == "audit-runtime":
+            findings = audit_runtime(args.runtime_root)
+            if findings:
+                for finding in findings:
+                    print(f"ERROR {finding}")
+                return 1
+            print(f"OK runtime={args.runtime_root} ai_imports=0")
+            return 0
+
+        findings = audit_game_repository(args.game_root)
         if findings:
             for finding in findings:
                 print(f"ERROR {finding}")
             return 1
-        print(f"OK runtime={args.runtime_root} ai_imports=0")
+        print(f"OK game={args.game_root} authoring_leaks=0")
         return 0
     except SourceProjectError as exc:
         print(f"ERROR {exc}")
@@ -284,6 +299,9 @@ def main() -> int:
             print(f"ERROR {issue}")
         return 1
     except RenderPackBuildError as exc:
+        print(f"ERROR {exc}")
+        return 1
+    except GameBoundaryError as exc:
         print(f"ERROR {exc}")
         return 1
 

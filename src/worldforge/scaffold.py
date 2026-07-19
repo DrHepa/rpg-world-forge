@@ -65,7 +65,7 @@ SOURCE_GUIDES = {
     "scenes": "Scenes with participants, time, location, conditions, and effects.",
     "dialogues": "Localized dialogue graphs, choices, conditions, and effects.",
     "localization": "Glossary, voice, visible text, and per-language rules.",
-    "implementation": "Contracts, catalogs, tests, and game-repository handoff.",
+    "implementation": "Contracts, catalogs, tests, and immutable game handoff.",
 }
 
 
@@ -235,6 +235,7 @@ def create_world_project(
         {
             "format": "rpg-world-forge.project",
             "format_version": 1,
+            "project_kind": "world",
             "world_id": world_id,
             "title": title.strip(),
             "language": language.strip(),
@@ -294,7 +295,9 @@ def create_world_project(
         "4. Keep proposals separate from canon and record dependencies.\n"
         "5. Validate deliverables and submit a phase report before advancing.\n\n"
         "## Boundaries\n\n"
-        "- This repository is the game result, not the forge tool.\n"
+        "- This is an independent world-authoring repository, not the Forge or "
+        "a game runtime.\n"
+        "- A separate game repository imports only an immutable runtime bundle.\n"
         "- AI is permitted only during offline authoring and asset production.\n"
         "- Runtime receives compiled data and processed assets, never models, "
         "prompts, provider SDKs, credentials or inference calls.\n"
@@ -308,9 +311,10 @@ def create_world_project(
     )
     (root / "README.md").write_text(
         f"# {title.strip()}\n\n"
-        "Game project created with RPG World Forge. Editable sources live in "
-        "`source/`. The world content language is declared in `world.json`; "
-        "tooling documentation remains in English.\n\n"
+        "World-authoring project created with RPG World Forge. Editable canon "
+        "and production sources live in `source/`; they are not game runtime "
+        "inputs. The world content language is declared in `world.json`; tooling "
+        "documentation remains in English.\n\n"
         "## Workflow\n\n"
         "```bash\n"
         "worldforge phase-status .\n"
@@ -319,6 +323,7 @@ def create_world_project(
         f"worldforge init-assets build/{world_id}.worldpack.json --output assets/manifest.json\n"
         f"worldforge build-renderpack assets/manifest.json --worldpack "
         f"build/{world_id}.worldpack.json --output build/runtime/renderpack.json\n"
+        "# Optional reference-runtime preview only:\n"
         f"isoworld --pack build/{world_id}.worldpack.json --renderpack "
         "build/runtime/renderpack.json\n"
         "```\n",

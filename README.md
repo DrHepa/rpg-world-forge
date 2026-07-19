@@ -3,13 +3,15 @@
 [![CI](https://github.com/DrHepa/rpg-world-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/DrHepa/rpg-world-forge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-lilac.svg)](LICENSE)
 
-A toolkit and base runtime for creating 2D/2.5D isometric RPGs in Python with
-`pyray`/raylib. The runtime is deterministic, data-driven, and works without an
-LLM, an AI API, or an Internet connection.
+A toolkit and tested reference runtime for creating 2D/2.5D isometric RPGs in
+Python with `pyray`/raylib. The runtime is deterministic, data-driven, and
+works without an LLM, an AI API, or an Internet connection.
 
-This repository contains **the forge**, not a particular world or game. Every
-result is created in its own directory/repository, where it owns its canon,
-characters, assets, and builds. No game-specific lore is hardcoded here.
+This repository contains **the Forge**, not a particular world or game. A world
+authoring repository owns canon, characters, editable content, asset production,
+and release evidence. A separate game repository owns executable code, UX,
+imported immutable bundles, platform CI, and releases. No game-specific lore is
+hardcoded here.
 
 AI can assist **outside the game** while designing lore, actors, cultures,
 quests, dialogue, arcs, scenes, maps, schedules, abilities, motivations, and
@@ -58,8 +60,9 @@ compiles it into a static worldpack consumed by the runtime.
 - Headless tests that do not open a window.
 
 The included pack is a **neutral technical vertical slice**. Real worlds live
-in independent game repositories and can define different actors, genres,
-rules, maps, languages, and campaigns without changing the forge.
+in independent world-authoring repositories and can define different actors,
+genres, rules, maps, languages, and campaigns without changing the Forge.
+Independent game repositories import only immutable, hash-locked releases.
 
 ## Quick start
 
@@ -131,9 +134,9 @@ worldforge phase-status ../my-world
 worldforge validate ../my-world/source/manifest.json --profile draft
 ```
 
-`../my-world` is independent and can become its own Git repository. The
-generated project includes `AGENTS.md`, 15 ordered phases, decision and task
-logs, multi-agent claims, phase reports, narrative source directories, and an
+`../my-world` is an independent **world-authoring repository**, not a game
+repository. It includes `AGENTS.md`, 15 ordered phases, decision and task logs,
+multi-agent claims, phase reports, narrative source directories, and an
 asset-production workspace. GPT can run the entire process as lead agent;
 specialist roles are optional.
 
@@ -153,9 +156,15 @@ worldforge build-renderpack ../my-world/assets/manifest.json \
   --worldpack ../my-world/build/my_world.worldpack.json \
   --output ../my-world/build/runtime/renderpack.json
 
+# Optional reference-runtime preview only; this is not the game handoff:
 isoworld --pack ../my-world/build/my_world.worldpack.json \
   --renderpack ../my-world/build/runtime/renderpack.json
 ```
+
+The production handoff is an immutable runtime bundle. Forge-side tooling
+verifies and copies that bundle into a separate game repository. It never
+copies the world's `AGENTS.md`, `.worldforge/`, editable `source/`, production
+manifests, prompts, candidates, or model/provider metadata.
 
 ## Import a map
 
@@ -190,12 +199,13 @@ data and must pass `worldforge validate`; manual overrides take precedence.
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python -m worldforge audit-runtime src/isoworld
+PYTHONPATH=src python -m worldforge audit-game /path/to/materialized-game
 ```
 
 ## Repository layout
 
 ```text
-src/isoworld/              game runtime; never imports worldforge or AI SDKs
+src/isoworld/              reference runtime; never imports worldforge or AI SDKs
 src/worldforge/            offline authoring, build, workflow, and QA tools
 examples/                  neutral vertical slice
 content/compiled/          generated worldpacks used by the example runtime
@@ -217,6 +227,10 @@ review in [AUDIT_M2_2026-07-19.md](docs/AUDIT_M2_2026-07-19.md).
 M2.5 presentation and renderpack contracts are documented in
 [M2_5_PRESENTATION.md](docs/M2_5_PRESENTATION.md), with the implementation audit
 in [AUDIT_M2_5_2026-07-19.md](docs/AUDIT_M2_5_2026-07-19.md).
+The M4 repository boundary is defined by
+[ADR-0009](docs/decisions/0009-independent-world-and-game-repositories.md), and
+the supported game-runtime conventions are documented in
+[PYRAY_RUNTIME_GUIDE.md](docs/PYRAY_RUNTIME_GUIDE.md).
 Visual and audio production is described in
 [ASSET_PIPELINE.md](docs/ASSET_PIPELINE.md). The GPT and multi-agent protocol is
 documented in [agents/README.md](agents/README.md).
@@ -228,4 +242,5 @@ Contributions must follow [AGENTS.md](AGENTS.md) and
 documentation, migration impact, and tests in the same pull request.
 
 Repository documentation and tooling interfaces are maintained in English.
-Each generated game declares its own content and localization languages.
+Each world declares its content locales. Each game target separately declares
+the locales and UI policy it supports.

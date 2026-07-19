@@ -12,11 +12,15 @@ handoff quality.
 
 ## Hard boundaries
 
-- Never add the canon, cast, lore or assets of a generated game to this toolkit.
+- Never add the canon, cast, lore or assets of a generated world to this toolkit.
 - Never add LLM/model inference, provider SDKs, credentials or prompt execution
   to `src/isoworld`.
 - AI and generative tools are authoring-time only.
-- Generated games must live in independent directories/repositories.
+- Generated world-authoring and game repositories must live outside the Forge
+  and remain separate from each other.
+- Game repositories contain no `AGENTS.md`, `.agents/`, `.worldforge/`,
+  authoring sources, prompts, phase reports, provider tooling, or mutable world
+  checkout.
 - Runtime consumes only validated worldpacks and processed assets.
 - Do not copy third-party code or assets without recording compatible licenses.
 - Do not treat a model repository license as the license for weights, datasets
@@ -32,8 +36,11 @@ handoff quality.
 
 ## Repository ownership
 
-- `src/isoworld/`: game runtime. It must not import `worldforge`.
+- `src/isoworld/`: tested reference runtime and snapshot source. It must not
+  import `worldforge`.
 - `src/worldforge/`: offline authoring/build/QA tools.
+- `.agents/skills/`: Forge-only reusable workflows; never copied to a world or
+  game repository.
 - `agents/`: reusable agent protocol and role cards.
 - `authoring/prompts/`: provider-agnostic authoring prompts.
 - `schemas/`: public data contracts.
@@ -44,9 +51,11 @@ handoff quality.
 
 - Runtime behavior change: add or update headless tests.
 - Source/worldpack contract change: update validator, schema, docs and fixture.
-- Generated-project layout change: update scaffold tests.
-- Agent workflow change: keep phase definitions, generated `AGENTS.md` and CLI
-  transitions aligned.
+- World-repository layout change: update world scaffold and workflow tests.
+- Game-template layout change: run the clean-game boundary audit and update its
+  materialization tests.
+- Agent workflow change: keep phase definitions, world-repository `AGENTS.md`
+  and CLI transitions aligned.
 - Asset pipeline change: test draft and release failure modes.
 
 ## Multi-agent protocol
@@ -56,8 +65,10 @@ owned paths and dependencies. Subagents must not modify canonical files outside
 their claim. They return evidence and proposed patches to the lead. The lead
 resolves conflicts, runs validation and records decisions.
 
-Use the protocol in `agents/ORCHESTRATION.md`. A generated game receives its own
-custom `AGENTS.md` and `.worldforge/` control directory.
+Use the protocol in `agents/ORCHESTRATION.md`. A generated world-authoring
+repository receives its own `AGENTS.md` and `.worldforge/` control directory.
+An independent game repository receives neither; Forge-side agents operate on
+it externally through explicit template, bundle, and compatibility contracts.
 
 ## Verification
 

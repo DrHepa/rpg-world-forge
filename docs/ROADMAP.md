@@ -46,10 +46,16 @@
 
 ## M4 - Multiple world production
 
-- Create, clone, and version independent world repositories.
+- Create, clone, and version independent world-authoring repositories.
 - Allow each world to define roster, genre, rules, and localization.
 - Package personal campaigns per playable actor.
-- Validate worldpack compatibility without engine coupling.
+- Release immutable runtime bundles and validate compatibility without engine
+  coupling.
+- Materialize independent pyray/raylib game repositories with no `AGENTS.md`,
+  skills, `.worldforge`, editable canon, production evidence, or Forge/AI
+  dependency.
+- Keep all game-construction skills and external bundle/runtime operations in
+  the Forge.
 
 ## M5 - Asset production
 

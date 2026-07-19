@@ -36,7 +36,7 @@ They are neither shipped with the game nor invoked during play.
 
 ## Initialization
 
-From the generated game repository:
+From the generated world-authoring repository:
 
 ```bash
 worldforge init-assets build/world.worldpack.json \
@@ -59,12 +59,15 @@ worldforge build-renderpack assets/manifest.json \
   --worldpack build/world.worldpack.json \
   --output build/runtime/renderpack.json
 
+# Optional reference-runtime QA only:
 isoworld --pack build/world.worldpack.json \
   --renderpack build/runtime/renderpack.json
 ```
 
 The compiler copies referenced processed files below `build/runtime/`, verifies
 them with the runtime loader, and strips production-only evidence.
+The subsequent release step creates an immutable bundle; a separate game
+repository imports only that bundle, never this production workspace.
 
 ## Production order
 

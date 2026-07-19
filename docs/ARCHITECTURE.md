@@ -3,27 +3,21 @@
 ## Primary boundary
 
 ```text
-per-world design session (human + optional AI)
-                    |
-                    v
-        reviewable <game-repo>/source JSON
-                    |
-          worldforge validate + compile
-                    |
-                    v
-              static JSON worldpack
-                    |
-                    +--------> asset-production manifest
-                    |          (authoring evidence only)
-                    |                    |
-                    |                    v
-                    |             runtime renderpack
-                    |          (processed files + bindings)
-                    |                    |
-                    +--------------------+
-                                         v
-                           raylib runtime without AI,
-                              API, models, or network
+Forge repository                       world-authoring repository
+(skills, templates, tools) --operates--> source + .worldforge + assets
+                                                   |
+                                      validate, compile, approve
+                                                   |
+                                                   v
+                                      immutable runtime bundle
+                                      (worldpack, renderpack,
+                                       processed assets, licenses)
+                                                   |
+                                      verified external import
+                                                   |
+                                                   v
+independent game repository <---------- copied, hash-locked data
+(pyray/raylib code, UX, saves, packaging; no authoring control plane)
 ```
 
 AI is not a game subsystem. It does not decide dialogue, quests, routes, or
@@ -87,11 +81,34 @@ references, and licensing evidence.
 
 ## Creative-process control plane
 
-Every generated game repository contains `.worldforge/`. GPT reads its status,
-works only on the active phase, and submits a phase report with deliverables,
-decisions, blockers, and validation evidence. `complete-phase` prevents phase
-skips or evidence-free completion. Optional subagents claim non-overlapping
-paths; only the lead GPT integrates canon.
+Every generated **world-authoring repository** contains `.worldforge/` and a
+tailored `AGENTS.md`. GPT reads its status, works only on the active phase, and
+submits a phase report with deliverables, decisions, blockers, and validation
+evidence. `complete-phase` prevents phase skips or evidence-free completion.
+Optional subagents claim non-overlapping paths; only the lead GPT integrates
+canon.
+
+The Forge repository is the only home for reusable `.agents/skills`. The game
+repository has no `AGENTS.md`, `.agents/`, `.worldforge/`, source canon, prompts,
+phase reports, or asset-production evidence. Forge-side agents may construct or
+update a game through explicit external paths, but no agent control plane is
+materialized into the game.
+
+`worldforge audit-game <game-repo>` enforces this seam. It rejects known agent
+and workflow paths, editable source roots, authoring-only JSON formats,
+`worldforge`/Modly/AI imports, and corresponding Python project dependencies.
+Future game materialization and bundle-import operations must pass this command
+before handoff.
+
+## Repository responsibility matrix
+
+| Concern | Forge | World authoring | Runtime bundle | Game |
+| --- | --- | --- | --- | --- |
+| Agent skills and generic prompts | Owns | Uses externally | Never | Never |
+| Canon and editable narrative source | Never | Owns | Compiled only | Never |
+| Asset candidates and production evidence | Generic tools only | Owns | Never | Never |
+| Worldpack, renderpack, processed assets | Builds/verifies | Releases | Owns immutable copies | Imports locked copies |
+| Pyray/raylib application, UX, saves, packaging | Templates/reference | Never | Never | Owns |
 
 ## Non-negotiable contracts
 
@@ -113,5 +130,6 @@ paths; only the lead GPT integrates canon.
 - Runtime contains no names, roster sizes, or lore from a particular game.
 - Local model execution is allowed only through an external Modly extension;
   the OpenAI route is likewise external authoring, never runtime inference.
-- Game repositories live outside the forge and distribute only approved
-  runtime code, worldpacks, and processed assets.
+- Game repositories live outside the Forge, pass the clean-game boundary
+  audit, and distribute only game-owned runtime code plus approved immutable
+  bundles and processed assets.

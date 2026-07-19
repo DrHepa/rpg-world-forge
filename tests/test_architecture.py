@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
+from worldforge.game_boundary import audit_game_repository
 from worldforge.runtime_audit import audit_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +15,24 @@ RUNTIME = ROOT / "src/isoworld"
 class ArchitectureTests(unittest.TestCase):
     def test_runtime_has_no_ai_sdk_imports(self) -> None:
         self.assertEqual([], audit_runtime(RUNTIME))
+
+    def test_runtime_audit_catches_current_and_dynamic_provider_imports(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "adapter.py").write_text(
+                "import importlib\n"
+                "from google import genai\n"
+                'importlib.import_module("openai")\n'
+                '__import__("modly")\n',
+                encoding="utf-8",
+            )
+
+            findings = audit_runtime(root)
+
+            self.assertEqual(
+                ["google.genai", "modly", "openai"],
+                sorted(finding.module for finding in findings),
+            )
 
     def test_runtime_does_not_import_authoring_tools(self) -> None:
         offenders: list[str] = []
@@ -31,6 +51,132 @@ class ArchitectureTests(unittest.TestCase):
             value = json.loads(path.read_text(encoding="utf-8"))
             self.assertIsInstance(value, dict, path.name)
             self.assertIn("$schema", value, path.name)
+
+    def test_clean_game_repository_has_no_authoring_control_plane(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "src/game").mkdir(parents=True)
+            (root / "src/game/app.py").write_text(
+                "from __future__ import annotations\n\nimport pyray as pr\n",
+                encoding="utf-8",
+            )
+            (root / "game_data/worlds").mkdir(parents=True)
+            (root / "scripts").mkdir()
+            (root / "scripts/verify_game.py").write_text(
+                "from __future__ import annotations\n",
+                encoding="utf-8",
+            )
+            (root / "pyproject.toml").write_text(
+                '[project]\nname = "example-game"\ndependencies = ["raylib==6.0.1.0"]\n',
+                encoding="utf-8",
+            )
+
+            self.assertEqual([], audit_game_repository(root))
+
+    def test_game_repository_rejects_forge_and_world_authoring_paths(self) -> None:
+        forbidden_paths = (
+            "AGENTS.md",
+            ".agents/skills/render/SKILL.md",
+            "skills/render/SKILL.md",
+            ".claude/settings.json",
+            ".codex/config.toml",
+            ".cursor/rules/project.mdc",
+            ".worldforge/status.json",
+            "authoring/prompts/quest.md",
+            "source/canon/world.md",
+        )
+        for relative in forbidden_paths:
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("not runtime data\n", encoding="utf-8")
+
+                findings = audit_game_repository(root)
+
+                self.assertEqual(1, len(findings))
+                self.assertEqual("forbidden_game_path", findings[0].rule)
+
+    def test_game_repository_rejects_authoring_and_ai_imports(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "src").mkdir()
+            (root / "src/app.py").write_text(
+                "import importlib\n"
+                "import openai\n"
+                "import worldforge.compiler\n"
+                "from google import genai\n"
+                "from modly import workflow\n"
+                'importlib.import_module("transformers")\n',
+                encoding="utf-8",
+            )
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(
+                [
+                    "google.genai",
+                    "modly",
+                    "openai",
+                    "transformers",
+                    "worldforge.compiler",
+                ],
+                sorted(finding.detail for finding in findings),
+            )
+            self.assertTrue(all(finding.rule == "forbidden_game_import" for finding in findings))
+
+    def test_game_repository_rejects_authoring_and_ai_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "pyproject.toml").write_text(
+                "[project]\n"
+                'name = "example-game"\n'
+                'dependencies = ["raylib==6.0.1.0", "rpg-world-forge", "openai>=1"]\n',
+                encoding="utf-8",
+            )
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(2, len(findings))
+            self.assertTrue(
+                all(finding.rule == "forbidden_game_dependency" for finding in findings)
+            )
+
+    def test_game_repository_checks_dependency_groups_and_requirements_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "pyproject.toml").write_text(
+                "[project]\n"
+                'name = "example-game"\n'
+                "[dependency-groups]\n"
+                'dev = ["google-genai>=1"]\n',
+                encoding="utf-8",
+            )
+            (root / "requirements-release.txt").write_text(
+                "raylib==6.0.1.0\ntransformers>=4\n",
+                encoding="utf-8",
+            )
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(
+                ["google-genai>=1", "transformers>=4"],
+                sorted(finding.detail for finding in findings),
+            )
+
+    def test_game_repository_rejects_authoring_formats_even_at_other_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "assets").mkdir()
+            (root / "assets/manifest.json").write_text(
+                '{"format": "rpg-world-forge.asset_manifest", "format_version": 2}\n',
+                encoding="utf-8",
+            )
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(1, len(findings))
+            self.assertEqual("forbidden_authoring_format", findings[0].rule)
 
 
 if __name__ == "__main__":
