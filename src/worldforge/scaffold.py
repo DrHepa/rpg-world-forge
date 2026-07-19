@@ -17,6 +17,7 @@ COLLECTIONS = (
     "dialogues",
     "facts",
     "factions",
+    "interactions",
     "maps",
     "personal_arcs",
     "quests",
@@ -40,6 +41,7 @@ SOURCE_GUIDES = {
     "actors": "Compilable playable/non-playable actors and narrative references.",
     "knowledge": "Facts known, suspected, protected, or forbidden per actor.",
     "abilities": "Compilable abilities with requirements, costs, effects, and consequences.",
+    "interactions": "Contextual world interactions with conditions and deterministic effects.",
     "schedules": "Schedules, routes, activities, conditions, and navigation fallbacks.",
     "mechanics": "Deterministic systems, events, state, and interacting rules.",
     "arcs": "World and personal arcs, acts, branches, failure, and recovery.",
@@ -92,13 +94,21 @@ def create_world_project(
         {
             "active_actor": "Personaje activo",
             "move_help": "Flechas o WASD: mover",
+            "navigate_help": "Clic izquierdo: navegar",
             "switch_help": "Tab: cambiar de personaje",
+            "interact_help": "E: interactuar",
+            "ability_help": "1: usar primera habilidad",
+            "clock_label": "Día",
         }
         if is_spanish
         else {
             "active_actor": "Active character",
             "move_help": "Arrow keys or WASD: move",
+            "navigate_help": "Left click: navigate",
             "switch_help": "Tab: switch character",
+            "interact_help": "E: interact",
+            "ability_help": "1: use first ability",
+            "clock_label": "Day",
         }
     )
     paths = {collection: [] for collection in COLLECTIONS}
@@ -123,7 +133,20 @@ def create_world_project(
             "title": title.strip(),
             "language": language.strip(),
             "start_map_id": "starting_area",
-            "capabilities": ["grid_movement"],
+            "capabilities": [
+                "grid_movement",
+                "path_navigation",
+                "world_clock",
+                "contextual_interactions",
+                "costed_abilities",
+                "versioned_persistence",
+            ],
+            "simulation": {
+                "start_day": 1,
+                "start_minute": 480,
+                "ticks_per_minute": 20,
+                "movement_interval_ticks": 4,
+            },
             "ui": ui,
         },
     )
@@ -201,7 +224,8 @@ def create_world_project(
         encoding="utf-8",
     )
     (root / ".worldforge/TASKS.md").write_text(
-        "# Tasks\n\nThe lead GPT maintains ordered backlog, active work, blockers and completed work.\n",
+        "# Tasks\n\n"
+        "The lead GPT maintains ordered backlog, active work, blockers and completed work.\n",
         encoding="utf-8",
     )
     (root / ".worldforge/HANDOFF.md").write_text(
@@ -210,7 +234,8 @@ def create_world_project(
     )
     (root / ".worldforge/claims/README.md").parent.mkdir(parents=True, exist_ok=True)
     (root / ".worldforge/claims/README.md").write_text(
-        "# Task claims\n\nOne JSON claim per active delegated task. Canonical paths cannot overlap.\n",
+        "# Task claims\n\n"
+        "One JSON claim per active delegated task. Canonical paths cannot overlap.\n",
         encoding="utf-8",
     )
     (root / ".worldforge/phase_reports/README.md").parent.mkdir(parents=True, exist_ok=True)

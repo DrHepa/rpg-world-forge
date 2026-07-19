@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
 from worldforge.runtime_audit import audit_runtime
-
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / "src/isoworld"
@@ -22,11 +22,15 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual([], offenders)
 
     def test_runtime_does_not_access_project_source_directories(self) -> None:
-        runtime_text = "\n".join(
-            path.read_text(encoding="utf-8") for path in RUNTIME.rglob("*.py")
-        )
+        runtime_text = "\n".join(path.read_text(encoding="utf-8") for path in RUNTIME.rglob("*.py"))
         self.assertNotIn("projects/", runtime_text)
         self.assertNotIn("examples/", runtime_text)
+
+    def test_public_json_schemas_are_valid_json_objects(self) -> None:
+        for path in sorted((ROOT / "schemas").glob("*.json")):
+            value = json.loads(path.read_text(encoding="utf-8"))
+            self.assertIsInstance(value, dict, path.name)
+            self.assertIn("$schema", value, path.name)
 
 
 if __name__ == "__main__":

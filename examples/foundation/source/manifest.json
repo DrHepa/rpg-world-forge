@@ -3,21 +3,29 @@
   "format_version": 1,
   "world": "world.json",
   "collections": {
-    "abilities": [],
+    "abilities": [
+      "abilities/focus.json"
+    ],
     "actors": [
       "actors/explorer.json",
-      "actors/maker.json"
+      "actors/maker.json",
+      "actors/guide.json"
     ],
     "dialogues": [],
     "facts": [],
     "factions": [],
+    "interactions": [
+      "interactions/resonant_stone.json"
+    ],
     "maps": [
       "maps/test_garden.json"
     ],
     "personal_arcs": [],
     "quests": [],
     "scenes": [],
-    "schedules": [],
+    "schedules": [
+      "schedules/guide_day.json"
+    ],
     "tile_types": [
       "tile_types/ground.json",
       "tile_types/rock.json",

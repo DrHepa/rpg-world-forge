@@ -1,0 +1,22 @@
+{
+  "id": "guide",
+  "display_name": "Guía",
+  "playable": false,
+  "spawn": {
+    "map_id": "test_garden",
+    "x": 5,
+    "y": 5
+  },
+  "color": [
+    104,
+    214,
+    180,
+    255
+  ],
+  "schedule_id": "guide_day",
+  "schedule_mode": "always",
+  "resources": {},
+  "tags": [
+    "example"
+  ]
+}

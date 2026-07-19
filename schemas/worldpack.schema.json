@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/worldpack.schema.json",
+  "title": "Compiled IsoWorld worldpack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "world", "collections", "content_hash"],
+  "properties": {
+    "format": {"const": "isoworld.worldpack"},
+    "format_version": {"enum": [1, 2]},
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "world": {
+      "type": "object",
+      "required": ["id", "title", "language", "start_map_id", "ui"]
+    },
+    "collections": {
+      "type": "object",
+      "required": ["tile_types", "maps", "actors"],
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "object", "required": ["id"]}
+      }
+    }
+  }
+}

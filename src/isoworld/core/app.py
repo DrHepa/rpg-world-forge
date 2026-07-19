@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from isoworld.content.models import WorldPack
 from isoworld.core.fixed_step import FixedStep
+from isoworld.persistence import load_game, save_game
+from isoworld.render.iso import screen_to_world
 from isoworld.render.render_state import RenderState, build_render_state
 from isoworld.render.renderer import IsometricRenderer
 from isoworld.world.simulation import Simulation
@@ -9,13 +13,20 @@ from isoworld.world.state import GameAction, WorldState
 
 
 class GameApp:
-    def __init__(self, pack: WorldPack) -> None:
+    def __init__(
+        self,
+        pack: WorldPack,
+        state: WorldState | None = None,
+        quick_save_path: Path | None = None,
+    ) -> None:
         self.pack = pack
-        self.simulation = Simulation(pack)
+        self.simulation = Simulation(pack, state)
         initial = build_render_state(self.simulation.state, pack)
         self._render_front: RenderState = initial
         self._render_back: RenderState = initial
         self.clock = FixedStep(tick_rate=20)
+        self.renderer = IsometricRenderer()
+        self.quick_save_path = quick_save_path
 
     def _sync_render_state(self) -> None:
         self._render_back = build_render_state(self.simulation.state, self.pack)
@@ -50,6 +61,75 @@ class GameApp:
             self.simulation.dispatch(GameAction(kind="select_actor", actor_id=selected))
             self._sync_render_state()
 
+        if key_pressed(pr.KEY_E):  # type: ignore[attr-defined]
+            self.simulation.dispatch(GameAction(kind="interact"))
+            self._sync_render_state()
+
+        if key_pressed(pr.KEY_ONE):  # type: ignore[attr-defined]
+            active_id = self.simulation.state.active_actor_id
+            active = self.simulation.state.actor(active_id)
+            definition = self.pack.actors[active_id]
+            ability_id = definition.ability_ids[0] if definition.ability_ids else None
+            target_id = None
+            if ability_id is not None and self.pack.abilities[ability_id].target == "actor":
+                candidates = [
+                    actor
+                    for actor in self.simulation.state.actors
+                    if actor.actor_id != active_id
+                    and actor.map_id == active.map_id
+                    and abs(actor.x - active.x) + abs(actor.y - active.y)
+                    <= self.pack.abilities[ability_id].range
+                ]
+                if candidates:
+                    target_id = min(
+                        candidates,
+                        key=lambda actor: (
+                            abs(actor.x - active.x) + abs(actor.y - active.y),
+                            actor.actor_id,
+                        ),
+                    ).actor_id
+            self.simulation.dispatch(
+                GameAction(
+                    kind="use_ability",
+                    ability_id=ability_id,
+                    target_actor_id=target_id,
+                )
+            )
+            self._sync_render_state()
+
+        if pr.is_mouse_button_pressed(pr.MOUSE_BUTTON_LEFT):  # type: ignore[attr-defined]
+            mouse = pr.get_mouse_position()  # type: ignore[attr-defined]
+            world_x, world_y = screen_to_world(
+                mouse.x - self.renderer.screen_width * 0.5,
+                mouse.y - 110.0,
+                self.renderer.tile_width,
+                self.renderer.tile_height,
+            )
+            active = self.simulation.state.actor(self.simulation.state.active_actor_id)
+            self.simulation.dispatch(
+                GameAction(
+                    kind="navigate",
+                    map_id=active.map_id,
+                    x=round(world_x),
+                    y=round(world_y),
+                )
+            )
+            self._sync_render_state()
+
+        if self.quick_save_path is not None and key_pressed(  # type: ignore[attr-defined]
+            pr.KEY_F5  # type: ignore[attr-defined]
+        ):
+            save_game(self.quick_save_path, self.simulation.state, self.pack)
+            self._sync_render_state()
+
+        if (
+            self.quick_save_path is not None
+            and self.quick_save_path.is_file()
+            and key_pressed(pr.KEY_F9)  # type: ignore[attr-defined]
+        ):
+            self.simulation.restore(load_game(self.quick_save_path, self.pack))
+            self._sync_render_state()
+
     def run(self) -> int:
         try:
             import pyray as pr
@@ -58,7 +138,7 @@ class GameApp:
                 "pyray is not installed. Install the game extra with: pip install -e '.[game]'"
             ) from exc
 
-        renderer = IsometricRenderer()
+        renderer = self.renderer
         pr.init_window(renderer.screen_width, renderer.screen_height, self.pack.title)
         pr.set_target_fps(60)
         try:

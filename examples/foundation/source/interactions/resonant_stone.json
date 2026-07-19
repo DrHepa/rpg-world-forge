@@ -1,0 +1,24 @@
+{
+  "id": "resonant_stone",
+  "display_name": "Piedra resonante",
+  "prompt": "La piedra devuelve parte de tu energía.",
+  "map_id": "test_garden",
+  "x": 1,
+  "y": 0,
+  "range": 1,
+  "required_flags": [],
+  "forbidden_flags": [],
+  "repeatable": false,
+  "effects": [
+    {
+      "kind": "change_resource",
+      "target": "self",
+      "resource": "energy",
+      "amount": 2
+    },
+    {
+      "kind": "set_flag",
+      "flag": "stone_awakened"
+    }
+  ]
+}

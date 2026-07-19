@@ -47,6 +47,24 @@ Every world fact has an ID. An actor may act or speak only from:
 The compiler rejects incompatible intersections and references to nonexistent
 facts, preventing accidental omniscience without an LLM.
 
+## M1 executable content
+
+The runtime executes a deliberately bounded subset of compiled content:
+
+- `world.simulation`: clock rate, starting time, and route movement interval.
+- `actors`: spawn, resources, abilities, schedule, and schedule mode.
+- `schedules`: time segments with primary and fallback locations.
+- `interactions`: location/range, flag conditions, repeatability, and effects.
+- `abilities`: target/range, positive costs, cooldown, and effects.
+
+The shared M1 effect vocabulary is `set_flag`, `clear_flag`, and
+`change_resource`. Unknown operations are rejected during source validation; the
+runtime never evaluates arbitrary expressions or scripts.
+
+The compiler emits worldpack format 2. The loader accepts formats 1 and 2 and
+verifies the canonical content hash before constructing typed runtime models.
+See [M1_SYSTEMS.md](M1_SYSTEMS.md) for exact semantics and accepted limits.
+
 ## Sources and artifacts
 
 - `<game-repo>/source/`: editable material for the independent world.
@@ -57,3 +75,8 @@ facts, preventing accidental omniscience without an LLM.
 For external resources, track source-code, model, weight, dataset, and final
 asset licenses separately. An MIT or Apache-2.0 repository does not
 automatically make its weights or datasets compatible.
+
+External Tiled/LDtk map files are references, not runtime inputs. Convert them
+with `worldforge import-map`, review the semantic mapping and imported rows,
+then add the internal map JSON to the source manifest. The generated import
+metadata records source and mapping hashes for reproducibility.

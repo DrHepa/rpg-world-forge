@@ -1,8 +1,28 @@
 {
   "collections": {
-    "abilities": [],
+    "abilities": [
+      {
+        "cooldown_minutes": 30,
+        "costs": {
+          "energy": 1
+        },
+        "display_name": "Concentración",
+        "effects": [
+          {
+            "flag": "focused",
+            "kind": "set_flag"
+          }
+        ],
+        "id": "focus",
+        "range": 0,
+        "target": "self"
+      }
+    ],
     "actors": [
       {
+        "ability_ids": [
+          "focus"
+        ],
         "color": [
           194,
           137,
@@ -12,10 +32,35 @@
         "display_name": "Explorador",
         "id": "explorer",
         "playable": true,
+        "resources": {
+          "energy": 3
+        },
         "spawn": {
           "map_id": "test_garden",
           "x": 1,
           "y": 1
+        },
+        "tags": [
+          "example"
+        ]
+      },
+      {
+        "color": [
+          104,
+          214,
+          180,
+          255
+        ],
+        "display_name": "Guía",
+        "id": "guide",
+        "playable": false,
+        "resources": {},
+        "schedule_id": "guide_day",
+        "schedule_mode": "always",
+        "spawn": {
+          "map_id": "test_garden",
+          "x": 5,
+          "y": 5
         },
         "tags": [
           "example"
@@ -31,6 +76,9 @@
         "display_name": "Constructora",
         "id": "maker",
         "playable": true,
+        "resources": {
+          "energy": 3
+        },
         "spawn": {
           "map_id": "test_garden",
           "x": 8,
@@ -44,6 +92,32 @@
     "dialogues": [],
     "factions": [],
     "facts": [],
+    "interactions": [
+      {
+        "display_name": "Piedra resonante",
+        "effects": [
+          {
+            "amount": 2,
+            "kind": "change_resource",
+            "resource": "energy",
+            "target": "self"
+          },
+          {
+            "flag": "stone_awakened",
+            "kind": "set_flag"
+          }
+        ],
+        "forbidden_flags": [],
+        "id": "resonant_stone",
+        "map_id": "test_garden",
+        "prompt": "La piedra devuelve parte de tu energía.",
+        "range": 1,
+        "repeatable": false,
+        "required_flags": [],
+        "x": 1,
+        "y": 0
+      }
+    ],
     "maps": [
       {
         "display_name": "Jardín de pruebas",
@@ -72,7 +146,28 @@
     "personal_arcs": [],
     "quests": [],
     "scenes": [],
-    "schedules": [],
+    "schedules": [
+      {
+        "entries": [
+          {
+            "activity": "observe_garden",
+            "end_minute": 1440,
+            "fallbacks": [
+              {
+                "map_id": "test_garden",
+                "x": 6,
+                "y": 5
+              }
+            ],
+            "map_id": "test_garden",
+            "start_minute": 0,
+            "x": 7,
+            "y": 5
+          }
+        ],
+        "id": "guide_day"
+      }
+    ],
     "tile_types": [
       {
         "arable": true,
@@ -126,21 +221,38 @@
       }
     ]
   },
-  "content_hash": "e4b6e50f6bdc68dd3bf882ef31e51903cf7c922488c461cffe97a101cb1b079b",
+  "content_hash": "71cf7889f8f6834e30393faa92c6cf5e77d451c9e647eb8242f3b3b2f4afe8a3",
   "format": "isoworld.worldpack",
-  "format_version": 1,
+  "format_version": 2,
   "world": {
     "capabilities": [
       "grid_movement",
-      "playable_actor_switching"
+      "playable_actor_switching",
+      "path_navigation",
+      "world_clock",
+      "schedules",
+      "contextual_interactions",
+      "costed_abilities",
+      "versioned_persistence",
+      "action_replay"
     ],
     "id": "foundation_slice",
     "language": "es",
+    "simulation": {
+      "movement_interval_ticks": 4,
+      "start_day": 1,
+      "start_minute": 480,
+      "ticks_per_minute": 20
+    },
     "start_map_id": "test_garden",
     "title": "Jardín de pruebas",
     "ui": {
+      "ability_help": "1: usar Concentración",
       "active_actor": "Personaje activo",
+      "clock_label": "Día",
+      "interact_help": "E: interactuar",
       "move_help": "Flechas o WASD: mover",
+      "navigate_help": "Clic izquierdo: navegar",
       "switch_help": "Tab: cambiar de personaje"
     }
   }

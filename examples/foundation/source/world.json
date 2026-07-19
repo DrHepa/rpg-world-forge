@@ -5,11 +5,28 @@
   "start_map_id": "test_garden",
   "capabilities": [
     "grid_movement",
-    "playable_actor_switching"
+    "playable_actor_switching",
+    "path_navigation",
+    "world_clock",
+    "schedules",
+    "contextual_interactions",
+    "costed_abilities",
+    "versioned_persistence",
+    "action_replay"
   ],
+  "simulation": {
+    "start_day": 1,
+    "start_minute": 480,
+    "ticks_per_minute": 20,
+    "movement_interval_ticks": 4
+  },
   "ui": {
     "active_actor": "Personaje activo",
+    "ability_help": "1: usar Concentración",
+    "clock_label": "Día",
+    "interact_help": "E: interactuar",
     "move_help": "Flechas o WASD: mover",
+    "navigate_help": "Clic izquierdo: navegar",
     "switch_help": "Tab: cambiar de personaje"
   }
 }

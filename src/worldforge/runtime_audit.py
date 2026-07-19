@@ -4,7 +4,6 @@ import ast
 from dataclasses import dataclass
 from pathlib import Path
 
-
 BANNED_IMPORT_ROOTS = {
     "anthropic",
     "google.generativeai",
@@ -29,7 +28,9 @@ class AuditFinding:
 
 
 def _is_banned(module: str) -> bool:
-    return any(module == banned or module.startswith(f"{banned}.") for banned in BANNED_IMPORT_ROOTS)
+    return any(
+        module == banned or module.startswith(f"{banned}.") for banned in BANNED_IMPORT_ROOTS
+    )
 
 
 def audit_runtime(root: str | Path) -> list[AuditFinding]:

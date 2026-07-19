@@ -22,7 +22,9 @@ workflows, deterministic runtime systems and neutral examples.
 Run:
 
 ```bash
-python -m pip install -e .
+python -m pip install -e ".[dev]"
+ruff check src tests
+ruff format --check src tests
 python -m unittest discover -s tests -v
 python -m worldforge validate examples/foundation/source/manifest.json --profile release
 python -m worldforge audit-runtime src/isoworld

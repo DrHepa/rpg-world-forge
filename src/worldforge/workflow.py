@@ -236,9 +236,7 @@ def reopen_phase(
         raise WorkflowError("reason and approved_by are required")
 
     reopen_index = PHASE_INDEX[phase_id]
-    status["completed_phases"] = [
-        item for item in completed if PHASE_INDEX[item] < reopen_index
-    ]
+    status["completed_phases"] = [item for item in completed if PHASE_INDEX[item] < reopen_index]
     status["current_phase"] = phase_id
     status["revision"] = int(status.get("revision", 0)) + 1
     if reopen_index <= PHASE_INDEX["p10_canon_lock"]:

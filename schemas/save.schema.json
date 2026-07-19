@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/save.schema.json",
+  "title": "IsoWorld versioned save",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "world_id",
+    "world_content_hash",
+    "state",
+    "state_digest"
+  ],
+  "properties": {
+    "format": {"const": "isoworld.save"},
+    "format_version": {"const": 1},
+    "world_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+    "world_content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "state_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "state": {
+      "type": "object",
+      "required": [
+        "tick",
+        "day",
+        "minute_of_day",
+        "minute_tick",
+        "active_actor_id",
+        "actors",
+        "flags",
+        "completed_interactions"
+      ],
+      "properties": {
+        "tick": {"type": "integer", "minimum": 0},
+        "day": {"type": "integer", "minimum": 1},
+        "minute_of_day": {"type": "integer", "minimum": 0, "maximum": 1439},
+        "minute_tick": {"type": "integer", "minimum": 0},
+        "active_actor_id": {"type": "string"},
+        "actors": {"type": "array", "items": {"type": "object"}},
+        "flags": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "completed_interactions": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "last_message": {"type": "string"}
+      }
+    }
+  }
+}

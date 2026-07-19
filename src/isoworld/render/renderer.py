@@ -39,6 +39,25 @@ class IsometricRenderer:
             for index in range(4):
                 pr.draw_line_v(points[index], points[(index + 1) % 4], pr.Color(35, 30, 48, 255))
 
+        for interaction in state.interactions:
+            x, y = world_to_screen(
+                interaction.x,
+                interaction.y,
+                10.0,
+                self.tile_width,
+                self.tile_height,
+            )
+            position = pr.Vector2(origin_x + x, origin_y + y)
+            color = pr.GOLD if interaction.available else pr.DARKGRAY
+            pr.draw_rectangle(int(position.x - 5), int(position.y - 5), 10, 10, color)
+
+        for actor in state.actors:
+            if not actor.active:
+                continue
+            for route_x, route_y in actor.route:
+                x, y = world_to_screen(route_x, route_y, 6.0, self.tile_width, self.tile_height)
+                pr.draw_circle(int(origin_x + x), int(origin_y + y), 3.0, pr.SKYBLUE)
+
         for actor in state.actors:
             x, y = world_to_screen(actor.x, actor.y, 18.0, self.tile_width, self.tile_height)
             position = pr.Vector2(origin_x + x, origin_y + y)
@@ -46,9 +65,13 @@ class IsometricRenderer:
             pr.draw_circle_v(position, 11.0 if actor.active else 8.0, color)
             if actor.active:
                 pr.draw_circle_lines(int(position.x), int(position.y), 15.0, pr.RAYWHITE)
-            pr.draw_text(actor.display_name, int(position.x + 14), int(position.y - 8), 14, pr.RAYWHITE)
+            pr.draw_text(
+                actor.display_name, int(position.x + 14), int(position.y - 8), 14, pr.RAYWHITE
+            )
 
         pr.draw_text(state.world_title, 24, 20, 28, pr.RAYWHITE)
         pr.draw_text(state.map_title, 24, 54, 18, pr.Color(184, 160, 230, 255))
+        pr.draw_text(state.time_text, self.screen_width - 230, 24, 20, pr.GOLD)
         for index, line in enumerate(state.hud_lines):
-            pr.draw_text(line, 24, self.screen_height - 86 + index * 22, 17, pr.LIGHTGRAY)
+            if line:
+                pr.draw_text(line, 24, self.screen_height - 104 + index * 22, 17, pr.LIGHTGRAY)

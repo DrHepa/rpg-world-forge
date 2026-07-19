@@ -1,6 +1,6 @@
 # Roadmap
 
-## M0 - Foundation (current)
+## M0 - Foundation (complete)
 
 - Pyray runtime with a 2.5D isometric map.
 - Fixed step, reducer, and immutable RenderState.
@@ -9,15 +9,15 @@
 - Headless tests and runtime AI-import audit.
 - GPT-led P00-P14 workflow and offline asset contracts.
 
-## M1 - Systemic vertical slice
+## M1 - Systemic vertical slice (complete)
 
-- Collisions, A* pathfinding, and cell reservations.
-- Clock, schedules, and fallback actor routes.
-- Contextual interaction and abilities with costs.
-- Versioned persistence and action replay.
-- Tiled/LDtk import into the internal format.
+- [x] Collisions, deterministic A* pathfinding, and cell reservations.
+- [x] Clock, schedules, and ordered fallback actor routes.
+- [x] Contextual interaction and abilities with resource costs and cooldowns.
+- [x] Versioned persistence and deterministic action replay.
+- [x] Finite Tiled JSON and embedded LDtk JSON import into the internal format.
 
-## M2 - Narrative core
+## M2 - Narrative core (next)
 
 - Facts, secrets, rumors, and knowledge boundaries.
 - Directed relationships and faction reputation.

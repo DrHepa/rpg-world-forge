@@ -62,6 +62,8 @@ custom `AGENTS.md` and `.worldforge/` control directory.
 ## Verification
 
 ```bash
+ruff check src tests
+ruff format --check src tests
 PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python -m worldforge validate \
   examples/foundation/source/manifest.json --profile release

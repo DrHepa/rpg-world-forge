@@ -1,0 +1,16 @@
+{
+  "id": "focus",
+  "display_name": "Concentración",
+  "target": "self",
+  "range": 0,
+  "costs": {
+    "energy": 1
+  },
+  "cooldown_minutes": 30,
+  "effects": [
+    {
+      "kind": "set_flag",
+      "flag": "focused"
+    }
+  ]
+}

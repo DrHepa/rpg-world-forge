@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/replay.schema.json",
+  "title": "IsoWorld deterministic action replay",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "world_id",
+    "world_content_hash",
+    "actions",
+    "final_state_digest"
+  ],
+  "properties": {
+    "format": {"const": "isoworld.replay"},
+    "format_version": {"const": 1},
+    "world_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+    "world_content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "final_state_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind"],
+        "properties": {"kind": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

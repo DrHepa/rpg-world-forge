@@ -1,8 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import Any
 
-from isoworld.content.models import WorldPack
+from isoworld.content.models import EffectDefinition, WorldPack
+from isoworld.world.navigation import Cell, find_path
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceValue:
+    id: str
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class Cooldown:
+    ability_id: str
+    ready_at_minute: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -11,13 +25,51 @@ class ActorState:
     map_id: str
     x: int
     y: int
+    resources: tuple[ResourceValue, ...] = ()
+    cooldowns: tuple[Cooldown, ...] = ()
+    route: tuple[Cell, ...] = ()
+    blocked_ticks: int = 0
+
+    def resource(self, resource_id: str) -> int:
+        item = next((item for item in self.resources if item.id == resource_id), None)
+        return item.value if item is not None else 0
+
+    def with_resource(self, resource_id: str, value: int) -> ActorState:
+        resources = {item.id: item.value for item in self.resources}
+        resources[resource_id] = max(0, value)
+        return replace(
+            self,
+            resources=tuple(ResourceValue(key, resources[key]) for key in sorted(resources)),
+        )
+
+    def cooldown_until(self, ability_id: str) -> int:
+        item = next((item for item in self.cooldowns if item.ability_id == ability_id), None)
+        return item.ready_at_minute if item is not None else 0
+
+    def with_cooldown(self, ability_id: str, ready_at: int) -> ActorState:
+        values = {item.ability_id: item.ready_at_minute for item in self.cooldowns}
+        values[ability_id] = ready_at
+        return replace(
+            self,
+            cooldowns=tuple(Cooldown(key, values[key]) for key in sorted(values)),
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class WorldState:
     tick: int
+    day: int
+    minute_of_day: int
+    minute_tick: int
     active_actor_id: str
     actors: tuple[ActorState, ...]
+    flags: frozenset[str] = frozenset()
+    completed_interactions: frozenset[str] = frozenset()
+    last_message: str = ""
+
+    @property
+    def absolute_minute(self) -> int:
+        return (self.day - 1) * 1440 + self.minute_of_day
 
     def actor(self, actor_id: str) -> ActorState:
         for actor in self.actors:
@@ -32,6 +84,60 @@ class GameAction:
     actor_id: str | None = None
     dx: int = 0
     dy: int = 0
+    map_id: str | None = None
+    x: int | None = None
+    y: int | None = None
+    ability_id: str | None = None
+    target_actor_id: str | None = None
+    interaction_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "actor_id": self.actor_id,
+            "dx": self.dx,
+            "dy": self.dy,
+            "map_id": self.map_id,
+            "x": self.x,
+            "y": self.y,
+            "ability_id": self.ability_id,
+            "target_actor_id": self.target_actor_id,
+            "interaction_id": self.interaction_id,
+        }
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, Any]) -> GameAction:
+        kind = raw.get("kind")
+        if kind not in {
+            "tick",
+            "select_actor",
+            "move",
+            "navigate",
+            "interact",
+            "use_ability",
+        }:
+            raise ValueError("action kind is unknown")
+        for field in (
+            "actor_id",
+            "map_id",
+            "ability_id",
+            "target_actor_id",
+            "interaction_id",
+        ):
+            if raw.get(field) is not None and not isinstance(raw[field], str):
+                raise ValueError(f"action {field} must be a string or null")
+        return cls(
+            kind=kind,
+            actor_id=raw.get("actor_id"),
+            dx=int(raw.get("dx", 0)),
+            dy=int(raw.get("dy", 0)),
+            map_id=raw.get("map_id"),
+            x=None if raw.get("x") is None else int(raw["x"]),
+            y=None if raw.get("y") is None else int(raw["y"]),
+            ability_id=raw.get("ability_id"),
+            target_actor_id=raw.get("target_actor_id"),
+            interaction_id=raw.get("interaction_id"),
+        )
 
 
 def initial_world_state(pack: WorldPack) -> WorldState:
@@ -42,33 +148,294 @@ def initial_world_state(pack: WorldPack) -> WorldState:
             map_id=actor.spawn.map_id,
             x=actor.spawn.x,
             y=actor.spawn.y,
+            resources=tuple(
+                ResourceValue(resource_id, value) for resource_id, value in actor.resources
+            ),
         )
         for actor in pack.actors.values()
     )
-    return WorldState(tick=0, active_actor_id=playable[0], actors=actors)
+    return WorldState(
+        tick=0,
+        day=pack.clock.start_day,
+        minute_of_day=pack.clock.start_minute,
+        minute_tick=0,
+        active_actor_id=playable[0],
+        actors=actors,
+    )
+
+
+def _replace_actor(state: WorldState, updated: ActorState) -> WorldState:
+    return replace(
+        state,
+        actors=tuple(
+            updated if actor.actor_id == updated.actor_id else actor for actor in state.actors
+        ),
+    )
+
+
+def _occupied(state: WorldState, map_id: str, *, except_actor: str | None = None) -> set[Cell]:
+    return {
+        (actor.x, actor.y)
+        for actor in state.actors
+        if actor.map_id == map_id and actor.actor_id != except_actor
+    }
+
+
+def _advance_clock(state: WorldState, pack: WorldPack) -> WorldState:
+    minute_tick = state.minute_tick + 1
+    day = state.day
+    minute = state.minute_of_day
+    if minute_tick >= pack.clock.ticks_per_minute:
+        minute_tick = 0
+        minute += 1
+        if minute >= 1440:
+            day += 1
+            minute = 0
+    return replace(
+        state,
+        tick=state.tick + 1,
+        day=day,
+        minute_of_day=minute,
+        minute_tick=minute_tick,
+        last_message="",
+    )
+
+
+def _schedule_enabled(state: WorldState, actor: ActorState, pack: WorldPack) -> bool:
+    definition = pack.actors[actor.actor_id]
+    if definition.schedule_id is None or definition.schedule_mode == "never":
+        return False
+    if definition.schedule_mode == "when_inactive" and actor.actor_id == state.active_actor_id:
+        return False
+    return True
+
+
+def _plan_schedules(state: WorldState, pack: WorldPack) -> WorldState:
+    result = state
+    for actor in sorted(result.actors, key=lambda item: item.actor_id):
+        actor = result.actor(actor.actor_id)
+        if actor.route or not _schedule_enabled(result, actor, pack):
+            continue
+        schedule_id = pack.actors[actor.actor_id].schedule_id
+        if schedule_id is None:
+            continue
+        entry = pack.schedules[schedule_id].entry_at(result.minute_of_day)
+        if entry is None:
+            continue
+        candidates = [value for value in entry.destinations if value.map_id == actor.map_id]
+        if any((actor.x, actor.y) == (value.x, value.y) for value in candidates):
+            continue
+        blocked = _occupied(result, actor.map_id, except_actor=actor.actor_id)
+        for destination in candidates:
+            route = find_path(
+                pack,
+                actor.map_id,
+                (actor.x, actor.y),
+                (destination.x, destination.y),
+                blocked=blocked,
+            )
+            if route:
+                result = _replace_actor(result, replace(actor, route=route, blocked_ticks=0))
+                break
+    return result
+
+
+def _advance_routes(state: WorldState, pack: WorldPack) -> WorldState:
+    if state.tick % pack.clock.movement_interval_ticks:
+        return state
+    current_occupancy = {(actor.map_id, actor.x, actor.y): actor.actor_id for actor in state.actors}
+    reservations: set[tuple[str, int, int]] = set()
+    updates: dict[str, ActorState] = {}
+    for actor in sorted(state.actors, key=lambda item: item.actor_id):
+        if not actor.route:
+            continue
+        target = actor.route[0]
+        key = (actor.map_id, target[0], target[1])
+        occupied_by = current_occupancy.get(key)
+        available = (
+            pack.is_walkable(actor.map_id, *target)
+            and key not in reservations
+            and (occupied_by is None or occupied_by == actor.actor_id)
+        )
+        if available:
+            reservations.add(key)
+            updates[actor.actor_id] = replace(
+                actor,
+                x=target[0],
+                y=target[1],
+                route=actor.route[1:],
+                blocked_ticks=0,
+            )
+        else:
+            blocked_ticks = actor.blocked_ticks + 1
+            updates[actor.actor_id] = replace(
+                actor,
+                route=() if blocked_ticks >= 3 else actor.route,
+                blocked_ticks=blocked_ticks,
+            )
+    if not updates:
+        return state
+    return replace(
+        state,
+        actors=tuple(updates.get(actor.actor_id, actor) for actor in state.actors),
+    )
+
+
+def _apply_effects(
+    state: WorldState,
+    effects: tuple[EffectDefinition, ...],
+    *,
+    source_actor_id: str,
+    target_actor_id: str,
+) -> WorldState:
+    result = state
+    for effect in effects:
+        if effect.kind == "set_flag" and effect.flag:
+            result = replace(result, flags=result.flags | {effect.flag})
+        elif effect.kind == "clear_flag" and effect.flag:
+            result = replace(result, flags=result.flags - {effect.flag})
+        elif effect.kind == "change_resource" and effect.resource:
+            actor_id = source_actor_id if effect.target == "self" else target_actor_id
+            actor = result.actor(actor_id)
+            actor = actor.with_resource(
+                effect.resource,
+                actor.resource(effect.resource) + effect.amount,
+            )
+            result = _replace_actor(result, actor)
+    return result
+
+
+def _move(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
+    actor_id = action.actor_id or state.active_actor_id
+    actor = state.actor(actor_id)
+    target = (actor.x + action.dx, actor.y + action.dy)
+    if not pack.is_walkable(actor.map_id, *target):
+        return replace(state, last_message="Movement blocked")
+    if target in _occupied(state, actor.map_id, except_actor=actor_id):
+        return replace(state, last_message="Cell occupied")
+    return _replace_actor(
+        replace(state, last_message=""),
+        replace(actor, x=target[0], y=target[1], route=(), blocked_ticks=0),
+    )
+
+
+def _navigate(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
+    actor_id = action.actor_id or state.active_actor_id
+    actor = state.actor(actor_id)
+    if action.x is None or action.y is None or action.map_id not in {None, actor.map_id}:
+        return replace(state, last_message="Invalid navigation target")
+    route = find_path(
+        pack,
+        actor.map_id,
+        (actor.x, actor.y),
+        (action.x, action.y),
+        blocked=_occupied(state, actor.map_id, except_actor=actor_id),
+    )
+    if not route and (actor.x, actor.y) != (action.x, action.y):
+        return replace(state, last_message="No route")
+    return _replace_actor(
+        replace(state, last_message="Route planned" if route else "Already there"),
+        replace(actor, route=route, blocked_ticks=0),
+    )
+
+
+def _interact(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
+    actor_id = action.actor_id or state.active_actor_id
+    actor = state.actor(actor_id)
+    candidates = [
+        interaction
+        for interaction in pack.interactions.values()
+        if interaction.location.map_id == actor.map_id
+        and abs(interaction.location.x - actor.x) + abs(interaction.location.y - actor.y)
+        <= interaction.range
+        and interaction.required_flags <= state.flags
+        and not (interaction.forbidden_flags & state.flags)
+        and (interaction.repeatable or interaction.id not in state.completed_interactions)
+    ]
+    if action.interaction_id is not None:
+        candidates = [item for item in candidates if item.id == action.interaction_id]
+    if not candidates:
+        return replace(state, last_message="Nothing to interact with")
+    interaction = min(
+        candidates,
+        key=lambda item: (
+            abs(item.location.x - actor.x) + abs(item.location.y - actor.y),
+            item.id,
+        ),
+    )
+    result = _apply_effects(
+        state,
+        interaction.effects,
+        source_actor_id=actor_id,
+        target_actor_id=actor_id,
+    )
+    if not interaction.repeatable:
+        result = replace(
+            result,
+            completed_interactions=result.completed_interactions | {interaction.id},
+        )
+    return replace(result, last_message=interaction.prompt)
+
+
+def _use_ability(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
+    actor_id = action.actor_id or state.active_actor_id
+    actor = state.actor(actor_id)
+    definition = pack.actors[actor_id]
+    ability_id = action.ability_id or (
+        definition.ability_ids[0] if definition.ability_ids else None
+    )
+    if ability_id is None or ability_id not in definition.ability_ids:
+        return replace(state, last_message="Ability unavailable")
+    ability = pack.abilities[ability_id]
+    if actor.cooldown_until(ability_id) > state.absolute_minute:
+        return replace(state, last_message="Ability is cooling down")
+    if any(actor.resource(key) < value for key, value in ability.costs.items()):
+        return replace(state, last_message="Not enough resources")
+
+    target_id = actor_id
+    if ability.target == "actor":
+        target_id = action.target_actor_id or ""
+        try:
+            target = state.actor(target_id)
+        except KeyError:
+            return replace(state, last_message="Invalid ability target")
+        distance = abs(target.x - actor.x) + abs(target.y - actor.y)
+        if target.map_id != actor.map_id or distance > ability.range:
+            return replace(state, last_message="Ability target is out of range")
+
+    updated_actor = actor
+    for resource_id, cost in ability.costs.items():
+        updated_actor = updated_actor.with_resource(
+            resource_id,
+            updated_actor.resource(resource_id) - cost,
+        )
+    updated_actor = updated_actor.with_cooldown(
+        ability_id,
+        state.absolute_minute + ability.cooldown_minutes,
+    )
+    result = _replace_actor(state, updated_actor)
+    result = _apply_effects(
+        result,
+        ability.effects,
+        source_actor_id=actor_id,
+        target_actor_id=target_id,
+    )
+    return replace(result, last_message=ability.display_name)
 
 
 def reduce_world(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
     if action.kind == "tick":
-        return replace(state, tick=state.tick + 1)
-
+        advanced = _advance_clock(state, pack)
+        planned = _plan_schedules(advanced, pack)
+        return _advance_routes(planned, pack)
     if action.kind == "select_actor" and action.actor_id in pack.playable_actor_ids:
-        return replace(state, active_actor_id=action.actor_id)
-
-    if action.kind != "move":
-        return state
-
-    actor_id = action.actor_id or state.active_actor_id
-    actor = state.actor(actor_id)
-    world_map = pack.maps[actor.map_id]
-    target_x = actor.x + action.dx
-    target_y = actor.y + action.dy
-    if target_x < 0 or target_y < 0 or target_x >= world_map.width or target_y >= world_map.height:
-        return state
-    tile_id = world_map.tile_id_at(target_x, target_y)
-    if not pack.tile_types[tile_id].walkable:
-        return state
-
-    moved = replace(actor, x=target_x, y=target_y)
-    actors = tuple(moved if item.actor_id == actor_id else item for item in state.actors)
-    return replace(state, actors=actors)
+        return replace(state, active_actor_id=action.actor_id, last_message="")
+    if action.kind == "move":
+        return _move(state, action, pack)
+    if action.kind == "navigate":
+        return _navigate(state, action, pack)
+    if action.kind == "interact":
+        return _interact(state, action, pack)
+    if action.kind == "use_ability":
+        return _use_ability(state, action, pack)
+    return state

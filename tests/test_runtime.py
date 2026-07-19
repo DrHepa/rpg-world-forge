@@ -10,7 +10,6 @@ from isoworld.render.iso import screen_to_world, world_to_screen
 from isoworld.render.render_state import build_render_state
 from isoworld.world.state import GameAction, initial_world_state, reduce_world
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PACK_PATH = ROOT / "content/compiled/foundation.worldpack.json"
 

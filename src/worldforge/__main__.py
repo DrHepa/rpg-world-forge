@@ -6,6 +6,12 @@ from pathlib import Path
 from worldforge.assets import AssetManifestError, init_asset_manifest, validate_asset_manifest
 from worldforge.claims import validate_claims
 from worldforge.compiler import CompilationError, compile_project
+from worldforge.map_import import (
+    MapImportError,
+    import_map_file,
+    load_mapping,
+    write_imported_map,
+)
 from worldforge.project import SourceProjectError, load_source_project
 from worldforge.runtime_audit import audit_runtime
 from worldforge.scaffold import ScaffoldError, create_world_project
@@ -72,6 +78,20 @@ def build_parser() -> argparse.ArgumentParser:
     compile_cmd = commands.add_parser("compile", help="compile a static worldpack")
     compile_cmd.add_argument("manifest", type=Path)
     compile_cmd.add_argument("--output", type=Path, required=True)
+
+    import_map = commands.add_parser(
+        "import-map",
+        help="convert a finite Tiled or embedded LDtk JSON layer to an internal map",
+    )
+    import_map.add_argument("source", type=Path)
+    import_map.add_argument("--format", choices=("auto", "tiled", "ldtk"), default="auto")
+    import_map.add_argument("--id", dest="map_id", required=True)
+    import_map.add_argument("--display-name", required=True)
+    import_map.add_argument("--mapping", type=Path, required=True)
+    import_map.add_argument("--layer")
+    import_map.add_argument("--level")
+    import_map.add_argument("--default-tile")
+    import_map.add_argument("--output", type=Path, required=True)
 
     audit = commands.add_parser("audit-runtime", help="reject AI SDK imports in runtime")
     audit.add_argument("runtime_root", type=Path)
@@ -167,6 +187,25 @@ def main() -> int:
             )
             return 0
 
+        if args.command == "import-map":
+            mapping = load_mapping(args.mapping)
+            imported = import_map_file(
+                args.source,
+                source_format=args.format,
+                map_id=args.map_id,
+                display_name=args.display_name,
+                mapping=mapping,
+                layer_name=args.layer,
+                level_name=args.level,
+                default_tile=args.default_tile,
+            )
+            write_imported_map(args.output, imported)
+            print(
+                f"OK output={args.output} map={imported['id']} "
+                f"size={imported['width']}x{imported['height']}"
+            )
+            return 0
+
         findings = audit_runtime(args.runtime_root)
         if findings:
             for finding in findings:
@@ -184,6 +223,9 @@ def main() -> int:
         print(f"ERROR {exc}")
         return 1
     except WorkflowError as exc:
+        print(f"ERROR {exc}")
+        return 1
+    except MapImportError as exc:
         print(f"ERROR {exc}")
         return 1
     except CompilationError as exc:

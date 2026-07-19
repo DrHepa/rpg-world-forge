@@ -7,7 +7,6 @@ from typing import Any
 
 from worldforge.validation import ID_PATTERN
 
-
 ACTIVE_STATUSES = {"claimed", "blocked", "ready_for_integration"}
 KNOWN_STATUSES = ACTIVE_STATUSES | {"integrated", "cancelled"}
 
@@ -78,7 +77,9 @@ def validate_claims(project_root: str | Path) -> list[ClaimIssue]:
             for raw_owned in claim["owned_paths"]:
                 owned = _normalize_owned_path(raw_owned)
                 if owned is None:
-                    issues.append(ClaimIssue(f"{relative}/owned_paths", f"unsafe path: {raw_owned}"))
+                    issues.append(
+                        ClaimIssue(f"{relative}/owned_paths", f"unsafe path: {raw_owned}")
+                    )
                 else:
                     ownership.append((task_id, owned, path))
 

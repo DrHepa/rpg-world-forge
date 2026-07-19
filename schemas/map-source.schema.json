@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/map-source.schema.json",
+  "title": "Internal isometric map source",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["id", "display_name", "width", "height", "legend", "rows"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+    "display_name": {"type": "string", "minLength": 1},
+    "width": {"type": "integer", "minimum": 1},
+    "height": {"type": "integer", "minimum": 1},
+    "legend": {
+      "type": "object",
+      "propertyNames": {"minLength": 1, "maxLength": 1},
+      "additionalProperties": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"}
+    },
+    "rows": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "import": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "source_format": {"enum": ["tiled-json", "ldtk-json", "external"]},
+        "manual_overrides": {"type": "array"}
+      }
+    }
+  }
+}

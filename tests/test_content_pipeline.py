@@ -14,7 +14,6 @@ from worldforge.scaffold import create_world_project
 from worldforge.validation import validate_project
 from worldforge.workflow import complete_phase, describe_status, reopen_phase
 
-
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "examples/foundation/source/manifest.json"
 COMPILED = ROOT / "content/compiled/foundation.worldpack.json"
@@ -65,6 +64,30 @@ class ContentPipelineTests(unittest.TestCase):
             sum("requires a personal arc" in message for message in messages),
         )
 
+    def test_malformed_m1_locations_report_issues_without_crashing(self) -> None:
+        original = load_source_project(MANIFEST)
+        collections = {key: list(value) for key, value in original.collections.items()}
+        collections["schedules"] = [
+            {
+                "id": "broken_schedule",
+                "entries": [
+                    {
+                        "start_minute": 0,
+                        "end_minute": 100,
+                        "map_id": "missing_map",
+                        "x": "bad",
+                        "y": 0,
+                        "activity": "wait",
+                        "fallbacks": ["not_a_location"],
+                    }
+                ],
+            }
+        ]
+        broken = SourceProject(original.manifest_path, original.world, collections)
+        messages = [issue.message for issue in validate_project(broken)]
+        self.assertTrue(any("unknown map" in message for message in messages))
+        self.assertTrue(any("location object" in message for message in messages))
+
     def test_compiler_writes_loadable_pack(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "test.worldpack.json"
@@ -86,6 +109,9 @@ class ContentPipelineTests(unittest.TestCase):
             self.assertEqual([], validate_project(project))
             self.assertEqual("another_world", project.world["id"])
             self.assertEqual("first_actor", project.collections["actors"][0]["id"])
+            self.assertIn("interactions", project.collections)
+            self.assertEqual(20, project.world["simulation"]["ticks_per_minute"])
+            self.assertEqual(2, build_worldpack(project)["format_version"])
             self.assertTrue((target / ".gitignore").is_file())
             self.assertTrue((target / "AGENTS.md").is_file())
             self.assertTrue((target / ".worldforge/status.json").is_file())
@@ -118,7 +144,9 @@ class ContentPipelineTests(unittest.TestCase):
                 language="es",
             )
             deliverable = target / "source/design/experience_brief.md"
-            deliverable.write_text("# Brief\n\nExperiencia y restricciones aprobadas.\n", encoding="utf-8")
+            deliverable.write_text(
+                "# Brief\n\nExperiencia y restricciones aprobadas.\n", encoding="utf-8"
+            )
             report = target / "phase_report.json"
             report.write_text(
                 json.dumps(
@@ -211,8 +239,7 @@ class ContentPipelineTests(unittest.TestCase):
             manifest_path = Path(directory) / "assets/manifest.json"
             init_asset_manifest(COMPILED, manifest_path)
             messages = [
-                issue.message
-                for issue in validate_asset_manifest(manifest_path, profile="release")
+                issue.message for issue in validate_asset_manifest(manifest_path, profile="release")
             ]
             self.assertIn("a release must contain assets", messages)
 
@@ -233,8 +260,7 @@ class ContentPipelineTests(unittest.TestCase):
             ]
             manifest_path.write_text(json.dumps(raw), encoding="utf-8")
             messages = [
-                issue.message
-                for issue in validate_asset_manifest(manifest_path, profile="release")
+                issue.message for issue in validate_asset_manifest(manifest_path, profile="release")
             ]
             self.assertIn("release requires processed status", messages)
             self.assertIn("provenance is required", messages)

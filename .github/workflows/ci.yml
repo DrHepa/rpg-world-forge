@@ -25,7 +25,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install package
-        run: python -m pip install -e .
+        run: python -m pip install -e ".[dev]"
+      - name: Lint and formatting
+        run: |
+          ruff check src tests
+          ruff format --check src tests
       - name: Compile Python
         run: python -m compileall -q src
       - name: Run headless tests
@@ -34,3 +38,5 @@ jobs:
         run: worldforge validate examples/foundation/source/manifest.json --profile release
       - name: Audit runtime AI boundary
         run: worldforge audit-runtime src/isoworld
+      - name: Build wheel
+        run: python -m pip wheel . --no-deps --wheel-dir dist

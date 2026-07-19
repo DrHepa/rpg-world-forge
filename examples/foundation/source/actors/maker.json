@@ -13,6 +13,9 @@
     96,
     255
   ],
+  "resources": {
+    "energy": 3
+  },
   "tags": [
     "example"
   ]

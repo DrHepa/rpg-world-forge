@@ -1,0 +1,20 @@
+{
+  "id": "guide_day",
+  "entries": [
+    {
+      "start_minute": 0,
+      "end_minute": 1440,
+      "map_id": "test_garden",
+      "x": 7,
+      "y": 5,
+      "activity": "observe_garden",
+      "fallbacks": [
+        {
+          "map_id": "test_garden",
+          "x": 6,
+          "y": 5
+        }
+      ]
+    }
+  ]
+}

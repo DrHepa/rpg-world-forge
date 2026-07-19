@@ -42,6 +42,16 @@ Input -> GameAction -> reducer(WorldState) -> new WorldState
 - Future systems react to domain events instead of calling one another through
   circular dependencies.
 
+M1 keeps navigation, clock advancement, schedules, interactions, abilities,
+and reservations inside the pure reducer. Persistence serializes only
+`WorldState`; rendering still consumes a separate frozen snapshot.
+
+```text
+tick -> advance clock -> plan eligible schedules -> reserve cells -> advance routes
+input -> move/navigate/interact/use_ability -> reducer -> new WorldState
+save/replay -> world ID + content hash + state/action digest
+```
+
 ## Layers
 
 1. `core`: application, input-to-action mapping, and fixed step.
@@ -65,6 +75,8 @@ paths; only the lead GPT integrates canon.
   `litellm`, `ollama`, `llama_cpp`, or equivalent packages.
 - Assets and worldpacks are distributable without credentials.
 - One seed and the same action sequence produce the same state.
+- Saves and replays must match the exact compiled world content hash.
+- No two actors may occupy or reserve the same destination cell in one tick.
 - Water is not walkable or arable.
 - Rock and vegetation are not arable by default.
 - Manual tile decisions take priority over generated decisions.
