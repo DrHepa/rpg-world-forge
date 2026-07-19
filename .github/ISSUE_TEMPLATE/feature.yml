@@ -1,0 +1,25 @@
+name: Feature proposal
+description: World-agnostic capability or contract improvement
+title: "[FEATURE] "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Explain the reusable need without game-specific canon.
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Proposed contract and alternatives
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Runtime, licensing and migration impact
+    validations:
+      required: true

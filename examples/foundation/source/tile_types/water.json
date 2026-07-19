@@ -1,0 +1,17 @@
+{
+  "id": "water",
+  "display_name": "Agua",
+  "color": [
+    46,
+    91,
+    132,
+    255
+  ],
+  "walkable": false,
+  "arable": false,
+  "height": -2,
+  "tags": [
+    "terrain",
+    "liquid"
+  ]
+}

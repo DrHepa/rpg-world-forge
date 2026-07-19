@@ -1,0 +1,15 @@
+{
+  "id": "foundation_slice",
+  "title": "Jardín de pruebas",
+  "language": "es",
+  "start_map_id": "test_garden",
+  "capabilities": [
+    "grid_movement",
+    "playable_actor_switching"
+  ],
+  "ui": {
+    "active_actor": "Personaje activo",
+    "move_help": "Flechas o WASD: mover",
+    "switch_help": "Tab: cambiar de personaje"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "explorer",
+  "display_name": "Explorador",
+  "playable": true,
+  "spawn": {
+    "map_id": "test_garden",
+    "x": 1,
+    "y": 1
+  },
+  "color": [
+    194,
+    137,
+    255,
+    255
+  ],
+  "tags": [
+    "example"
+  ]
+}

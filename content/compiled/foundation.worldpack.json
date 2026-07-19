@@ -1,0 +1,147 @@
+{
+  "collections": {
+    "abilities": [],
+    "actors": [
+      {
+        "color": [
+          194,
+          137,
+          255,
+          255
+        ],
+        "display_name": "Explorador",
+        "id": "explorer",
+        "playable": true,
+        "spawn": {
+          "map_id": "test_garden",
+          "x": 1,
+          "y": 1
+        },
+        "tags": [
+          "example"
+        ]
+      },
+      {
+        "color": [
+          255,
+          185,
+          96,
+          255
+        ],
+        "display_name": "Constructora",
+        "id": "maker",
+        "playable": true,
+        "spawn": {
+          "map_id": "test_garden",
+          "x": 8,
+          "y": 8
+        },
+        "tags": [
+          "example"
+        ]
+      }
+    ],
+    "dialogues": [],
+    "factions": [],
+    "facts": [],
+    "maps": [
+      {
+        "display_name": "Jardín de pruebas",
+        "height": 10,
+        "id": "test_garden",
+        "legend": {
+          "#": "rock",
+          ".": "ground",
+          "~": "water"
+        },
+        "rows": [
+          "..........",
+          "..##......",
+          "..##..~~~.",
+          "......~~~.",
+          ".~~~..~~~.",
+          ".~~~......",
+          ".~~~...##.",
+          ".......##.",
+          "..........",
+          ".........."
+        ],
+        "width": 10
+      }
+    ],
+    "personal_arcs": [],
+    "quests": [],
+    "scenes": [],
+    "schedules": [],
+    "tile_types": [
+      {
+        "arable": true,
+        "color": [
+          82,
+          112,
+          78,
+          255
+        ],
+        "display_name": "Suelo",
+        "height": 0,
+        "id": "ground",
+        "tags": [
+          "terrain"
+        ],
+        "walkable": true
+      },
+      {
+        "arable": false,
+        "color": [
+          88,
+          82,
+          98,
+          255
+        ],
+        "display_name": "Roca",
+        "height": 6,
+        "id": "rock",
+        "tags": [
+          "terrain",
+          "solid"
+        ],
+        "walkable": false
+      },
+      {
+        "arable": false,
+        "color": [
+          46,
+          91,
+          132,
+          255
+        ],
+        "display_name": "Agua",
+        "height": -2,
+        "id": "water",
+        "tags": [
+          "terrain",
+          "liquid"
+        ],
+        "walkable": false
+      }
+    ]
+  },
+  "content_hash": "e4b6e50f6bdc68dd3bf882ef31e51903cf7c922488c461cffe97a101cb1b079b",
+  "format": "isoworld.worldpack",
+  "format_version": 1,
+  "world": {
+    "capabilities": [
+      "grid_movement",
+      "playable_actor_switching"
+    ],
+    "id": "foundation_slice",
+    "language": "es",
+    "start_map_id": "test_garden",
+    "title": "Jardín de pruebas",
+    "ui": {
+      "active_actor": "Personaje activo",
+      "move_help": "Flechas o WASD: mover",
+      "switch_help": "Tab: cambiar de personaje"
+    }
+  }
+}

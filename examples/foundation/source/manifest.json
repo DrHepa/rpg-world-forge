@@ -1,0 +1,27 @@
+{
+  "format": "isoworld.source_manifest",
+  "format_version": 1,
+  "world": "world.json",
+  "collections": {
+    "abilities": [],
+    "actors": [
+      "actors/explorer.json",
+      "actors/maker.json"
+    ],
+    "dialogues": [],
+    "facts": [],
+    "factions": [],
+    "maps": [
+      "maps/test_garden.json"
+    ],
+    "personal_arcs": [],
+    "quests": [],
+    "scenes": [],
+    "schedules": [],
+    "tile_types": [
+      "tile_types/ground.json",
+      "tile_types/rock.json",
+      "tile_types/water.json"
+    ]
+  }
+}

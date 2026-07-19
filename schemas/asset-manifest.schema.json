@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/asset-manifest.schema.json",
+  "title": "RPG World Forge asset manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "world_id",
+    "world_content_hash",
+    "phase",
+    "assets"
+  ],
+  "properties": {
+    "format": {
+      "const": "rpg-world-forge.asset_manifest"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "world_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$"
+    },
+    "world_content_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "phase": {
+      "enum": [
+        "art_direction",
+        "production",
+        "release"
+      ]
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "specification_file"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,63}$"
+          },
+          "kind": {
+            "enum": [
+              "font",
+              "music",
+              "portrait",
+              "shader",
+              "sfx",
+              "sprite",
+              "spritesheet",
+              "tileset",
+              "ui",
+              "vfx"
+            ]
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "generated",
+              "approved",
+              "processed"
+            ]
+          },
+          "specification_file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "runtime_file": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

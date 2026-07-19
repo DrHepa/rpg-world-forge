@@ -1,0 +1,19 @@
+{
+  "id": "maker",
+  "display_name": "Constructora",
+  "playable": true,
+  "spawn": {
+    "map_id": "test_garden",
+    "x": 8,
+    "y": 8
+  },
+  "color": [
+    255,
+    185,
+    96,
+    255
+  ],
+  "tags": [
+    "example"
+  ]
+}

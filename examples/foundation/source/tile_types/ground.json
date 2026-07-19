@@ -1,0 +1,16 @@
+{
+  "id": "ground",
+  "display_name": "Suelo",
+  "color": [
+    82,
+    112,
+    78,
+    255
+  ],
+  "walkable": true,
+  "arable": true,
+  "height": 0,
+  "tags": [
+    "terrain"
+  ]
+}

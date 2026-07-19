@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/phase-report.schema.json",
+  "title": "RPG World Forge phase report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "phase",
+    "status",
+    "summary",
+    "deliverables",
+    "decisions",
+    "blockers",
+    "validations",
+    "reviewed_by"
+  ],
+  "properties": {
+    "format": {
+      "const": "rpg-world-forge.phase_report"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "phase": {
+      "type": "string",
+      "pattern": "^p[0-9]{2}_[a-z0-9_]+$"
+    },
+    "status": {
+      "const": "ready"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "deliverables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "validations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "passed",
+          "evidence"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "passed": {
+            "const": true
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reviewed_by": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worldpack_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worldpack_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "asset_manifest_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "handoff_path": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

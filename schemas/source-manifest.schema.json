@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/source-manifest.schema.json",
+  "title": "RPG World Forge source manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "world",
+    "collections"
+  ],
+  "properties": {
+    "format": {
+      "const": "isoworld.source_manifest"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "world": {
+      "type": "string",
+      "minLength": 1
+    },
+    "collections": {
+      "type": "object",
+      "required": [
+        "tile_types",
+        "maps",
+        "actors"
+      ],
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

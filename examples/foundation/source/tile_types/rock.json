@@ -1,0 +1,17 @@
+{
+  "id": "rock",
+  "display_name": "Roca",
+  "color": [
+    88,
+    82,
+    98,
+    255
+  ],
+  "walkable": false,
+  "arable": false,
+  "height": 6,
+  "tags": [
+    "terrain",
+    "solid"
+  ]
+}

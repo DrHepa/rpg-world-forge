@@ -1,0 +1,62 @@
+name: Agent task
+description: Bounded work for GPT or a delegated specialist
+title: "[AGENT] "
+labels:
+  - agent-task
+body:
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase
+      options:
+        - Toolkit/core
+        - P00 Brief
+        - P01 Genre/style
+        - P02 World laws
+        - P03 Geography
+        - P04 Timeline
+        - P05 Societies
+        - P06 Characters
+        - P07 Systems
+        - P08 World arcs
+        - P09 Narrative content
+        - P10 Canon lock
+        - P11 Art/audio
+        - P12 Asset specs
+        - P13 Asset production
+        - P14 Handoff
+    validations:
+      required: true
+  - type: input
+    id: principal
+    attributes:
+      label: Principal agent
+      value: GPT
+    validations:
+      required: true
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective and non-goals
+      description: State one bounded outcome and what must not change.
+    validations:
+      required: true
+  - type: textarea
+    id: paths
+    attributes:
+      label: Owned paths
+      description: Exact files/directories this task may modify.
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Canonical inputs and dependencies
+    validations:
+      required: true
+  - type: textarea
+    id: gate
+    attributes:
+      label: Deliverables and validation gate
+    validations:
+      required: true
