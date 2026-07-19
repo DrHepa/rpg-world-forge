@@ -16,6 +16,14 @@
   "schedule_id": "guide_day",
   "schedule_mode": "always",
   "resources": {},
+  "knowledge": {
+    "secrets": [
+      "stone_song"
+    ]
+  },
+  "faction_reputation": {
+    "garden_keepers": 40
+  },
   "tags": [
     "example"
   ]

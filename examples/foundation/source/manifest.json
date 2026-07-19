@@ -11,9 +11,16 @@
       "actors/maker.json",
       "actors/guide.json"
     ],
-    "dialogues": [],
-    "facts": [],
-    "factions": [],
+    "dialogues": [
+      "dialogues/guide_welcome.json"
+    ],
+    "facts": [
+      "facts/garden_rumor.json",
+      "facts/stone_song.json"
+    ],
+    "factions": [
+      "factions/garden_keepers.json"
+    ],
     "interactions": [
       "interactions/resonant_stone.json"
     ],
@@ -21,8 +28,12 @@
       "maps/test_garden.json"
     ],
     "personal_arcs": [],
-    "quests": [],
-    "scenes": [],
+    "quests": [
+      "quests/resonance_trial.json"
+    ],
+    "scenes": [
+      "scenes/morning_resonance.json"
+    ],
     "schedules": [
       "schedules/guide_day.json"
     ],

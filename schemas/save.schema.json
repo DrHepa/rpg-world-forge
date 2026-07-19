@@ -14,7 +14,7 @@
   ],
   "properties": {
     "format": {"const": "isoworld.save"},
-    "format_version": {"const": 1},
+    "format_version": {"const": 2},
     "world_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
     "world_content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "state_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -28,7 +28,12 @@
         "active_actor_id",
         "actors",
         "flags",
-        "completed_interactions"
+        "completed_interactions",
+        "quests",
+        "dialogue",
+        "active_scene_id",
+        "triggered_scenes",
+        "recent_events"
       ],
       "properties": {
         "tick": {"type": "integer", "minimum": 0},
@@ -43,6 +48,15 @@
           "items": {"type": "string"},
           "uniqueItems": true
         },
+        "quests": {"type": "array", "items": {"type": "object"}},
+        "dialogue": {"type": ["object", "null"]},
+        "active_scene_id": {"type": ["string", "null"]},
+        "triggered_scenes": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "recent_events": {"type": "array", "items": {"type": "object"}},
         "last_message": {"type": "string"}
       }
     }

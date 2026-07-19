@@ -17,13 +17,13 @@
 - [x] Versioned persistence and deterministic action replay.
 - [x] Finite Tiled JSON and embedded LDtk JSON import into the internal format.
 
-## M2 - Narrative core (next)
+## M2 - Narrative core (complete)
 
-- Facts, secrets, rumors, and knowledge boundaries.
-- Directed relationships and faction reputation.
-- Conditional dialogue graphs.
-- Event-reactive quests and time-windowed scenes.
-- Reachability and softlock analysis.
+- [x] Facts, secrets, rumors, and knowledge boundaries.
+- [x] Directed relationships and faction reputation.
+- [x] Conditional dialogue graphs.
+- [x] Event-reactive quests and time-windowed scenes.
+- [x] Reachability and softlock analysis.
 
 ## M3 - Living world
 

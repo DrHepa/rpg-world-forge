@@ -30,8 +30,21 @@
           255
         ],
         "display_name": "Explorador",
+        "faction_reputation": {
+          "garden_keepers": 0
+        },
         "id": "explorer",
+        "knowledge": {
+          "suspects": [
+            "garden_rumor"
+          ]
+        },
         "playable": true,
+        "relationships": {
+          "guide": {
+            "trust": 10
+          }
+        },
         "resources": {
           "energy": 3
         },
@@ -52,7 +65,15 @@
           255
         ],
         "display_name": "Guía",
+        "faction_reputation": {
+          "garden_keepers": 40
+        },
         "id": "guide",
+        "knowledge": {
+          "secrets": [
+            "stone_song"
+          ]
+        },
         "playable": false,
         "resources": {},
         "schedule_id": "guide_day",
@@ -89,9 +110,105 @@
         ]
       }
     ],
-    "dialogues": [],
-    "factions": [],
-    "facts": [],
+    "dialogues": [
+      {
+        "actor_id": "guide",
+        "conditions": [
+          {
+            "flag": "stone_awakened",
+            "kind": "flag_set"
+          }
+        ],
+        "display_name": "La memoria de la piedra",
+        "id": "guide_welcome",
+        "nodes": [
+          {
+            "allow_exit": true,
+            "choices": [
+              {
+                "conditions": [
+                  {
+                    "flag": "stone_awakened",
+                    "kind": "flag_set"
+                  }
+                ],
+                "effects": [],
+                "id": "ask_song",
+                "next_node_id": "explanation",
+                "text": "Preguntar qué recuerda la piedra."
+              },
+              {
+                "conditions": [],
+                "effects": [],
+                "id": "leave",
+                "next_node_id": null,
+                "text": "Despedirse."
+              }
+            ],
+            "fact_refs": [],
+            "id": "welcome",
+            "on_enter": [],
+            "speaker_id": "guide",
+            "text": "He oído la resonancia. ¿Qué quieres saber?"
+          },
+          {
+            "allow_exit": true,
+            "choices": [
+              {
+                "conditions": [],
+                "effects": [
+                  {
+                    "fact_id": "stone_song",
+                    "kind": "learn_fact",
+                    "knowledge_status": "known",
+                    "target": "self"
+                  },
+                  {
+                    "amount": 10,
+                    "dimension": "trust",
+                    "kind": "change_relationship",
+                    "target": "self",
+                    "target_actor_id": "guide"
+                  }
+                ],
+                "id": "remember_song",
+                "next_node_id": null,
+                "text": "Guardar la canción en la memoria."
+              }
+            ],
+            "fact_refs": [
+              "stone_song"
+            ],
+            "id": "explanation",
+            "on_enter": [],
+            "speaker_id": "guide",
+            "text": "La piedra conserva un fragmento de la memoria del jardín. Ahora también tú puedes reconocer su canción."
+          }
+        ],
+        "range": 1,
+        "start_node_id": "welcome"
+      }
+    ],
+    "factions": [
+      {
+        "display_name": "Guardianes del jardín",
+        "id": "garden_keepers"
+      }
+    ],
+    "facts": [
+      {
+        "id": "garden_rumor",
+        "kind": "rumor",
+        "statement": "Some paths in the garden are said to answer patient travellers.",
+        "truth": "unknown"
+      },
+      {
+        "id": "stone_song",
+        "kind": "secret",
+        "statement": "The resonant stone preserves a fragment of the garden's memory.",
+        "truth": "true"
+      }
+    ],
     "interactions": [
       {
         "display_name": "Piedra resonante",
@@ -144,8 +261,71 @@
       }
     ],
     "personal_arcs": [],
-    "quests": [],
-    "scenes": [],
+    "quests": [
+      {
+        "auto_start_conditions": [],
+        "id": "resonance_trial",
+        "stages": [
+          {
+            "completion_conditions": [
+              {
+                "event_kind": "interaction_completed",
+                "kind": "event",
+                "subject_id": "resonant_stone"
+              }
+            ],
+            "description": "Despierta la piedra resonante.",
+            "failure_conditions": [],
+            "id": "awaken_stone",
+            "next_stage_id": "learn_song",
+            "on_complete": [],
+            "on_fail": []
+          },
+          {
+            "completion_conditions": [
+              {
+                "fact_id": "stone_song",
+                "kind": "fact_status",
+                "knowledge_status": "known"
+              }
+            ],
+            "description": "Habla con la guía y aprende la canción de la piedra.",
+            "failure_conditions": [],
+            "id": "learn_song",
+            "next_stage_id": null,
+            "on_complete": [
+              {
+                "amount": 5,
+                "faction_id": "garden_keepers",
+                "kind": "change_reputation",
+                "target": "self"
+              }
+            ],
+            "on_fail": []
+          }
+        ],
+        "start_stage_id": "awaken_stone",
+        "title": "La prueba de la resonancia"
+      }
+    ],
+    "scenes": [
+      {
+        "conditions": [
+          {
+            "flag": "stone_awakened",
+            "kind": "flag_set"
+          }
+        ],
+        "effects": [],
+        "end_minute": 540,
+        "id": "morning_resonance",
+        "once": true,
+        "priority": 10,
+        "start_minute": 480,
+        "text": "La resonancia recorre los senderos y, durante un instante, el jardín parece recordar a quienes lo atraviesan.",
+        "title": "Una respuesta en el jardín"
+      }
+    ],
     "schedules": [
       {
         "entries": [
@@ -221,9 +401,9 @@
       }
     ]
   },
-  "content_hash": "71cf7889f8f6834e30393faa92c6cf5e77d451c9e647eb8242f3b3b2f4afe8a3",
+  "content_hash": "818af80ba6afbfd1f7144c0944c989847d47ea9736a8626786ea18d3d26ed9a7",
   "format": "isoworld.worldpack",
-  "format_version": 2,
+  "format_version": 3,
   "world": {
     "capabilities": [
       "grid_movement",
@@ -234,7 +414,12 @@
       "contextual_interactions",
       "costed_abilities",
       "versioned_persistence",
-      "action_replay"
+      "action_replay",
+      "typed_knowledge",
+      "directed_relationships",
+      "conditional_dialogue",
+      "reactive_quests",
+      "timed_scenes"
     ],
     "id": "foundation_slice",
     "language": "es",
@@ -250,9 +435,12 @@
       "ability_help": "1: usar Concentración",
       "active_actor": "Personaje activo",
       "clock_label": "Día",
+      "dialogue_help": "Q: hablar; números: elegir; Esc: salir",
       "interact_help": "E: interactuar",
       "move_help": "Flechas o WASD: mover",
       "navigate_help": "Clic izquierdo: navegar",
+      "quest_label": "Misión",
+      "scene_help": "Espacio: continuar",
       "switch_help": "Tab: cambiar de personaje"
     }
   }

@@ -98,6 +98,9 @@ def create_world_project(
             "switch_help": "Tab: cambiar de personaje",
             "interact_help": "E: interactuar",
             "ability_help": "1: usar primera habilidad",
+            "dialogue_help": "Q: hablar; números: elegir; Esc: salir",
+            "scene_help": "Espacio: continuar",
+            "quest_label": "Misión",
             "clock_label": "Día",
         }
         if is_spanish
@@ -108,6 +111,9 @@ def create_world_project(
             "switch_help": "Tab: switch character",
             "interact_help": "E: interact",
             "ability_help": "1: use first ability",
+            "dialogue_help": "Q: talk; number keys: choose; Esc: leave",
+            "scene_help": "Space: continue",
+            "quest_label": "Quest",
             "clock_label": "Day",
         }
     )
@@ -140,6 +146,11 @@ def create_world_project(
                 "contextual_interactions",
                 "costed_abilities",
                 "versioned_persistence",
+                "typed_knowledge",
+                "directed_relationships",
+                "conditional_dialogue",
+                "reactive_quests",
+                "timed_scenes",
             ],
             "simulation": {
                 "start_day": 1,

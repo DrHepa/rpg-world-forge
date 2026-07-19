@@ -21,7 +21,7 @@ def build_worldpack(project: SourceProject) -> dict[str, Any]:
         raise CompilationError(issues)
     payload: dict[str, Any] = {
         "format": "isoworld.worldpack",
-        "format_version": 2,
+        "format_version": 3,
         "world": project.world,
         "collections": {
             name: sorted(items, key=lambda item: item["id"])

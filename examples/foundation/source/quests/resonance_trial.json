@@ -1,0 +1,45 @@
+{
+  "id": "resonance_trial",
+  "title": "La prueba de la resonancia",
+  "start_stage_id": "awaken_stone",
+  "auto_start_conditions": [],
+  "stages": [
+    {
+      "id": "awaken_stone",
+      "description": "Despierta la piedra resonante.",
+      "completion_conditions": [
+        {
+          "kind": "event",
+          "event_kind": "interaction_completed",
+          "subject_id": "resonant_stone"
+        }
+      ],
+      "failure_conditions": [],
+      "on_complete": [],
+      "on_fail": [],
+      "next_stage_id": "learn_song"
+    },
+    {
+      "id": "learn_song",
+      "description": "Habla con la guía y aprende la canción de la piedra.",
+      "completion_conditions": [
+        {
+          "kind": "fact_status",
+          "fact_id": "stone_song",
+          "knowledge_status": "known"
+        }
+      ],
+      "failure_conditions": [],
+      "on_complete": [
+        {
+          "kind": "change_reputation",
+          "target": "self",
+          "faction_id": "garden_keepers",
+          "amount": 5
+        }
+      ],
+      "on_fail": [],
+      "next_stage_id": null
+    }
+  ]
+}

@@ -7,7 +7,7 @@
   "required": ["format", "format_version", "world", "collections", "content_hash"],
   "properties": {
     "format": {"const": "isoworld.worldpack"},
-    "format_version": {"enum": [1, 2]},
+    "format_version": {"enum": [1, 2, 3]},
     "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "world": {
       "type": "object",
@@ -16,10 +16,44 @@
     "collections": {
       "type": "object",
       "required": ["tile_types", "maps", "actors"],
+      "properties": {
+        "facts": {
+          "type": "array",
+          "items": {"$ref": "narrative-content.schema.json#/$defs/fact"}
+        },
+        "factions": {
+          "type": "array",
+          "items": {"$ref": "narrative-content.schema.json#/$defs/faction"}
+        },
+        "dialogues": {
+          "type": "array",
+          "items": {"$ref": "narrative-content.schema.json#/$defs/dialogue"}
+        },
+        "quests": {
+          "type": "array",
+          "items": {"$ref": "narrative-content.schema.json#/$defs/quest"}
+        },
+        "scenes": {
+          "type": "array",
+          "items": {"$ref": "narrative-content.schema.json#/$defs/scene"}
+        }
+      },
       "additionalProperties": {
         "type": "array",
         "items": {"type": "object", "required": ["id"]}
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"format_version": {"const": 3}}},
+      "then": {
+        "properties": {
+          "collections": {
+            "required": ["facts", "factions", "dialogues", "quests", "scenes"]
+          }
+        }
+      }
+    }
+  ]
 }

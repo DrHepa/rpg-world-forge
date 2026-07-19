@@ -15,6 +15,10 @@ Conditions inspect flags, clock, location, inventory, reputation,
 relationships, knowledge, and quest stages. Effects change those domains
 through validated actions.
 
+M2 implements the bounded subset documented in
+[M2_NARRATIVE.md](M2_NARRATIVE.md). Conditions are declarative conjunctions,
+effects are allowlisted operations, and quest/event propagation is bounded.
+
 ## Systems that should interact
 
 - **Relationships**: trust, debt, and fear open different paths.

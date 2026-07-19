@@ -17,7 +17,7 @@ knowledge boundaries. Its output is never accepted directly: a human or the
 authorized lead agent reviews it, `worldforge` validates it, and the build step
 compiles it into a static worldpack consumed by the runtime.
 
-## Current systemic slice (M1)
+## Current systemic slice (M2)
 
 - Fixed-step game loop rendered through pyray.
 - Isometric projection and semantic terrain (ground, water, and rock).
@@ -30,6 +30,11 @@ compiles it into a static worldpack consumed by the runtime.
 - Abilities with explicit resource costs, range, cooldowns, and effects.
 - Versioned, worldpack-bound saves and deterministic action replays.
 - Finite Tiled JSON and embedded LDtk JSON map import.
+- Typed facts, rumors, secrets, and enforced per-actor knowledge boundaries.
+- Directed relationship dimensions and per-actor faction reputation.
+- Conditional dialogue graphs with fact-gated speakers and choices.
+- Event-reactive quest stages and prioritized time-windowed scenes.
+- Offline narrative reachability, producer, and softlock analysis.
 - Offline content compiler and cross-reference validator.
 - Offline asset pipeline with provenance and license tracking.
 - A 15-phase workflow with GPT as lead agent and verifiable quality gates.
@@ -67,6 +72,9 @@ Vertical-slice controls:
 - `Tab`: select the next playable actor defined by the worldpack.
 - `E`: use the nearest available contextual interaction.
 - `1`: use the active actor's first ability.
+- `Q`: start the nearest eligible dialogue; number keys select a choice.
+- `Esc`: leave a dialogue when its current node allows it.
+- `Space`: dismiss an active scene.
 - `F5`/`F9`: write/load the path supplied with `--save`.
 - `Esc`: exit.
 
@@ -111,6 +119,9 @@ After the canon is complete:
 ```bash
 worldforge compile ../my-world/source/manifest.json \
   --output ../my-world/build/my_world.worldpack.json
+worldforge analyze-narrative ../my-world/source/manifest.json \
+  --output ../my-world/build/narrative-analysis.json \
+  --fail-on warning
 worldforge init-assets ../my-world/build/my_world.worldpack.json \
   --output ../my-world/assets/manifest.json
 ```
@@ -169,6 +180,9 @@ Read [ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 M1 runtime contracts and limits are documented in
 [M1_SYSTEMS.md](docs/M1_SYSTEMS.md), and the implementation audit is recorded in
 [AUDIT_2026-07-19.md](docs/AUDIT_2026-07-19.md).
+M2 narrative contracts and limits are documented in
+[M2_NARRATIVE.md](docs/M2_NARRATIVE.md), with its security and implementation
+review in [AUDIT_M2_2026-07-19.md](docs/AUDIT_M2_2026-07-19.md).
 Visual and audio production is described in
 [ASSET_PIPELINE.md](docs/ASSET_PIPELINE.md). The GPT and multi-agent protocol is
 documented in [agents/README.md](agents/README.md).

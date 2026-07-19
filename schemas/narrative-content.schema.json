@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/narrative-content.schema.json",
+  "title": "IsoWorld M2 narrative content",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$"
+    },
+    "condition": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "flag_set",
+            "flag_unset",
+            "fact_status",
+            "relationship_at_least",
+            "reputation_at_least",
+            "quest_status",
+            "event",
+            "time_window",
+            "actor_at"
+          ]
+        },
+        "negate": {"type": "boolean"},
+        "flag": {"$ref": "#/$defs/id"},
+        "fact_id": {"$ref": "#/$defs/id"},
+        "knowledge_status": {"enum": ["unknown", "suspected", "known", "secret"]},
+        "actor_id": {"$ref": "#/$defs/id"},
+        "target_actor_id": {"$ref": "#/$defs/id"},
+        "dimension": {"$ref": "#/$defs/id"},
+        "faction_id": {"$ref": "#/$defs/id"},
+        "value": {"type": "integer"},
+        "quest_id": {"$ref": "#/$defs/id"},
+        "quest_status": {"enum": ["inactive", "active", "completed", "failed"]},
+        "event_kind": {"$ref": "#/$defs/id"},
+        "subject_id": {"$ref": "#/$defs/id"},
+        "map_id": {"$ref": "#/$defs/id"},
+        "x": {"type": "integer", "minimum": 0},
+        "y": {"type": "integer", "minimum": 0},
+        "start_minute": {"type": "integer", "minimum": 0, "maximum": 1439},
+        "end_minute": {"type": "integer", "minimum": 0, "maximum": 1440}
+      }
+    },
+    "effect": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "set_flag",
+            "clear_flag",
+            "change_resource",
+            "learn_fact",
+            "change_relationship",
+            "change_reputation"
+          ]
+        },
+        "target": {"enum": ["self", "target"]},
+        "resource": {"$ref": "#/$defs/id"},
+        "amount": {"type": "integer"},
+        "flag": {"$ref": "#/$defs/id"},
+        "fact_id": {"$ref": "#/$defs/id"},
+        "knowledge_status": {"enum": ["suspected", "known", "secret"]},
+        "target_actor_id": {"$ref": "#/$defs/id"},
+        "dimension": {"$ref": "#/$defs/id"},
+        "faction_id": {"$ref": "#/$defs/id"}
+      }
+    },
+    "fact": {
+      "type": "object",
+      "required": ["id", "statement", "kind", "truth"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "statement": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["truth", "secret", "rumor"]},
+        "truth": {"enum": ["true", "false", "unknown"]}
+      }
+    },
+    "faction": {
+      "type": "object",
+      "required": ["id", "display_name"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "display_name": {"type": "string", "minLength": 1}
+      }
+    },
+    "dialogue": {
+      "type": "object",
+      "required": ["id", "display_name", "actor_id", "range", "start_node_id", "nodes"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "display_name": {"type": "string", "minLength": 1},
+        "actor_id": {"$ref": "#/$defs/id"},
+        "range": {"type": "integer", "minimum": 0},
+        "start_node_id": {"$ref": "#/$defs/id"},
+        "conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
+        "nodes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "speaker_id", "text", "choices"],
+            "properties": {
+              "id": {"$ref": "#/$defs/id"},
+              "speaker_id": {"$ref": "#/$defs/id"},
+              "text": {"type": "string", "minLength": 1},
+              "fact_refs": {"type": "array", "items": {"$ref": "#/$defs/id"}},
+              "on_enter": {"type": "array", "items": {"$ref": "#/$defs/effect"}},
+              "allow_exit": {"type": "boolean"},
+              "choices": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "text"],
+                  "properties": {
+                    "id": {"$ref": "#/$defs/id"},
+                    "text": {"type": "string", "minLength": 1},
+                    "next_node_id": {"type": ["string", "null"]},
+                    "conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
+                    "effects": {"type": "array", "items": {"$ref": "#/$defs/effect"}}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "quest": {
+      "type": "object",
+      "required": ["id", "title", "start_stage_id", "stages"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "minLength": 1},
+        "start_stage_id": {"$ref": "#/$defs/id"},
+        "auto_start_conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
+        "stages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "completion_conditions"],
+            "properties": {
+              "id": {"$ref": "#/$defs/id"},
+              "description": {"type": "string", "minLength": 1},
+              "completion_conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
+              "failure_conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
+              "on_complete": {"type": "array", "items": {"$ref": "#/$defs/effect"}},
+              "on_fail": {"type": "array", "items": {"$ref": "#/$defs/effect"}},
+              "next_stage_id": {"type": ["string", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "scene": {
+      "type": "object",
+      "required": ["id", "title", "text", "start_minute", "end_minute"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "minLength": 1},
+        "text": {"type": "string", "minLength": 1},
+        "start_minute": {"type": "integer", "minimum": 0, "maximum": 1439},
+        "end_minute": {"type": "integer", "minimum": 0, "maximum": 1440},
+        "conditions": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
+        "effects": {"type": "array", "items": {"$ref": "#/$defs/effect"}},
+        "once": {"type": "boolean"},
+        "priority": {"type": "integer"}
+      }
+    }
+  }
+}

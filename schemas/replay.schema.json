@@ -14,7 +14,7 @@
   ],
   "properties": {
     "format": {"const": "isoworld.replay"},
-    "format_version": {"const": 1},
+    "format_version": {"const": 2},
     "world_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
     "world_content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "final_state_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -23,7 +23,24 @@
       "items": {
         "type": "object",
         "required": ["kind"],
-        "properties": {"kind": {"type": "string", "minLength": 1}}
+        "properties": {
+          "kind": {
+            "enum": [
+              "tick",
+              "select_actor",
+              "move",
+              "navigate",
+              "interact",
+              "use_ability",
+              "start_dialogue",
+              "choose_dialogue",
+              "end_dialogue",
+              "dismiss_scene"
+            ]
+          },
+          "dialogue_id": {"type": ["string", "null"]},
+          "choice_id": {"type": ["string", "null"]}
+        }
       }
     }
   }

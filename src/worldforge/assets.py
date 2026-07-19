@@ -80,7 +80,7 @@ def _walk_strings(value: Any, path: str):
 def init_asset_manifest(worldpack_path: str | Path, output_path: str | Path) -> dict[str, Any]:
     pack_path = Path(worldpack_path)
     pack = _read_json(pack_path)
-    if pack.get("format") != "isoworld.worldpack" or pack.get("format_version") not in {1, 2}:
+    if pack.get("format") != "isoworld.worldpack" or pack.get("format_version") not in {1, 2, 3}:
         raise AssetManifestError("The input file is not a compatible worldpack")
     content_hash = pack.get("content_hash")
     if not isinstance(content_hash, str) or not SHA256_PATTERN.fullmatch(content_hash):

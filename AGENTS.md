@@ -67,5 +67,7 @@ ruff format --check src tests
 PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python -m worldforge validate \
   examples/foundation/source/manifest.json --profile release
+PYTHONPATH=src python -m worldforge analyze-narrative \
+  examples/foundation/source/manifest.json --fail-on warning
 PYTHONPATH=src python -m worldforge audit-runtime src/isoworld
 ```

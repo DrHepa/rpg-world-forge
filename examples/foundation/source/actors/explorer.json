@@ -19,6 +19,19 @@
   "resources": {
     "energy": 3
   },
+  "knowledge": {
+    "suspects": [
+      "garden_rumor"
+    ]
+  },
+  "relationships": {
+    "guide": {
+      "trust": 10
+    }
+  },
+  "faction_reputation": {
+    "garden_keepers": 0
+  },
   "tags": [
     "example"
   ]

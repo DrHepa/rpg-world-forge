@@ -72,6 +72,32 @@ class IsometricRenderer:
         pr.draw_text(state.world_title, 24, 20, 28, pr.RAYWHITE)
         pr.draw_text(state.map_title, 24, 54, 18, pr.Color(184, 160, 230, 255))
         pr.draw_text(state.time_text, self.screen_width - 230, 24, 20, pr.GOLD)
+        hud_y = self.screen_height - (len(state.hud_lines) * 22 + 16)
         for index, line in enumerate(state.hud_lines):
             if line:
-                pr.draw_text(line, 24, self.screen_height - 104 + index * 22, 17, pr.LIGHTGRAY)
+                pr.draw_text(line, 24, hud_y + index * 22, 17, pr.LIGHTGRAY)
+
+        if state.overlay is not None:
+            overlay = state.overlay
+            x = 130
+            y = 150
+            width = self.screen_width - 260
+            height = self.screen_height - 300
+            pr.draw_rectangle(x, y, width, height, pr.Color(18, 15, 28, 245))
+            pr.draw_rectangle_lines(x, y, width, height, pr.Color(194, 137, 255, 255))
+            pr.draw_text(overlay.title, x + 28, y + 24, 25, pr.RAYWHITE)
+            line_y = y + 72
+            for line in overlay.lines:
+                pr.draw_text(line, x + 28, line_y, 19, pr.LIGHTGRAY)
+                line_y += 26
+            line_y += 12
+            for choice in overlay.choices:
+                pr.draw_text(choice, x + 28, line_y, 18, pr.GOLD)
+                line_y += 25
+            pr.draw_text(
+                overlay.help_text,
+                x + 28,
+                y + height - 36,
+                16,
+                pr.Color(184, 160, 230, 255),
+            )

@@ -36,6 +36,14 @@ class InteractionView:
 
 
 @dataclass(frozen=True, slots=True)
+class OverlayView:
+    title: str
+    lines: tuple[str, ...]
+    choices: tuple[str, ...]
+    help_text: str
+
+
+@dataclass(frozen=True, slots=True)
 class RenderState:
     world_title: str
     map_title: str
@@ -45,6 +53,23 @@ class RenderState:
     actors: tuple[ActorView, ...]
     interactions: tuple[InteractionView, ...]
     hud_lines: tuple[str, ...]
+    overlay: OverlayView | None
+
+
+def _wrap_text(value: str, width: int = 72) -> tuple[str, ...]:
+    words = value.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and len(candidate) > width:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return tuple(lines)
 
 
 def build_render_state(state: WorldState, pack: WorldPack) -> RenderState:
@@ -100,6 +125,40 @@ def build_render_state(state: WorldState, pack: WorldPack) -> RenderState:
         f"{pack.ui['switch_help']} | {pack.ui['interact_help']} | {pack.ui['ability_help']}",
         state.last_message,
     )
+    active_quests = []
+    for progress in state.quests:
+        if progress.status != "active" or progress.stage_id is None:
+            continue
+        quest = pack.quests[progress.quest_id]
+        active_quests.append(
+            f"{pack.ui['quest_label']}: {quest.title} — "
+            f"{quest.stages[progress.stage_id].description}"
+        )
+    if active_quests:
+        hud_lines = hud_lines[:3] + tuple(active_quests[:2]) + hud_lines[3:]
+
+    overlay = None
+    if state.active_scene_id is not None:
+        scene = pack.scenes[state.active_scene_id]
+        overlay = OverlayView(
+            title=scene.title,
+            lines=_wrap_text(scene.text),
+            choices=(),
+            help_text=pack.ui["scene_help"],
+        )
+    elif state.dialogue is not None:
+        from isoworld.world.narrative import available_dialogue_choices
+
+        dialogue = pack.dialogues[state.dialogue.dialogue_id]
+        node = dialogue.nodes[state.dialogue.node_id]
+        speaker = pack.actors[node.speaker_id].display_name
+        choices = available_dialogue_choices(state, pack)
+        overlay = OverlayView(
+            title=f"{dialogue.display_name} — {speaker}",
+            lines=_wrap_text(node.text),
+            choices=tuple(f"{index}. {choice.text}" for index, choice in enumerate(choices, 1)),
+            help_text=pack.ui["dialogue_help"],
+        )
     return RenderState(
         world_title=pack.title,
         map_title=world_map.display_name,
@@ -109,4 +168,5 @@ def build_render_state(state: WorldState, pack: WorldPack) -> RenderState:
         actors=actors,
         interactions=interactions,
         hud_lines=hud_lines,
+        overlay=overlay,
     )

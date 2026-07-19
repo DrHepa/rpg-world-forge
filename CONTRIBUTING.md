@@ -27,6 +27,7 @@ ruff check src tests
 ruff format --check src tests
 python -m unittest discover -s tests -v
 python -m worldforge validate examples/foundation/source/manifest.json --profile release
+python -m worldforge analyze-narrative examples/foundation/source/manifest.json --fail-on warning
 python -m worldforge audit-runtime src/isoworld
 ```
 

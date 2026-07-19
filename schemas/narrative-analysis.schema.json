@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/narrative-analysis.schema.json",
+  "title": "RPG World Forge narrative analysis report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "world_id", "summary", "findings"],
+  "properties": {
+    "format": {"const": "rpg-world-forge.narrative_analysis"},
+    "format_version": {"const": 1},
+    "world_id": {"type": "string"},
+    "summary": {"type": "object"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "code", "path", "message"],
+        "properties": {
+          "severity": {"enum": ["error", "warning", "info"]},
+          "code": {"type": "string"},
+          "path": {"type": "string"},
+          "message": {"type": "string"}
+        }
+      }
+    }
+  }
+}

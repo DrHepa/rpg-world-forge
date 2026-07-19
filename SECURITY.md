@@ -15,6 +15,9 @@ paths outside their project root. Generated projects must never commit API keys,
 model-service credentials or private reference material.
 
 Worldpack loaders verify structural runtime invariants and the canonical content
-hash. Saves and replays are limited in size, versioned, content-hash-bound, and
+hash and reject packs over 64 MiB. Narrative conditions and effects are strict
+allowlists; the runtime never evaluates source text, templates, or scripts.
+Knowledge boundaries are checked again at dialogue/effect execution. Saves and
+replays are limited in size, versioned, content-hash-bound, and
 digest-checked. Tiled/LDtk import accepts only the documented finite JSON
 subsets; it never evaluates scripts or external object payloads.

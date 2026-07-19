@@ -50,16 +50,16 @@ not partially mutate state.
 
 ## Persistence and replay
 
-Save format `isoworld.save` version 1 stores the complete runtime state and a
+At M1, save format `isoworld.save` version 1 stored the complete runtime state and a
 canonical SHA-256 digest. Replay format `isoworld.replay` version 1 stores every
 dispatched input/tick action plus the expected final digest. Both documents bind
 to `world_id` and the compiled `world_content_hash`. Incompatible or tampered
 documents fail closed. Writes use a same-directory temporary file and atomic
 replacement.
 
-The current loader supports worldpack formats 1 and 2. The compiler emits format
-2. Future save format changes require an explicit migration; unknown versions
-are never guessed.
+M2 now emits worldpack format 3, accepts worldpack formats 1 through 3, and uses
+save/replay format 2 for narrative state. Unknown versions are never guessed;
+see [M2_NARRATIVE.md](M2_NARRATIVE.md).
 
 ## Map import
 

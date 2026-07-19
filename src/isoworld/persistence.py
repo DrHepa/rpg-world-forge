@@ -9,7 +9,13 @@ from isoworld.content.models import WorldPack
 from isoworld.world.state import (
     ActorState,
     Cooldown,
+    DialogueState,
+    DomainEvent,
     GameAction,
+    KnowledgeValue,
+    QuestState,
+    RelationshipValue,
+    ReputationValue,
     ResourceValue,
     WorldState,
     initial_world_state,
@@ -17,9 +23,9 @@ from isoworld.world.state import (
 )
 
 SAVE_FORMAT = "isoworld.save"
-SAVE_VERSION = 1
+SAVE_VERSION = 2
 REPLAY_FORMAT = "isoworld.replay"
-REPLAY_VERSION = 1
+REPLAY_VERSION = 2
 MAX_PERSISTENCE_BYTES = 64 * 1024 * 1024
 MAX_REPLAY_ACTIONS = 1_000_000
 
@@ -45,11 +51,49 @@ def state_to_dict(state: WorldState) -> dict[str, Any]:
                 "cooldowns": {item.ability_id: item.ready_at_minute for item in actor.cooldowns},
                 "route": [[x, y] for x, y in actor.route],
                 "blocked_ticks": actor.blocked_ticks,
+                "knowledge": {item.fact_id: item.status for item in actor.knowledge},
+                "relationships": [
+                    {
+                        "target_actor_id": item.target_actor_id,
+                        "dimension": item.dimension,
+                        "value": item.value,
+                    }
+                    for item in actor.relationships
+                ],
+                "faction_reputation": {
+                    item.faction_id: item.value for item in actor.faction_reputation
+                },
             }
             for actor in state.actors
         ],
         "flags": sorted(state.flags),
         "completed_interactions": sorted(state.completed_interactions),
+        "quests": [
+            {
+                "quest_id": quest.quest_id,
+                "status": quest.status,
+                "stage_id": quest.stage_id,
+            }
+            for quest in state.quests
+        ],
+        "dialogue": None
+        if state.dialogue is None
+        else {
+            "dialogue_id": state.dialogue.dialogue_id,
+            "node_id": state.dialogue.node_id,
+            "initiator_actor_id": state.dialogue.initiator_actor_id,
+            "partner_actor_id": state.dialogue.partner_actor_id,
+        },
+        "active_scene_id": state.active_scene_id,
+        "triggered_scenes": sorted(state.triggered_scenes),
+        "recent_events": [
+            {
+                "kind": event.kind,
+                "actor_id": event.actor_id,
+                "subject_id": event.subject_id,
+            }
+            for event in state.recent_events
+        ],
         "last_message": state.last_message,
     }
 
@@ -115,8 +159,35 @@ def state_from_dict(raw: dict[str, Any], pack: WorldPack) -> WorldState:
                 ),
                 route=tuple((int(cell[0]), int(cell[1])) for cell in item.get("route", [])),
                 blocked_ticks=int(item.get("blocked_ticks", 0)),
+                knowledge=tuple(
+                    KnowledgeValue(key, str(value))
+                    for key, value in sorted(item.get("knowledge", {}).items())
+                ),
+                relationships=tuple(
+                    RelationshipValue(
+                        value["target_actor_id"],
+                        value["dimension"],
+                        int(value["value"]),
+                    )
+                    for value in item.get("relationships", [])
+                ),
+                faction_reputation=tuple(
+                    ReputationValue(key, int(value))
+                    for key, value in sorted(item.get("faction_reputation", {}).items())
+                ),
             )
             for item in raw["actors"]
+        )
+        dialogue_raw = raw.get("dialogue")
+        dialogue = (
+            None
+            if dialogue_raw is None
+            else DialogueState(
+                dialogue_raw["dialogue_id"],
+                dialogue_raw["node_id"],
+                dialogue_raw["initiator_actor_id"],
+                dialogue_raw["partner_actor_id"],
+            )
         )
         state = WorldState(
             tick=int(raw["tick"]),
@@ -127,6 +198,17 @@ def state_from_dict(raw: dict[str, Any], pack: WorldPack) -> WorldState:
             actors=actors,
             flags=frozenset(raw.get("flags", [])),
             completed_interactions=frozenset(raw.get("completed_interactions", [])),
+            quests=tuple(
+                QuestState(item["quest_id"], item["status"], item.get("stage_id"))
+                for item in raw.get("quests", [])
+            ),
+            dialogue=dialogue,
+            active_scene_id=raw.get("active_scene_id"),
+            triggered_scenes=frozenset(raw.get("triggered_scenes", [])),
+            recent_events=tuple(
+                DomainEvent(item["kind"], item.get("actor_id"), item.get("subject_id"))
+                for item in raw.get("recent_events", [])
+            ),
             last_message=str(raw.get("last_message", "")),
         )
     except (KeyError, TypeError, ValueError, IndexError) as exc:
@@ -165,10 +247,66 @@ def _validate_state(state: WorldState, pack: WorldPack) -> None:
             raise PersistenceError(f"Actor {actor.actor_id} has an invalid cooldown")
         if any(not pack.is_walkable(actor.map_id, *cell) for cell in actor.route):
             raise PersistenceError(f"Actor {actor.actor_id} has an invalid route")
+        if any(
+            item.fact_id not in pack.facts
+            or item.status not in {"suspected", "known", "secret"}
+            or item.fact_id in pack.actors[actor.actor_id].forbidden_fact_ids
+            for item in actor.knowledge
+        ):
+            raise PersistenceError(f"Actor {actor.actor_id} has invalid knowledge")
+        if any(
+            item.target_actor_id not in pack.actors
+            or not item.dimension
+            or not -100 <= item.value <= 100
+            for item in actor.relationships
+        ):
+            raise PersistenceError(f"Actor {actor.actor_id} has an invalid relationship")
+        if any(
+            item.faction_id not in pack.factions or not -100 <= item.value <= 100
+            for item in actor.faction_reputation
+        ):
+            raise PersistenceError(f"Actor {actor.actor_id} has an invalid reputation")
     if not state.completed_interactions <= set(pack.interactions):
         raise PersistenceError("Saved interactions do not match the worldpack")
     if not all(isinstance(flag, str) for flag in state.flags):
         raise PersistenceError("Saved flags must be strings")
+    if {item.quest_id for item in state.quests} != set(pack.quests) or len(state.quests) != len(
+        pack.quests
+    ):
+        raise PersistenceError("Saved quests do not match the worldpack")
+    for quest in state.quests:
+        definition = pack.quests[quest.quest_id]
+        if quest.status not in {"inactive", "active", "completed", "failed"}:
+            raise PersistenceError(f"Quest {quest.quest_id} has an invalid status")
+        if quest.stage_id is not None and quest.stage_id not in definition.stages:
+            raise PersistenceError(f"Quest {quest.quest_id} has an invalid stage")
+        if quest.status == "active" and quest.stage_id is None:
+            raise PersistenceError(f"Quest {quest.quest_id} has no active stage")
+    if state.dialogue is not None:
+        dialogue = pack.dialogues.get(state.dialogue.dialogue_id)
+        if (
+            dialogue is None
+            or state.dialogue.node_id not in dialogue.nodes
+            or state.dialogue.initiator_actor_id not in pack.actors
+            or state.dialogue.partner_actor_id != dialogue.actor_id
+        ):
+            raise PersistenceError("Saved dialogue is invalid")
+    if state.active_scene_id is not None and state.active_scene_id not in pack.scenes:
+        raise PersistenceError("Saved scene is invalid")
+    valid_scene_keys = set(pack.scenes)
+    if any(
+        not isinstance(key, str) or key.split(":", 1)[0] not in valid_scene_keys
+        for key in state.triggered_scenes
+    ):
+        raise PersistenceError("Saved scene history is invalid")
+    if any(
+        not isinstance(event.kind, str)
+        or not event.kind
+        or (event.actor_id is not None and event.actor_id not in pack.actors)
+        or (event.subject_id is not None and not isinstance(event.subject_id, str))
+        for event in state.recent_events
+    ):
+        raise PersistenceError("Saved events are invalid")
 
 
 def save_game(path: str | Path, state: WorldState, pack: WorldPack) -> None:

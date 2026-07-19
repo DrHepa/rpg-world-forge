@@ -1,0 +1,77 @@
+{
+  "id": "guide_welcome",
+  "display_name": "La memoria de la piedra",
+  "actor_id": "guide",
+  "range": 1,
+  "start_node_id": "welcome",
+  "conditions": [
+    {
+      "kind": "flag_set",
+      "flag": "stone_awakened"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "welcome",
+      "speaker_id": "guide",
+      "text": "He oído la resonancia. ¿Qué quieres saber?",
+      "fact_refs": [],
+      "choices": [
+        {
+          "id": "ask_song",
+          "text": "Preguntar qué recuerda la piedra.",
+          "next_node_id": "explanation",
+          "conditions": [
+            {
+              "kind": "flag_set",
+              "flag": "stone_awakened"
+            }
+          ],
+          "effects": []
+        },
+        {
+          "id": "leave",
+          "text": "Despedirse.",
+          "next_node_id": null,
+          "conditions": [],
+          "effects": []
+        }
+      ],
+      "on_enter": [],
+      "allow_exit": true
+    },
+    {
+      "id": "explanation",
+      "speaker_id": "guide",
+      "text": "La piedra conserva un fragmento de la memoria del jardín. Ahora también tú puedes reconocer su canción.",
+      "fact_refs": [
+        "stone_song"
+      ],
+      "choices": [
+        {
+          "id": "remember_song",
+          "text": "Guardar la canción en la memoria.",
+          "next_node_id": null,
+          "conditions": [],
+          "effects": [
+            {
+              "kind": "learn_fact",
+              "target": "self",
+              "fact_id": "stone_song",
+              "knowledge_status": "known"
+            },
+            {
+              "kind": "change_relationship",
+              "target": "self",
+              "target_actor_id": "guide",
+              "dimension": "trust",
+              "amount": 10
+            }
+          ]
+        }
+      ],
+      "on_enter": [],
+      "allow_exit": true
+    }
+  ]
+}

@@ -42,13 +42,16 @@ Input -> GameAction -> reducer(WorldState) -> new WorldState
 - Future systems react to domain events instead of calling one another through
   circular dependencies.
 
-M1 keeps navigation, clock advancement, schedules, interactions, abilities,
-and reservations inside the pure reducer. Persistence serializes only
-`WorldState`; rendering still consumes a separate frozen snapshot.
+Navigation, clock advancement, schedules, interactions, abilities, narrative
+events, quests, dialogues, scenes, and reservations stay inside pure state
+transitions. Persistence serializes only `WorldState`; rendering still consumes
+a separate frozen snapshot.
 
 ```text
 tick -> advance clock -> plan eligible schedules -> reserve cells -> advance routes
 input -> move/navigate/interact/use_ability -> reducer -> new WorldState
+event -> bounded quest transitions -> eligible scene -> new WorldState
+input -> dialogue choice/dismiss scene -> reducer -> new WorldState
 save/replay -> world ID + content hash + state/action digest
 ```
 

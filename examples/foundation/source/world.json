@@ -12,7 +12,12 @@
     "contextual_interactions",
     "costed_abilities",
     "versioned_persistence",
-    "action_replay"
+    "action_replay",
+    "typed_knowledge",
+    "directed_relationships",
+    "conditional_dialogue",
+    "reactive_quests",
+    "timed_scenes"
   ],
   "simulation": {
     "start_day": 1,
@@ -25,8 +30,11 @@
     "ability_help": "1: usar Concentración",
     "clock_label": "Día",
     "interact_help": "E: interactuar",
+    "dialogue_help": "Q: hablar; números: elegir; Esc: salir",
     "move_help": "Flechas o WASD: mover",
     "navigate_help": "Clic izquierdo: navegar",
+    "quest_label": "Misión",
+    "scene_help": "Espacio: continuar",
     "switch_help": "Tab: cambiar de personaje"
   }
 }

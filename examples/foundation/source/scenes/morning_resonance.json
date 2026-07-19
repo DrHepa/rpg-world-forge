@@ -1,0 +1,16 @@
+{
+  "id": "morning_resonance",
+  "title": "Una respuesta en el jardín",
+  "text": "La resonancia recorre los senderos y, durante un instante, el jardín parece recordar a quienes lo atraviesan.",
+  "start_minute": 480,
+  "end_minute": 540,
+  "conditions": [
+    {
+      "kind": "flag_set",
+      "flag": "stone_awakened"
+    }
+  ],
+  "effects": [],
+  "once": true,
+  "priority": 10
+}

@@ -47,7 +47,7 @@ Every world fact has an ID. An actor may act or speak only from:
 The compiler rejects incompatible intersections and references to nonexistent
 facts, preventing accidental omniscience without an LLM.
 
-## M1 executable content
+## Executable content through M2
 
 The runtime executes a deliberately bounded subset of compiled content:
 
@@ -56,14 +56,21 @@ The runtime executes a deliberately bounded subset of compiled content:
 - `schedules`: time segments with primary and fallback locations.
 - `interactions`: location/range, flag conditions, repeatability, and effects.
 - `abilities`: target/range, positive costs, cooldown, and effects.
+- `facts` and actor knowledge: distinct epistemic state and hard boundaries.
+- `factions` and actor social state: directed relationships and reputation.
+- `dialogues`: conditional localized graphs with fact-gated nodes.
+- `quests`: event/state-reactive stage machines.
+- `scenes`: prioritized time-windowed narrative overlays.
 
-The shared M1 effect vocabulary is `set_flag`, `clear_flag`, and
-`change_resource`. Unknown operations are rejected during source validation; the
-runtime never evaluates arbitrary expressions or scripts.
+The shared effect vocabulary is `set_flag`, `clear_flag`, `change_resource`,
+`learn_fact`, `change_relationship`, and `change_reputation`. Unknown operations
+are rejected during source validation and loading; the runtime never evaluates
+arbitrary expressions or scripts.
 
-The compiler emits worldpack format 2. The loader accepts formats 1 and 2 and
+The compiler emits worldpack format 3. The loader accepts formats 1, 2, and 3 and
 verifies the canonical content hash before constructing typed runtime models.
-See [M1_SYSTEMS.md](M1_SYSTEMS.md) for exact semantics and accepted limits.
+See [M1_SYSTEMS.md](M1_SYSTEMS.md) and [M2_NARRATIVE.md](M2_NARRATIVE.md) for
+exact semantics and accepted limits.
 
 ## Sources and artifacts
 

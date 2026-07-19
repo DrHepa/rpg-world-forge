@@ -111,7 +111,7 @@ class ContentPipelineTests(unittest.TestCase):
             self.assertEqual("first_actor", project.collections["actors"][0]["id"])
             self.assertIn("interactions", project.collections)
             self.assertEqual(20, project.world["simulation"]["ticks_per_minute"])
-            self.assertEqual(2, build_worldpack(project)["format_version"])
+            self.assertEqual(3, build_worldpack(project)["format_version"])
             self.assertTrue((target / ".gitignore").is_file())
             self.assertTrue((target / "AGENTS.md").is_file())
             self.assertTrue((target / ".worldforge/status.json").is_file())

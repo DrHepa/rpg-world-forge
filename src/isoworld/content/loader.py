@@ -9,10 +9,19 @@ from isoworld.content.models import (
     AbilityDefinition,
     ActorDefinition,
     ClockDefinition,
+    ConditionDefinition,
+    DialogueChoiceDefinition,
+    DialogueDefinition,
+    DialogueNodeDefinition,
     EffectDefinition,
+    FactDefinition,
+    FactionDefinition,
     InteractionDefinition,
     Location,
     MapDefinition,
+    QuestDefinition,
+    QuestStageDefinition,
+    SceneDefinition,
     ScheduleDefinition,
     ScheduleEntry,
     Spawn,
@@ -23,6 +32,10 @@ from isoworld.content.models import (
 
 class WorldPackError(ValueError):
     """Raised when a compiled pack cannot be loaded safely."""
+
+
+MAX_WORLDPACK_BYTES = 64 * 1024 * 1024
+M2_COLLECTIONS = {"facts", "factions", "dialogues", "quests", "scenes"}
 
 
 def _integer(raw: Any, context: str) -> int:
@@ -54,6 +67,20 @@ def _string_tuple(raw: Any, context: str) -> tuple[str, ...]:
     return tuple(raw)
 
 
+def _optional_string(raw: Any, context: str) -> str | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise WorldPackError(f"{context}: must be a string or null")
+    return raw
+
+
+def _optional_integer(raw: Any, context: str) -> int | None:
+    if raw is None:
+        return None
+    return _integer(raw, context)
+
+
 def _color(raw: Any, context: str) -> tuple[int, int, int, int]:
     if not isinstance(raw, list) or len(raw) not in (3, 4):
         raise WorldPackError(f"{context}: color must contain 3 or 4 integers")
@@ -70,14 +97,205 @@ def _color(raw: Any, context: str) -> tuple[int, int, int, int]:
 def _effect(raw: dict[str, Any], context: str) -> EffectDefinition:
     try:
         return EffectDefinition(
-            kind=str(raw["kind"]),
-            target=str(raw.get("target", "self")),
-            resource=raw.get("resource"),
+            kind=_optional_string(raw["kind"], f"{context}/kind") or "",
+            target=_optional_string(raw.get("target", "self"), f"{context}/target") or "self",
+            resource=_optional_string(raw.get("resource"), f"{context}/resource"),
             amount=_integer(raw.get("amount", 0), f"{context}/amount"),
-            flag=raw.get("flag"),
+            flag=_optional_string(raw.get("flag"), f"{context}/flag"),
+            fact_id=_optional_string(raw.get("fact_id"), f"{context}/fact_id"),
+            knowledge_status=_optional_string(
+                raw.get("knowledge_status"), f"{context}/knowledge_status"
+            ),
+            target_actor_id=_optional_string(
+                raw.get("target_actor_id"), f"{context}/target_actor_id"
+            ),
+            dimension=_optional_string(raw.get("dimension"), f"{context}/dimension"),
+            faction_id=_optional_string(raw.get("faction_id"), f"{context}/faction_id"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise WorldPackError(f"{context}: invalid effect") from exc
+
+
+def _effects(raw: Any, context: str) -> tuple[EffectDefinition, ...]:
+    if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
+        raise WorldPackError(f"{context}: must be a list of effect objects")
+    return tuple(_effect(item, f"{context}/{index}") for index, item in enumerate(raw))
+
+
+def _condition(raw: dict[str, Any], context: str) -> ConditionDefinition:
+    try:
+        return ConditionDefinition(
+            kind=_optional_string(raw["kind"], f"{context}/kind") or "",
+            negate=_boolean(raw.get("negate", False), f"{context}/negate"),
+            flag=_optional_string(raw.get("flag"), f"{context}/flag"),
+            fact_id=_optional_string(raw.get("fact_id"), f"{context}/fact_id"),
+            knowledge_status=_optional_string(
+                raw.get("knowledge_status"), f"{context}/knowledge_status"
+            ),
+            actor_id=_optional_string(raw.get("actor_id"), f"{context}/actor_id"),
+            target_actor_id=_optional_string(
+                raw.get("target_actor_id"), f"{context}/target_actor_id"
+            ),
+            dimension=_optional_string(raw.get("dimension"), f"{context}/dimension"),
+            faction_id=_optional_string(raw.get("faction_id"), f"{context}/faction_id"),
+            value=_integer(raw.get("value", 0), f"{context}/value"),
+            quest_id=_optional_string(raw.get("quest_id"), f"{context}/quest_id"),
+            quest_status=_optional_string(raw.get("quest_status"), f"{context}/quest_status"),
+            event_kind=_optional_string(raw.get("event_kind"), f"{context}/event_kind"),
+            subject_id=_optional_string(raw.get("subject_id"), f"{context}/subject_id"),
+            map_id=_optional_string(raw.get("map_id"), f"{context}/map_id"),
+            x=_optional_integer(raw.get("x"), f"{context}/x"),
+            y=_optional_integer(raw.get("y"), f"{context}/y"),
+            start_minute=_optional_integer(raw.get("start_minute"), f"{context}/start_minute"),
+            end_minute=_optional_integer(raw.get("end_minute"), f"{context}/end_minute"),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise WorldPackError(f"{context}: invalid condition") from exc
+
+
+def _conditions(raw: Any, context: str) -> tuple[ConditionDefinition, ...]:
+    if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
+        raise WorldPackError(f"{context}: must be a list of condition objects")
+    return tuple(_condition(item, f"{context}/{index}") for index, item in enumerate(raw))
+
+
+def _knowledge(raw: Any, context: str) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
+    if not isinstance(raw, dict):
+        raise WorldPackError(f"{context}: must be an object")
+    values: dict[str, str] = {}
+    for group, status in (("knows", "known"), ("suspects", "suspected"), ("secrets", "secret")):
+        for fact_id in _string_tuple(raw.get(group, []), f"{context}/{group}"):
+            values[fact_id] = status
+    forbidden = _string_tuple(raw.get("forbidden", []), f"{context}/forbidden")
+    return tuple(sorted(values.items())), tuple(sorted(forbidden))
+
+
+def _relationships(raw: Any, context: str) -> tuple[tuple[str, tuple[tuple[str, int], ...]], ...]:
+    if not isinstance(raw, dict):
+        raise WorldPackError(f"{context}: must be an object")
+    result: list[tuple[str, tuple[tuple[str, int], ...]]] = []
+    for actor_id, dimensions in sorted(raw.items()):
+        if not isinstance(actor_id, str):
+            raise WorldPackError(f"{context}: actor IDs must be strings")
+        result.append(
+            (actor_id, tuple(sorted(_integer_dict(dimensions, f"{context}/{actor_id}").items())))
+        )
+    return tuple(result)
+
+
+def _dialogues(raw: list[dict[str, Any]]) -> dict[str, DialogueDefinition]:
+    result: dict[str, DialogueDefinition] = {}
+    for item in raw:
+        dialogue_id = item["id"]
+        nodes: dict[str, DialogueNodeDefinition] = {}
+        for node_position, node in enumerate(item.get("nodes", [])):
+            context = f"dialogues/{dialogue_id}/nodes/{node_position}"
+            if node.get("id") in nodes:
+                raise WorldPackError(f"{context}: duplicate node ID")
+            choice_ids: set[str] = set()
+            for choice in node.get("choices", []):
+                choice_id = choice.get("id")
+                if choice_id in choice_ids:
+                    raise WorldPackError(f"{context}: duplicate choice ID")
+                choice_ids.add(choice_id)
+            choices = tuple(
+                DialogueChoiceDefinition(
+                    id=choice["id"],
+                    text=choice["text"],
+                    next_node_id=_optional_string(
+                        choice.get("next_node_id"),
+                        f"{context}/choices/{choice_position}/next_node_id",
+                    ),
+                    conditions=_conditions(
+                        choice.get("conditions", []),
+                        f"{context}/choices/{choice_position}/conditions",
+                    ),
+                    effects=_effects(
+                        choice.get("effects", []),
+                        f"{context}/choices/{choice_position}/effects",
+                    ),
+                )
+                for choice_position, choice in enumerate(node.get("choices", []))
+            )
+            nodes[node["id"]] = DialogueNodeDefinition(
+                id=node["id"],
+                speaker_id=node["speaker_id"],
+                text=node["text"],
+                fact_refs=_string_tuple(node.get("fact_refs", []), f"{context}/fact_refs"),
+                choices=choices,
+                on_enter=_effects(node.get("on_enter", []), f"{context}/on_enter"),
+                allow_exit=_boolean(node.get("allow_exit", True), f"{context}/allow_exit"),
+            )
+        result[dialogue_id] = DialogueDefinition(
+            id=dialogue_id,
+            display_name=item["display_name"],
+            actor_id=item["actor_id"],
+            range=_integer(item.get("range", 1), f"dialogues/{dialogue_id}/range"),
+            start_node_id=item["start_node_id"],
+            conditions=_conditions(
+                item.get("conditions", []), f"dialogues/{dialogue_id}/conditions"
+            ),
+            nodes=nodes,
+        )
+    return result
+
+
+def _quests(raw: list[dict[str, Any]]) -> dict[str, QuestDefinition]:
+    result: dict[str, QuestDefinition] = {}
+    for item in raw:
+        quest_id = item["id"]
+        stages: dict[str, QuestStageDefinition] = {}
+        for position, stage in enumerate(item.get("stages", [])):
+            context = f"quests/{quest_id}/stages/{position}"
+            if stage.get("id") in stages:
+                raise WorldPackError(f"{context}: duplicate stage ID")
+            stages[stage["id"]] = QuestStageDefinition(
+                id=stage["id"],
+                description=stage["description"],
+                completion_conditions=_conditions(
+                    stage.get("completion_conditions", []),
+                    f"{context}/completion_conditions",
+                ),
+                failure_conditions=_conditions(
+                    stage.get("failure_conditions", []),
+                    f"{context}/failure_conditions",
+                ),
+                on_complete=_effects(stage.get("on_complete", []), f"{context}/on_complete"),
+                on_fail=_effects(stage.get("on_fail", []), f"{context}/on_fail"),
+                next_stage_id=_optional_string(
+                    stage.get("next_stage_id"), f"{context}/next_stage_id"
+                ),
+            )
+        result[quest_id] = QuestDefinition(
+            id=quest_id,
+            title=item["title"],
+            start_stage_id=item["start_stage_id"],
+            auto_start_conditions=_conditions(
+                item.get("auto_start_conditions", []),
+                f"quests/{quest_id}/auto_start_conditions",
+            ),
+            stages=stages,
+        )
+    return result
+
+
+def _scenes(raw: list[dict[str, Any]]) -> dict[str, SceneDefinition]:
+    result: dict[str, SceneDefinition] = {}
+    for item in raw:
+        scene_id = item["id"]
+        context = f"scenes/{scene_id}"
+        result[scene_id] = SceneDefinition(
+            id=scene_id,
+            title=item["title"],
+            text=item["text"],
+            start_minute=_integer(item.get("start_minute", 0), f"{context}/start_minute"),
+            end_minute=_integer(item.get("end_minute", 1440), f"{context}/end_minute"),
+            conditions=_conditions(item.get("conditions", []), f"{context}/conditions"),
+            effects=_effects(item.get("effects", []), f"{context}/effects"),
+            once=_boolean(item.get("once", True), f"{context}/once"),
+            priority=_integer(item.get("priority", 0), f"{context}/priority"),
+        )
+    return result
 
 
 def _location(raw: dict[str, Any], context: str) -> Location:
@@ -104,6 +322,98 @@ def _verify_hash(raw: dict[str, Any]) -> str:
     if actual != supplied:
         raise WorldPackError("The worldpack content hash does not match its contents")
     return supplied
+
+
+SUPPORTED_EFFECTS = {
+    "set_flag",
+    "clear_flag",
+    "change_resource",
+    "learn_fact",
+    "change_relationship",
+    "change_reputation",
+}
+SUPPORTED_CONDITIONS = {
+    "flag_set",
+    "flag_unset",
+    "fact_status",
+    "relationship_at_least",
+    "reputation_at_least",
+    "quest_status",
+    "event",
+    "time_window",
+    "actor_at",
+}
+KNOWLEDGE_STATUSES = {"unknown", "suspected", "known", "secret"}
+
+
+def _validate_effect_contract(effect: EffectDefinition, pack: WorldPack, context: str) -> None:
+    if effect.kind not in SUPPORTED_EFFECTS or effect.target not in {"self", "target"}:
+        raise WorldPackError(f"{context} has an unsupported effect")
+    if effect.kind in {"set_flag", "clear_flag"} and not effect.flag:
+        raise WorldPackError(f"{context} has an invalid flag effect")
+    if effect.kind == "change_resource" and (not effect.resource or effect.amount == 0):
+        raise WorldPackError(f"{context} has an invalid resource effect")
+    if effect.kind == "learn_fact" and (
+        effect.fact_id not in pack.facts
+        or effect.knowledge_status not in KNOWLEDGE_STATUSES - {"unknown"}
+    ):
+        raise WorldPackError(f"{context} has an invalid knowledge effect")
+    if effect.kind == "change_relationship" and (
+        effect.target_actor_id not in pack.actors or not effect.dimension or effect.amount == 0
+    ):
+        raise WorldPackError(f"{context} has an invalid relationship effect")
+    if effect.kind == "change_reputation" and (
+        effect.faction_id not in pack.factions or effect.amount == 0
+    ):
+        raise WorldPackError(f"{context} has an invalid reputation effect")
+
+
+def _validate_condition_contract(
+    condition: ConditionDefinition, pack: WorldPack, context: str
+) -> None:
+    if condition.kind not in SUPPORTED_CONDITIONS:
+        raise WorldPackError(f"{context} has an unsupported condition")
+    if condition.actor_id is not None and condition.actor_id not in pack.actors:
+        raise WorldPackError(f"{context} references an unknown actor")
+    if condition.kind in {"flag_set", "flag_unset"} and not condition.flag:
+        raise WorldPackError(f"{context} has an invalid flag condition")
+    if condition.kind == "fact_status" and (
+        condition.fact_id not in pack.facts or condition.knowledge_status not in KNOWLEDGE_STATUSES
+    ):
+        raise WorldPackError(f"{context} has an invalid knowledge condition")
+    if condition.kind == "relationship_at_least" and (
+        condition.target_actor_id not in pack.actors or not condition.dimension
+    ):
+        raise WorldPackError(f"{context} has an invalid relationship condition")
+    if condition.kind == "reputation_at_least" and condition.faction_id not in pack.factions:
+        raise WorldPackError(f"{context} has an invalid reputation condition")
+    if condition.kind == "quest_status" and (
+        condition.quest_id not in pack.quests
+        or condition.quest_status not in {"inactive", "active", "completed", "failed"}
+    ):
+        raise WorldPackError(f"{context} has an invalid quest condition")
+    if condition.kind == "event" and not condition.event_kind:
+        raise WorldPackError(f"{context} has an invalid event condition")
+    if condition.kind == "time_window" and (
+        condition.start_minute is None
+        or condition.end_minute is None
+        or not 0 <= condition.start_minute <= 1439
+        or not 0 <= condition.end_minute <= 1440
+        or condition.start_minute == condition.end_minute
+    ):
+        raise WorldPackError(f"{context} has an invalid time window")
+    if condition.kind == "actor_at":
+        world_map = pack.maps.get(condition.map_id or "")
+        if (
+            world_map is None
+            or condition.x is None
+            or condition.y is None
+            or condition.x < 0
+            or condition.y < 0
+            or condition.x >= world_map.width
+            or condition.y >= world_map.height
+        ):
+            raise WorldPackError(f"{context} has an invalid location condition")
 
 
 def _validate_runtime_pack(pack: WorldPack) -> None:
@@ -133,6 +443,8 @@ def _validate_runtime_pack(pack: WorldPack) -> None:
                     raise WorldPackError(f"Map {world_map.id} references an unknown tile")
     occupied: set[tuple[str, int, int]] = set()
     for actor in pack.actors.values():
+        if not isinstance(actor.display_name, str) or not actor.display_name:
+            raise WorldPackError(f"Actor {actor.id} has an invalid display name")
         if actor.spawn.map_id not in pack.maps or not pack.is_walkable(
             actor.spawn.map_id, actor.spawn.x, actor.spawn.y
         ):
@@ -154,6 +466,25 @@ def _validate_runtime_pack(pack: WorldPack) -> None:
             for ability_id in actor.ability_ids
         ):
             raise WorldPackError(f"Actor {actor.id} references an unknown ability")
+        knowledge = dict(actor.knowledge)
+        if any(
+            fact_id not in pack.facts for fact_id in set(knowledge) | set(actor.forbidden_fact_ids)
+        ):
+            raise WorldPackError(f"Actor {actor.id} references an unknown fact")
+        if set(knowledge) & set(actor.forbidden_fact_ids):
+            raise WorldPackError(f"Actor {actor.id} knows a forbidden fact")
+        if any(status not in KNOWLEDGE_STATUSES - {"unknown"} for status in knowledge.values()):
+            raise WorldPackError(f"Actor {actor.id} has an invalid knowledge status")
+        for target_actor_id, dimensions in actor.relationships:
+            if target_actor_id not in pack.actors or any(
+                not dimension or value < -100 or value > 100 for dimension, value in dimensions
+            ):
+                raise WorldPackError(f"Actor {actor.id} has an invalid relationship")
+        if any(
+            faction_id not in pack.factions or value < -100 or value > 100
+            for faction_id, value in actor.faction_reputation
+        ):
+            raise WorldPackError(f"Actor {actor.id} has an invalid faction reputation")
     for ability in pack.abilities.values():
         if (
             ability.target not in {"self", "actor"}
@@ -190,18 +521,105 @@ def _validate_runtime_pack(pack: WorldPack) -> None:
             or not interaction.effects
         ):
             raise WorldPackError(f"Interaction {interaction.id} has an invalid contract")
-    supported_effects = {"set_flag", "clear_flag", "change_resource"}
     for effects, context in [
         *((ability.effects, f"Ability {ability.id}") for ability in pack.abilities.values()),
         *((item.effects, f"Interaction {item.id}") for item in pack.interactions.values()),
     ]:
-        if any(effect.kind not in supported_effects for effect in effects):
-            raise WorldPackError(f"{context} has an unsupported effect")
+        for effect in effects:
+            _validate_effect_contract(effect, pack, context)
+    for fact in pack.facts.values():
+        if (
+            not isinstance(fact.statement, str)
+            or not fact.statement
+            or fact.kind not in {"truth", "secret", "rumor"}
+            or fact.truth not in {"true", "false", "unknown"}
+        ):
+            raise WorldPackError(f"Fact {fact.id} has an invalid contract")
+    for faction in pack.factions.values():
+        if not isinstance(faction.display_name, str) or not faction.display_name:
+            raise WorldPackError(f"Faction {faction.id} has an invalid contract")
+    for dialogue in pack.dialogues.values():
+        if (
+            not isinstance(dialogue.display_name, str)
+            or not dialogue.display_name
+            or dialogue.actor_id not in pack.actors
+            or dialogue.range < 0
+            or dialogue.start_node_id not in dialogue.nodes
+            or not dialogue.nodes
+        ):
+            raise WorldPackError(f"Dialogue {dialogue.id} has an invalid contract")
+        for condition in dialogue.conditions:
+            _validate_condition_contract(condition, pack, f"Dialogue {dialogue.id}")
+        for node in dialogue.nodes.values():
+            if (
+                node.speaker_id not in pack.actors
+                or not isinstance(node.text, str)
+                or not node.text
+                or any(fact_id not in pack.facts for fact_id in node.fact_refs)
+            ):
+                raise WorldPackError(f"Dialogue {dialogue.id} has an invalid node")
+            for effect in node.on_enter:
+                _validate_effect_contract(effect, pack, f"Dialogue {dialogue.id}")
+            choice_ids: set[str] = set()
+            for choice in node.choices:
+                if (
+                    not isinstance(choice.text, str)
+                    or not choice.text
+                    or choice.id in choice_ids
+                    or (
+                        choice.next_node_id is not None
+                        and choice.next_node_id not in dialogue.nodes
+                    )
+                ):
+                    raise WorldPackError(f"Dialogue {dialogue.id} has an invalid choice")
+                choice_ids.add(choice.id)
+                for condition in choice.conditions:
+                    _validate_condition_contract(condition, pack, f"Dialogue {dialogue.id}")
+                for effect in choice.effects:
+                    _validate_effect_contract(effect, pack, f"Dialogue {dialogue.id}")
+    for quest in pack.quests.values():
+        if (
+            not isinstance(quest.title, str)
+            or not quest.title
+            or not quest.stages
+            or quest.start_stage_id not in quest.stages
+        ):
+            raise WorldPackError(f"Quest {quest.id} has an invalid contract")
+        for condition in quest.auto_start_conditions:
+            _validate_condition_contract(condition, pack, f"Quest {quest.id}")
+        for stage in quest.stages.values():
+            if (
+                not isinstance(stage.description, str)
+                or not stage.description
+                or (stage.next_stage_id is not None and stage.next_stage_id not in quest.stages)
+            ):
+                raise WorldPackError(f"Quest {quest.id} has an invalid next stage")
+            for condition in stage.completion_conditions + stage.failure_conditions:
+                _validate_condition_contract(condition, pack, f"Quest {quest.id}")
+            for effect in stage.on_complete + stage.on_fail:
+                _validate_effect_contract(effect, pack, f"Quest {quest.id}")
+    for scene in pack.scenes.values():
+        if (
+            not isinstance(scene.title, str)
+            or not scene.title
+            or not isinstance(scene.text, str)
+            or not scene.text
+            or not 0 <= scene.start_minute <= 1439
+            or not 0 <= scene.end_minute <= 1440
+            or scene.start_minute == scene.end_minute
+        ):
+            raise WorldPackError(f"Scene {scene.id} has an invalid time window")
+        for condition in scene.conditions:
+            _validate_condition_contract(condition, pack, f"Scene {scene.id}")
+        for effect in scene.effects:
+            _validate_effect_contract(effect, pack, f"Scene {scene.id}")
 
 
 def load_worldpack(path: str | Path) -> WorldPack:
     pack_path = Path(path)
     try:
+        if pack_path.stat().st_size > MAX_WORLDPACK_BYTES:
+            raise WorldPackError("The worldpack exceeds the 64 MiB limit")
         raw = json.loads(pack_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise WorldPackError(f"Could not load {pack_path}: {exc}") from exc
@@ -210,7 +628,7 @@ def load_worldpack(path: str | Path) -> WorldPack:
     if raw.get("format") != "isoworld.worldpack":
         raise WorldPackError("Unknown worldpack format")
     version = raw.get("format_version")
-    if not isinstance(version, int) or isinstance(version, bool) or version not in {1, 2}:
+    if not isinstance(version, int) or isinstance(version, bool) or version not in {1, 2, 3}:
         raise WorldPackError("Unsupported worldpack version")
     content_hash = _verify_hash(raw)
 
@@ -226,6 +644,14 @@ def load_worldpack(path: str | Path) -> WorldPack:
             for name, items in collections.items()
         ):
             raise TypeError("collections must contain lists of objects")
+        if version == 3 and not M2_COLLECTIONS <= set(collections):
+            raise WorldPackError("Worldpack version 3 is missing narrative collections")
+        for collection_name, items in collections.items():
+            identifiers = [item.get("id") for item in items]
+            if not all(isinstance(identifier, str) for identifier in identifiers):
+                raise WorldPackError(f"Collection {collection_name} has a non-string ID")
+            if len(set(identifiers)) != len(identifiers):
+                raise WorldPackError(f"Collection {collection_name} has a duplicate ID")
         tile_types = {
             item["id"]: TileType(
                 id=item["id"],
@@ -309,8 +735,13 @@ def load_worldpack(path: str | Path) -> WorldPack:
             )
             for item in collections.get("interactions", [])
         }
-        actors = {
-            item["id"]: ActorDefinition(
+        actors: dict[str, ActorDefinition] = {}
+        for item in collections["actors"]:
+            actor_id = item["id"]
+            knowledge, forbidden_fact_ids = _knowledge(
+                item.get("knowledge", {}), f"actors/{actor_id}/knowledge"
+            )
+            actors[actor_id] = ActorDefinition(
                 id=item["id"],
                 display_name=item["display_name"],
                 playable=_boolean(item["playable"], f"actors/{item['id']}/playable"),
@@ -335,10 +766,40 @@ def load_worldpack(path: str | Path) -> WorldPack:
                         ).items()
                     )
                 ),
+                knowledge=knowledge,
+                forbidden_fact_ids=forbidden_fact_ids,
+                relationships=_relationships(
+                    item.get("relationships", {}), f"actors/{actor_id}/relationships"
+                ),
+                faction_reputation=tuple(
+                    sorted(
+                        _integer_dict(
+                            item.get("faction_reputation", {}),
+                            f"actors/{actor_id}/faction_reputation",
+                        ).items()
+                    )
+                ),
             )
-            for item in collections["actors"]
+        facts = {
+            item["id"]: FactDefinition(
+                id=item["id"],
+                statement=item["statement"],
+                kind=item.get("kind", "truth"),
+                truth=item.get("truth", "true"),
+            )
+            for item in collections.get("facts", [])
         }
-    except (KeyError, TypeError, ValueError) as exc:
+        factions = {
+            item["id"]: FactionDefinition(
+                id=item["id"],
+                display_name=item["display_name"],
+            )
+            for item in collections.get("factions", [])
+        }
+        dialogues = _dialogues(collections.get("dialogues", []))
+        quests = _quests(collections.get("quests", []))
+        scenes = _scenes(collections.get("scenes", []))
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
         raise WorldPackError(f"Malformed worldpack: {exc}") from exc
 
     simulation = world.get("simulation", {})
@@ -364,6 +825,9 @@ def load_worldpack(path: str | Path) -> WorldPack:
         "navigate_help": "Left click: navigate",
         "interact_help": "E: interact",
         "ability_help": "1: use first ability",
+        "dialogue_help": "Q: talk; number keys: choose; Esc: leave",
+        "scene_help": "Space: continue",
+        "quest_label": "Quest",
         "clock_label": "Day",
     }
     if not isinstance(world.get("ui"), dict) or not all(
@@ -374,7 +838,20 @@ def load_worldpack(path: str | Path) -> WorldPack:
     extra_collections = {
         key: tuple(value)
         for key, value in collections.items()
-        if key not in {"tile_types", "maps", "actors", "abilities", "schedules", "interactions"}
+        if key
+        not in {
+            "tile_types",
+            "maps",
+            "actors",
+            "abilities",
+            "schedules",
+            "interactions",
+            "facts",
+            "factions",
+            "dialogues",
+            "quests",
+            "scenes",
+        }
     }
     for field in ("id", "title", "language", "start_map_id"):
         if not isinstance(world.get(field), str):
@@ -394,6 +871,11 @@ def load_worldpack(path: str | Path) -> WorldPack:
         abilities=abilities,
         schedules=schedules,
         interactions=interactions,
+        facts=facts,
+        factions=factions,
+        dialogues=dialogues,
+        quests=quests,
+        scenes=scenes,
         collections=extra_collections,
     )
     if pack.start_map_id not in pack.maps:

@@ -56,6 +56,48 @@ class EffectDefinition:
     resource: str | None = None
     amount: int = 0
     flag: str | None = None
+    fact_id: str | None = None
+    knowledge_status: str | None = None
+    target_actor_id: str | None = None
+    dimension: str | None = None
+    faction_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConditionDefinition:
+    kind: str
+    negate: bool = False
+    flag: str | None = None
+    fact_id: str | None = None
+    knowledge_status: str | None = None
+    actor_id: str | None = None
+    target_actor_id: str | None = None
+    dimension: str | None = None
+    faction_id: str | None = None
+    value: int = 0
+    quest_id: str | None = None
+    quest_status: str | None = None
+    event_kind: str | None = None
+    subject_id: str | None = None
+    map_id: str | None = None
+    x: int | None = None
+    y: int | None = None
+    start_minute: int | None = None
+    end_minute: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FactDefinition:
+    id: str
+    statement: str
+    kind: str
+    truth: str
+
+
+@dataclass(frozen=True, slots=True)
+class FactionDefinition:
+    id: str
+    display_name: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,6 +147,70 @@ class InteractionDefinition:
 
 
 @dataclass(frozen=True, slots=True)
+class DialogueChoiceDefinition:
+    id: str
+    text: str
+    next_node_id: str | None
+    conditions: tuple[ConditionDefinition, ...]
+    effects: tuple[EffectDefinition, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class DialogueNodeDefinition:
+    id: str
+    speaker_id: str
+    text: str
+    fact_refs: tuple[str, ...]
+    choices: tuple[DialogueChoiceDefinition, ...]
+    on_enter: tuple[EffectDefinition, ...]
+    allow_exit: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DialogueDefinition:
+    id: str
+    display_name: str
+    actor_id: str
+    range: int
+    start_node_id: str
+    conditions: tuple[ConditionDefinition, ...]
+    nodes: dict[str, DialogueNodeDefinition]
+
+
+@dataclass(frozen=True, slots=True)
+class QuestStageDefinition:
+    id: str
+    description: str
+    completion_conditions: tuple[ConditionDefinition, ...]
+    failure_conditions: tuple[ConditionDefinition, ...]
+    on_complete: tuple[EffectDefinition, ...]
+    on_fail: tuple[EffectDefinition, ...]
+    next_stage_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class QuestDefinition:
+    id: str
+    title: str
+    start_stage_id: str
+    auto_start_conditions: tuple[ConditionDefinition, ...]
+    stages: dict[str, QuestStageDefinition]
+
+
+@dataclass(frozen=True, slots=True)
+class SceneDefinition:
+    id: str
+    title: str
+    text: str
+    start_minute: int
+    end_minute: int
+    conditions: tuple[ConditionDefinition, ...]
+    effects: tuple[EffectDefinition, ...]
+    once: bool
+    priority: int
+
+
+@dataclass(frozen=True, slots=True)
 class ActorDefinition:
     id: str
     display_name: str
@@ -116,6 +222,10 @@ class ActorDefinition:
     schedule_mode: str = "never"
     ability_ids: tuple[str, ...] = ()
     resources: tuple[tuple[str, int], ...] = ()
+    knowledge: tuple[tuple[str, str], ...] = ()
+    forbidden_fact_ids: tuple[str, ...] = ()
+    relationships: tuple[tuple[str, tuple[tuple[str, int], ...]], ...] = ()
+    faction_reputation: tuple[tuple[str, int], ...] = ()
 
     @property
     def initial_resources(self) -> dict[str, int]:
@@ -138,6 +248,11 @@ class WorldPack:
     abilities: dict[str, AbilityDefinition]
     schedules: dict[str, ScheduleDefinition]
     interactions: dict[str, InteractionDefinition]
+    facts: dict[str, FactDefinition]
+    factions: dict[str, FactionDefinition]
+    dialogues: dict[str, DialogueDefinition]
+    quests: dict[str, QuestDefinition]
+    scenes: dict[str, SceneDefinition]
     collections: dict[str, tuple[dict[str, Any], ...]]
 
     @property

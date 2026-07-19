@@ -20,6 +20,47 @@ class Cooldown:
 
 
 @dataclass(frozen=True, slots=True)
+class KnowledgeValue:
+    fact_id: str
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
+class RelationshipValue:
+    target_actor_id: str
+    dimension: str
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReputationValue:
+    faction_id: str
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class QuestState:
+    quest_id: str
+    status: str = "inactive"
+    stage_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DialogueState:
+    dialogue_id: str
+    node_id: str
+    initiator_actor_id: str
+    partner_actor_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class DomainEvent:
+    kind: str
+    actor_id: str | None = None
+    subject_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ActorState:
     actor_id: str
     map_id: str
@@ -29,6 +70,9 @@ class ActorState:
     cooldowns: tuple[Cooldown, ...] = ()
     route: tuple[Cell, ...] = ()
     blocked_ticks: int = 0
+    knowledge: tuple[KnowledgeValue, ...] = ()
+    relationships: tuple[RelationshipValue, ...] = ()
+    faction_reputation: tuple[ReputationValue, ...] = ()
 
     def resource(self, resource_id: str) -> int:
         item = next((item for item in self.resources if item.id == resource_id), None)
@@ -54,6 +98,61 @@ class ActorState:
             cooldowns=tuple(Cooldown(key, values[key]) for key in sorted(values)),
         )
 
+    def knowledge_status(self, fact_id: str) -> str:
+        item = next((item for item in self.knowledge if item.fact_id == fact_id), None)
+        return item.status if item is not None else "unknown"
+
+    def with_knowledge(self, fact_id: str, status: str) -> ActorState:
+        values = {item.fact_id: item.status for item in self.knowledge}
+        if status == "unknown":
+            values.pop(fact_id, None)
+        else:
+            values[fact_id] = status
+        return replace(
+            self,
+            knowledge=tuple(KnowledgeValue(key, values[key]) for key in sorted(values)),
+        )
+
+    def relationship(self, target_actor_id: str, dimension: str) -> int:
+        item = next(
+            (
+                item
+                for item in self.relationships
+                if item.target_actor_id == target_actor_id and item.dimension == dimension
+            ),
+            None,
+        )
+        return item.value if item is not None else 0
+
+    def with_relationship(self, target_actor_id: str, dimension: str, value: int) -> ActorState:
+        values = {(item.target_actor_id, item.dimension): item.value for item in self.relationships}
+        values[(target_actor_id, dimension)] = max(-100, min(100, value))
+        return replace(
+            self,
+            relationships=tuple(
+                RelationshipValue(
+                    target,
+                    relationship_dimension,
+                    values[(target, relationship_dimension)],
+                )
+                for target, relationship_dimension in sorted(values)
+            ),
+        )
+
+    def reputation(self, faction_id: str) -> int:
+        item = next(
+            (item for item in self.faction_reputation if item.faction_id == faction_id), None
+        )
+        return item.value if item is not None else 0
+
+    def with_reputation(self, faction_id: str, value: int) -> ActorState:
+        values = {item.faction_id: item.value for item in self.faction_reputation}
+        values[faction_id] = max(-100, min(100, value))
+        return replace(
+            self,
+            faction_reputation=tuple(ReputationValue(key, values[key]) for key in sorted(values)),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class WorldState:
@@ -65,6 +164,11 @@ class WorldState:
     actors: tuple[ActorState, ...]
     flags: frozenset[str] = frozenset()
     completed_interactions: frozenset[str] = frozenset()
+    quests: tuple[QuestState, ...] = ()
+    dialogue: DialogueState | None = None
+    active_scene_id: str | None = None
+    triggered_scenes: frozenset[str] = frozenset()
+    recent_events: tuple[DomainEvent, ...] = ()
     last_message: str = ""
 
     @property
@@ -76,6 +180,10 @@ class WorldState:
             if actor.actor_id == actor_id:
                 return actor
         raise KeyError(actor_id)
+
+    def quest(self, quest_id: str) -> QuestState:
+        item = next((item for item in self.quests if item.quest_id == quest_id), None)
+        return item if item is not None else QuestState(quest_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +198,8 @@ class GameAction:
     ability_id: str | None = None
     target_actor_id: str | None = None
     interaction_id: str | None = None
+    dialogue_id: str | None = None
+    choice_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -103,6 +213,8 @@ class GameAction:
             "ability_id": self.ability_id,
             "target_actor_id": self.target_actor_id,
             "interaction_id": self.interaction_id,
+            "dialogue_id": self.dialogue_id,
+            "choice_id": self.choice_id,
         }
 
     @classmethod
@@ -115,6 +227,10 @@ class GameAction:
             "navigate",
             "interact",
             "use_ability",
+            "start_dialogue",
+            "choose_dialogue",
+            "end_dialogue",
+            "dismiss_scene",
         }:
             raise ValueError("action kind is unknown")
         for field in (
@@ -123,6 +239,8 @@ class GameAction:
             "ability_id",
             "target_actor_id",
             "interaction_id",
+            "dialogue_id",
+            "choice_id",
         ):
             if raw.get(field) is not None and not isinstance(raw[field], str):
                 raise ValueError(f"action {field} must be a string or null")
@@ -137,6 +255,8 @@ class GameAction:
             ability_id=raw.get("ability_id"),
             target_actor_id=raw.get("target_actor_id"),
             interaction_id=raw.get("interaction_id"),
+            dialogue_id=raw.get("dialogue_id"),
+            choice_id=raw.get("choice_id"),
         )
 
 
@@ -151,17 +271,30 @@ def initial_world_state(pack: WorldPack) -> WorldState:
             resources=tuple(
                 ResourceValue(resource_id, value) for resource_id, value in actor.resources
             ),
+            knowledge=tuple(KnowledgeValue(fact_id, status) for fact_id, status in actor.knowledge),
+            relationships=tuple(
+                RelationshipValue(target_actor_id, dimension, value)
+                for target_actor_id, dimensions in actor.relationships
+                for dimension, value in dimensions
+            ),
+            faction_reputation=tuple(
+                ReputationValue(faction_id, value) for faction_id, value in actor.faction_reputation
+            ),
         )
         for actor in pack.actors.values()
     )
-    return WorldState(
+    state = WorldState(
         tick=0,
         day=pack.clock.start_day,
         minute_of_day=pack.clock.start_minute,
         minute_tick=0,
         active_actor_id=playable[0],
         actors=actors,
+        quests=tuple(QuestState(quest_id) for quest_id in sorted(pack.quests)),
     )
+    from isoworld.world.narrative import initialize_narrative
+
+    return initialize_narrative(state, pack)
 
 
 def _replace_actor(state: WorldState, updated: ActorState) -> WorldState:
@@ -287,13 +420,19 @@ def _apply_effects(
     *,
     source_actor_id: str,
     target_actor_id: str,
+    events: list[DomainEvent] | None = None,
+    pack: WorldPack | None = None,
 ) -> WorldState:
     result = state
     for effect in effects:
         if effect.kind == "set_flag" and effect.flag:
             result = replace(result, flags=result.flags | {effect.flag})
+            if events is not None:
+                events.append(DomainEvent("flag_changed", source_actor_id, effect.flag))
         elif effect.kind == "clear_flag" and effect.flag:
             result = replace(result, flags=result.flags - {effect.flag})
+            if events is not None:
+                events.append(DomainEvent("flag_changed", source_actor_id, effect.flag))
         elif effect.kind == "change_resource" and effect.resource:
             actor_id = source_actor_id if effect.target == "self" else target_actor_id
             actor = result.actor(actor_id)
@@ -302,6 +441,35 @@ def _apply_effects(
                 actor.resource(effect.resource) + effect.amount,
             )
             result = _replace_actor(result, actor)
+        elif effect.kind == "learn_fact" and effect.fact_id and effect.knowledge_status:
+            actor_id = source_actor_id if effect.target == "self" else target_actor_id
+            if pack is not None and effect.fact_id in pack.actors[actor_id].forbidden_fact_ids:
+                continue
+            actor = result.actor(actor_id).with_knowledge(effect.fact_id, effect.knowledge_status)
+            result = _replace_actor(result, actor)
+            if events is not None:
+                events.append(DomainEvent("fact_learned", actor_id, effect.fact_id))
+        elif effect.kind == "change_relationship" and effect.target_actor_id and effect.dimension:
+            actor_id = source_actor_id if effect.target == "self" else target_actor_id
+            actor = result.actor(actor_id)
+            actor = actor.with_relationship(
+                effect.target_actor_id,
+                effect.dimension,
+                actor.relationship(effect.target_actor_id, effect.dimension) + effect.amount,
+            )
+            result = _replace_actor(result, actor)
+            if events is not None:
+                events.append(DomainEvent("relationship_changed", actor_id, effect.target_actor_id))
+        elif effect.kind == "change_reputation" and effect.faction_id:
+            actor_id = source_actor_id if effect.target == "self" else target_actor_id
+            actor = result.actor(actor_id)
+            actor = actor.with_reputation(
+                effect.faction_id,
+                actor.reputation(effect.faction_id) + effect.amount,
+            )
+            result = _replace_actor(result, actor)
+            if events is not None:
+                events.append(DomainEvent("reputation_changed", actor_id, effect.faction_id))
     return result
 
 
@@ -313,9 +481,13 @@ def _move(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
         return replace(state, last_message="Movement blocked")
     if target in _occupied(state, actor.map_id, except_actor=actor_id):
         return replace(state, last_message="Cell occupied")
-    return _replace_actor(
+    result = _replace_actor(
         replace(state, last_message=""),
         replace(actor, x=target[0], y=target[1], route=(), blocked_ticks=0),
+    )
+    return replace(
+        result,
+        recent_events=(DomainEvent("location_entered", actor_id, actor.map_id),),
     )
 
 
@@ -363,18 +535,21 @@ def _interact(state: WorldState, action: GameAction, pack: WorldPack) -> WorldSt
             item.id,
         ),
     )
+    events = [DomainEvent("interaction_completed", actor_id, interaction.id)]
     result = _apply_effects(
         state,
         interaction.effects,
         source_actor_id=actor_id,
         target_actor_id=actor_id,
+        events=events,
+        pack=pack,
     )
     if not interaction.repeatable:
         result = replace(
             result,
             completed_interactions=result.completed_interactions | {interaction.id},
         )
-    return replace(result, last_message=interaction.prompt)
+    return replace(result, last_message=interaction.prompt, recent_events=tuple(events))
 
 
 def _use_ability(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
@@ -414,28 +589,66 @@ def _use_ability(state: WorldState, action: GameAction, pack: WorldPack) -> Worl
         state.absolute_minute + ability.cooldown_minutes,
     )
     result = _replace_actor(state, updated_actor)
+    events = [DomainEvent("ability_used", actor_id, ability_id)]
     result = _apply_effects(
         result,
         ability.effects,
         source_actor_id=actor_id,
         target_actor_id=target_id,
+        events=events,
+        pack=pack,
     )
-    return replace(result, last_message=ability.display_name)
+    return replace(result, last_message=ability.display_name, recent_events=tuple(events))
 
 
 def reduce_world(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
+    from isoworld.world.narrative import handle_narrative_action, postprocess_narrative
+
+    state = replace(state, recent_events=())
+    if state.active_scene_id is not None or state.dialogue is not None:
+        return handle_narrative_action(state, action, pack)
+    if action.kind in {
+        "start_dialogue",
+        "choose_dialogue",
+        "end_dialogue",
+        "dismiss_scene",
+    }:
+        return handle_narrative_action(state, action, pack)
     if action.kind == "tick":
         advanced = _advance_clock(state, pack)
         planned = _plan_schedules(advanced, pack)
-        return _advance_routes(planned, pack)
+        result = _advance_routes(planned, pack)
+        events: list[DomainEvent] = []
+        if (state.day, state.minute_of_day) != (result.day, result.minute_of_day):
+            events.append(DomainEvent("minute_changed"))
+        for actor in result.actors:
+            previous = state.actor(actor.actor_id)
+            if (previous.map_id, previous.x, previous.y) != (actor.map_id, actor.x, actor.y):
+                events.append(DomainEvent("location_entered", actor.actor_id, actor.map_id))
+        result = replace(result, recent_events=tuple(events))
+        return postprocess_narrative(result, pack, tuple(events), state.active_actor_id)
     if action.kind == "select_actor" and action.actor_id in pack.playable_actor_ids:
-        return replace(state, active_actor_id=action.actor_id, last_message="")
+        return replace(
+            state,
+            active_actor_id=action.actor_id,
+            recent_events=(),
+            last_message="",
+        )
     if action.kind == "move":
-        return _move(state, action, pack)
+        result = _move(state, action, pack)
+        return postprocess_narrative(
+            result, pack, result.recent_events, action.actor_id or state.active_actor_id
+        )
     if action.kind == "navigate":
-        return _navigate(state, action, pack)
+        return replace(_navigate(state, action, pack), recent_events=())
     if action.kind == "interact":
-        return _interact(state, action, pack)
+        result = _interact(state, action, pack)
+        return postprocess_narrative(
+            result, pack, result.recent_events, action.actor_id or state.active_actor_id
+        )
     if action.kind == "use_ability":
-        return _use_ability(state, action, pack)
-    return state
+        result = _use_ability(state, action, pack)
+        return postprocess_narrative(
+            result, pack, result.recent_events, action.actor_id or state.active_actor_id
+        )
+    return replace(state, recent_events=())

@@ -36,6 +36,8 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate neutral release fixture
         run: worldforge validate examples/foundation/source/manifest.json --profile release
+      - name: Analyze neutral narrative fixture
+        run: worldforge analyze-narrative examples/foundation/source/manifest.json --fail-on warning
       - name: Audit runtime AI boundary
         run: worldforge audit-runtime src/isoworld
       - name: Build wheel

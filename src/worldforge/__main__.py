@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from worldforge.assets import AssetManifestError, init_asset_manifest, validate_asset_manifest
@@ -12,6 +13,7 @@ from worldforge.map_import import (
     load_mapping,
     write_imported_map,
 )
+from worldforge.narrative_analysis import analyze_project, write_analysis
 from worldforge.project import SourceProjectError, load_source_project
 from worldforge.runtime_audit import audit_runtime
 from worldforge.scaffold import ScaffoldError, create_world_project
@@ -78,6 +80,14 @@ def build_parser() -> argparse.ArgumentParser:
     compile_cmd = commands.add_parser("compile", help="compile a static worldpack")
     compile_cmd.add_argument("manifest", type=Path)
     compile_cmd.add_argument("--output", type=Path, required=True)
+
+    analyze = commands.add_parser(
+        "analyze-narrative",
+        help="report unreachable narrative content and possible softlocks",
+    )
+    analyze.add_argument("manifest", type=Path)
+    analyze.add_argument("--output", type=Path)
+    analyze.add_argument("--fail-on", choices=("error", "warning", "never"), default="error")
 
     import_map = commands.add_parser(
         "import-map",
@@ -185,6 +195,30 @@ def main() -> int:
                 f"OK output={args.output} hash={payload['content_hash']} "
                 f"world={payload['world']['id']}"
             )
+            return 0
+
+        if args.command == "analyze-narrative":
+            project = load_source_project(args.manifest)
+            validation_issues = validate_project(project)
+            if validation_issues:
+                for issue in validation_issues:
+                    print(f"ERROR {issue}")
+                return 1
+            report = analyze_project(project)
+            if args.output is not None:
+                write_analysis(args.output, report)
+                print(
+                    f"OK output={args.output} errors={report['summary']['error']} "
+                    f"warnings={report['summary']['warning']}"
+                )
+            else:
+                print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+            if args.fail_on == "error" and report["summary"]["error"]:
+                return 1
+            if args.fail_on == "warning" and (
+                report["summary"]["error"] or report["summary"]["warning"]
+            ):
+                return 1
             return 0
 
         if args.command == "import-map":
