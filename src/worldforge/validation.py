@@ -25,6 +25,13 @@ KNOWN_COLLECTIONS = (
     "quests",
     "scenes",
     "personal_arcs",
+    "resources",
+    "needs",
+    "goals",
+    "stockpiles",
+    "constructions",
+    "production_recipes",
+    "consequences",
 )
 
 
@@ -120,6 +127,9 @@ def _validate_effects(
     facts: dict[str, dict[str, Any]] | None = None,
     actors: dict[str, dict[str, Any]] | None = None,
     factions: dict[str, dict[str, Any]] | None = None,
+    resources: dict[str, dict[str, Any]] | None = None,
+    needs: dict[str, dict[str, Any]] | None = None,
+    stockpiles: dict[str, dict[str, Any]] | None = None,
     allow_empty: bool = False,
 ) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
@@ -129,6 +139,9 @@ def _validate_effects(
     facts = facts or {}
     actors = actors or {}
     factions = factions or {}
+    resources = resources or {}
+    needs = needs or {}
+    stockpiles = stockpiles or {}
     for index, effect in enumerate(value):
         effect_path = f"{path}/{index}"
         if not isinstance(effect, dict):
@@ -142,6 +155,8 @@ def _validate_effects(
             "learn_fact",
             "change_relationship",
             "change_reputation",
+            "change_stockpile_resource",
+            "change_need",
         }:
             issues.append(ValidationIssue(f"{effect_path}/kind", f"unsupported effect: {kind}"))
         if effect.get("target", "self") not in {"self", "target"}:
@@ -150,6 +165,13 @@ def _validate_effects(
             issues.extend(_valid_id(effect.get("flag"), f"{effect_path}/flag"))
         if kind == "change_resource":
             issues.extend(_valid_id(effect.get("resource"), f"{effect_path}/resource"))
+            if resources and effect.get("resource") not in resources:
+                issues.append(
+                    ValidationIssue(
+                        f"{effect_path}/resource",
+                        f"unknown resource: {effect.get('resource')}",
+                    )
+                )
             amount = effect.get("amount")
             if not isinstance(amount, int) or isinstance(amount, bool) or amount == 0:
                 issues.append(
@@ -192,6 +214,33 @@ def _validate_effects(
                 issues.append(
                     ValidationIssue(f"{effect_path}/amount", "must be a non-zero integer")
                 )
+        if kind == "change_stockpile_resource":
+            stockpile_id = effect.get("stockpile_id")
+            if not isinstance(stockpile_id, str) or stockpile_id not in stockpiles:
+                issues.append(
+                    ValidationIssue(
+                        f"{effect_path}/stockpile_id", f"unknown stockpile: {stockpile_id}"
+                    )
+                )
+            resource_id = effect.get("resource")
+            if not isinstance(resource_id, str) or resource_id not in resources:
+                issues.append(
+                    ValidationIssue(f"{effect_path}/resource", f"unknown resource: {resource_id}")
+                )
+            amount = effect.get("amount")
+            if not isinstance(amount, int) or isinstance(amount, bool) or amount == 0:
+                issues.append(
+                    ValidationIssue(f"{effect_path}/amount", "must be a non-zero integer")
+                )
+        if kind == "change_need":
+            need_id = effect.get("need_id")
+            if not isinstance(need_id, str) or need_id not in needs:
+                issues.append(ValidationIssue(f"{effect_path}/need_id", f"unknown need: {need_id}"))
+            amount = effect.get("amount")
+            if not isinstance(amount, int) or isinstance(amount, bool) or amount == 0:
+                issues.append(
+                    ValidationIssue(f"{effect_path}/amount", "must be a non-zero integer")
+                )
     return issues
 
 
@@ -204,10 +253,18 @@ def _validate_conditions(
     factions: dict[str, dict[str, Any]],
     quests: dict[str, dict[str, Any]],
     maps: dict[str, dict[str, Any]],
+    resources: dict[str, dict[str, Any]] | None = None,
+    needs: dict[str, dict[str, Any]] | None = None,
+    stockpiles: dict[str, dict[str, Any]] | None = None,
+    constructions: dict[str, dict[str, Any]] | None = None,
 ) -> list[ValidationIssue]:
     if not isinstance(value, list):
         return [ValidationIssue(path, "must be a list")]
     issues: list[ValidationIssue] = []
+    resources = resources or {}
+    needs = needs or {}
+    stockpiles = stockpiles or {}
+    constructions = constructions or {}
     supported = {
         "flag_set",
         "flag_unset",
@@ -218,6 +275,10 @@ def _validate_conditions(
         "event",
         "time_window",
         "actor_at",
+        "need_at_most",
+        "stockpile_resource_at_least",
+        "construction_status",
+        "scarcity_at_least",
     }
     for index, condition in enumerate(value):
         condition_path = f"{path}/{index}"
@@ -321,6 +382,76 @@ def _validate_conditions(
                     require_walkable=False,
                 )
             )
+        elif kind == "need_at_most":
+            if (
+                not isinstance(condition.get("need_id"), str)
+                or condition.get("need_id") not in needs
+            ):
+                issues.append(
+                    ValidationIssue(
+                        f"{condition_path}/need_id",
+                        f"unknown need: {condition.get('need_id')}",
+                    )
+                )
+        elif kind == "stockpile_resource_at_least":
+            if (
+                not isinstance(condition.get("stockpile_id"), str)
+                or condition.get("stockpile_id") not in stockpiles
+            ):
+                issues.append(
+                    ValidationIssue(
+                        f"{condition_path}/stockpile_id",
+                        f"unknown stockpile: {condition.get('stockpile_id')}",
+                    )
+                )
+            if (
+                not isinstance(condition.get("resource_id"), str)
+                or condition.get("resource_id") not in resources
+            ):
+                issues.append(
+                    ValidationIssue(
+                        f"{condition_path}/resource_id",
+                        f"unknown resource: {condition.get('resource_id')}",
+                    )
+                )
+        elif kind == "construction_status":
+            if (
+                not isinstance(condition.get("construction_id"), str)
+                or condition.get("construction_id") not in constructions
+            ):
+                issues.append(
+                    ValidationIssue(
+                        f"{condition_path}/construction_id",
+                        f"unknown construction: {condition.get('construction_id')}",
+                    )
+                )
+            if condition.get("construction_status") not in {"absent", "building", "completed"}:
+                issues.append(
+                    ValidationIssue(
+                        f"{condition_path}/construction_status", "invalid construction status"
+                    )
+                )
+        elif kind == "scarcity_at_least":
+            if (
+                not isinstance(condition.get("resource_id"), str)
+                or condition.get("resource_id") not in resources
+            ):
+                issues.append(
+                    ValidationIssue(
+                        f"{condition_path}/resource_id",
+                        f"unknown resource: {condition.get('resource_id')}",
+                    )
+                )
+        if kind in {
+            "relationship_at_least",
+            "reputation_at_least",
+            "need_at_most",
+            "stockpile_resource_at_least",
+            "scarcity_at_least",
+        }:
+            value = condition.get("value")
+            if not isinstance(value, int) or isinstance(value, bool):
+                issues.append(ValidationIssue(f"{condition_path}/value", "must be an integer"))
     return issues
 
 
@@ -356,6 +487,8 @@ def validate_project(
             "conditional_dialogue": {"dialogue_help"},
             "reactive_quests": {"quest_label"},
             "timed_scenes": {"scene_help"},
+            "actor_needs": {"needs_label"},
+            "hierarchical_goals": {"goal_label"},
         }
         for capability in capabilities:
             required_ui.update(capability_ui.get(capability, set()))
@@ -422,6 +555,13 @@ def validate_project(
     quests = indexes.get("quests", {})
     scenes = indexes.get("scenes", {})
     arcs = indexes.get("personal_arcs", {})
+    resource_definitions = indexes.get("resources", {})
+    needs = indexes.get("needs", {})
+    goals = indexes.get("goals", {})
+    stockpiles = indexes.get("stockpiles", {})
+    constructions = indexes.get("constructions", {})
+    recipes = indexes.get("production_recipes", {})
+    consequences = indexes.get("consequences", {})
 
     policy = world.get("content_policy", {})
     if not isinstance(policy, dict):
@@ -659,6 +799,29 @@ def validate_project(
                     or not -100 <= value <= 100
                 ):
                     issues.append(ValidationIssue(reputation_path, "must be in -100..100"))
+        actor_needs = actor.get("needs", {})
+        if not isinstance(actor_needs, dict):
+            issues.append(ValidationIssue(f"{path}/needs", "must be an object"))
+        else:
+            for need_id, value in actor_needs.items():
+                if need_id not in needs:
+                    issues.append(ValidationIssue(f"{path}/needs/{need_id}", "unknown need"))
+                if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 100:
+                    issues.append(ValidationIssue(f"{path}/needs/{need_id}", "must be in 0..100"))
+        goal_ids = actor.get("goal_ids", [])
+        if not isinstance(goal_ids, list):
+            issues.append(ValidationIssue(f"{path}/goal_ids", "must be a list"))
+        else:
+            for goal_id in goal_ids:
+                if not isinstance(goal_id, str) or goal_id not in goals:
+                    issues.append(ValidationIssue(f"{path}/goal_ids", f"unknown goal: {goal_id}"))
+                elif goals[goal_id].get("parent_id") is not None:
+                    issues.append(
+                        ValidationIssue(
+                            f"{path}/goal_ids",
+                            f"goal is not a hierarchy root: {goal_id}",
+                        )
+                    )
 
     playable_actors = [actor for actor in actors.values() if actor.get("playable") is True]
     if profile == "release" and not playable_actors:
@@ -720,6 +883,13 @@ def validate_project(
         else:
             for resource_id, amount in costs.items():
                 issues.extend(_valid_id(resource_id, f"{path}/costs/{resource_id}"))
+                if resource_definitions and resource_id not in resource_definitions:
+                    issues.append(
+                        ValidationIssue(
+                            f"{path}/costs/{resource_id}",
+                            f"unknown resource: {resource_id}",
+                        )
+                    )
                 if not isinstance(amount, int) or isinstance(amount, bool) or amount <= 0:
                     issues.append(
                         ValidationIssue(f"{path}/costs/{resource_id}", "must be a positive integer")
@@ -731,6 +901,9 @@ def validate_project(
                 facts=facts,
                 actors=actors,
                 factions=factions,
+                resources=resource_definitions,
+                needs=needs,
+                stockpiles=stockpiles,
             )
         )
 
@@ -907,6 +1080,9 @@ def validate_project(
                 facts=facts,
                 actors=actors,
                 factions=factions,
+                resources=resource_definitions,
+                needs=needs,
+                stockpiles=stockpiles,
             )
         )
 
@@ -916,8 +1092,19 @@ def validate_project(
         "factions": factions,
         "quests": quests,
         "maps": maps,
+        "resources": resource_definitions,
+        "needs": needs,
+        "stockpiles": stockpiles,
+        "constructions": constructions,
     }
-    effect_indexes = {"facts": facts, "actors": actors, "factions": factions}
+    effect_indexes = {
+        "facts": facts,
+        "actors": actors,
+        "factions": factions,
+        "resources": resource_definitions,
+        "needs": needs,
+        "stockpiles": stockpiles,
+    }
 
     for dialogue_id, dialogue in dialogues.items():
         path = f"dialogues/{dialogue_id}"
@@ -1151,6 +1338,311 @@ def validate_project(
                 **effect_indexes,
             )
         )
+
+    def validate_resource_amounts(
+        value: Any, path: str, *, allow_empty: bool
+    ) -> list[ValidationIssue]:
+        result: list[ValidationIssue] = []
+        if not isinstance(value, dict) or (not value and not allow_empty):
+            return [ValidationIssue(path, "must be an object with resource amounts")]
+        for resource_id, amount in value.items():
+            if resource_id not in resource_definitions:
+                result.append(
+                    ValidationIssue(f"{path}/{resource_id}", f"unknown resource: {resource_id}")
+                )
+            if not isinstance(amount, int) or isinstance(amount, bool) or amount < 0:
+                result.append(
+                    ValidationIssue(f"{path}/{resource_id}", "must be a non-negative integer")
+                )
+        return result
+
+    for resource_id, resource in resource_definitions.items():
+        path = f"resources/{resource_id}"
+        issues.extend(_require(resource, ("display_name", "base_value", "scarcity_target"), path))
+        if (
+            not isinstance(resource.get("display_name"), str)
+            or not resource.get("display_name", "").strip()
+        ):
+            issues.append(ValidationIssue(f"{path}/display_name", "must contain a display name"))
+        for field in ("base_value", "scarcity_target"):
+            value = resource.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                issues.append(ValidationIssue(f"{path}/{field}", "must be a non-negative integer"))
+
+    for need_id, need in needs.items():
+        path = f"needs/{need_id}"
+        issues.extend(
+            _require(
+                need,
+                (
+                    "display_name",
+                    "decay_interval_minutes",
+                    "decay_amount",
+                    "critical_below",
+                    "resource_id",
+                    "consume_amount",
+                    "restore_amount",
+                ),
+                path,
+            )
+        )
+        if (
+            not isinstance(need.get("display_name"), str)
+            or not need.get("display_name", "").strip()
+        ):
+            issues.append(ValidationIssue(f"{path}/display_name", "must contain a display name"))
+        if (
+            not isinstance(need.get("resource_id"), str)
+            or need.get("resource_id") not in resource_definitions
+        ):
+            issues.append(
+                ValidationIssue(
+                    f"{path}/resource_id", f"unknown resource: {need.get('resource_id')}"
+                )
+            )
+        for field in (
+            "decay_interval_minutes",
+            "decay_amount",
+            "consume_amount",
+            "restore_amount",
+        ):
+            value = need.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                issues.append(ValidationIssue(f"{path}/{field}", "must be a positive integer"))
+        critical = need.get("critical_below")
+        if not isinstance(critical, int) or isinstance(critical, bool) or not 0 <= critical <= 100:
+            issues.append(ValidationIssue(f"{path}/critical_below", "must be in 0..100"))
+
+    for stockpile_id, stockpile in stockpiles.items():
+        path = f"stockpiles/{stockpile_id}"
+        issues.extend(_require(stockpile, ("display_name", "location", "capacity"), path))
+        if (
+            not isinstance(stockpile.get("display_name"), str)
+            or not stockpile.get("display_name", "").strip()
+        ):
+            issues.append(ValidationIssue(f"{path}/display_name", "must contain a display name"))
+        issues.extend(
+            _validate_location(
+                stockpile.get("location"),
+                f"{path}/location",
+                maps,
+                tile_types,
+                require_walkable=True,
+            )
+        )
+        capacity = stockpile.get("capacity")
+        if not isinstance(capacity, int) or isinstance(capacity, bool) or capacity < 1:
+            issues.append(ValidationIssue(f"{path}/capacity", "must be a positive integer"))
+        issues.extend(
+            validate_resource_amounts(
+                stockpile.get("resources", {}),
+                f"{path}/resources",
+                allow_empty=True,
+            )
+        )
+        contents = stockpile.get("resources", {})
+        if (
+            isinstance(capacity, int)
+            and isinstance(contents, dict)
+            and all(isinstance(value, int) for value in contents.values())
+            and sum(contents.values()) > capacity
+        ):
+            issues.append(ValidationIssue(f"{path}/resources", "exceeds stockpile capacity"))
+
+    for construction_id, construction in constructions.items():
+        path = f"constructions/{construction_id}"
+        issues.extend(
+            _require(
+                construction,
+                ("display_name", "footprint", "costs", "build_minutes", "blocks_movement"),
+                path,
+            )
+        )
+        if (
+            not isinstance(construction.get("display_name"), str)
+            or not construction.get("display_name", "").strip()
+        ):
+            issues.append(ValidationIssue(f"{path}/display_name", "must contain a display name"))
+        footprint = construction.get("footprint")
+        if (
+            not isinstance(footprint, list)
+            or not footprint
+            or any(
+                not isinstance(cell, list)
+                or len(cell) != 2
+                or any(not isinstance(value, int) or isinstance(value, bool) for value in cell)
+                for cell in footprint
+            )
+        ):
+            issues.append(ValidationIssue(f"{path}/footprint", "must contain [x, y] offsets"))
+        elif [0, 0] not in footprint or len({tuple(cell) for cell in footprint}) != len(footprint):
+            issues.append(
+                ValidationIssue(f"{path}/footprint", "must include [0, 0] without duplicates")
+            )
+        issues.extend(
+            validate_resource_amounts(construction.get("costs"), f"{path}/costs", allow_empty=False)
+        )
+        if isinstance(construction.get("costs"), dict) and any(
+            value == 0 for value in construction["costs"].values()
+        ):
+            issues.append(ValidationIssue(f"{path}/costs", "construction costs must be positive"))
+        build_minutes = construction.get("build_minutes")
+        if (
+            not isinstance(build_minutes, int)
+            or isinstance(build_minutes, bool)
+            or build_minutes < 1
+        ):
+            issues.append(ValidationIssue(f"{path}/build_minutes", "must be a positive integer"))
+        if not isinstance(construction.get("blocks_movement"), bool):
+            issues.append(ValidationIssue(f"{path}/blocks_movement", "must be a boolean"))
+        stockpile_id = construction.get("stockpile_id")
+        if stockpile_id is not None and (
+            not isinstance(stockpile_id, str) or stockpile_id not in stockpiles
+        ):
+            issues.append(
+                ValidationIssue(f"{path}/stockpile_id", f"unknown stockpile: {stockpile_id}")
+            )
+
+    for recipe_id, recipe in recipes.items():
+        path = f"production_recipes/{recipe_id}"
+        issues.extend(
+            _require(
+                recipe,
+                (
+                    "display_name",
+                    "required_construction_id",
+                    "inputs",
+                    "outputs",
+                    "duration_minutes",
+                ),
+                path,
+            )
+        )
+        if (
+            not isinstance(recipe.get("display_name"), str)
+            or not recipe.get("display_name", "").strip()
+        ):
+            issues.append(ValidationIssue(f"{path}/display_name", "must contain a display name"))
+        if (
+            not isinstance(recipe.get("required_construction_id"), str)
+            or recipe.get("required_construction_id") not in constructions
+        ):
+            issues.append(
+                ValidationIssue(
+                    f"{path}/required_construction_id",
+                    f"unknown construction: {recipe.get('required_construction_id')}",
+                )
+            )
+        for field in ("inputs", "outputs"):
+            issues.extend(
+                validate_resource_amounts(recipe.get(field), f"{path}/{field}", allow_empty=False)
+            )
+            if isinstance(recipe.get(field), dict) and any(
+                value == 0 for value in recipe[field].values()
+            ):
+                issues.append(ValidationIssue(f"{path}/{field}", "amounts must be positive"))
+        duration = recipe.get("duration_minutes")
+        if not isinstance(duration, int) or isinstance(duration, bool) or duration < 1:
+            issues.append(ValidationIssue(f"{path}/duration_minutes", "must be positive"))
+
+    for goal_id, goal in goals.items():
+        path = f"goals/{goal_id}"
+        issues.extend(_require(goal, ("display_name", "priority", "conditions", "action"), path))
+        if (
+            not isinstance(goal.get("display_name"), str)
+            or not goal.get("display_name", "").strip()
+        ):
+            issues.append(ValidationIssue(f"{path}/display_name", "must contain a display name"))
+        parent_id = goal.get("parent_id")
+        if parent_id is not None and (not isinstance(parent_id, str) or parent_id not in goals):
+            issues.append(ValidationIssue(f"{path}/parent_id", f"unknown goal: {parent_id}"))
+        priority = goal.get("priority")
+        if not isinstance(priority, int) or isinstance(priority, bool):
+            issues.append(ValidationIssue(f"{path}/priority", "must be an integer"))
+        issues.extend(
+            _validate_conditions(goal.get("conditions"), f"{path}/conditions", **condition_indexes)
+        )
+        action = goal.get("action")
+        if action is None:
+            continue
+        if not isinstance(action, dict):
+            issues.append(ValidationIssue(f"{path}/action", "must be an object or null"))
+            continue
+        kind = action.get("kind")
+        if kind not in {"satisfy_need", "produce", "build", "travel"}:
+            issues.append(ValidationIssue(f"{path}/action/kind", f"unsupported action: {kind}"))
+        if kind == "satisfy_need" and (
+            not isinstance(action.get("need_id"), str) or action.get("need_id") not in needs
+        ):
+            issues.append(ValidationIssue(f"{path}/action/need_id", "unknown need"))
+        if kind == "produce" and (
+            not isinstance(action.get("recipe_id"), str) or action.get("recipe_id") not in recipes
+        ):
+            issues.append(ValidationIssue(f"{path}/action/recipe_id", "unknown recipe"))
+        if kind == "build" and (
+            not isinstance(action.get("blueprint_id"), str)
+            or action.get("blueprint_id") not in constructions
+        ):
+            issues.append(ValidationIssue(f"{path}/action/blueprint_id", "unknown construction"))
+        if action.get("stockpile_id") is not None and (
+            not isinstance(action.get("stockpile_id"), str)
+            or action.get("stockpile_id") not in stockpiles
+        ):
+            issues.append(ValidationIssue(f"{path}/action/stockpile_id", "unknown stockpile"))
+        if kind in {"build", "travel"}:
+            issues.extend(
+                _validate_location(
+                    action.get("location"),
+                    f"{path}/action/location",
+                    maps,
+                    tile_types,
+                    require_walkable=True,
+                )
+            )
+
+    for goal_id in goals:
+        seen: set[str] = set()
+        cursor: str | None = goal_id
+        while cursor is not None and cursor in goals:
+            if cursor in seen:
+                issues.append(ValidationIssue(f"goals/{goal_id}/parent_id", "goal cycle"))
+                break
+            seen.add(cursor)
+            parent = goals[cursor].get("parent_id")
+            cursor = parent if isinstance(parent, str) else None
+
+    for consequence_id, consequence in consequences.items():
+        path = f"consequences/{consequence_id}"
+        issues.extend(_require(consequence, ("delay_minutes", "trigger_event", "effects"), path))
+        delay = consequence.get("delay_minutes")
+        if not isinstance(delay, int) or isinstance(delay, bool) or delay < 1:
+            issues.append(ValidationIssue(f"{path}/delay_minutes", "must be positive"))
+        issues.extend(_valid_id(consequence.get("trigger_event"), f"{path}/trigger_event"))
+        if consequence.get("subject_id") is not None:
+            issues.extend(_valid_id(consequence.get("subject_id"), f"{path}/subject_id"))
+        if "once" in consequence and not isinstance(consequence["once"], bool):
+            issues.append(ValidationIssue(f"{path}/once", "must be a boolean"))
+        issues.extend(
+            _validate_conditions(
+                consequence.get("conditions", []), f"{path}/conditions", **condition_indexes
+            )
+        )
+        issues.extend(
+            _validate_effects(consequence.get("effects"), f"{path}/effects", **effect_indexes)
+        )
+
+    if resource_definitions:
+        for actor_id, actor in actors.items():
+            resources = actor.get("resources", {})
+            if isinstance(resources, dict):
+                for resource_id in resources:
+                    if resource_id not in resource_definitions:
+                        issues.append(
+                            ValidationIssue(
+                                f"actors/{actor_id}/resources/{resource_id}",
+                                f"unknown resource: {resource_id}",
+                            )
+                        )
 
     for path, value in _walk_strings(world, "world"):
         if PLACEHOLDER_PATTERN.search(value):

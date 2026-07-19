@@ -201,6 +201,8 @@ def _binding_kind_is_compatible(slot: str, kind: Any) -> bool:
         return kind in {"sprite", "spritesheet", "tileset"}
     if category == "interaction":
         return kind in {"sprite", "spritesheet", "vfx"}
+    if category == "construction":
+        return kind in {"sprite", "spritesheet", "tileset"}
     if category == "portrait":
         return kind in {"portrait", "sprite"}
     if category == "event":

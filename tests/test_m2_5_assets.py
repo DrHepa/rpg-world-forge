@@ -225,6 +225,14 @@ def _release_manifest(directory: Path) -> Path:
             }
             for item in pack["collections"]["tile_types"]
         ),
+        *(
+            {
+                "slot": f"construction:{item['id']}",
+                "asset_id": "neutral_atlas",
+                "clip": "actor_idle",
+            }
+            for item in pack["collections"]["constructions"]
+        ),
         {
             "slot": "event:interaction_completed",
             "asset_id": "neutral_sfx",
@@ -438,6 +446,7 @@ class M25AssetTests(unittest.TestCase):
             pack = load_worldpack(COMPILED)
             renderpack = load_renderpack(output, pack)
             self.assertIsNotNone(renderpack.binding("actor:explorer"))
+            self.assertIsNotNone(renderpack.binding("construction:workshop"))
 
             fake = _FakePyray()
             registry = RaylibAssetRegistry(fake, renderpack)

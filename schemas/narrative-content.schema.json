@@ -21,7 +21,11 @@
             "quest_status",
             "event",
             "time_window",
-            "actor_at"
+            "actor_at",
+            "need_at_most",
+            "stockpile_resource_at_least",
+            "construction_status",
+            "scarcity_at_least"
           ]
         },
         "negate": {"type": "boolean"},
@@ -41,7 +45,12 @@
         "x": {"type": "integer", "minimum": 0},
         "y": {"type": "integer", "minimum": 0},
         "start_minute": {"type": "integer", "minimum": 0, "maximum": 1439},
-        "end_minute": {"type": "integer", "minimum": 0, "maximum": 1440}
+        "end_minute": {"type": "integer", "minimum": 0, "maximum": 1440},
+        "need_id": {"$ref": "#/$defs/id"},
+        "resource_id": {"$ref": "#/$defs/id"},
+        "stockpile_id": {"$ref": "#/$defs/id"},
+        "construction_id": {"$ref": "#/$defs/id"},
+        "construction_status": {"enum": ["absent", "building", "completed"]}
       }
     },
     "effect": {
@@ -55,7 +64,9 @@
             "change_resource",
             "learn_fact",
             "change_relationship",
-            "change_reputation"
+            "change_reputation",
+            "change_stockpile_resource",
+            "change_need"
           ]
         },
         "target": {"enum": ["self", "target"]},
@@ -66,7 +77,9 @@
         "knowledge_status": {"enum": ["suspected", "known", "secret"]},
         "target_actor_id": {"$ref": "#/$defs/id"},
         "dimension": {"$ref": "#/$defs/id"},
-        "faction_id": {"$ref": "#/$defs/id"}
+        "faction_id": {"$ref": "#/$defs/id"},
+        "stockpile_id": {"$ref": "#/$defs/id"},
+        "need_id": {"$ref": "#/$defs/id"}
       }
     },
     "fact": {

@@ -10,21 +10,29 @@ from isoworld.content.models import (
     ActorDefinition,
     ClockDefinition,
     ConditionDefinition,
+    ConsequenceDefinition,
+    ConstructionDefinition,
     DialogueChoiceDefinition,
     DialogueDefinition,
     DialogueNodeDefinition,
     EffectDefinition,
     FactDefinition,
     FactionDefinition,
+    GoalActionDefinition,
+    GoalDefinition,
     InteractionDefinition,
     Location,
     MapDefinition,
+    NeedDefinition,
+    ProductionRecipeDefinition,
     QuestDefinition,
     QuestStageDefinition,
+    ResourceDefinition,
     SceneDefinition,
     ScheduleDefinition,
     ScheduleEntry,
     Spawn,
+    StockpileDefinition,
     TileType,
     WorldPack,
 )
@@ -36,6 +44,15 @@ class WorldPackError(ValueError):
 
 MAX_WORLDPACK_BYTES = 64 * 1024 * 1024
 M2_COLLECTIONS = {"facts", "factions", "dialogues", "quests", "scenes"}
+M3_COLLECTIONS = {
+    "resources",
+    "needs",
+    "goals",
+    "stockpiles",
+    "constructions",
+    "production_recipes",
+    "consequences",
+}
 
 
 def _integer(raw: Any, context: str) -> int:
@@ -111,6 +128,8 @@ def _effect(raw: dict[str, Any], context: str) -> EffectDefinition:
             ),
             dimension=_optional_string(raw.get("dimension"), f"{context}/dimension"),
             faction_id=_optional_string(raw.get("faction_id"), f"{context}/faction_id"),
+            stockpile_id=_optional_string(raw.get("stockpile_id"), f"{context}/stockpile_id"),
+            need_id=_optional_string(raw.get("need_id"), f"{context}/need_id"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise WorldPackError(f"{context}: invalid effect") from exc
@@ -148,6 +167,15 @@ def _condition(raw: dict[str, Any], context: str) -> ConditionDefinition:
             y=_optional_integer(raw.get("y"), f"{context}/y"),
             start_minute=_optional_integer(raw.get("start_minute"), f"{context}/start_minute"),
             end_minute=_optional_integer(raw.get("end_minute"), f"{context}/end_minute"),
+            need_id=_optional_string(raw.get("need_id"), f"{context}/need_id"),
+            resource_id=_optional_string(raw.get("resource_id"), f"{context}/resource_id"),
+            stockpile_id=_optional_string(raw.get("stockpile_id"), f"{context}/stockpile_id"),
+            construction_id=_optional_string(
+                raw.get("construction_id"), f"{context}/construction_id"
+            ),
+            construction_status=_optional_string(
+                raw.get("construction_status"), f"{context}/construction_status"
+            ),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise WorldPackError(f"{context}: invalid condition") from exc
@@ -311,6 +339,166 @@ def _location(raw: dict[str, Any], context: str) -> Location:
         raise WorldPackError(f"{context}: invalid location") from exc
 
 
+def _living_world_collections(
+    collections: dict[str, list[dict[str, Any]]],
+) -> tuple[
+    dict[str, ResourceDefinition],
+    dict[str, NeedDefinition],
+    dict[str, GoalDefinition],
+    dict[str, StockpileDefinition],
+    dict[str, ConstructionDefinition],
+    dict[str, ProductionRecipeDefinition],
+    dict[str, ConsequenceDefinition],
+]:
+    resources = {
+        item["id"]: ResourceDefinition(
+            item["id"],
+            item["display_name"],
+            _integer(item.get("base_value", 1), f"resources/{item['id']}/base_value"),
+            _integer(item.get("scarcity_target", 0), f"resources/{item['id']}/scarcity_target"),
+        )
+        for item in collections.get("resources", [])
+    }
+    needs = {
+        item["id"]: NeedDefinition(
+            item["id"],
+            item["display_name"],
+            _integer(
+                item["decay_interval_minutes"],
+                f"needs/{item['id']}/decay_interval_minutes",
+            ),
+            _integer(item["decay_amount"], f"needs/{item['id']}/decay_amount"),
+            _integer(item["critical_below"], f"needs/{item['id']}/critical_below"),
+            item["resource_id"],
+            _integer(item["consume_amount"], f"needs/{item['id']}/consume_amount"),
+            _integer(item["restore_amount"], f"needs/{item['id']}/restore_amount"),
+        )
+        for item in collections.get("needs", [])
+    }
+    goals: dict[str, GoalDefinition] = {}
+    for item in collections.get("goals", []):
+        raw_action = item.get("action")
+        action = None
+        if raw_action is not None:
+            if not isinstance(raw_action, dict):
+                raise WorldPackError(f"goals/{item['id']}/action must be an object or null")
+            location = None
+            if raw_action.get("location") is not None:
+                location = _location(raw_action["location"], f"goals/{item['id']}/action/location")
+            action = GoalActionDefinition(
+                kind=raw_action["kind"],
+                need_id=_optional_string(
+                    raw_action.get("need_id"), f"goals/{item['id']}/action/need_id"
+                ),
+                stockpile_id=_optional_string(
+                    raw_action.get("stockpile_id"),
+                    f"goals/{item['id']}/action/stockpile_id",
+                ),
+                blueprint_id=_optional_string(
+                    raw_action.get("blueprint_id"),
+                    f"goals/{item['id']}/action/blueprint_id",
+                ),
+                recipe_id=_optional_string(
+                    raw_action.get("recipe_id"), f"goals/{item['id']}/action/recipe_id"
+                ),
+                location=location,
+            )
+        goals[item["id"]] = GoalDefinition(
+            item["id"],
+            item["display_name"],
+            _optional_string(item.get("parent_id"), f"goals/{item['id']}/parent_id"),
+            _integer(item.get("priority", 0), f"goals/{item['id']}/priority"),
+            _conditions(item.get("conditions", []), f"goals/{item['id']}/conditions"),
+            action,
+        )
+    stockpiles = {
+        item["id"]: StockpileDefinition(
+            item["id"],
+            item["display_name"],
+            _location(item["location"], f"stockpiles/{item['id']}/location"),
+            _integer(item["capacity"], f"stockpiles/{item['id']}/capacity"),
+            tuple(
+                sorted(
+                    _integer_dict(
+                        item.get("resources", {}), f"stockpiles/{item['id']}/resources"
+                    ).items()
+                )
+            ),
+        )
+        for item in collections.get("stockpiles", [])
+    }
+    constructions: dict[str, ConstructionDefinition] = {}
+    for item in collections.get("constructions", []):
+        footprint_raw = item.get("footprint", [[0, 0]])
+        if not isinstance(footprint_raw, list):
+            raise WorldPackError(f"constructions/{item['id']}/footprint must be a list")
+        footprint = tuple(
+            (
+                _integer(cell[0], f"constructions/{item['id']}/footprint/{position}/0"),
+                _integer(cell[1], f"constructions/{item['id']}/footprint/{position}/1"),
+            )
+            for position, cell in enumerate(footprint_raw)
+            if isinstance(cell, list) and len(cell) == 2
+        )
+        if len(footprint) != len(footprint_raw):
+            raise WorldPackError(f"constructions/{item['id']}/footprint has an invalid cell")
+        constructions[item["id"]] = ConstructionDefinition(
+            item["id"],
+            item["display_name"],
+            footprint,
+            tuple(
+                sorted(
+                    _integer_dict(
+                        item.get("costs", {}), f"constructions/{item['id']}/costs"
+                    ).items()
+                )
+            ),
+            _integer(item["build_minutes"], f"constructions/{item['id']}/build_minutes"),
+            _boolean(
+                item.get("blocks_movement", True),
+                f"constructions/{item['id']}/blocks_movement",
+            ),
+            _optional_string(item.get("stockpile_id"), f"constructions/{item['id']}/stockpile_id"),
+        )
+    recipes = {
+        item["id"]: ProductionRecipeDefinition(
+            item["id"],
+            item["display_name"],
+            item["required_construction_id"],
+            tuple(
+                sorted(
+                    _integer_dict(item["inputs"], f"production_recipes/{item['id']}/inputs").items()
+                )
+            ),
+            tuple(
+                sorted(
+                    _integer_dict(
+                        item["outputs"], f"production_recipes/{item['id']}/outputs"
+                    ).items()
+                )
+            ),
+            _integer(
+                item["duration_minutes"],
+                f"production_recipes/{item['id']}/duration_minutes",
+            ),
+        )
+        for item in collections.get("production_recipes", [])
+    }
+    consequences = {
+        item["id"]: ConsequenceDefinition(
+            item["id"],
+            _integer(item["delay_minutes"], f"consequences/{item['id']}/delay_minutes"),
+            item["trigger_event"],
+            _optional_string(item.get("subject_id"), f"consequences/{item['id']}/subject_id"),
+            _conditions(item.get("conditions", []), f"consequences/{item['id']}/conditions"),
+            _effects(item.get("effects", []), f"consequences/{item['id']}/effects"),
+            _boolean(item.get("once", True), f"consequences/{item['id']}/once"),
+        )
+        for item in collections.get("consequences", [])
+    }
+    return resources, needs, goals, stockpiles, constructions, recipes, consequences
+
+
 def _verify_hash(raw: dict[str, Any]) -> str:
     supplied = raw.get("content_hash")
     if not isinstance(supplied, str) or len(supplied) != 64:
@@ -331,6 +519,8 @@ SUPPORTED_EFFECTS = {
     "learn_fact",
     "change_relationship",
     "change_reputation",
+    "change_stockpile_resource",
+    "change_need",
 }
 SUPPORTED_CONDITIONS = {
     "flag_set",
@@ -342,6 +532,10 @@ SUPPORTED_CONDITIONS = {
     "event",
     "time_window",
     "actor_at",
+    "need_at_most",
+    "stockpile_resource_at_least",
+    "construction_status",
+    "scarcity_at_least",
 }
 KNOWLEDGE_STATUSES = {"unknown", "suspected", "known", "secret"}
 
@@ -351,7 +545,11 @@ def _validate_effect_contract(effect: EffectDefinition, pack: WorldPack, context
         raise WorldPackError(f"{context} has an unsupported effect")
     if effect.kind in {"set_flag", "clear_flag"} and not effect.flag:
         raise WorldPackError(f"{context} has an invalid flag effect")
-    if effect.kind == "change_resource" and (not effect.resource or effect.amount == 0):
+    if effect.kind == "change_resource" and (
+        not effect.resource
+        or effect.amount == 0
+        or (pack.resources and effect.resource not in pack.resources)
+    ):
         raise WorldPackError(f"{context} has an invalid resource effect")
     if effect.kind == "learn_fact" and (
         effect.fact_id not in pack.facts
@@ -366,6 +564,14 @@ def _validate_effect_contract(effect: EffectDefinition, pack: WorldPack, context
         effect.faction_id not in pack.factions or effect.amount == 0
     ):
         raise WorldPackError(f"{context} has an invalid reputation effect")
+    if effect.kind == "change_stockpile_resource" and (
+        effect.stockpile_id not in pack.stockpiles
+        or effect.resource not in pack.resources
+        or effect.amount == 0
+    ):
+        raise WorldPackError(f"{context} has an invalid stockpile effect")
+    if effect.kind == "change_need" and (effect.need_id not in pack.needs or effect.amount == 0):
+        raise WorldPackError(f"{context} has an invalid need effect")
 
 
 def _validate_condition_contract(
@@ -414,6 +620,19 @@ def _validate_condition_contract(
             or condition.y >= world_map.height
         ):
             raise WorldPackError(f"{context} has an invalid location condition")
+    if condition.kind == "need_at_most" and condition.need_id not in pack.needs:
+        raise WorldPackError(f"{context} has an invalid need condition")
+    if condition.kind == "stockpile_resource_at_least" and (
+        condition.stockpile_id not in pack.stockpiles or condition.resource_id not in pack.resources
+    ):
+        raise WorldPackError(f"{context} has an invalid stockpile condition")
+    if condition.kind == "construction_status" and (
+        condition.construction_id not in pack.constructions
+        or condition.construction_status not in {"absent", "building", "completed"}
+    ):
+        raise WorldPackError(f"{context} has an invalid construction condition")
+    if condition.kind == "scarcity_at_least" and condition.resource_id not in pack.resources:
+        raise WorldPackError(f"{context} has an invalid scarcity condition")
 
 
 def _validate_runtime_pack(pack: WorldPack) -> None:
@@ -453,8 +672,11 @@ def _validate_runtime_pack(pack: WorldPack) -> None:
         if cell in occupied:
             raise WorldPackError("Two actors share a spawn cell")
         occupied.add(cell)
-        if any(value < 0 for _, value in actor.resources):
-            raise WorldPackError(f"Actor {actor.id} has a negative resource")
+        if any(
+            value < 0 or (pack.resources and resource_id not in pack.resources)
+            for resource_id, value in actor.resources
+        ):
+            raise WorldPackError(f"Actor {actor.id} has an invalid resource")
         if actor.schedule_id is not None and (
             not isinstance(actor.schedule_id, str) or actor.schedule_id not in pack.schedules
         ):
@@ -485,13 +707,25 @@ def _validate_runtime_pack(pack: WorldPack) -> None:
             for faction_id, value in actor.faction_reputation
         ):
             raise WorldPackError(f"Actor {actor.id} has an invalid faction reputation")
+        if any(
+            need_id not in pack.needs or not 0 <= value <= 100 for need_id, value in actor.needs
+        ):
+            raise WorldPackError(f"Actor {actor.id} has invalid needs")
+        if any(
+            goal_id not in pack.goals or pack.goals[goal_id].parent_id is not None
+            for goal_id in actor.goal_ids
+        ):
+            raise WorldPackError(f"Actor {actor.id} references an unknown goal")
     for ability in pack.abilities.values():
         if (
             ability.target not in {"self", "actor"}
             or ability.range < 0
             or ability.cooldown_minutes < 0
             or not ability.costs
-            or any(cost <= 0 for cost in ability.costs.values())
+            or any(
+                cost <= 0 or (pack.resources and resource_id not in pack.resources)
+                for resource_id, cost in ability.costs.items()
+            )
         ):
             raise WorldPackError(f"Ability {ability.id} has an invalid contract")
     for schedule in pack.schedules.values():
@@ -613,6 +847,106 @@ def _validate_runtime_pack(pack: WorldPack) -> None:
             _validate_condition_contract(condition, pack, f"Scene {scene.id}")
         for effect in scene.effects:
             _validate_effect_contract(effect, pack, f"Scene {scene.id}")
+    for resource in pack.resources.values():
+        if resource.base_value < 0 or resource.scarcity_target < 0 or not resource.display_name:
+            raise WorldPackError(f"Resource {resource.id} has an invalid contract")
+    for need in pack.needs.values():
+        if (
+            not need.display_name
+            or need.decay_interval_minutes < 1
+            or need.decay_amount < 1
+            or not 0 <= need.critical_below <= 100
+            or need.resource_id not in pack.resources
+            or need.consume_amount < 1
+            or need.restore_amount < 1
+        ):
+            raise WorldPackError(f"Need {need.id} has an invalid contract")
+    for stockpile in pack.stockpiles.values():
+        if (
+            not stockpile.display_name
+            or stockpile.location.map_id not in pack.maps
+            or not pack.is_walkable(
+                stockpile.location.map_id, stockpile.location.x, stockpile.location.y
+            )
+            or stockpile.capacity < 1
+            or any(key not in pack.resources or value < 0 for key, value in stockpile.resources)
+            or sum(value for _, value in stockpile.resources) > stockpile.capacity
+        ):
+            raise WorldPackError(f"Stockpile {stockpile.id} has an invalid contract")
+    for construction in pack.constructions.values():
+        if (
+            not construction.display_name
+            or not construction.footprint
+            or len(set(construction.footprint)) != len(construction.footprint)
+            or (0, 0) not in construction.footprint
+            or not construction.costs
+            or any(key not in pack.resources or value < 1 for key, value in construction.costs)
+            or construction.build_minutes < 1
+            or (
+                construction.stockpile_id is not None
+                and construction.stockpile_id not in pack.stockpiles
+            )
+        ):
+            raise WorldPackError(f"Construction {construction.id} has an invalid contract")
+    for recipe in pack.production_recipes.values():
+        if (
+            not recipe.display_name
+            or recipe.required_construction_id not in pack.constructions
+            or not recipe.inputs
+            or not recipe.outputs
+            or recipe.duration_minutes < 1
+            or any(key not in pack.resources or value < 1 for key, value in recipe.inputs)
+            or any(key not in pack.resources or value < 1 for key, value in recipe.outputs)
+        ):
+            raise WorldPackError(f"Production recipe {recipe.id} has an invalid contract")
+    for goal in pack.goals.values():
+        if not goal.display_name:
+            raise WorldPackError(f"Goal {goal.id} has an invalid display name")
+        if goal.parent_id is not None and goal.parent_id not in pack.goals:
+            raise WorldPackError(f"Goal {goal.id} has an unknown parent")
+        for condition in goal.conditions:
+            _validate_condition_contract(condition, pack, f"Goal {goal.id}")
+        action = goal.action
+        if action is None:
+            continue
+        if action.kind not in {"satisfy_need", "produce", "build", "travel"}:
+            raise WorldPackError(f"Goal {goal.id} has an unsupported action")
+        if action.kind == "satisfy_need" and action.need_id not in pack.needs:
+            raise WorldPackError(f"Goal {goal.id} has an invalid need action")
+        if action.kind == "produce" and action.recipe_id not in pack.production_recipes:
+            raise WorldPackError(f"Goal {goal.id} has an invalid production action")
+        if action.kind == "build" and (
+            action.blueprint_id not in pack.constructions or action.location is None
+        ):
+            raise WorldPackError(f"Goal {goal.id} has an invalid construction action")
+        if action.kind == "travel" and action.location is None:
+            raise WorldPackError(f"Goal {goal.id} has an invalid travel action")
+        if action.stockpile_id is not None and action.stockpile_id not in pack.stockpiles:
+            raise WorldPackError(f"Goal {goal.id} has an invalid stockpile")
+        if action.location is not None and (
+            action.location.map_id not in pack.maps
+            or not pack.is_walkable(action.location.map_id, action.location.x, action.location.y)
+        ):
+            raise WorldPackError(f"Goal {goal.id} has an invalid location")
+    for goal_id in pack.goals:
+        seen: set[str] = set()
+        cursor: str | None = goal_id
+        while cursor is not None:
+            if cursor in seen:
+                raise WorldPackError("Goal hierarchy contains a cycle")
+            seen.add(cursor)
+            cursor = pack.goals[cursor].parent_id
+    for consequence in pack.consequences.values():
+        if (
+            consequence.delay_minutes < 1
+            or not consequence.trigger_event
+            or not consequence.effects
+        ):
+            raise WorldPackError(f"Consequence {consequence.id} has an invalid contract")
+        for condition in consequence.conditions:
+            _validate_condition_contract(condition, pack, f"Consequence {consequence.id}")
+        for effect in consequence.effects:
+            _validate_effect_contract(effect, pack, f"Consequence {consequence.id}")
 
 
 def load_worldpack(path: str | Path) -> WorldPack:
@@ -628,7 +962,7 @@ def load_worldpack(path: str | Path) -> WorldPack:
     if raw.get("format") != "isoworld.worldpack":
         raise WorldPackError("Unknown worldpack format")
     version = raw.get("format_version")
-    if not isinstance(version, int) or isinstance(version, bool) or version not in {1, 2, 3}:
+    if not isinstance(version, int) or isinstance(version, bool) or version not in {1, 2, 3, 4}:
         raise WorldPackError("Unsupported worldpack version")
     content_hash = _verify_hash(raw)
 
@@ -644,8 +978,10 @@ def load_worldpack(path: str | Path) -> WorldPack:
             for name, items in collections.items()
         ):
             raise TypeError("collections must contain lists of objects")
-        if version == 3 and not M2_COLLECTIONS <= set(collections):
-            raise WorldPackError("Worldpack version 3 is missing narrative collections")
+        if version >= 3 and not M2_COLLECTIONS <= set(collections):
+            raise WorldPackError("Worldpack is missing narrative collections")
+        if version == 4 and not M3_COLLECTIONS <= set(collections):
+            raise WorldPackError("Worldpack version 4 is missing living-world collections")
         for collection_name, items in collections.items():
             identifiers = [item.get("id") for item in items]
             if not all(isinstance(identifier, str) for identifier in identifiers):
@@ -779,6 +1115,10 @@ def load_worldpack(path: str | Path) -> WorldPack:
                         ).items()
                     )
                 ),
+                needs=tuple(
+                    sorted(_integer_dict(item.get("needs", {}), f"actors/{actor_id}/needs").items())
+                ),
+                goal_ids=_string_tuple(item.get("goal_ids", []), f"actors/{actor_id}/goal_ids"),
             )
         facts = {
             item["id"]: FactDefinition(
@@ -799,6 +1139,15 @@ def load_worldpack(path: str | Path) -> WorldPack:
         dialogues = _dialogues(collections.get("dialogues", []))
         quests = _quests(collections.get("quests", []))
         scenes = _scenes(collections.get("scenes", []))
+        (
+            resources,
+            needs,
+            goals,
+            stockpiles,
+            constructions,
+            production_recipes,
+            consequences,
+        ) = _living_world_collections(collections)
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
         raise WorldPackError(f"Malformed worldpack: {exc}") from exc
 
@@ -829,6 +1178,8 @@ def load_worldpack(path: str | Path) -> WorldPack:
         "scene_help": "Space: continue",
         "quest_label": "Quest",
         "clock_label": "Day",
+        "needs_label": "Needs",
+        "goal_label": "Goal",
     }
     if not isinstance(world.get("ui"), dict) or not all(
         isinstance(key, str) and isinstance(value, str) for key, value in world["ui"].items()
@@ -851,6 +1202,13 @@ def load_worldpack(path: str | Path) -> WorldPack:
             "dialogues",
             "quests",
             "scenes",
+            "resources",
+            "needs",
+            "goals",
+            "stockpiles",
+            "constructions",
+            "production_recipes",
+            "consequences",
         }
     }
     for field in ("id", "title", "language", "start_map_id"):
@@ -876,6 +1234,13 @@ def load_worldpack(path: str | Path) -> WorldPack:
         dialogues=dialogues,
         quests=quests,
         scenes=scenes,
+        resources=resources,
+        needs=needs,
+        goals=goals,
+        stockpiles=stockpiles,
+        constructions=constructions,
+        production_recipes=production_recipes,
+        consequences=consequences,
         collections=extra_collections,
     )
     if pack.start_map_id not in pack.maps:

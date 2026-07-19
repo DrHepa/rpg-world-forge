@@ -17,7 +17,12 @@
     "directed_relationships",
     "conditional_dialogue",
     "reactive_quests",
-    "timed_scenes"
+    "timed_scenes",
+    "actor_needs",
+    "hierarchical_goals",
+    "construction",
+    "resource_economy",
+    "delayed_consequences"
   ],
   "simulation": {
     "start_day": 1,
@@ -29,6 +34,8 @@
     "active_actor": "Personaje activo",
     "ability_help": "1: usar Concentración",
     "clock_label": "Día",
+    "needs_label": "Necesidades",
+    "goal_label": "Objetivo",
     "interact_help": "E: interactuar",
     "dialogue_help": "Q: hablar; números: elegir; Esc: salir",
     "move_help": "Flechas o WASD: mover",

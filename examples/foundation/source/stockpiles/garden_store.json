@@ -1,0 +1,14 @@
+{
+  "id": "garden_store",
+  "display_name": "Garden store",
+  "location": {
+    "map_id": "test_garden",
+    "x": 5,
+    "y": 4
+  },
+  "capacity": 20,
+  "resources": {
+    "berries": 3,
+    "timber": 4
+  }
+}

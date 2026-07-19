@@ -36,12 +36,13 @@
 - [x] OpenAI authoring route and optional Modly-only route for local models.
 - [x] Headless integration tests and a real hidden-window raylib CI smoke test.
 
-## M3 - Living world
+## M3 - Living world (complete)
 
-- Construction affecting navigation, economy, and scenes.
-- Actor routines, needs, and hierarchical goals.
-- Resources, production, and scarcity.
-- Delayed consequences and multi-stage arcs.
+- [x] Construction affecting navigation, economy, render state, and scenes.
+- [x] Actor routines, needs, and hierarchical goals.
+- [x] Resources, stockpiles, production, capacity, and scarcity.
+- [x] Delayed consequences and multi-stage arcs.
+- [x] Worldpack v4 and save/replay v3 with strict cross-reference validation.
 
 ## M4 - Multiple world production
 

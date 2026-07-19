@@ -1,0 +1,16 @@
+{
+  "id": "supply_response",
+  "delay_minutes": 2,
+  "trigger_event": "consequence_resolved",
+  "subject_id": "workshop_rumor",
+  "conditions": [],
+  "effects": [
+    {
+      "kind": "change_stockpile_resource",
+      "stockpile_id": "garden_store",
+      "resource": "berries",
+      "amount": 2
+    }
+  ],
+  "once": true
+}

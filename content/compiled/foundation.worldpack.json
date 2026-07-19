@@ -68,11 +68,17 @@
         "faction_reputation": {
           "garden_keepers": 40
         },
+        "goal_ids": [
+          "survive"
+        ],
         "id": "guide",
         "knowledge": {
           "secrets": [
             "stone_song"
           ]
+        },
+        "needs": {
+          "hunger": 50
         },
         "playable": false,
         "resources": {},
@@ -98,7 +104,8 @@
         "id": "maker",
         "playable": true,
         "resources": {
-          "energy": 3
+          "energy": 3,
+          "timber": 2
         },
         "spawn": {
           "map_id": "test_garden",
@@ -108,6 +115,56 @@
         "tags": [
           "example"
         ]
+      }
+    ],
+    "consequences": [
+      {
+        "conditions": [],
+        "delay_minutes": 2,
+        "effects": [
+          {
+            "amount": 2,
+            "kind": "change_stockpile_resource",
+            "resource": "berries",
+            "stockpile_id": "garden_store"
+          }
+        ],
+        "id": "supply_response",
+        "once": true,
+        "subject_id": "workshop_rumor",
+        "trigger_event": "consequence_resolved"
+      },
+      {
+        "conditions": [],
+        "delay_minutes": 2,
+        "effects": [
+          {
+            "flag": "market_noticed",
+            "kind": "set_flag"
+          }
+        ],
+        "id": "workshop_rumor",
+        "once": true,
+        "subject_id": "workshop",
+        "trigger_event": "construction_completed"
+      }
+    ],
+    "constructions": [
+      {
+        "blocks_movement": true,
+        "build_minutes": 2,
+        "costs": {
+          "timber": 2
+        },
+        "display_name": "Workshop",
+        "footprint": [
+          [
+            0,
+            0
+          ]
+        ],
+        "id": "workshop",
+        "stockpile_id": "garden_store"
       }
     ],
     "dialogues": [
@@ -209,6 +266,34 @@
         "truth": "true"
       }
     ],
+    "goals": [
+      {
+        "action": {
+          "kind": "satisfy_need",
+          "need_id": "hunger",
+          "stockpile_id": "garden_store"
+        },
+        "conditions": [
+          {
+            "kind": "need_at_most",
+            "need_id": "hunger",
+            "value": 40
+          }
+        ],
+        "display_name": "Eat from the garden store",
+        "id": "eat_berries",
+        "parent_id": "survive",
+        "priority": 100
+      },
+      {
+        "action": null,
+        "conditions": [],
+        "display_name": "Survive",
+        "id": "survive",
+        "parent_id": null,
+        "priority": 10
+      }
+    ],
     "interactions": [
       {
         "display_name": "Piedra resonante",
@@ -260,7 +345,33 @@
         "width": 10
       }
     ],
+    "needs": [
+      {
+        "consume_amount": 1,
+        "critical_below": 40,
+        "decay_amount": 10,
+        "decay_interval_minutes": 1,
+        "display_name": "Hunger",
+        "id": "hunger",
+        "resource_id": "berries",
+        "restore_amount": 50
+      }
+    ],
     "personal_arcs": [],
+    "production_recipes": [
+      {
+        "display_name": "Make planks",
+        "duration_minutes": 2,
+        "id": "make_planks",
+        "inputs": {
+          "timber": 1
+        },
+        "outputs": {
+          "planks": 2
+        },
+        "required_construction_id": "workshop"
+      }
+    ],
     "quests": [
       {
         "auto_start_conditions": [],
@@ -308,6 +419,32 @@
         "title": "La prueba de la resonancia"
       }
     ],
+    "resources": [
+      {
+        "base_value": 2,
+        "display_name": "Berries",
+        "id": "berries",
+        "scarcity_target": 8
+      },
+      {
+        "base_value": 1,
+        "display_name": "Energy",
+        "id": "energy",
+        "scarcity_target": 6
+      },
+      {
+        "base_value": 5,
+        "display_name": "Planks",
+        "id": "planks",
+        "scarcity_target": 4
+      },
+      {
+        "base_value": 3,
+        "display_name": "Timber",
+        "id": "timber",
+        "scarcity_target": 6
+      }
+    ],
     "scenes": [
       {
         "conditions": [
@@ -346,6 +483,22 @@
           }
         ],
         "id": "guide_day"
+      }
+    ],
+    "stockpiles": [
+      {
+        "capacity": 20,
+        "display_name": "Garden store",
+        "id": "garden_store",
+        "location": {
+          "map_id": "test_garden",
+          "x": 5,
+          "y": 4
+        },
+        "resources": {
+          "berries": 3,
+          "timber": 4
+        }
       }
     ],
     "tile_types": [
@@ -401,9 +554,9 @@
       }
     ]
   },
-  "content_hash": "818af80ba6afbfd1f7144c0944c989847d47ea9736a8626786ea18d3d26ed9a7",
+  "content_hash": "e76ba2f3ee76c533371e8b5fd6c3132c9e7d7c83ea9c251694091264f8b75366",
   "format": "isoworld.worldpack",
-  "format_version": 3,
+  "format_version": 4,
   "world": {
     "capabilities": [
       "grid_movement",
@@ -419,7 +572,12 @@
       "directed_relationships",
       "conditional_dialogue",
       "reactive_quests",
-      "timed_scenes"
+      "timed_scenes",
+      "actor_needs",
+      "hierarchical_goals",
+      "construction",
+      "resource_economy",
+      "delayed_consequences"
     ],
     "id": "foundation_slice",
     "language": "es",
@@ -436,9 +594,11 @@
       "active_actor": "Personaje activo",
       "clock_label": "Día",
       "dialogue_help": "Q: hablar; números: elegir; Esc: salir",
+      "goal_label": "Objetivo",
       "interact_help": "E: interactuar",
       "move_help": "Flechas o WASD: mover",
       "navigate_help": "Clic izquierdo: navegar",
+      "needs_label": "Necesidades",
       "quest_label": "Misión",
       "scene_help": "Espacio: continuar",
       "switch_help": "Tab: cambiar de personaje"

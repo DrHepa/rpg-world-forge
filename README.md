@@ -17,7 +17,7 @@ knowledge boundaries. Its output is never accepted directly: a human or the
 authorized lead agent reviews it, `worldforge` validates it, and the build step
 compiles it into a static worldpack consumed by the runtime.
 
-## Current systemic slice (M2.5)
+## Current systemic slice (M3)
 
 - Fixed-step game loop rendered through pyray.
 - Isometric projection and semantic terrain (ground, water, and rock).
@@ -34,6 +34,14 @@ compiles it into a static worldpack consumed by the runtime.
 - Directed relationship dimensions and per-actor faction reputation.
 - Conditional dialogue graphs with fact-gated speakers and choices.
 - Event-reactive quest stages and prioritized time-windowed scenes.
+- Construction blueprints with footprints, costs, build time, dynamic collision,
+  render bindings, and narrative events.
+- Typed resources, located stockpiles, bounded capacity, production recipes,
+  delayed outputs, and derived scarcity.
+- Per-actor needs with deterministic decay and hierarchical, prioritized goals
+  that can travel, consume, build, or produce.
+- Persisted delayed consequences that react to domain events and form bounded,
+  authored multi-stage arcs.
 - Offline narrative reachability, producer, and softlock analysis.
 - Offline content compiler and cross-reference validator.
 - Offline asset pipeline with provenance and license tracking.
@@ -100,6 +108,13 @@ isoworld --pack content/compiled/foundation.worldpack.json \
 
 Saves and replays are tied to the exact world content hash. A changed worldpack
 is rejected instead of silently loading incompatible state.
+
+M3 exposes `build`, `start_production`, and `transfer_resource` as typed
+`GameAction` values. A derived game supplies its own build/economy UI and
+dispatches those actions; the forge runtime deliberately does not impose a
+genre-specific construction menu. Completed or in-progress constructions are
+visible in the pyray renderer, with `construction:<blueprint_id>` renderpack
+bindings and primitive fallbacks.
 
 ## Create an independent world
 

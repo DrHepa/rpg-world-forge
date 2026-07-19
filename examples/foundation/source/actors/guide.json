@@ -16,6 +16,12 @@
   "schedule_id": "guide_day",
   "schedule_mode": "always",
   "resources": {},
+  "needs": {
+    "hunger": 50
+  },
+  "goal_ids": [
+    "survive"
+  ],
   "knowledge": {
     "secrets": [
       "stone_song"

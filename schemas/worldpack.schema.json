@@ -7,7 +7,7 @@
   "required": ["format", "format_version", "world", "collections", "content_hash"],
   "properties": {
     "format": {"const": "isoworld.worldpack"},
-    "format_version": {"enum": [1, 2, 3]},
+    "format_version": {"enum": [1, 2, 3, 4]},
     "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "world": {
       "type": "object",
@@ -36,7 +36,14 @@
         "scenes": {
           "type": "array",
           "items": {"$ref": "narrative-content.schema.json#/$defs/scene"}
-        }
+        },
+        "resources": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/resource"}},
+        "needs": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/need"}},
+        "goals": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/goal"}},
+        "stockpiles": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/stockpile"}},
+        "constructions": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/construction"}},
+        "production_recipes": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/production_recipe"}},
+        "consequences": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/consequence"}}
       },
       "additionalProperties": {
         "type": "array",
@@ -51,6 +58,20 @@
         "properties": {
           "collections": {
             "required": ["facts", "factions", "dialogues", "quests", "scenes"]
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"format_version": {"const": 4}}},
+      "then": {
+        "properties": {
+          "collections": {
+            "required": [
+              "facts", "factions", "dialogues", "quests", "scenes",
+              "resources", "needs", "goals", "stockpiles", "constructions",
+              "production_recipes", "consequences"
+            ]
           }
         }
       }

@@ -3,7 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from isoworld.render.iso import screen_to_world, world_to_screen
-from isoworld.render.render_state import ActorView, InteractionView, RenderState, TileView
+from isoworld.render.render_state import (
+    ActorView,
+    ConstructionView,
+    InteractionView,
+    RenderState,
+    TileView,
+)
 from isoworld.render.resources import RaylibAssetRegistry
 
 
@@ -125,10 +131,33 @@ class IsometricRenderer:
             pr.draw_circle_lines(int(x), int(y), 5.0, pr.RAYWHITE)
         self._draw_text(pr, actor.display_name, x + 14, y - 28, 14, pr.RAYWHITE)
 
-    def _entity_key(self, kind: str, item: ActorView | InteractionView) -> tuple[Any, ...]:
-        slot = f"{kind}:{item.actor_id if kind == 'actor' else item.interaction_id}"
+    def _draw_construction(self, pr: Any, item: ConstructionView, tick: int) -> None:
+        x, y = world_to_screen(item.x, item.y, 0.0, self.tile_width, self.tile_height)
+        if self.resources is not None:
+            binding = self.resources.binding(f"construction:{item.blueprint_id}")
+            if binding is not None and self.resources.draw_binding(
+                binding,
+                anchor_x=x,
+                anchor_y=y,
+                tick=tick,
+                tint=pr.WHITE if item.status == "completed" else pr.LIGHTGRAY,
+            ):
+                return
+        color = pr.BROWN if item.status == "completed" else pr.GRAY
+        pr.draw_rectangle(int(x - 14), int(y - 24), 28, 24, color)
+        self._draw_text(pr, item.display_name, x + 16, y - 26, 13, pr.RAYWHITE)
+
+    def _entity_key(
+        self, kind: str, item: ActorView | InteractionView | ConstructionView
+    ) -> tuple[Any, ...]:
+        if kind == "actor":
+            identifier = item.actor_id  # type: ignore[union-attr]
+        elif kind == "interaction":
+            identifier = item.interaction_id  # type: ignore[union-attr]
+        else:
+            identifier = item.blueprint_id  # type: ignore[union-attr]
+        slot = f"{kind}:{identifier}"
         layer = self.resources.layer_for(slot) if self.resources is not None else 0
-        identifier = item.actor_id if kind == "actor" else item.interaction_id
         return (item.x + item.y, layer, item.y, item.x, kind, identifier)
 
     def draw(self, pr: Any, state: RenderState) -> None:
@@ -148,15 +177,18 @@ class IsometricRenderer:
                     x, y = world_to_screen(route_x, route_y, 6.0, self.tile_width, self.tile_height)
                     pr.draw_circle(int(x), int(y), 3.0, pr.SKYBLUE)
 
-            entities: list[tuple[str, ActorView | InteractionView]] = [
+            entities: list[tuple[str, ActorView | InteractionView | ConstructionView]] = [
                 *(("interaction", item) for item in state.interactions),
+                *(("construction", item) for item in state.constructions),
                 *(("actor", item) for item in state.actors),
             ]
             for kind, item in sorted(entities, key=lambda value: self._entity_key(*value)):
                 if kind == "actor":
                     self._draw_actor(pr, item, state.tick)  # type: ignore[arg-type]
-                else:
+                elif kind == "interaction":
                     self._draw_interaction(pr, item, state.tick)  # type: ignore[arg-type]
+                else:
+                    self._draw_construction(pr, item, state.tick)  # type: ignore[arg-type]
         finally:
             pr.end_mode_2d()
 

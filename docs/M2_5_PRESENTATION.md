@@ -27,7 +27,8 @@ renderpack.json + runtime-assets/
 - Every processed file is copied beneath the renderpack root and verified by
   SHA-256 before raylib receives it.
 - Semantic slots decouple canon from art paths: `actor:<id>`,
-  `tile_type:<id>`, `interaction:<id>`, `portrait:<actor_id>`,
+  `tile_type:<id>`, `interaction:<id>`, `construction:<blueprint_id>`,
+  `portrait:<actor_id>`,
   `event:<kind>[:<subject_id>]`, `music:default`, `music:map:<map_id>`, and
   `ui:font`.
 - Actor and tile-type bindings are mandatory for a release.
@@ -57,7 +58,8 @@ keeps headless/system development independent from the final art pipeline.
 - Mouse wheel: zoom in the range `0.5..3.0`.
 - Middle-button drag: pan the isometric camera.
 - Left-click navigation uses the same `Camera2D` inverse transform as drawing.
-- Actors and interactions are sorted by isometric depth plus configured layer.
+- Actors, interactions, and M3 construction instances are sorted by isometric
+  depth plus configured layer.
 - Dialogue can bind a processed portrait with `portrait:<speaker_id>`.
 - `event:*` SFX consume immutable recent domain events exactly once per render
   revision; map/default music is streamed and updated every frame.

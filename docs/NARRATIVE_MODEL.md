@@ -11,13 +11,16 @@ A scene activates through declarative conditions and produces effects:
 conditions -> scene/dialogue -> choices -> effects -> new events
 ```
 
-Conditions inspect flags, clock, location, inventory, reputation,
-relationships, knowledge, and quest stages. Effects change those domains
-through validated actions.
+Conditions inspect flags, clock, location, inventory, needs, stockpile
+resources, scarcity, construction status, reputation, relationships, knowledge,
+and quest stages. Effects change those domains through validated actions.
 
 M2 implements the bounded subset documented in
 [M2_NARRATIVE.md](M2_NARRATIVE.md). Conditions are declarative conjunctions,
 effects are allowlisted operations, and quest/event propagation is bounded.
+M3 extends the same contract with delayed consequences: an authored event
+match schedules a persisted future reaction, whose resolution can emit the
+event that starts a later stage. No prose or decision is generated at runtime.
 
 ## Systems that should interact
 

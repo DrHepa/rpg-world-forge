@@ -8,24 +8,29 @@ from typing import Any
 from isoworld.content.models import WorldPack
 from isoworld.world.state import (
     ActorState,
+    ConstructionState,
     Cooldown,
     DialogueState,
     DomainEvent,
     GameAction,
     KnowledgeValue,
+    NeedValue,
+    PendingConsequence,
+    ProductionJob,
     QuestState,
     RelationshipValue,
     ReputationValue,
     ResourceValue,
+    StockpileState,
     WorldState,
     initial_world_state,
     reduce_world,
 )
 
 SAVE_FORMAT = "isoworld.save"
-SAVE_VERSION = 2
+SAVE_VERSION = 3
 REPLAY_FORMAT = "isoworld.replay"
-REPLAY_VERSION = 2
+REPLAY_VERSION = 3
 MAX_PERSISTENCE_BYTES = 64 * 1024 * 1024
 MAX_REPLAY_ACTIONS = 1_000_000
 
@@ -63,6 +68,8 @@ def state_to_dict(state: WorldState) -> dict[str, Any]:
                 "faction_reputation": {
                     item.faction_id: item.value for item in actor.faction_reputation
                 },
+                "needs": {item.need_id: item.value for item in actor.needs},
+                "active_goal_id": actor.active_goal_id,
             }
             for actor in state.actors
         ],
@@ -94,6 +101,44 @@ def state_to_dict(state: WorldState) -> dict[str, Any]:
             }
             for event in state.recent_events
         ],
+        "stockpiles": [
+            {
+                "stockpile_id": item.stockpile_id,
+                "resources": {resource.id: resource.value for resource in item.resources},
+            }
+            for item in state.stockpiles
+        ],
+        "constructions": [
+            {
+                "instance_id": item.instance_id,
+                "blueprint_id": item.blueprint_id,
+                "map_id": item.map_id,
+                "x": item.x,
+                "y": item.y,
+                "builder_actor_id": item.builder_actor_id,
+                "status": item.status,
+                "complete_at_minute": item.complete_at_minute,
+            }
+            for item in state.constructions
+        ],
+        "production_jobs": [
+            {
+                "construction_instance_id": item.construction_instance_id,
+                "recipe_id": item.recipe_id,
+                "actor_id": item.actor_id,
+                "complete_at_minute": item.complete_at_minute,
+            }
+            for item in state.production_jobs
+        ],
+        "pending_consequences": [
+            {
+                "consequence_id": item.consequence_id,
+                "due_at_minute": item.due_at_minute,
+                "source_actor_id": item.source_actor_id,
+            }
+            for item in state.pending_consequences
+        ],
+        "triggered_consequences": sorted(state.triggered_consequences),
         "last_message": state.last_message,
     }
 
@@ -141,24 +186,36 @@ def _compatible(raw: dict[str, Any], pack: WorldPack, expected_format: str, vers
         raise PersistenceError("The worldpack changed; migrate or restart this state")
 
 
+def _saved_integer(value: Any, context: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise PersistenceError(f"Malformed saved state: {context} must be an integer")
+    return value
+
+
 def state_from_dict(raw: dict[str, Any], pack: WorldPack) -> WorldState:
     try:
         actors = tuple(
             ActorState(
                 actor_id=item["actor_id"],
                 map_id=item["map_id"],
-                x=int(item["x"]),
-                y=int(item["y"]),
+                x=_saved_integer(item["x"], "actor x"),
+                y=_saved_integer(item["y"], "actor y"),
                 resources=tuple(
-                    ResourceValue(key, int(value))
+                    ResourceValue(key, _saved_integer(value, "actor resource"))
                     for key, value in sorted(item.get("resources", {}).items())
                 ),
                 cooldowns=tuple(
-                    Cooldown(key, int(value))
+                    Cooldown(key, _saved_integer(value, "actor cooldown"))
                     for key, value in sorted(item.get("cooldowns", {}).items())
                 ),
-                route=tuple((int(cell[0]), int(cell[1])) for cell in item.get("route", [])),
-                blocked_ticks=int(item.get("blocked_ticks", 0)),
+                route=tuple(
+                    (
+                        _saved_integer(cell[0], "route x"),
+                        _saved_integer(cell[1], "route y"),
+                    )
+                    for cell in item.get("route", [])
+                ),
+                blocked_ticks=_saved_integer(item.get("blocked_ticks", 0), "blocked ticks"),
                 knowledge=tuple(
                     KnowledgeValue(key, str(value))
                     for key, value in sorted(item.get("knowledge", {}).items())
@@ -167,14 +224,19 @@ def state_from_dict(raw: dict[str, Any], pack: WorldPack) -> WorldState:
                     RelationshipValue(
                         value["target_actor_id"],
                         value["dimension"],
-                        int(value["value"]),
+                        _saved_integer(value["value"], "relationship value"),
                     )
                     for value in item.get("relationships", [])
                 ),
                 faction_reputation=tuple(
-                    ReputationValue(key, int(value))
+                    ReputationValue(key, _saved_integer(value, "reputation value"))
                     for key, value in sorted(item.get("faction_reputation", {}).items())
                 ),
+                needs=tuple(
+                    NeedValue(key, _saved_integer(value, "need value"))
+                    for key, value in sorted(item.get("needs", {}).items())
+                ),
+                active_goal_id=item.get("active_goal_id"),
             )
             for item in raw["actors"]
         )
@@ -190,10 +252,10 @@ def state_from_dict(raw: dict[str, Any], pack: WorldPack) -> WorldState:
             )
         )
         state = WorldState(
-            tick=int(raw["tick"]),
-            day=int(raw["day"]),
-            minute_of_day=int(raw["minute_of_day"]),
-            minute_tick=int(raw["minute_tick"]),
+            tick=_saved_integer(raw["tick"], "tick"),
+            day=_saved_integer(raw["day"], "day"),
+            minute_of_day=_saved_integer(raw["minute_of_day"], "minute_of_day"),
+            minute_tick=_saved_integer(raw["minute_tick"], "minute_tick"),
             active_actor_id=raw["active_actor_id"],
             actors=actors,
             flags=frozenset(raw.get("flags", [])),
@@ -209,6 +271,47 @@ def state_from_dict(raw: dict[str, Any], pack: WorldPack) -> WorldState:
                 DomainEvent(item["kind"], item.get("actor_id"), item.get("subject_id"))
                 for item in raw.get("recent_events", [])
             ),
+            stockpiles=tuple(
+                StockpileState(
+                    item["stockpile_id"],
+                    tuple(
+                        ResourceValue(key, _saved_integer(value, "stockpile resource"))
+                        for key, value in sorted(item.get("resources", {}).items())
+                    ),
+                )
+                for item in raw.get("stockpiles", [])
+            ),
+            constructions=tuple(
+                ConstructionState(
+                    item["instance_id"],
+                    item["blueprint_id"],
+                    item["map_id"],
+                    _saved_integer(item["x"], "construction x"),
+                    _saved_integer(item["y"], "construction y"),
+                    item["builder_actor_id"],
+                    item["status"],
+                    _saved_integer(item["complete_at_minute"], "construction completion minute"),
+                )
+                for item in raw.get("constructions", [])
+            ),
+            production_jobs=tuple(
+                ProductionJob(
+                    item["construction_instance_id"],
+                    item["recipe_id"],
+                    item["actor_id"],
+                    _saved_integer(item["complete_at_minute"], "production completion minute"),
+                )
+                for item in raw.get("production_jobs", [])
+            ),
+            pending_consequences=tuple(
+                PendingConsequence(
+                    item["consequence_id"],
+                    _saved_integer(item["due_at_minute"], "consequence due minute"),
+                    item["source_actor_id"],
+                )
+                for item in raw.get("pending_consequences", [])
+            ),
+            triggered_consequences=frozenset(raw.get("triggered_consequences", [])),
             last_message=str(raw.get("last_message", "")),
         )
     except (KeyError, TypeError, ValueError, IndexError) as exc:
@@ -218,6 +321,8 @@ def state_from_dict(raw: dict[str, Any], pack: WorldPack) -> WorldState:
 
 
 def _validate_state(state: WorldState, pack: WorldPack) -> None:
+    from isoworld.world.living_world import dynamic_blocked_cells
+
     expected = set(pack.actors)
     actual = {actor.actor_id for actor in state.actors}
     if actual != expected or len(actual) != len(state.actors):
@@ -232,20 +337,31 @@ def _validate_state(state: WorldState, pack: WorldPack) -> None:
         raise PersistenceError("minute_tick is outside the clock range")
     occupied: set[tuple[str, int, int]] = set()
     for actor in state.actors:
-        if actor.map_id not in pack.maps or not pack.is_walkable(actor.map_id, actor.x, actor.y):
+        if (
+            actor.map_id not in pack.maps
+            or not pack.is_walkable(actor.map_id, actor.x, actor.y)
+            or (actor.x, actor.y) in dynamic_blocked_cells(state, pack, actor.map_id)
+        ):
             raise PersistenceError(f"Actor {actor.actor_id} has an invalid position")
         key = (actor.map_id, actor.x, actor.y)
         if key in occupied:
             raise PersistenceError("Two actors occupy the same cell")
         occupied.add(key)
-        if any(item.value < 0 for item in actor.resources):
-            raise PersistenceError(f"Actor {actor.actor_id} has a negative resource")
+        if any(
+            item.value < 0 or (pack.resources and item.id not in pack.resources)
+            for item in actor.resources
+        ):
+            raise PersistenceError(f"Actor {actor.actor_id} has an invalid resource")
         if any(
             item.ability_id not in pack.abilities or item.ready_at_minute < 0
             for item in actor.cooldowns
         ):
             raise PersistenceError(f"Actor {actor.actor_id} has an invalid cooldown")
-        if any(not pack.is_walkable(actor.map_id, *cell) for cell in actor.route):
+        if any(
+            not pack.is_walkable(actor.map_id, *cell)
+            or cell in dynamic_blocked_cells(state, pack, actor.map_id)
+            for cell in actor.route
+        ):
             raise PersistenceError(f"Actor {actor.actor_id} has an invalid route")
         if any(
             item.fact_id not in pack.facts
@@ -266,6 +382,16 @@ def _validate_state(state: WorldState, pack: WorldPack) -> None:
             for item in actor.faction_reputation
         ):
             raise PersistenceError(f"Actor {actor.actor_id} has an invalid reputation")
+        if any(
+            item.need_id not in pack.needs or not 0 <= item.value <= 100 for item in actor.needs
+        ):
+            raise PersistenceError(f"Actor {actor.actor_id} has invalid needs")
+        if {item.need_id for item in actor.needs} != {
+            need_id for need_id, _ in pack.actors[actor.actor_id].needs
+        }:
+            raise PersistenceError(f"Actor {actor.actor_id} has incomplete needs")
+        if actor.active_goal_id is not None and actor.active_goal_id not in pack.goals:
+            raise PersistenceError(f"Actor {actor.actor_id} has an invalid active goal")
     if not state.completed_interactions <= set(pack.interactions):
         raise PersistenceError("Saved interactions do not match the worldpack")
     if not all(isinstance(flag, str) for flag in state.flags):
@@ -307,6 +433,75 @@ def _validate_state(state: WorldState, pack: WorldPack) -> None:
         for event in state.recent_events
     ):
         raise PersistenceError("Saved events are invalid")
+    if {item.stockpile_id for item in state.stockpiles} != set(pack.stockpiles) or len(
+        state.stockpiles
+    ) != len(pack.stockpiles):
+        raise PersistenceError("Saved stockpiles do not match the worldpack")
+    for stockpile in state.stockpiles:
+        definition = pack.stockpiles[stockpile.stockpile_id]
+        if (
+            any(item.id not in pack.resources or item.value < 0 for item in stockpile.resources)
+            or stockpile.total > definition.capacity
+        ):
+            raise PersistenceError(f"Stockpile {stockpile.stockpile_id} is invalid")
+    construction_ids = {item.instance_id for item in state.constructions}
+    if len(construction_ids) != len(state.constructions):
+        raise PersistenceError("Saved construction IDs are not unique")
+    occupied_construction_cells: set[tuple[str, int, int]] = set()
+    for item in state.constructions:
+        blueprint = pack.constructions.get(item.blueprint_id)
+        if (
+            blueprint is None
+            or item.map_id not in pack.maps
+            or item.status not in {"building", "completed"}
+            or item.builder_actor_id not in pack.actors
+            or item.complete_at_minute < 0
+        ):
+            raise PersistenceError(f"Construction {item.instance_id} is invalid")
+        expected_id = f"{item.blueprint_id}__{item.map_id}__{item.x}_{item.y}"
+        if (
+            item.instance_id != expected_id
+            or (item.status == "building" and item.complete_at_minute <= state.absolute_minute)
+            or (item.status == "completed" and item.complete_at_minute > state.absolute_minute)
+        ):
+            raise PersistenceError(f"Construction {item.instance_id} has invalid timing")
+        for dx, dy in blueprint.footprint:
+            cell = (item.map_id, item.x + dx, item.y + dy)
+            if cell in occupied_construction_cells or not pack.is_walkable(*cell):
+                raise PersistenceError(f"Construction {item.instance_id} has invalid cells")
+            occupied_construction_cells.add(cell)
+    if any(
+        job.construction_instance_id not in construction_ids
+        or job.recipe_id not in pack.production_recipes
+        or job.actor_id not in pack.actors
+        or job.complete_at_minute <= state.absolute_minute
+        for job in state.production_jobs
+    ):
+        raise PersistenceError("Saved production jobs are invalid")
+    constructions_by_id = {item.instance_id: item for item in state.constructions}
+    if any(
+        pack.production_recipes[job.recipe_id].required_construction_id
+        != constructions_by_id[job.construction_instance_id].blueprint_id
+        for job in state.production_jobs
+    ):
+        raise PersistenceError("Saved production job uses the wrong construction")
+    if len({job.construction_instance_id for job in state.production_jobs}) != len(
+        state.production_jobs
+    ):
+        raise PersistenceError("A construction has multiple production jobs")
+    if any(
+        item.consequence_id not in pack.consequences
+        or item.source_actor_id not in pack.actors
+        or item.due_at_minute <= state.absolute_minute
+        for item in state.pending_consequences
+    ):
+        raise PersistenceError("Saved pending consequences are invalid")
+    if len({item.consequence_id for item in state.pending_consequences}) != len(
+        state.pending_consequences
+    ):
+        raise PersistenceError("Saved pending consequences are duplicated")
+    if not state.triggered_consequences <= set(pack.consequences):
+        raise PersistenceError("Saved consequence history is invalid")
 
 
 def save_game(path: str | Path, state: WorldState, pack: WorldPack) -> None:

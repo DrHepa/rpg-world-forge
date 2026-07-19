@@ -1,0 +1,14 @@
+{
+  "id": "workshop_rumor",
+  "delay_minutes": 2,
+  "trigger_event": "construction_completed",
+  "subject_id": "workshop",
+  "conditions": [],
+  "effects": [
+    {
+      "kind": "set_flag",
+      "flag": "market_noticed"
+    }
+  ],
+  "once": true
+}

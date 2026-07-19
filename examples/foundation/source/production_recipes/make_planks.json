@@ -1,0 +1,12 @@
+{
+  "id": "make_planks",
+  "display_name": "Make planks",
+  "required_construction_id": "workshop",
+  "inputs": {
+    "timber": 1
+  },
+  "outputs": {
+    "planks": 2
+  },
+  "duration_minutes": 2
+}

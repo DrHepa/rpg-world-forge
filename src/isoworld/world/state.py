@@ -39,6 +39,61 @@ class ReputationValue:
 
 
 @dataclass(frozen=True, slots=True)
+class NeedValue:
+    need_id: str
+    value: int
+
+
+@dataclass(frozen=True, slots=True)
+class StockpileState:
+    stockpile_id: str
+    resources: tuple[ResourceValue, ...] = ()
+
+    def resource(self, resource_id: str) -> int:
+        item = next((item for item in self.resources if item.id == resource_id), None)
+        return item.value if item is not None else 0
+
+    def with_resource(self, resource_id: str, value: int) -> StockpileState:
+        resources = {item.id: item.value for item in self.resources}
+        resources[resource_id] = max(0, value)
+        return replace(
+            self,
+            resources=tuple(ResourceValue(key, resources[key]) for key in sorted(resources)),
+        )
+
+    @property
+    def total(self) -> int:
+        return sum(item.value for item in self.resources)
+
+
+@dataclass(frozen=True, slots=True)
+class ConstructionState:
+    instance_id: str
+    blueprint_id: str
+    map_id: str
+    x: int
+    y: int
+    builder_actor_id: str
+    status: str
+    complete_at_minute: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProductionJob:
+    construction_instance_id: str
+    recipe_id: str
+    actor_id: str
+    complete_at_minute: int
+
+
+@dataclass(frozen=True, slots=True)
+class PendingConsequence:
+    consequence_id: str
+    due_at_minute: int
+    source_actor_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class QuestState:
     quest_id: str
     status: str = "inactive"
@@ -73,6 +128,8 @@ class ActorState:
     knowledge: tuple[KnowledgeValue, ...] = ()
     relationships: tuple[RelationshipValue, ...] = ()
     faction_reputation: tuple[ReputationValue, ...] = ()
+    needs: tuple[NeedValue, ...] = ()
+    active_goal_id: str | None = None
 
     def resource(self, resource_id: str) -> int:
         item = next((item for item in self.resources if item.id == resource_id), None)
@@ -153,6 +210,18 @@ class ActorState:
             faction_reputation=tuple(ReputationValue(key, values[key]) for key in sorted(values)),
         )
 
+    def need(self, need_id: str) -> int:
+        item = next((item for item in self.needs if item.need_id == need_id), None)
+        return item.value if item is not None else 100
+
+    def with_need(self, need_id: str, value: int) -> ActorState:
+        values = {item.need_id: item.value for item in self.needs}
+        values[need_id] = max(0, min(100, value))
+        return replace(
+            self,
+            needs=tuple(NeedValue(key, values[key]) for key in sorted(values)),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class WorldState:
@@ -169,6 +238,11 @@ class WorldState:
     active_scene_id: str | None = None
     triggered_scenes: frozenset[str] = frozenset()
     recent_events: tuple[DomainEvent, ...] = ()
+    stockpiles: tuple[StockpileState, ...] = ()
+    constructions: tuple[ConstructionState, ...] = ()
+    production_jobs: tuple[ProductionJob, ...] = ()
+    pending_consequences: tuple[PendingConsequence, ...] = ()
+    triggered_consequences: frozenset[str] = frozenset()
     last_message: str = ""
 
     @property
@@ -185,6 +259,12 @@ class WorldState:
         item = next((item for item in self.quests if item.quest_id == quest_id), None)
         return item if item is not None else QuestState(quest_id)
 
+    def stockpile(self, stockpile_id: str) -> StockpileState:
+        for stockpile in self.stockpiles:
+            if stockpile.stockpile_id == stockpile_id:
+                return stockpile
+        raise KeyError(stockpile_id)
+
 
 @dataclass(frozen=True, slots=True)
 class GameAction:
@@ -200,6 +280,13 @@ class GameAction:
     interaction_id: str | None = None
     dialogue_id: str | None = None
     choice_id: str | None = None
+    blueprint_id: str | None = None
+    construction_instance_id: str | None = None
+    recipe_id: str | None = None
+    stockpile_id: str | None = None
+    resource_id: str | None = None
+    amount: int = 0
+    direction: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -215,6 +302,13 @@ class GameAction:
             "interaction_id": self.interaction_id,
             "dialogue_id": self.dialogue_id,
             "choice_id": self.choice_id,
+            "blueprint_id": self.blueprint_id,
+            "construction_instance_id": self.construction_instance_id,
+            "recipe_id": self.recipe_id,
+            "stockpile_id": self.stockpile_id,
+            "resource_id": self.resource_id,
+            "amount": self.amount,
+            "direction": self.direction,
         }
 
     @classmethod
@@ -231,6 +325,9 @@ class GameAction:
             "choose_dialogue",
             "end_dialogue",
             "dismiss_scene",
+            "build",
+            "start_production",
+            "transfer_resource",
         }:
             raise ValueError("action kind is unknown")
         for field in (
@@ -241,22 +338,43 @@ class GameAction:
             "interaction_id",
             "dialogue_id",
             "choice_id",
+            "blueprint_id",
+            "construction_instance_id",
+            "recipe_id",
+            "stockpile_id",
+            "resource_id",
+            "direction",
         ):
             if raw.get(field) is not None and not isinstance(raw[field], str):
                 raise ValueError(f"action {field} must be a string or null")
+        for field in ("dx", "dy", "amount"):
+            value = raw.get(field, 0)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(f"action {field} must be an integer")
+        for field in ("x", "y"):
+            value = raw.get(field)
+            if value is not None and (not isinstance(value, int) or isinstance(value, bool)):
+                raise ValueError(f"action {field} must be an integer or null")
         return cls(
             kind=kind,
             actor_id=raw.get("actor_id"),
-            dx=int(raw.get("dx", 0)),
-            dy=int(raw.get("dy", 0)),
+            dx=raw.get("dx", 0),
+            dy=raw.get("dy", 0),
             map_id=raw.get("map_id"),
-            x=None if raw.get("x") is None else int(raw["x"]),
-            y=None if raw.get("y") is None else int(raw["y"]),
+            x=raw.get("x"),
+            y=raw.get("y"),
             ability_id=raw.get("ability_id"),
             target_actor_id=raw.get("target_actor_id"),
             interaction_id=raw.get("interaction_id"),
             dialogue_id=raw.get("dialogue_id"),
             choice_id=raw.get("choice_id"),
+            blueprint_id=raw.get("blueprint_id"),
+            construction_instance_id=raw.get("construction_instance_id"),
+            recipe_id=raw.get("recipe_id"),
+            stockpile_id=raw.get("stockpile_id"),
+            resource_id=raw.get("resource_id"),
+            amount=raw.get("amount", 0),
+            direction=raw.get("direction"),
         )
 
 
@@ -280,6 +398,7 @@ def initial_world_state(pack: WorldPack) -> WorldState:
             faction_reputation=tuple(
                 ReputationValue(faction_id, value) for faction_id, value in actor.faction_reputation
             ),
+            needs=tuple(NeedValue(need_id, value) for need_id, value in actor.needs),
         )
         for actor in pack.actors.values()
     )
@@ -291,6 +410,15 @@ def initial_world_state(pack: WorldPack) -> WorldState:
         active_actor_id=playable[0],
         actors=actors,
         quests=tuple(QuestState(quest_id) for quest_id in sorted(pack.quests)),
+        stockpiles=tuple(
+            StockpileState(
+                stockpile.id,
+                tuple(
+                    ResourceValue(resource_id, value) for resource_id, value in stockpile.resources
+                ),
+            )
+            for stockpile in pack.stockpiles.values()
+        ),
     )
     from isoworld.world.narrative import initialize_narrative
 
@@ -336,6 +464,8 @@ def _advance_clock(state: WorldState, pack: WorldPack) -> WorldState:
 
 def _schedule_enabled(state: WorldState, actor: ActorState, pack: WorldPack) -> bool:
     definition = pack.actors[actor.actor_id]
+    if actor.active_goal_id is not None:
+        return False
     if definition.schedule_id is None or definition.schedule_mode == "never":
         return False
     if definition.schedule_mode == "when_inactive" and actor.actor_id == state.active_actor_id:
@@ -344,6 +474,8 @@ def _schedule_enabled(state: WorldState, actor: ActorState, pack: WorldPack) -> 
 
 
 def _plan_schedules(state: WorldState, pack: WorldPack) -> WorldState:
+    from isoworld.world.living_world import dynamic_blocked_cells
+
     result = state
     for actor in sorted(result.actors, key=lambda item: item.actor_id):
         actor = result.actor(actor.actor_id)
@@ -358,7 +490,9 @@ def _plan_schedules(state: WorldState, pack: WorldPack) -> WorldState:
         candidates = [value for value in entry.destinations if value.map_id == actor.map_id]
         if any((actor.x, actor.y) == (value.x, value.y) for value in candidates):
             continue
-        blocked = _occupied(result, actor.map_id, except_actor=actor.actor_id)
+        blocked = _occupied(
+            result, actor.map_id, except_actor=actor.actor_id
+        ) | dynamic_blocked_cells(result, pack, actor.map_id)
         for destination in candidates:
             route = find_path(
                 pack,
@@ -374,6 +508,8 @@ def _plan_schedules(state: WorldState, pack: WorldPack) -> WorldState:
 
 
 def _advance_routes(state: WorldState, pack: WorldPack) -> WorldState:
+    from isoworld.world.living_world import is_walkable
+
     if state.tick % pack.clock.movement_interval_ticks:
         return state
     current_occupancy = {(actor.map_id, actor.x, actor.y): actor.actor_id for actor in state.actors}
@@ -386,7 +522,7 @@ def _advance_routes(state: WorldState, pack: WorldPack) -> WorldState:
         key = (actor.map_id, target[0], target[1])
         occupied_by = current_occupancy.get(key)
         available = (
-            pack.is_walkable(actor.map_id, *target)
+            is_walkable(state, pack, actor.map_id, *target)
             and key not in reservations
             and (occupied_by is None or occupied_by == actor.actor_id)
         )
@@ -470,14 +606,41 @@ def _apply_effects(
             result = _replace_actor(result, actor)
             if events is not None:
                 events.append(DomainEvent("reputation_changed", actor_id, effect.faction_id))
+        elif effect.kind == "change_stockpile_resource" and effect.stockpile_id and effect.resource:
+            stockpile = result.stockpile(effect.stockpile_id)
+            value = stockpile.resource(effect.resource) + effect.amount
+            if pack is not None:
+                available = pack.stockpiles[effect.stockpile_id].capacity - (
+                    stockpile.total - stockpile.resource(effect.resource)
+                )
+                value = min(value, available)
+            stockpile = stockpile.with_resource(effect.resource, value)
+            result = replace(
+                result,
+                stockpiles=tuple(
+                    stockpile if item.stockpile_id == stockpile.stockpile_id else item
+                    for item in result.stockpiles
+                ),
+            )
+            if events is not None:
+                events.append(DomainEvent("stockpile_changed", source_actor_id, effect.resource))
+        elif effect.kind == "change_need" and effect.need_id:
+            actor_id = source_actor_id if effect.target == "self" else target_actor_id
+            actor = result.actor(actor_id)
+            actor = actor.with_need(effect.need_id, actor.need(effect.need_id) + effect.amount)
+            result = _replace_actor(result, actor)
+            if events is not None:
+                events.append(DomainEvent("need_changed", actor_id, effect.need_id))
     return result
 
 
 def _move(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
+    from isoworld.world.living_world import is_walkable
+
     actor_id = action.actor_id or state.active_actor_id
     actor = state.actor(actor_id)
     target = (actor.x + action.dx, actor.y + action.dy)
-    if not pack.is_walkable(actor.map_id, *target):
+    if not is_walkable(state, pack, actor.map_id, *target):
         return replace(state, last_message="Movement blocked")
     if target in _occupied(state, actor.map_id, except_actor=actor_id):
         return replace(state, last_message="Cell occupied")
@@ -492,6 +655,8 @@ def _move(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
 
 
 def _navigate(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
+    from isoworld.world.living_world import dynamic_blocked_cells
+
     actor_id = action.actor_id or state.active_actor_id
     actor = state.actor(actor_id)
     if action.x is None or action.y is None or action.map_id not in {None, actor.map_id}:
@@ -501,7 +666,8 @@ def _navigate(state: WorldState, action: GameAction, pack: WorldPack) -> WorldSt
         actor.map_id,
         (actor.x, actor.y),
         (action.x, action.y),
-        blocked=_occupied(state, actor.map_id, except_actor=actor_id),
+        blocked=_occupied(state, actor.map_id, except_actor=actor_id)
+        | dynamic_blocked_cells(state, pack, actor.map_id),
     )
     if not route and (actor.x, actor.y) != (action.x, action.y):
         return replace(state, last_message="No route")
@@ -602,6 +768,12 @@ def _use_ability(state: WorldState, action: GameAction, pack: WorldPack) -> Worl
 
 
 def reduce_world(state: WorldState, action: GameAction, pack: WorldPack) -> WorldState:
+    from isoworld.world.living_world import (
+        advance_living_world,
+        build,
+        start_production,
+        transfer_resource,
+    )
     from isoworld.world.narrative import handle_narrative_action, postprocess_narrative
 
     state = replace(state, recent_events=())
@@ -616,11 +788,17 @@ def reduce_world(state: WorldState, action: GameAction, pack: WorldPack) -> Worl
         return handle_narrative_action(state, action, pack)
     if action.kind == "tick":
         advanced = _advance_clock(state, pack)
+        events: list[DomainEvent] = []
+        minute_changed = (state.day, state.minute_of_day) != (
+            advanced.day,
+            advanced.minute_of_day,
+        )
+        if minute_changed:
+            events.append(DomainEvent("minute_changed"))
+            advanced = advance_living_world(advanced, pack, events)
+            events = list(advanced.recent_events)
         planned = _plan_schedules(advanced, pack)
         result = _advance_routes(planned, pack)
-        events: list[DomainEvent] = []
-        if (state.day, state.minute_of_day) != (result.day, result.minute_of_day):
-            events.append(DomainEvent("minute_changed"))
         for actor in result.actors:
             previous = state.actor(actor.actor_id)
             if (previous.map_id, previous.x, previous.y) != (actor.map_id, actor.x, actor.y):
@@ -648,6 +826,21 @@ def reduce_world(state: WorldState, action: GameAction, pack: WorldPack) -> Worl
         )
     if action.kind == "use_ability":
         result = _use_ability(state, action, pack)
+        return postprocess_narrative(
+            result, pack, result.recent_events, action.actor_id or state.active_actor_id
+        )
+    if action.kind == "build":
+        result = build(state, action, pack)
+        return postprocess_narrative(
+            result, pack, result.recent_events, action.actor_id or state.active_actor_id
+        )
+    if action.kind == "start_production":
+        result = start_production(state, action, pack)
+        return postprocess_narrative(
+            result, pack, result.recent_events, action.actor_id or state.active_actor_id
+        )
+    if action.kind == "transfer_resource":
+        result = transfer_resource(state, action, pack)
         return postprocess_narrative(
             result, pack, result.recent_events, action.actor_id or state.active_actor_id
         )

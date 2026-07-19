@@ -1,0 +1,6 @@
+{
+  "id": "energy",
+  "display_name": "Energy",
+  "base_value": 1,
+  "scarcity_target": 6
+}

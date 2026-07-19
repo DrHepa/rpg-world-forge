@@ -8,6 +8,21 @@ from worldforge.integrity import canonical_payload_hash
 from worldforge.project import SourceProject, load_source_project
 from worldforge.validation import ValidationIssue, validate_project
 
+WORLDPACK_V4_COLLECTIONS = {
+    "consequences",
+    "constructions",
+    "dialogues",
+    "facts",
+    "factions",
+    "goals",
+    "needs",
+    "production_recipes",
+    "quests",
+    "resources",
+    "scenes",
+    "stockpiles",
+}
+
 
 class CompilationError(ValueError):
     def __init__(self, issues: list[ValidationIssue]) -> None:
@@ -21,11 +36,11 @@ def build_worldpack(project: SourceProject) -> dict[str, Any]:
         raise CompilationError(issues)
     payload: dict[str, Any] = {
         "format": "isoworld.worldpack",
-        "format_version": 3,
+        "format_version": 4,
         "world": project.world,
         "collections": {
-            name: sorted(items, key=lambda item: item["id"])
-            for name, items in sorted(project.collections.items())
+            name: sorted(project.collections.get(name, []), key=lambda item: item["id"])
+            for name in sorted(set(project.collections) | WORLDPACK_V4_COLLECTIONS)
         },
     }
     payload["content_hash"] = canonical_payload_hash(payload)

@@ -129,6 +129,8 @@ or prompt is copied into the renderpack.
 - One or more typed outputs: texture, clipset, audio, font, or shader, with
   runtime path, media type, and SHA-256.
 - Semantic bindings from world/runtime slots to asset IDs and clips.
+- Optional construction bindings use `construction:<blueprint_id>`; the M3
+  renderer keeps a primitive fallback when a world has not produced them yet.
 
 ## Validation profiles
 

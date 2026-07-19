@@ -14,15 +14,22 @@ class ScaffoldError(ValueError):
 COLLECTIONS = (
     "abilities",
     "actors",
+    "consequences",
+    "constructions",
     "dialogues",
     "facts",
     "factions",
+    "goals",
     "interactions",
     "maps",
+    "needs",
     "personal_arcs",
+    "production_recipes",
     "quests",
     "scenes",
     "schedules",
+    "resources",
+    "stockpiles",
     "tile_types",
 )
 
@@ -44,6 +51,13 @@ SOURCE_GUIDES = {
     "interactions": "Contextual world interactions with conditions and deterministic effects.",
     "schedules": "Schedules, routes, activities, conditions, and navigation fallbacks.",
     "mechanics": "Deterministic systems, events, state, and interacting rules.",
+    "resources": "Resource definitions, values, scarcity targets, and ownership rules.",
+    "needs": "Actor needs, decay cadence, thresholds, and deterministic restoration.",
+    "goals": "Hierarchical actor goals, conditions, priorities, and typed actions.",
+    "stockpiles": "World inventories, capacities, locations, and resource flows.",
+    "constructions": "Blueprint footprints, costs, build times, and navigation effects.",
+    "production_recipes": "Construction-bound inputs, outputs, and production duration.",
+    "consequences": "Delayed event reactions, conditions, effects, and chain stages.",
     "arcs": "World and personal arcs, acts, branches, failure, and recovery.",
     "personal_arcs": "Compilable personal campaigns referenced by playable actors.",
     "events": "Implementable events with conditions, effects, and causality.",
@@ -102,6 +116,8 @@ def create_world_project(
             "scene_help": "Espacio: continuar",
             "quest_label": "Misión",
             "clock_label": "Día",
+            "needs_label": "Necesidades",
+            "goal_label": "Objetivo",
         }
         if is_spanish
         else {
@@ -115,6 +131,8 @@ def create_world_project(
             "scene_help": "Space: continue",
             "quest_label": "Quest",
             "clock_label": "Day",
+            "needs_label": "Needs",
+            "goal_label": "Goal",
         }
     )
     paths = {collection: [] for collection in COLLECTIONS}
@@ -151,6 +169,11 @@ def create_world_project(
                 "conditional_dialogue",
                 "reactive_quests",
                 "timed_scenes",
+                "actor_needs",
+                "hierarchical_goals",
+                "construction",
+                "resource_economy",
+                "delayed_consequences",
             ],
             "simulation": {
                 "start_day": 1,

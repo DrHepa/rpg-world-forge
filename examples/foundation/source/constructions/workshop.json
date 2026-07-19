@@ -1,0 +1,13 @@
+{
+  "id": "workshop",
+  "display_name": "Workshop",
+  "footprint": [
+    [0, 0]
+  ],
+  "costs": {
+    "timber": 2
+  },
+  "build_minutes": 2,
+  "blocks_movement": true,
+  "stockpile_id": "garden_store"
+}

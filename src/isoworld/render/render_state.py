@@ -37,6 +37,16 @@ class InteractionView:
 
 
 @dataclass(frozen=True, slots=True)
+class ConstructionView:
+    instance_id: str
+    blueprint_id: str
+    display_name: str
+    x: int
+    y: int
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
 class EventView:
     kind: str
     actor_id: str | None
@@ -63,6 +73,7 @@ class RenderState:
     tiles: tuple[TileView, ...]
     actors: tuple[ActorView, ...]
     interactions: tuple[InteractionView, ...]
+    constructions: tuple[ConstructionView, ...]
     events: tuple[EventView, ...]
     hud_lines: tuple[str, ...]
     overlay: OverlayView | None
@@ -126,14 +137,33 @@ def build_render_state(state: WorldState, pack: WorldPack, *, revision: int = 0)
         for item in pack.interactions.values()
         if item.location.map_id == active.map_id
     )
+    constructions = tuple(
+        ConstructionView(
+            instance_id=item.instance_id,
+            blueprint_id=item.blueprint_id,
+            display_name=pack.constructions[item.blueprint_id].display_name,
+            x=item.x,
+            y=item.y,
+            status=item.status,
+        )
+        for item in state.constructions
+        if item.map_id == active.map_id
+    )
     active_name = pack.actors[state.active_actor_id].display_name
     resources = ", ".join(f"{item.id}: {item.value}" for item in active.resources) or "-"
+    needs = ", ".join(
+        f"{pack.needs[item.need_id].display_name}: {item.value}" for item in active.needs
+    )
+    goal = (
+        pack.goals[active.active_goal_id].display_name if active.active_goal_id is not None else "-"
+    )
     time_text = (
         f"{pack.ui['clock_label']} {state.day} "
         f"{state.minute_of_day // 60:02d}:{state.minute_of_day % 60:02d}"
     )
     hud_lines = (
         f"{pack.ui['active_actor']}: {active_name} | {resources}",
+        f"{pack.ui['needs_label']}: {needs or '-'} | {pack.ui['goal_label']}: {goal}",
         f"{pack.ui['move_help']} | {pack.ui['navigate_help']}",
         f"{pack.ui['switch_help']} | {pack.ui['interact_help']} | {pack.ui['ability_help']}",
         state.last_message,
@@ -148,7 +178,7 @@ def build_render_state(state: WorldState, pack: WorldPack, *, revision: int = 0)
             f"{quest.stages[progress.stage_id].description}"
         )
     if active_quests:
-        hud_lines = hud_lines[:3] + tuple(active_quests[:2]) + hud_lines[3:]
+        hud_lines = hud_lines[:4] + tuple(active_quests[:2]) + hud_lines[4:]
 
     overlay = None
     if state.active_scene_id is not None:
@@ -184,6 +214,7 @@ def build_render_state(state: WorldState, pack: WorldPack, *, revision: int = 0)
         tiles=tiles,
         actors=actors,
         interactions=interactions,
+        constructions=constructions,
         events=tuple(
             EventView(event.kind, event.actor_id, event.subject_id) for event in state.recent_events
         ),

@@ -14,7 +14,7 @@
   ],
   "properties": {
     "format": {"const": "isoworld.replay"},
-    "format_version": {"const": 2},
+    "format_version": {"const": 3},
     "world_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
     "world_content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "final_state_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -35,11 +35,21 @@
               "start_dialogue",
               "choose_dialogue",
               "end_dialogue",
-              "dismiss_scene"
+              "dismiss_scene",
+              "build",
+              "start_production",
+              "transfer_resource"
             ]
           },
           "dialogue_id": {"type": ["string", "null"]},
-          "choice_id": {"type": ["string", "null"]}
+          "choice_id": {"type": ["string", "null"]},
+          "blueprint_id": {"type": ["string", "null"]},
+          "construction_instance_id": {"type": ["string", "null"]},
+          "recipe_id": {"type": ["string", "null"]},
+          "stockpile_id": {"type": ["string", "null"]},
+          "resource_id": {"type": ["string", "null"]},
+          "amount": {"type": "integer"},
+          "direction": {"type": ["string", "null"]}
         }
       }
     }

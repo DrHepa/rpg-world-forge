@@ -54,6 +54,10 @@ def _effects(project: SourceProject) -> Iterable[tuple[str, dict[str, Any]]]:
         for position, effect in enumerate(scene.get("effects", [])):
             if isinstance(effect, dict):
                 yield f"scenes/{scene.get('id')}/effects/{position}", effect
+    for consequence in project.collections.get("consequences", []):
+        for position, effect in enumerate(consequence.get("effects", [])):
+            if isinstance(effect, dict):
+                yield f"consequences/{consequence.get('id')}/effects/{position}", effect
 
 
 def _conditions(project: SourceProject) -> Iterable[tuple[str, dict[str, Any]]]:
@@ -86,6 +90,11 @@ def _conditions(project: SourceProject) -> Iterable[tuple[str, dict[str, Any]]]:
         for position, condition in enumerate(scene.get("conditions", [])):
             if isinstance(condition, dict):
                 yield f"scenes/{scene.get('id')}/conditions/{position}", condition
+    for collection in ("goals", "consequences"):
+        for item in project.collections.get(collection, []):
+            for position, condition in enumerate(item.get("conditions", [])):
+                if isinstance(condition, dict):
+                    yield f"{collection}/{item.get('id')}/conditions/{position}", condition
 
 
 def _reachable(start: str, edges: dict[str, set[str]]) -> set[str]:
@@ -280,6 +289,36 @@ def analyze_project(project: SourceProject) -> dict[str, Any]:
                 )
             )
 
+    consequences = {
+        item.get("id"): item
+        for item in project.collections.get("consequences", [])
+        if isinstance(item.get("id"), str)
+    }
+    consequence_edges = {
+        consequence_id: {
+            item_id
+            for item_id, item in consequences.items()
+            if item.get("trigger_event") == "consequence_resolved"
+            and item.get("subject_id") == consequence_id
+        }
+        for consequence_id in consequences
+    }
+    for consequence_id, item in consequences.items():
+        if item.get("once", True) is not False:
+            continue
+        if any(
+            consequence_id in _reachable(target, consequence_edges)
+            for target in consequence_edges[consequence_id]
+        ):
+            findings.append(
+                NarrativeFinding(
+                    "warning",
+                    "repeating_consequence_cycle",
+                    f"consequences/{consequence_id}",
+                    "A repeatable delayed consequence participates in a reaction cycle.",
+                )
+            )
+
     counts = {"error": 0, "warning": 0, "info": 0}
     for finding in findings:
         counts[finding.severity] += 1
@@ -291,6 +330,7 @@ def analyze_project(project: SourceProject) -> dict[str, Any]:
             "dialogues": len(project.collections.get("dialogues", [])),
             "quests": len(project.collections.get("quests", [])),
             "scenes": len(project.collections.get("scenes", [])),
+            "consequences": len(project.collections.get("consequences", [])),
             "unreachable_dialogue_nodes": unreachable_nodes,
             "unreachable_quest_stages": unreachable_stages,
             **counts,

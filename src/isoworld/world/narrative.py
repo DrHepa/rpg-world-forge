@@ -30,6 +30,7 @@ def condition_met(
     *,
     source_actor_id: str,
     events: tuple[DomainEvent, ...] = (),
+    pack: WorldPack | None = None,
 ) -> bool:
     actor_id = condition.actor_id or source_actor_id
     result = False
@@ -72,6 +73,28 @@ def condition_met(
         result = (
             actor.map_id == condition.map_id and actor.x == condition.x and actor.y == condition.y
         )
+    elif condition.kind == "need_at_most" and condition.need_id:
+        result = state.actor(actor_id).need(condition.need_id) <= condition.value
+    elif (
+        condition.kind == "stockpile_resource_at_least"
+        and condition.stockpile_id
+        and condition.resource_id
+    ):
+        result = state.stockpile(condition.stockpile_id).resource(condition.resource_id) >= (
+            condition.value
+        )
+    elif condition.kind == "construction_status" and condition.construction_id:
+        statuses = {
+            item.status
+            for item in state.constructions
+            if item.blueprint_id == condition.construction_id
+        }
+        requested = condition.construction_status or "absent"
+        result = (requested == "absent" and not statuses) or requested in statuses
+    elif condition.kind == "scarcity_at_least" and condition.resource_id and pack is not None:
+        from isoworld.world.living_world import scarcity_percent
+
+        result = scarcity_percent(state, pack, condition.resource_id) >= condition.value
     return not result if condition.negate else result
 
 
@@ -81,6 +104,7 @@ def conditions_met(
     *,
     source_actor_id: str,
     events: tuple[DomainEvent, ...] = (),
+    pack: WorldPack | None = None,
 ) -> bool:
     return all(
         condition_met(
@@ -88,6 +112,7 @@ def conditions_met(
             condition,
             source_actor_id=source_actor_id,
             events=events,
+            pack=pack,
         )
         for condition in conditions
     )
@@ -127,6 +152,7 @@ def available_dialogue_choices(
             choice.conditions,
             source_actor_id=state.dialogue.initiator_actor_id,
             events=state.recent_events,
+            pack=pack,
         ):
             continue
         if choice.next_node_id is not None and not _node_accessible(
@@ -152,6 +178,7 @@ def _process_quests(
             definition.auto_start_conditions,
             source_actor_id=source_actor_id,
             events=tuple(events),
+            pack=pack,
         ):
             progress = QuestState(quest_id, "active", definition.start_stage_id)
             result = _replace_quest(result, progress)
@@ -167,6 +194,7 @@ def _process_quests(
                 stage.failure_conditions,
                 source_actor_id=source_actor_id,
                 events=tuple(events),
+                pack=pack,
             ):
                 result = _apply_effects(
                     result,
@@ -185,6 +213,7 @@ def _process_quests(
                 stage.completion_conditions,
                 source_actor_id=source_actor_id,
                 events=tuple(events),
+                pack=pack,
             ):
                 break
             result = _apply_effects(
@@ -226,6 +255,7 @@ def _trigger_scene(
             scene.conditions,
             source_actor_id=source_actor_id,
             events=tuple(events),
+            pack=pack,
         ):
             candidates.append(scene)
     if not candidates:
@@ -254,8 +284,10 @@ def postprocess_narrative(
     events: tuple[DomainEvent, ...],
     source_actor_id: str,
 ) -> WorldState:
-    mutable_events = list(events)
-    result = state
+    from isoworld.world.living_world import process_consequences
+
+    result = process_consequences(state, pack, events, source_actor_id)
+    mutable_events = list(result.recent_events)
     transition_limit = max(
         1, len(pack.quests) + sum(len(quest.stages) for quest in pack.quests.values())
     )
@@ -287,7 +319,13 @@ def _start_dialogue(state: WorldState, action: GameAction, pack: WorldPack) -> W
         if (
             partner.map_id == actor.map_id
             and distance <= dialogue.range
-            and conditions_met(state, dialogue.conditions, source_actor_id=actor_id, events=())
+            and conditions_met(
+                state,
+                dialogue.conditions,
+                source_actor_id=actor_id,
+                events=(),
+                pack=pack,
+            )
             and _node_accessible(state, pack, dialogue.nodes[dialogue.start_node_id])
         ):
             candidates.append((distance, dialogue.id, dialogue))

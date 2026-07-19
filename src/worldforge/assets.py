@@ -136,7 +136,7 @@ def _verified_worldpack(path: Path) -> dict[str, Any]:
         pack.get("format") != "isoworld.worldpack"
         or isinstance(format_version, bool)
         or not isinstance(format_version, int)
-        or format_version not in {1, 2, 3}
+        or format_version not in {1, 2, 3, 4}
     ):
         raise AssetManifestError("The input file is not a compatible worldpack")
     content_hash = pack.get("content_hash")
@@ -544,6 +544,8 @@ def _binding_kind_is_compatible(slot: str, kind: Any) -> bool:
         return kind in {"sprite", "spritesheet", "tileset"}
     if category == "interaction":
         return kind in {"sprite", "spritesheet", "vfx"}
+    if category == "construction":
+        return kind in {"sprite", "spritesheet", "tileset"}
     if category == "portrait":
         return kind in {"portrait", "sprite"}
     if category == "event":
@@ -602,7 +604,13 @@ def _validate_bindings(
             clip_id = binding.get(field)
             if clip_id is not None and (not isinstance(clip_id, str) or clip_id not in clips):
                 issues.append(AssetIssue(f"{item_path}/{field}", "unknown clip"))
-        if slot.split(":", 1)[0] in {"actor", "tile_type", "interaction", "portrait"}:
+        if slot.split(":", 1)[0] in {
+            "actor",
+            "tile_type",
+            "interaction",
+            "construction",
+            "portrait",
+        }:
             if not binding.get("clip"):
                 issues.append(AssetIssue(f"{item_path}/clip", "visual binding requires a clip"))
 

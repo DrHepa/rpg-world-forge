@@ -14,7 +14,8 @@
     255
   ],
   "resources": {
-    "energy": 3
+    "energy": 3,
+    "timber": 2
   },
   "tags": [
     "example"

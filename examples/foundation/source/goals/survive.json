@@ -1,0 +1,8 @@
+{
+  "id": "survive",
+  "display_name": "Survive",
+  "parent_id": null,
+  "priority": 10,
+  "conditions": [],
+  "action": null
+}

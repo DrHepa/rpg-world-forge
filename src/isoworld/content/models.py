@@ -61,6 +61,8 @@ class EffectDefinition:
     target_actor_id: str | None = None
     dimension: str | None = None
     faction_id: str | None = None
+    stockpile_id: str | None = None
+    need_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +86,92 @@ class ConditionDefinition:
     y: int | None = None
     start_minute: int | None = None
     end_minute: int | None = None
+    need_id: str | None = None
+    resource_id: str | None = None
+    stockpile_id: str | None = None
+    construction_id: str | None = None
+    construction_status: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceDefinition:
+    id: str
+    display_name: str
+    base_value: int
+    scarcity_target: int
+
+
+@dataclass(frozen=True, slots=True)
+class NeedDefinition:
+    id: str
+    display_name: str
+    decay_interval_minutes: int
+    decay_amount: int
+    critical_below: int
+    resource_id: str
+    consume_amount: int
+    restore_amount: int
+
+
+@dataclass(frozen=True, slots=True)
+class GoalActionDefinition:
+    kind: str
+    need_id: str | None = None
+    stockpile_id: str | None = None
+    blueprint_id: str | None = None
+    recipe_id: str | None = None
+    location: Location | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class GoalDefinition:
+    id: str
+    display_name: str
+    parent_id: str | None
+    priority: int
+    conditions: tuple[ConditionDefinition, ...]
+    action: GoalActionDefinition | None
+
+
+@dataclass(frozen=True, slots=True)
+class StockpileDefinition:
+    id: str
+    display_name: str
+    location: Location
+    capacity: int
+    resources: tuple[tuple[str, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ConstructionDefinition:
+    id: str
+    display_name: str
+    footprint: tuple[tuple[int, int], ...]
+    costs: tuple[tuple[str, int], ...]
+    build_minutes: int
+    blocks_movement: bool
+    stockpile_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ProductionRecipeDefinition:
+    id: str
+    display_name: str
+    required_construction_id: str
+    inputs: tuple[tuple[str, int], ...]
+    outputs: tuple[tuple[str, int], ...]
+    duration_minutes: int
+
+
+@dataclass(frozen=True, slots=True)
+class ConsequenceDefinition:
+    id: str
+    delay_minutes: int
+    trigger_event: str
+    subject_id: str | None
+    conditions: tuple[ConditionDefinition, ...]
+    effects: tuple[EffectDefinition, ...]
+    once: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +314,8 @@ class ActorDefinition:
     forbidden_fact_ids: tuple[str, ...] = ()
     relationships: tuple[tuple[str, tuple[tuple[str, int], ...]], ...] = ()
     faction_reputation: tuple[tuple[str, int], ...] = ()
+    needs: tuple[tuple[str, int], ...] = ()
+    goal_ids: tuple[str, ...] = ()
 
     @property
     def initial_resources(self) -> dict[str, int]:
@@ -253,6 +343,13 @@ class WorldPack:
     dialogues: dict[str, DialogueDefinition]
     quests: dict[str, QuestDefinition]
     scenes: dict[str, SceneDefinition]
+    resources: dict[str, ResourceDefinition]
+    needs: dict[str, NeedDefinition]
+    goals: dict[str, GoalDefinition]
+    stockpiles: dict[str, StockpileDefinition]
+    constructions: dict[str, ConstructionDefinition]
+    production_recipes: dict[str, ProductionRecipeDefinition]
+    consequences: dict[str, ConsequenceDefinition]
     collections: dict[str, tuple[dict[str, Any], ...]]
 
     @property

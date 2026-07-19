@@ -11,6 +11,13 @@
       "actors/maker.json",
       "actors/guide.json"
     ],
+    "consequences": [
+      "consequences/workshop_rumor.json",
+      "consequences/supply_response.json"
+    ],
+    "constructions": [
+      "constructions/workshop.json"
+    ],
     "dialogues": [
       "dialogues/guide_welcome.json"
     ],
@@ -24,10 +31,20 @@
     "interactions": [
       "interactions/resonant_stone.json"
     ],
+    "goals": [
+      "goals/survive.json",
+      "goals/eat_berries.json"
+    ],
     "maps": [
       "maps/test_garden.json"
     ],
     "personal_arcs": [],
+    "needs": [
+      "needs/hunger.json"
+    ],
+    "production_recipes": [
+      "production_recipes/make_planks.json"
+    ],
     "quests": [
       "quests/resonance_trial.json"
     ],
@@ -36,6 +53,15 @@
     ],
     "schedules": [
       "schedules/guide_day.json"
+    ],
+    "resources": [
+      "resources/berries.json",
+      "resources/energy.json",
+      "resources/planks.json",
+      "resources/timber.json"
+    ],
+    "stockpiles": [
+      "stockpiles/garden_store.json"
     ],
     "tile_types": [
       "tile_types/ground.json",

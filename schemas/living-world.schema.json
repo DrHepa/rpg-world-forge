@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/living-world.schema.json",
+  "title": "IsoWorld M3 living-world content",
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+    "resource_amounts": {
+      "type": "object",
+      "propertyNames": {"$ref": "#/$defs/id"},
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "location": {
+      "type": "object",
+      "required": ["map_id", "x", "y"],
+      "properties": {
+        "map_id": {"$ref": "#/$defs/id"},
+        "x": {"type": "integer", "minimum": 0},
+        "y": {"type": "integer", "minimum": 0}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "required": ["id", "display_name", "base_value", "scarcity_target"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "display_name": {"type": "string", "minLength": 1},
+        "base_value": {"type": "integer", "minimum": 0},
+        "scarcity_target": {"type": "integer", "minimum": 0}
+      }
+    },
+    "need": {
+      "type": "object",
+      "required": ["id", "display_name", "decay_interval_minutes", "decay_amount", "critical_below", "resource_id", "consume_amount", "restore_amount"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "display_name": {"type": "string", "minLength": 1},
+        "decay_interval_minutes": {"type": "integer", "minimum": 1},
+        "decay_amount": {"type": "integer", "minimum": 1},
+        "critical_below": {"type": "integer", "minimum": 0, "maximum": 100},
+        "resource_id": {"$ref": "#/$defs/id"},
+        "consume_amount": {"type": "integer", "minimum": 1},
+        "restore_amount": {"type": "integer", "minimum": 1}
+      }
+    },
+    "goal": {
+      "type": "object",
+      "required": ["id", "display_name", "priority", "conditions", "action"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "display_name": {"type": "string", "minLength": 1},
+        "parent_id": {"type": ["string", "null"]},
+        "priority": {"type": "integer"},
+        "conditions": {"type": "array", "items": {"$ref": "narrative-content.schema.json#/$defs/condition"}},
+        "action": {
+          "type": ["object", "null"],
+          "properties": {
+            "kind": {"enum": ["satisfy_need", "produce", "build", "travel"]},
+            "need_id": {"$ref": "#/$defs/id"},
+            "stockpile_id": {"$ref": "#/$defs/id"},
+            "blueprint_id": {"$ref": "#/$defs/id"},
+            "recipe_id": {"$ref": "#/$defs/id"},
+            "location": {"$ref": "#/$defs/location"}
+          }
+        }
+      }
+    },
+    "stockpile": {
+      "type": "object",
+      "required": ["id", "display_name", "location", "capacity", "resources"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "display_name": {"type": "string", "minLength": 1},
+        "location": {"$ref": "#/$defs/location"},
+        "capacity": {"type": "integer", "minimum": 1},
+        "resources": {"$ref": "#/$defs/resource_amounts"}
+      }
+    },
+    "construction": {
+      "type": "object",
+      "required": ["id", "display_name", "footprint", "costs", "build_minutes", "blocks_movement"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "display_name": {"type": "string", "minLength": 1},
+        "footprint": {"type": "array", "minItems": 1, "items": {"type": "array", "prefixItems": [{"type": "integer"}, {"type": "integer"}], "minItems": 2, "maxItems": 2}},
+        "costs": {"$ref": "#/$defs/resource_amounts"},
+        "build_minutes": {"type": "integer", "minimum": 1},
+        "blocks_movement": {"type": "boolean"},
+        "stockpile_id": {"type": ["string", "null"]}
+      }
+    },
+    "production_recipe": {
+      "type": "object",
+      "required": ["id", "display_name", "required_construction_id", "inputs", "outputs", "duration_minutes"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "display_name": {"type": "string", "minLength": 1},
+        "required_construction_id": {"$ref": "#/$defs/id"},
+        "inputs": {"$ref": "#/$defs/resource_amounts"},
+        "outputs": {"$ref": "#/$defs/resource_amounts"},
+        "duration_minutes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "consequence": {
+      "type": "object",
+      "required": ["id", "delay_minutes", "trigger_event", "effects"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "delay_minutes": {"type": "integer", "minimum": 1},
+        "trigger_event": {"$ref": "#/$defs/id"},
+        "subject_id": {"$ref": "#/$defs/id"},
+        "conditions": {"type": "array", "items": {"$ref": "narrative-content.schema.json#/$defs/condition"}},
+        "effects": {"type": "array", "items": {"$ref": "narrative-content.schema.json#/$defs/effect"}},
+        "once": {"type": "boolean"}
+      }
+    }
+  }
+}

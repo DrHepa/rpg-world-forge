@@ -1,0 +1,18 @@
+{
+  "id": "eat_berries",
+  "display_name": "Eat from the garden store",
+  "parent_id": "survive",
+  "priority": 100,
+  "conditions": [
+    {
+      "kind": "need_at_most",
+      "need_id": "hunger",
+      "value": 40
+    }
+  ],
+  "action": {
+    "kind": "satisfy_need",
+    "need_id": "hunger",
+    "stockpile_id": "garden_store"
+  }
+}
