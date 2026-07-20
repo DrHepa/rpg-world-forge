@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from isoworld.content.models import WorldPack
-from isoworld.runtime_io import RuntimeIOError, read_json_object
+from isoworld.runtime_io import RuntimeIOError, read_json_object, write_json_atomic
 from isoworld.world.state import (
     ActorState,
     ConstructionState,
@@ -162,14 +162,10 @@ def _read_object(path: str | Path) -> dict[str, Any]:
 
 
 def _write_object(path: str | Path, value: dict[str, Any]) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(f".{target.name}.tmp")
-    temporary.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(target)
+    try:
+        write_json_atomic(path, value)
+    except RuntimeIOError as exc:
+        raise PersistenceError(f"Could not write {path}: {exc}") from exc
 
 
 def _compatible(raw: dict[str, Any], pack: WorldPack, expected_format: str, version: int) -> None:
