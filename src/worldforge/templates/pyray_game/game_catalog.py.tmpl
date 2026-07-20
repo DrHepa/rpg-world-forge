@@ -1,0 +1,1015 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import stat
+import unicodedata
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+from isoworld.content.loader import WorldPackError, load_worldpack
+from isoworld.content.media import media_signature_matches
+from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
+from isoworld.content.portability import is_portable_path_component
+from isoworld.content.renderpack import RenderPackError, load_renderpack
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+CATALOG_RELATIVE_PATH = Path("game_data/worlds.lock.json")
+SHARED_LOCK_RELATIVE_PATH = Path("game_data/shared.lock.json")
+BUNDLE_MANIFEST = "bundle.manifest.json"
+MAX_MANIFEST_BYTES = 16 * 1024 * 1024
+MAX_BUNDLE_FILE_BYTES = 512 * 1024 * 1024
+MAX_BUNDLE_FILES = 100_000
+MAX_BUNDLE_BYTES = 16 * 1024 * 1024 * 1024
+MAX_BUNDLE_PATH_BYTES = 1024
+MAX_LICENSE_BYTES = 4 * 1024 * 1024
+MAX_SHARED_FILES = 10_000
+MAX_SHARED_BYTES = 8 * 1024 * 1024 * 1024
+ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+RELEASE_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+WINDOWS_RESERVED_NAMES = {
+    "aux",
+    "con",
+    "nul",
+    "prn",
+    *(f"com{number}" for number in range(1, 10)),
+    *(f"lpt{number}" for number in range(1, 10)),
+}
+FORBIDDEN_PATH_COMPONENTS = {
+    ".agents",
+    ".worldforge",
+    "authoring",
+    "candidates",
+    "claims",
+    "credentials",
+    "phase_reports",
+    "prompts",
+    "recipes",
+    "references",
+    "source",
+    "specs",
+    "weights",
+    "workflows",
+}
+FORBIDDEN_RUNTIME_FILENAMES = {
+    ".cursorrules",
+    "agents.md",
+    "agents.override.md",
+    "claude.md",
+    "copilot-instructions.md",
+    "gemini.md",
+    "skill.md",
+}
+LICENSE_MEDIA_TYPES = {
+    ".html": "text/html",
+    ".json": "application/json",
+    ".md": "text/markdown",
+    ".rst": "text/plain",
+    ".txt": "text/plain",
+}
+SHARED_MEDIA_TYPES = {
+    "application/json",
+    "audio/mpeg",
+    "audio/ogg",
+    "audio/wav",
+    "font/otf",
+    "font/ttf",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "text/x-glsl",
+}
+SHARED_EXTENSION_MEDIA_TYPES = {
+    ".frag": "text/x-glsl",
+    ".fs": "text/x-glsl",
+    ".glsl": "text/x-glsl",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".json": "application/json",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".otf": "font/otf",
+    ".png": "image/png",
+    ".ttf": "font/ttf",
+    ".vert": "text/x-glsl",
+    ".vs": "text/x-glsl",
+    ".wav": "audio/wav",
+    ".webp": "image/webp",
+}
+FORBIDDEN_JSON_KEYS = {
+    "api_key",
+    "candidate_file",
+    "checkpoint",
+    "credentials",
+    "extension_id",
+    "extension_version",
+    "model",
+    "model_id",
+    "model_name",
+    "model_version",
+    "negative_prompt",
+    "provider",
+    "provider_id",
+    "recipe",
+    "specification_file",
+    "weights",
+    "workflow",
+    "workflow_file",
+}
+FORBIDDEN_JSON_FORMATS = {
+    "isoworld.source_manifest",
+    "rpg-world-forge.asset_manifest",
+    "rpg-world-forge.asset_spec",
+    "rpg-world-forge.narrative_analysis",
+    "rpg-world-forge.phase_catalog",
+    "rpg-world-forge.phase_report",
+    "rpg-world-forge.project",
+    "rpg-world-forge.reopen_log",
+    "rpg-world-forge.task_claim",
+    "rpg-world-forge.workflow_status",
+}
+
+
+class CatalogError(ValueError):
+    """Raised when installed runtime content is unsafe or inconsistent."""
+
+
+class _DuplicateKeyError(ValueError):
+    pass
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateKeyError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogRelease:
+    world_id: str
+    release_id: str
+    bundle_hash: str
+    path: str
+    worldpack_hash: str
+    renderpack_hash: str
+    required_runtime_features: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedBundle:
+    release: CatalogRelease
+    root: Path
+    worldpack_path: Path
+    renderpack_path: Path
+    manifest: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class SharedAsset:
+    path: str
+    sha256: str
+    size: int
+    media_type: str
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _canonical_hash(document: dict[str, Any], field: str) -> str:
+    payload = dict(document)
+    payload.pop(field, None)
+    canonical = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return _sha256_bytes(canonical.encode("utf-8"))
+
+
+def _read_object(path: Path, *, limit: int) -> tuple[dict[str, Any], bytes]:
+    try:
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or path.is_symlink() or info.st_nlink != 1:
+            raise CatalogError(f"Expected a regular file: {path}")
+        if info.st_size > limit:
+            raise CatalogError(f"File exceeds the {limit}-byte limit: {path}")
+        data = path.read_bytes()
+        document = json.loads(
+            data.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+        )
+    except CatalogError:
+        raise
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, _DuplicateKeyError) as exc:
+        raise CatalogError(f"Could not read JSON object {path}: {exc}") from exc
+    if not isinstance(document, dict):
+        raise CatalogError(f"Expected a JSON object: {path}")
+    return document, data
+
+
+def _require_exact_keys(document: dict[str, Any], expected: set[str], context: str) -> None:
+    if set(document) != expected:
+        missing = sorted(expected - set(document))
+        extra = sorted(set(document) - expected)
+        raise CatalogError(f"{context} keys differ; missing={missing}, extra={extra}")
+
+
+def _safe_posix_path(value: Any, context: str) -> PurePosixPath:
+    if not isinstance(value, str) or not value or "\\" in value or "\x00" in value:
+        raise CatalogError(f"{context} must be a relative POSIX path")
+    pure = PurePosixPath(value)
+    if pure.is_absolute() or any(part in {"", ".", ".."} for part in pure.parts):
+        raise CatalogError(f"{context} is not a normalized relative path: {value!r}")
+    if pure.as_posix() != value:
+        raise CatalogError(f"{context} is not canonical: {value!r}")
+    if (
+        unicodedata.normalize("NFC", value) != value
+        or len(value.encode("utf-8")) > MAX_BUNDLE_PATH_BYTES
+    ):
+        raise CatalogError(f"{context} is not a portable normalized path: {value!r}")
+    for component in pure.parts:
+        device_name = component.split(".", 1)[0].casefold()
+        if (
+            len(component.encode("utf-8")) > 255
+            or component.endswith((" ", "."))
+            or any(ord(character) < 32 or character in '<>:"|?*' for character in component)
+            or device_name in WINDOWS_RESERVED_NAMES
+        ):
+            raise CatalogError(f"{context} is not portable: {value!r}")
+    return pure
+
+
+def _bundle_payload_path(value: Any, context: str) -> PurePosixPath:
+    pure = _safe_posix_path(value, context)
+    if pure.as_posix() in {"worldpack.json", "renderpack.json"}:
+        return pure
+    if len(pure.parts) < 2 or pure.parts[0] not in {"assets", "licenses"}:
+        raise CatalogError(f"{context} is outside runtime bundle roots")
+    for component in pure.parts:
+        folded = component.casefold()
+        if (
+            folded.startswith(".")
+            or folded in FORBIDDEN_PATH_COMPONENTS
+            or PurePosixPath(component).stem.casefold() in FORBIDDEN_PATH_COMPONENTS
+            or folded in FORBIDDEN_RUNTIME_FILENAMES
+        ):
+            raise CatalogError(f"{context} exposes an authoring-only path")
+    return pure
+
+
+def _safe_file(root: Path, relative: str) -> Path:
+    pure = _safe_posix_path(relative, "bundle file path")
+    candidate = root.joinpath(*pure.parts)
+    current = root
+    for part in pure.parts:
+        current = current / part
+        try:
+            info = current.lstat()
+        except OSError as exc:
+            raise CatalogError(f"Missing bundle path {relative}: {exc}") from exc
+        if stat.S_ISLNK(info.st_mode):
+            raise CatalogError(f"Bundle path contains a symlink: {relative}")
+    if not candidate.is_file() or candidate.is_symlink() or candidate.stat().st_nlink != 1:
+        raise CatalogError(f"Bundle payload is not a regular file: {relative}")
+    return candidate
+
+
+def _parse_release(raw: Any, position: int) -> CatalogRelease:
+    if not isinstance(raw, dict):
+        raise CatalogError(f"catalog releases/{position} must be an object")
+    _require_exact_keys(
+        raw,
+        {
+            "world_id",
+            "release_id",
+            "bundle_hash",
+            "path",
+            "worldpack_hash",
+            "renderpack_hash",
+            "required_runtime_features",
+        },
+        f"catalog releases/{position}",
+    )
+    world_id = raw["world_id"]
+    release_id = raw["release_id"]
+    if (
+        not isinstance(world_id, str)
+        or ID_PATTERN.fullmatch(world_id) is None
+        or not is_portable_path_component(world_id)
+    ):
+        raise CatalogError(f"catalog releases/{position}/world_id is invalid")
+    if not isinstance(release_id, str) or RELEASE_PATTERN.fullmatch(release_id) is None:
+        raise CatalogError(f"catalog releases/{position}/release_id is invalid")
+    expected_path = f"game_data/worlds/{world_id}/{release_id}"
+    if raw["path"] != expected_path:
+        raise CatalogError(f"catalog releases/{position}/path must be {expected_path!r}")
+    for field in ("bundle_hash", "worldpack_hash", "renderpack_hash"):
+        if not isinstance(raw[field], str) or SHA256_PATTERN.fullmatch(raw[field]) is None:
+            raise CatalogError(f"catalog releases/{position}/{field} is not SHA-256")
+    features = raw["required_runtime_features"]
+    if (
+        not isinstance(features, list)
+        or not all(isinstance(item, str) and ID_PATTERN.fullmatch(item) for item in features)
+        or features != sorted(set(features))
+    ):
+        raise CatalogError(
+            f"catalog releases/{position}/required_runtime_features must be sorted unique IDs"
+        )
+    return CatalogRelease(
+        world_id=world_id,
+        release_id=release_id,
+        bundle_hash=raw["bundle_hash"],
+        path=raw["path"],
+        worldpack_hash=raw["worldpack_hash"],
+        renderpack_hash=raw["renderpack_hash"],
+        required_runtime_features=tuple(features),
+    )
+
+
+def _real_directory(path: Path, context: str) -> None:
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        raise CatalogError(f"Missing {context}: {path}") from exc
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise CatalogError(f"{context} must be a real directory: {path}")
+
+
+def _audit_catalog_storage(root: Path, releases: tuple[CatalogRelease, ...]) -> None:
+    worlds_root = root / "game_data/worlds"
+    expected: dict[str, set[str]] = {}
+    for release in releases:
+        expected.setdefault(release.world_id, set()).add(release.release_id)
+    if not worlds_root.exists() and not worlds_root.is_symlink():
+        if releases:
+            raise CatalogError("catalog refers to a missing game_data/worlds directory")
+        return
+    _real_directory(root / "game_data", "game data root")
+    _real_directory(worlds_root, "installed worlds root")
+    actual_worlds: set[str] = set()
+    for world_path in sorted(worlds_root.iterdir()):
+        _real_directory(world_path, "installed world directory")
+        actual_worlds.add(world_path.name)
+        if world_path.name not in expected:
+            raise CatalogError(f"unmanaged installed world directory: {world_path.name}")
+        actual_releases: set[str] = set()
+        for release_path in sorted(world_path.iterdir()):
+            _real_directory(release_path, "installed release directory")
+            actual_releases.add(release_path.name)
+        if actual_releases != expected[world_path.name]:
+            raise CatalogError(f"catalog/storage mismatch for world {world_path.name}")
+    if actual_worlds != set(expected):
+        raise CatalogError("catalog and installed world directories disagree")
+
+
+def _shared_asset_path(value: Any, context: str) -> str:
+    pure = _safe_posix_path(value, context)
+    if pure.parts[:2] != ("game_data", "shared") or len(pure.parts) < 3:
+        raise CatalogError(f"{context} must be below game_data/shared")
+    for component in pure.parts[2:]:
+        folded = component.casefold()
+        if (
+            folded.startswith(".")
+            or folded in FORBIDDEN_PATH_COMPONENTS
+            or PurePosixPath(component).stem.casefold() in FORBIDDEN_PATH_COMPONENTS
+            or folded in FORBIDDEN_RUNTIME_FILENAMES
+        ):
+            raise CatalogError(f"{context} exposes an authoring-only path")
+    return pure.as_posix()
+
+
+def _parse_shared_asset(raw: Any, position: int) -> SharedAsset:
+    if not isinstance(raw, dict):
+        raise CatalogError(f"shared files/{position} must be an object")
+    _require_exact_keys(
+        raw,
+        {"path", "sha256", "size", "media_type"},
+        f"shared files/{position}",
+    )
+    path = _shared_asset_path(raw["path"], f"shared files/{position}/path")
+    digest = raw["sha256"]
+    size = raw["size"]
+    media_type = raw["media_type"]
+    if not isinstance(digest, str) or SHA256_PATTERN.fullmatch(digest) is None:
+        raise CatalogError(f"shared files/{position}/sha256 is invalid")
+    if (
+        isinstance(size, bool)
+        or not isinstance(size, int)
+        or not 0 <= size <= MAX_BUNDLE_FILE_BYTES
+    ):
+        raise CatalogError(f"shared files/{position}/size is invalid")
+    if media_type not in SHARED_MEDIA_TYPES:
+        raise CatalogError(f"shared files/{position}/media_type is unsupported")
+    expected_media = SHARED_EXTENSION_MEDIA_TYPES.get(PurePosixPath(path).suffix.casefold())
+    if expected_media is None or media_type != expected_media:
+        raise CatalogError(f"shared files/{position} extension and media_type disagree")
+    return SharedAsset(path, digest, size, media_type)
+
+
+def load_shared_assets(
+    project_root: str | Path | None = None,
+) -> tuple[SharedAsset, ...]:
+    root = Path(project_root).resolve() if project_root is not None else PROJECT_ROOT
+    document, data = _read_object(root / SHARED_LOCK_RELATIVE_PATH, limit=MAX_MANIFEST_BYTES)
+    _require_exact_keys(
+        document,
+        {"format", "format_version", "files", "notices_sha256", "content_hash"},
+        "shared asset lock",
+    )
+    if document["format"] != "isoworld.shared_assets" or document["format_version"] != 1:
+        raise CatalogError("Unknown shared asset lock format")
+    content_hash = document["content_hash"]
+    if (
+        not isinstance(content_hash, str)
+        or SHA256_PATTERN.fullmatch(content_hash) is None
+        or _canonical_hash(document, "content_hash") != content_hash
+    ):
+        raise CatalogError("Shared asset lock content hash does not verify")
+    expected_bytes = (
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    if data != expected_bytes:
+        raise CatalogError("Shared asset lock bytes are not in canonical form")
+    notices_hash = document["notices_sha256"]
+    if not isinstance(notices_hash, str) or SHA256_PATTERN.fullmatch(notices_hash) is None:
+        raise CatalogError("Shared asset notices hash is invalid")
+    notices_path = _safe_file(root, "THIRD_PARTY_NOTICES.md")
+    if _sha256_file(notices_path) != notices_hash:
+        raise CatalogError("Shared asset lock does not match THIRD_PARTY_NOTICES.md")
+    raw_files = document["files"]
+    if not isinstance(raw_files, list) or len(raw_files) > MAX_SHARED_FILES:
+        raise CatalogError("Shared asset files must be a bounded list")
+    assets = tuple(_parse_shared_asset(raw, index) for index, raw in enumerate(raw_files))
+    paths = [asset.path for asset in assets]
+    if paths != sorted(set(paths)):
+        raise CatalogError("Shared asset paths must be unique and sorted")
+    folded_prefixes: dict[str, str] = {}
+    for path in paths:
+        prefix: list[str] = []
+        for component in PurePosixPath(path).parts:
+            prefix.append(component)
+            exact = "/".join(prefix)
+            folded = exact.casefold()
+            previous = folded_prefixes.setdefault(folded, exact)
+            if previous != exact:
+                raise CatalogError(
+                    "Shared asset path prefixes collide case-insensitively: "
+                    f"{previous!r} and {exact!r}"
+                )
+    if sum(asset.size for asset in assets) > MAX_SHARED_BYTES:
+        raise CatalogError("Shared assets exceed the total-byte limit")
+
+    shared_root = root / "game_data/shared"
+    if not assets:
+        if shared_root.exists() or shared_root.is_symlink():
+            raise CatalogError("Empty shared asset lock requires no shared directory")
+        return ()
+    _real_directory(root / "game_data", "game data root")
+    _real_directory(shared_root, "shared asset root")
+    disk_files: set[str] = set()
+    disk_directories: set[str] = set()
+    for current, directory_names, file_names in os.walk(
+        shared_root,
+        topdown=True,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        directory_names.sort()
+        file_names.sort()
+        for name in directory_names:
+            directory = current_path / name
+            info = directory.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise CatalogError(f"Shared assets contain an unsafe directory: {directory}")
+            disk_directories.add(directory.relative_to(root).as_posix())
+        for name in file_names:
+            path = current_path / name
+            info = path.lstat()
+            if (
+                stat.S_ISLNK(info.st_mode)
+                or not stat.S_ISREG(info.st_mode)
+                or info.st_nlink != 1
+                or info.st_size > MAX_BUNDLE_FILE_BYTES
+            ):
+                raise CatalogError(f"Shared assets contain an unsafe file: {path}")
+            disk_files.add(path.relative_to(root).as_posix())
+    if disk_files != set(paths):
+        raise CatalogError("Shared asset tree differs from its lock")
+    expected_directories = {
+        parent.as_posix()
+        for path in paths
+        for parent in PurePosixPath(path).parents
+        if parent.as_posix() not in {".", "game_data", "game_data/shared"}
+    }
+    if disk_directories != expected_directories:
+        raise CatalogError("Shared asset directory tree differs from its lock")
+    for asset in assets:
+        path = _safe_file(root, asset.path)
+        if path.stat().st_size != asset.size or _sha256_file(path) != asset.sha256:
+            raise CatalogError(f"Shared asset failed size/hash verification: {asset.path}")
+        if not media_signature_matches(path, asset.media_type):
+            raise CatalogError(f"Shared asset bytes disagree with media type: {asset.path}")
+        if asset.media_type == "application/json":
+            value, _ = _read_object(path, limit=MAX_MANIFEST_BYTES)
+            _scan_runtime_json(value, asset.path)
+    return assets
+
+
+def _audit_game_data_root(
+    root: Path,
+    releases: tuple[CatalogRelease, ...],
+    shared_assets: tuple[SharedAsset, ...],
+) -> None:
+    game_data = root / "game_data"
+    _real_directory(game_data, "game data root")
+    expected = {"shared.lock.json", "worlds.lock.json"}
+    if releases:
+        expected.add("worlds")
+    if shared_assets:
+        expected.add("shared")
+    actual: set[str] = set()
+    for entry in game_data.iterdir():
+        info = entry.lstat()
+        if stat.S_ISLNK(info.st_mode):
+            raise CatalogError(f"game data contains a symlink: {entry.name}")
+        actual.add(entry.name)
+    if actual != expected:
+        raise CatalogError(
+            f"game data root differs from the locked allowlist; "
+            f"missing={sorted(expected - actual)}, extra={sorted(actual - expected)}"
+        )
+
+
+def load_catalog(project_root: str | Path | None = None) -> tuple[CatalogRelease, ...]:
+    root = Path(project_root).resolve() if project_root is not None else PROJECT_ROOT
+    shared_assets = load_shared_assets(root)
+    document, data = _read_object(root / CATALOG_RELATIVE_PATH, limit=MAX_MANIFEST_BYTES)
+    _require_exact_keys(document, {"format", "format_version", "releases"}, "catalog")
+    if document["format"] != "isoworld.world_catalog" or document["format_version"] != 1:
+        raise CatalogError("Unknown world catalog format")
+    raw_releases = document["releases"]
+    if not isinstance(raw_releases, list):
+        raise CatalogError("catalog releases must be a list")
+    releases = tuple(_parse_release(raw, index) for index, raw in enumerate(raw_releases))
+    keys = [(item.world_id, item.release_id) for item in releases]
+    if keys != sorted(set(keys)):
+        raise CatalogError("catalog releases must be unique and sorted by world/release")
+    hashes = [item.bundle_hash for item in releases]
+    if len(hashes) != len(set(hashes)):
+        raise CatalogError("catalog reuses one bundle hash for multiple releases")
+    expected_bytes = (
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    if data != expected_bytes:
+        raise CatalogError("world catalog bytes are not in canonical form")
+    _audit_catalog_storage(root, releases)
+    _audit_game_data_root(root, releases, shared_assets)
+    return releases
+
+
+def select_release(
+    releases: tuple[CatalogRelease, ...],
+    *,
+    world_id: str | None = None,
+    release_id: str | None = None,
+) -> CatalogRelease:
+    matches = tuple(
+        item
+        for item in releases
+        if (world_id is None or item.world_id == world_id)
+        and (release_id is None or item.release_id == release_id)
+    )
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise CatalogError("No installed release matches the requested world and release")
+    raise CatalogError("World/release selection is ambiguous; specify both identifiers")
+
+
+def _file_record(raw: Any, position: int) -> tuple[str, str, int, str]:
+    if not isinstance(raw, dict):
+        raise CatalogError(f"bundle files/{position} must be an object")
+    _require_exact_keys(raw, {"path", "sha256", "size", "media_type"}, f"files/{position}")
+    path = _bundle_payload_path(raw["path"], f"files/{position}/path").as_posix()
+    if path == BUNDLE_MANIFEST:
+        raise CatalogError("The bundle manifest cannot declare itself as payload")
+    digest = raw["sha256"]
+    size = raw["size"]
+    media_type = raw["media_type"]
+    if not isinstance(digest, str) or SHA256_PATTERN.fullmatch(digest) is None:
+        raise CatalogError(f"files/{position}/sha256 is invalid")
+    if (
+        not isinstance(size, int)
+        or isinstance(size, bool)
+        or not 0 <= size <= MAX_BUNDLE_FILE_BYTES
+    ):
+        raise CatalogError(f"files/{position}/size is invalid")
+    if (
+        not isinstance(media_type, str)
+        or not media_type
+        or any(character.isspace() for character in media_type)
+    ):
+        raise CatalogError(f"files/{position}/media_type is invalid")
+    return path, digest, size, media_type
+
+
+def _scan_runtime_json(value: Any, context: str) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key.casefold() in FORBIDDEN_JSON_KEYS:
+                raise CatalogError(f"{context} contains authoring/provider key {key!r}")
+            if key == "format" and isinstance(child, str) and child in FORBIDDEN_JSON_FORMATS:
+                raise CatalogError(f"{context} contains authoring-only format {child!r}")
+            _scan_runtime_json(child, context)
+    elif isinstance(value, list):
+        for child in value:
+            _scan_runtime_json(child, context)
+
+
+def _validate_license_record(record: tuple[str, str, int, str], context: str) -> None:
+    relative, _digest, size, media_type = record
+    expected = LICENSE_MEDIA_TYPES.get(PurePosixPath(relative).suffix.casefold())
+    if expected is None or media_type != expected:
+        raise CatalogError(f"{context} must use an approved license notice format")
+    if size > MAX_LICENSE_BYTES:
+        raise CatalogError(f"{context} exceeds the license notice size limit")
+
+
+def _verify_license_payload(root: Path, record: tuple[str, str, int, str]) -> None:
+    relative, _digest, _size, media_type = record
+    path = _safe_file(root, relative)
+    if media_type == "application/json":
+        document, _ = _read_object(path, limit=MAX_LICENSE_BYTES)
+        _scan_runtime_json(document, relative)
+        return
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise CatalogError(f"License notice is not UTF-8 text: {relative}") from exc
+    if "\x00" in text:
+        raise CatalogError(f"License notice contains NUL bytes: {relative}")
+
+
+def _validate_worldpack_envelope(raw: dict[str, Any]) -> None:
+    expected = {"format", "format_version", "world", "collections", "content_hash"}
+    version = raw.get("format_version")
+    if isinstance(version, int) and not isinstance(version, bool) and version >= 5:
+        expected.add("runtime_requirements")
+    _require_exact_keys(raw, expected, "bundled worldpack")
+
+
+def _validate_renderpack_shape(raw: dict[str, Any]) -> None:
+    _require_exact_keys(
+        raw,
+        {
+            "format",
+            "format_version",
+            "world_id",
+            "world_content_hash",
+            "assets",
+            "bindings",
+            "content_hash",
+        },
+        "bundled renderpack",
+    )
+    assets = raw.get("assets")
+    bindings = raw.get("bindings")
+    if not isinstance(assets, list) or not isinstance(bindings, list):
+        raise CatalogError("renderpack assets and bindings must be lists")
+    for asset_index, asset in enumerate(assets):
+        if not isinstance(asset, dict):
+            raise CatalogError(f"renderpack assets/{asset_index} must be an object")
+        _require_exact_keys(asset, {"id", "kind", "files"}, f"assets/{asset_index}")
+        if not isinstance(asset["files"], list):
+            raise CatalogError(f"renderpack assets/{asset_index}/files must be a list")
+        for file_index, item in enumerate(asset["files"]):
+            if not isinstance(item, dict):
+                raise CatalogError("renderpack asset file must be an object")
+            _require_exact_keys(
+                item,
+                {"role", "path", "sha256", "media_type"},
+                f"assets/{asset_index}/files/{file_index}",
+            )
+    allowed_binding = {"slot", "asset_id", "clip", "moving_clip", "scale", "layer"}
+    for index, binding in enumerate(bindings):
+        if (
+            not isinstance(binding, dict)
+            or not {"slot", "asset_id"} <= set(binding)
+            or not set(binding) <= allowed_binding
+        ):
+            raise CatalogError(f"renderpack bindings/{index} has invalid fields")
+
+
+def _validate_clipset(raw: dict[str, Any], context: str) -> None:
+    _require_exact_keys(raw, {"format", "format_version", "clips"}, context)
+    if raw.get("format") != "isoworld.clipset" or raw.get("format_version") != 1:
+        raise CatalogError(f"{context} is not a supported clipset")
+    clips = raw.get("clips")
+    if not isinstance(clips, list):
+        raise CatalogError(f"{context}/clips must be a list")
+    for clip_index, clip in enumerate(clips):
+        if not isinstance(clip, dict):
+            raise CatalogError(f"{context}/clips/{clip_index} must be an object")
+        _require_exact_keys(
+            clip,
+            {"id", "pivot", "loop", "frames"},
+            f"{context}/clips/{clip_index}",
+        )
+        frames = clip["frames"]
+        if not isinstance(frames, list):
+            raise CatalogError(f"{context}/clips/{clip_index}/frames must be a list")
+        for frame_index, frame in enumerate(frames):
+            if not isinstance(frame, dict):
+                raise CatalogError("clipset frame must be an object")
+            _require_exact_keys(
+                frame,
+                {"x", "y", "width", "height", "duration_ticks"},
+                f"{context}/clips/{clip_index}/frames/{frame_index}",
+            )
+
+
+def verify_release(
+    release: CatalogRelease,
+    project_root: str | Path | None = None,
+) -> VerifiedBundle:
+    project = Path(project_root).resolve() if project_root is not None else PROJECT_ROOT
+    relative_root = _safe_posix_path(release.path, "catalog release path")
+    root = project.joinpath(*relative_root.parts)
+    if not root.is_dir() or root.is_symlink():
+        raise CatalogError(f"Installed bundle root is missing or unsafe: {release.path}")
+    disk_files: list[Path] = []
+    disk_directories: set[str] = set()
+    total_bytes = 0
+    for current, directory_names, file_names in os.walk(root, topdown=True, followlinks=False):
+        current_path = Path(current)
+        directory_names.sort()
+        file_names.sort()
+        for name in directory_names:
+            item = current_path / name
+            info = item.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise CatalogError(f"Bundle contains an unsafe directory: {item.relative_to(root)}")
+            disk_directories.add(item.relative_to(root).as_posix())
+        for name in file_names:
+            item = current_path / name
+            info = item.lstat()
+            if (
+                stat.S_ISLNK(info.st_mode)
+                or not stat.S_ISREG(info.st_mode)
+                or info.st_nlink != 1
+                or info.st_size > MAX_BUNDLE_FILE_BYTES
+            ):
+                raise CatalogError(f"Bundle contains an unsafe file: {item.relative_to(root)}")
+            total_bytes += info.st_size
+            disk_files.append(item)
+    if len(disk_files) > MAX_BUNDLE_FILES + 1 or total_bytes > MAX_BUNDLE_BYTES:
+        raise CatalogError("Bundle exceeds the file-count or total-byte limit")
+
+    manifest_path = _safe_file(root, BUNDLE_MANIFEST)
+    manifest, manifest_bytes = _read_object(manifest_path, limit=MAX_MANIFEST_BYTES)
+    expected_manifest = (
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    if manifest_bytes != expected_manifest:
+        raise CatalogError("Bundle manifest bytes are not in canonical form")
+    _require_exact_keys(
+        manifest,
+        {
+            "format",
+            "format_version",
+            "world_id",
+            "release_id",
+            "source_hashes",
+            "worldpack",
+            "renderpack",
+            "required_runtime_features",
+            "files",
+            "licenses",
+            "bundle_hash",
+        },
+        "bundle manifest",
+    )
+    if manifest["format"] != "isoworld.runtime_bundle" or manifest["format_version"] != 1:
+        raise CatalogError("Unknown runtime bundle format")
+    if manifest["world_id"] != release.world_id or manifest["release_id"] != release.release_id:
+        raise CatalogError("Catalog and bundle identity differ")
+    if manifest["bundle_hash"] != release.bundle_hash:
+        raise CatalogError("Catalog and bundle hashes differ")
+    if _canonical_hash(manifest, "bundle_hash") != release.bundle_hash:
+        raise CatalogError("Bundle manifest hash does not verify")
+
+    source_hashes = manifest["source_hashes"]
+    if not isinstance(source_hashes, dict):
+        raise CatalogError("bundle source_hashes must be an object")
+    _require_exact_keys(
+        source_hashes,
+        {"worldpack_content_hash", "renderpack_content_hash"},
+        "bundle source_hashes",
+    )
+    if any(
+        not isinstance(value, str) or SHA256_PATTERN.fullmatch(value) is None
+        for value in source_hashes.values()
+    ):
+        raise CatalogError("bundle source hashes must be SHA-256 values")
+
+    worldpack = manifest["worldpack"]
+    renderpack = manifest["renderpack"]
+    if not isinstance(worldpack, dict) or not isinstance(renderpack, dict):
+        raise CatalogError("bundle pack descriptors must be objects")
+    _require_exact_keys(worldpack, {"path", "format_version", "content_hash"}, "worldpack")
+    _require_exact_keys(
+        renderpack,
+        {"path", "format_version", "content_hash", "world_content_hash"},
+        "renderpack",
+    )
+    if worldpack["path"] != "worldpack.json" or renderpack["path"] != "renderpack.json":
+        raise CatalogError("bundle pack paths are not canonical")
+    if (
+        not isinstance(worldpack["format_version"], int)
+        or isinstance(worldpack["format_version"], bool)
+        or renderpack["format_version"] != 1
+    ):
+        raise CatalogError("bundle pack format versions are invalid")
+    for value in (
+        worldpack["content_hash"],
+        renderpack["content_hash"],
+        renderpack["world_content_hash"],
+    ):
+        if not isinstance(value, str) or SHA256_PATTERN.fullmatch(value) is None:
+            raise CatalogError("bundle pack content hashes must be SHA-256 values")
+
+    raw_features = manifest["required_runtime_features"]
+    if (
+        not isinstance(raw_features, list)
+        or raw_features != sorted(set(raw_features))
+        or not all(isinstance(value, str) and ID_PATTERN.fullmatch(value) for value in raw_features)
+    ):
+        raise CatalogError("bundle required runtime features are invalid")
+    if tuple(raw_features) != release.required_runtime_features:
+        raise CatalogError("Catalog and bundle feature requirements differ")
+
+    raw_files = manifest["files"]
+    raw_licenses = manifest["licenses"]
+    if not isinstance(raw_files, list) or not isinstance(raw_licenses, list):
+        raise CatalogError("bundle files and licenses must be lists")
+    records = tuple(_file_record(raw, index) for index, raw in enumerate(raw_files))
+    if not records or len(records) > MAX_BUNDLE_FILES:
+        raise CatalogError("bundle files must be a non-empty bounded list")
+    paths = [record[0] for record in records]
+    if paths != sorted(set(paths)):
+        raise CatalogError("bundle payload paths must be unique and sorted")
+    if len({path.casefold() for path in paths}) != len(paths):
+        raise CatalogError("bundle payload paths collide case-insensitively")
+    folded_prefixes: dict[str, str] = {}
+    for path in paths:
+        prefix: list[str] = []
+        for component in PurePosixPath(path).parts:
+            prefix.append(component)
+            exact_prefix = "/".join(prefix)
+            folded_prefix = exact_prefix.casefold()
+            previous = folded_prefixes.setdefault(folded_prefix, exact_prefix)
+            if previous != exact_prefix:
+                raise CatalogError(
+                    "bundle payload prefixes collide case-insensitively: "
+                    f"{previous!r} and {exact_prefix!r}"
+                )
+    if sum(record[2] for record in records) > MAX_BUNDLE_BYTES:
+        raise CatalogError("bundle file records exceed the total-byte limit")
+    license_records = [raw for raw in raw_files if raw.get("path", "").startswith("licenses/")]
+    if raw_licenses != license_records or not raw_licenses:
+        raise CatalogError("bundle license records are incomplete or inconsistent")
+    parsed_licenses = tuple(record for record in records if record[0].startswith("licenses/"))
+    for index, record in enumerate(parsed_licenses):
+        _validate_license_record(record, f"licenses/{index}")
+    all_disk_paths = {item.relative_to(root).as_posix() for item in disk_files}
+    expected_disk_paths = {BUNDLE_MANIFEST, *paths}
+    if all_disk_paths != expected_disk_paths:
+        raise CatalogError("bundle file tree differs from the manifest")
+    expected_directories = {
+        parent.as_posix()
+        for relative in expected_disk_paths
+        for parent in PurePosixPath(relative).parents
+        if parent.as_posix() != "."
+    }
+    if disk_directories != expected_directories:
+        raise CatalogError("bundle directory tree contains missing or extra directories")
+    actual_paths = sorted(all_disk_paths - {BUNDLE_MANIFEST})
+    if actual_paths != paths:
+        raise CatalogError("bundle tree differs from the manifest payload list")
+    for path, digest, size, media_type in records:
+        payload = _safe_file(root, path)
+        if payload.stat().st_size != size or _sha256_file(payload) != digest:
+            raise CatalogError(f"bundle payload failed size/hash verification: {path}")
+        if path.startswith("assets/") and not media_signature_matches(payload, media_type):
+            raise CatalogError(f"bundle asset contents do not match declared media type: {path}")
+    for record in parsed_licenses:
+        _verify_license_payload(root, record)
+    records_by_path = {
+        path: {"sha256": digest, "size": size, "media_type": media_type}
+        for path, digest, size, media_type in records
+    }
+    for required_json in ("worldpack.json", "renderpack.json"):
+        if records_by_path.get(required_json, {}).get("media_type") != "application/json":
+            raise CatalogError(f"{required_json} must be inventoried as application/json")
+
+    if worldpack["content_hash"] != release.worldpack_hash:
+        raise CatalogError("Catalog and bundled worldpack hashes differ")
+    if renderpack["content_hash"] != release.renderpack_hash:
+        raise CatalogError("Catalog and bundled renderpack hashes differ")
+    if renderpack["world_content_hash"] != worldpack["content_hash"]:
+        raise CatalogError("Bundled renderpack targets a different worldpack")
+
+    worldpack_path = _safe_file(root, worldpack["path"])
+    renderpack_path = _safe_file(root, renderpack["path"])
+    worldpack_raw, _ = _read_object(worldpack_path, limit=64 * 1024 * 1024)
+    renderpack_raw, _ = _read_object(renderpack_path, limit=16 * 1024 * 1024)
+    _scan_runtime_json(worldpack_raw, "bundled worldpack")
+    _scan_runtime_json(renderpack_raw, "bundled renderpack")
+    _validate_worldpack_envelope(worldpack_raw)
+    _validate_renderpack_shape(renderpack_raw)
+    for relative, record in records_by_path.items():
+        if record["media_type"] != "application/json" or relative in {
+            "worldpack.json",
+            "renderpack.json",
+        }:
+            continue
+        document, _ = _read_object(_safe_file(root, relative), limit=MAX_MANIFEST_BYTES)
+        _scan_runtime_json(document, relative)
+        if relative.startswith("assets/"):
+            _validate_clipset(document, relative)
+    try:
+        loaded_world = load_worldpack(worldpack_path)
+        loaded_render = load_renderpack(renderpack_path, loaded_world)
+    except (WorldPackError, RenderPackError) as exc:
+        raise CatalogError(f"Bundled runtime content is invalid: {exc}") from exc
+    if (
+        loaded_world.world_id != release.world_id
+        or loaded_render.world_id != release.world_id
+        or loaded_world.format_version != worldpack["format_version"]
+        or loaded_world.content_hash != worldpack["content_hash"]
+        or loaded_render.content_hash != renderpack["content_hash"]
+        or loaded_render.world_content_hash != loaded_world.content_hash
+    ):
+        raise CatalogError("Loaded runtime content disagrees with bundle metadata")
+    if loaded_world.content_hash != source_hashes["worldpack_content_hash"]:
+        raise CatalogError("Source worldpack hash disagrees with the bundled worldpack")
+    if tuple(loaded_world.runtime_requirements.required_features) != tuple(raw_features):
+        raise CatalogError("Worldpack and bundle feature requirements differ")
+    referenced_assets: dict[str, tuple[str, str]] = {}
+    for asset in loaded_render.assets:
+        for item in asset.files:
+            relative = _bundle_payload_path(
+                item.path,
+                f"renderpack asset {asset.id}",
+            ).as_posix()
+            if not relative.startswith("assets/"):
+                raise CatalogError(f"renderpack asset is outside assets/**: {relative}")
+            current = (item.sha256, item.media_type)
+            previous = referenced_assets.get(relative)
+            if previous is not None and previous != current:
+                raise CatalogError(f"renderpack conflicts on asset metadata: {relative}")
+            referenced_assets[relative] = current
+    manifest_assets = {
+        path: (record["sha256"], record["media_type"])
+        for path, record in records_by_path.items()
+        if path.startswith("assets/")
+    }
+    if referenced_assets != manifest_assets:
+        raise CatalogError("renderpack references and manifest asset inventory differ")
+    return VerifiedBundle(release, root, worldpack_path, renderpack_path, manifest)
+
+
+def verify_catalog(project_root: str | Path | None = None) -> tuple[VerifiedBundle, ...]:
+    releases = load_catalog(project_root)
+    bundles = tuple(verify_release(release, project_root) for release in releases)
+    for bundle in bundles:
+        worldpack = load_worldpack(bundle.worldpack_path)
+        compatibility = worldpack.compatibility_with(
+            RUNTIME_API_VERSION,
+            SUPPORTED_RUNTIME_FEATURES,
+        )
+        if not compatibility.compatible:
+            raise CatalogError(
+                "Installed release is incompatible with this runtime: "
+                f"{bundle.release.world_id}/{bundle.release.release_id}; "
+                f"api_compatible={compatibility.api_compatible}; "
+                f"missing_features={list(compatibility.missing_required_features)}"
+            )
+    return bundles

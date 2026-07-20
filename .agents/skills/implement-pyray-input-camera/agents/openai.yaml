@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Pyray Input and Camera"
+  short_description: "Build action mapping, viewport, and picking"
+  default_prompt: "Use $implement-pyray-input-camera to implement semantic input, Camera2D, and isometric picking."

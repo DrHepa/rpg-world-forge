@@ -1,0 +1,284 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import stat
+import subprocess
+import sys
+import unicodedata
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path, PurePosixPath
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SHARED_ROOT = PROJECT_ROOT / "game_data/shared"
+LOCK_PATH = PROJECT_ROOT / "game_data/shared.lock.json"
+NOTICES_PATH = PROJECT_ROOT / "THIRD_PARTY_NOTICES.md"
+MAX_FILES = 10_000
+MAX_FILE_BYTES = 512 * 1024 * 1024
+MAX_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
+MAX_PATH_BYTES = 1024
+MEDIA_TYPES = {
+    ".frag": "text/x-glsl",
+    ".fs": "text/x-glsl",
+    ".glsl": "text/x-glsl",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".json": "application/json",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".otf": "font/otf",
+    ".png": "image/png",
+    ".ttf": "font/ttf",
+    ".vert": "text/x-glsl",
+    ".vs": "text/x-glsl",
+    ".wav": "audio/wav",
+    ".webp": "image/webp",
+}
+WINDOWS_RESERVED_NAMES = {
+    "aux",
+    "con",
+    "nul",
+    "prn",
+    *(f"com{number}" for number in range(1, 10)),
+    *(f"lpt{number}" for number in range(1, 10)),
+}
+FORBIDDEN_COMPONENTS = {
+    ".agents",
+    ".worldforge",
+    "authoring",
+    "candidates",
+    "credentials",
+    "phase_reports",
+    "prompts",
+    "recipes",
+    "references",
+    "source",
+    "specs",
+    "weights",
+    "workflows",
+}
+
+
+@contextmanager
+def _exclusive_mutation() -> Iterator[None]:
+    path = PROJECT_ROOT / ".isoworld-mutation.lock"
+    try:
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise ValueError("Another game mutation is already in progress") from exc
+    identity = os.fstat(descriptor)
+    try:
+        os.write(descriptor, f"pid={os.getpid()} operation=shared-assets\n".encode("ascii"))
+        yield
+    finally:
+        os.close(descriptor)
+        try:
+            current = path.lstat()
+        except FileNotFoundError:
+            current = None
+        if current is not None and (current.st_dev, current.st_ino) == (
+            identity.st_dev,
+            identity.st_ino,
+        ):
+            path.unlink()
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _require_real_directory(path: Path, context: str) -> None:
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        raise ValueError(f"{context} is missing: {path}") from exc
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise ValueError(f"{context} must be a real directory: {path}")
+
+
+def _require_regular_file(path: Path, context: str) -> None:
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        raise ValueError(f"{context} is missing: {path}") from exc
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise ValueError(f"{context} must be a standalone regular file: {path}")
+
+
+def _write_new_file(path: Path, data: bytes) -> None:
+    with path.open("xb") as target:
+        target.write(data)
+        target.flush()
+        os.fsync(target.fileno())
+
+
+def _content_hash(document: dict[str, object]) -> str:
+    payload = dict(document)
+    payload.pop("content_hash", None)
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_relative_path(relative: str) -> None:
+    pure = PurePosixPath(relative)
+    if (
+        pure.is_absolute()
+        or pure.as_posix() != relative
+        or pure.parts[:2] != ("game_data", "shared")
+        or len(pure.parts) < 3
+        or unicodedata.normalize("NFC", relative) != relative
+        or len(relative.encode("utf-8")) > MAX_PATH_BYTES
+    ):
+        raise ValueError(f"shared asset path is not canonical: {relative!r}")
+    for component in pure.parts:
+        folded = component.casefold()
+        device = component.split(".", 1)[0].casefold()
+        if (
+            len(component.encode("utf-8")) > 255
+            or component.endswith((" ", "."))
+            or any(ord(character) < 32 or character in '<>:"|?*' for character in component)
+            or device in WINDOWS_RESERVED_NAMES
+            or folded.startswith(".")
+            or folded in FORBIDDEN_COMPONENTS
+            or PurePosixPath(component).stem.casefold() in FORBIDDEN_COMPONENTS
+        ):
+            raise ValueError(f"shared asset path is not portable: {relative!r}")
+
+
+def _records() -> list[dict[str, object]]:
+    if not SHARED_ROOT.exists() and not SHARED_ROOT.is_symlink():
+        return []
+    info = SHARED_ROOT.lstat()
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise ValueError("game_data/shared must be a real directory")
+    records: list[dict[str, object]] = []
+    actual_directories: set[str] = set()
+    total = 0
+    for current, directory_names, file_names in os.walk(
+        SHARED_ROOT,
+        topdown=True,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        directory_names.sort()
+        file_names.sort()
+        for name in directory_names:
+            directory = current_path / name
+            directory_info = directory.lstat()
+            if stat.S_ISLNK(directory_info.st_mode) or not stat.S_ISDIR(directory_info.st_mode):
+                raise ValueError(f"shared assets contain an unsafe directory: {directory}")
+            actual_directories.add(directory.relative_to(SHARED_ROOT).as_posix())
+        for name in file_names:
+            path = current_path / name
+            file_info = path.lstat()
+            if (
+                stat.S_ISLNK(file_info.st_mode)
+                or not stat.S_ISREG(file_info.st_mode)
+                or file_info.st_nlink != 1
+                or file_info.st_size > MAX_FILE_BYTES
+            ):
+                raise ValueError(f"shared assets contain an unsafe file: {path}")
+            relative = path.relative_to(PROJECT_ROOT).as_posix()
+            _validate_relative_path(relative)
+            media_type = MEDIA_TYPES.get(path.suffix.casefold())
+            if media_type is None:
+                raise ValueError(f"shared asset has an unsupported extension: {relative}")
+            total += file_info.st_size
+            if total > MAX_TOTAL_BYTES or len(records) >= MAX_FILES:
+                raise ValueError("shared assets exceed the file-count or byte limit")
+            records.append(
+                {
+                    "media_type": media_type,
+                    "path": relative,
+                    "sha256": _sha256(path),
+                    "size": file_info.st_size,
+                }
+            )
+    records.sort(key=lambda item: str(item["path"]))
+    if not records:
+        if actual_directories:
+            raise ValueError("shared assets contain an empty or undeclared directory")
+        SHARED_ROOT.rmdir()
+        return []
+    expected_directories = {
+        parent.relative_to(PurePosixPath("game_data/shared")).as_posix()
+        for record in records
+        for parent in PurePosixPath(str(record["path"])).parents
+        if PurePosixPath("game_data/shared") in parent.parents
+    }
+    if actual_directories != expected_directories:
+        raise ValueError("shared assets contain an empty or undeclared directory")
+    return records
+
+
+def lock_shared_assets() -> dict[str, object]:
+    with _exclusive_mutation():
+        _require_real_directory(PROJECT_ROOT, "game project root")
+        _require_real_directory(PROJECT_ROOT / "game_data", "game data root")
+        _require_regular_file(LOCK_PATH, "shared asset lock")
+        _require_regular_file(NOTICES_PATH, "third-party notices")
+        records = _records()
+        document: dict[str, object] = {
+            "format": "isoworld.shared_assets",
+            "format_version": 1,
+            "files": records,
+            "notices_sha256": _sha256(NOTICES_PATH),
+        }
+        document["content_hash"] = _content_hash(document)
+        encoded = (
+            json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        before = LOCK_PATH.read_bytes()
+        temporary = LOCK_PATH.with_name(f".{LOCK_PATH.name}.tmp-{uuid.uuid4().hex}")
+        try:
+            _write_new_file(temporary, encoded)
+            os.replace(temporary, LOCK_PATH)
+            environment = {
+                key: value
+                for key, value in os.environ.items()
+                if key not in {"PYTHONHOME", "PYTHONPATH"}
+            }
+            result = subprocess.run(
+                [sys.executable, "-I", str(PROJECT_ROOT / "scripts/verify_game.py")],
+                cwd=PROJECT_ROOT,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                raise ValueError(result.stderr.strip() or "shared asset verification failed")
+        except Exception:
+            restore = LOCK_PATH.with_name(f".{LOCK_PATH.name}.restore-{uuid.uuid4().hex}")
+            _write_new_file(restore, before)
+            os.replace(restore, LOCK_PATH)
+            raise
+        finally:
+            temporary.unlink(missing_ok=True)
+        return document
+
+
+def main() -> int:
+    try:
+        document = lock_shared_assets()
+    except (OSError, ValueError) as exc:
+        print(f"ERROR {exc}", file=sys.stderr)
+        return 1
+    print(f"shared_assets={len(document['files'])} hash={document['content_hash']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -44,18 +44,28 @@
 - [x] Delayed consequences and multi-stage arcs.
 - [x] Worldpack v4 and save/replay v3 with strict cross-reference validation.
 
-## M4 - Multiple world production
+## M4 - Multiple world production (complete)
 
-- Create, clone, and version independent world-authoring repositories.
-- Allow each world to define roster, genre, rules, and localization.
-- Package personal campaigns per playable actor.
-- Release immutable runtime bundles and validate compatibility without engine
-  coupling.
-- Materialize independent pyray/raylib game repositories with no `AGENTS.md`,
-  skills, `.worldforge`, editable canon, production evidence, or Forge/AI
-  dependency.
-- Keep all game-construction skills and external bundle/runtime operations in
-  the Forge.
+- [x] Create, inspect, upgrade, clone, and stable-SemVer version independent
+  world-authoring repositories.
+- [x] Compile worldpack v5 with world-defined roster, genre, rules,
+  localization, runtime requirements, and personal campaigns.
+- [x] Export and verify immutable runtime bundles with canonical manifests,
+  content hashes, contained paths, licenses, and compatibility declarations.
+- [x] Import multiple world/release bundles atomically into a locked,
+  runtime-neutral game catalog.
+- [x] Materialize independent pyray/raylib game repositories with no
+  `AGENTS.md`, skills, `.worldforge`, editable canon, production evidence, or
+  Forge/AI dependency.
+- [x] Vendor an immutable `src/isoworld/` snapshot, isolate game work under
+  `src/game/`, and separate runtime migration from the locked pyray platform
+  migration.
+- [x] Provide 24 Forge-only, phase-scoped skills: four world/release operations
+  and twenty standalone-game implementation phases.
+- [x] Pin the first desktop baseline to CPython 3.11/3.12,
+  `raylib==6.0.1.0` imported as `pyray`, native raylib 6.0, and a CI-consumed
+  exact dependency/build/quality lock, with headless, native-smoke, benchmark, package,
+  and platform-CI entry points.
 
 ## M5 - Asset production
 

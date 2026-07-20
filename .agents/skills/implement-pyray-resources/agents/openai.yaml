@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Pyray Resources"
+  short_description: "Own and validate native graphics resources"
+  default_prompt: "Use $implement-pyray-resources to implement safe pyray graphics-resource lifecycle management."

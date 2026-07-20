@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Isometric Rendering"
+  short_description: "Build deterministic 2.5D render planning"
+  default_prompt: "Use $implement-pyray-isometric-rendering to implement the tested isometric rendering phase."

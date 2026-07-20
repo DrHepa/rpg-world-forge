@@ -1,0 +1,168 @@
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import sys
+from pathlib import Path
+
+from game import GAME_ID, GAME_TITLE
+from game.catalog import (
+    CatalogError,
+    load_catalog,
+    select_release,
+    verify_release,
+)
+from isoworld.content.loader import WorldPackError, load_worldpack
+from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
+from isoworld.content.renderpack import RenderPackError, load_renderpack
+from isoworld.core.app import GameApp
+from isoworld.persistence import PersistenceError, load_game, save_game, state_digest
+
+SLOT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+
+
+def _default_user_data_root() -> Path:
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library/Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+    return (base / GAME_ID).resolve()
+
+
+def _save_path(
+    root: Path,
+    world_id: str,
+    release_id: str,
+    slot: str | None,
+) -> Path | None:
+    if slot is None:
+        return None
+    if SLOT_PATTERN.fullmatch(slot) is None:
+        raise ValueError("save slots use lowercase letters, digits, underscore, and hyphen")
+    return root / "saves" / world_id / release_id / f"{slot}.json"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=f"Run {GAME_TITLE}")
+    parser.add_argument("--world", help="installed world ID")
+    parser.add_argument("--release", help="installed release ID")
+    parser.add_argument("--list-worlds", action="store_true", help="list installed releases")
+    parser.add_argument(
+        "--headless-ticks",
+        type=int,
+        metavar="N",
+        help="simulate N ticks without importing pyray or opening a window",
+    )
+    parser.add_argument("--load-slot", help="load a named save slot before running")
+    parser.add_argument("--quick-save-slot", help="F5/F9 quick-save slot")
+    parser.add_argument("--save-on-exit-slot", help="write a named save after the run")
+    parser.add_argument(
+        "--user-data",
+        type=Path,
+        default=_default_user_data_root(),
+        help="writable settings/save root (defaults to the platform user-data directory)",
+    )
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    try:
+        releases = load_catalog()
+        if args.list_worlds:
+            for release in releases:
+                features = ",".join(release.required_runtime_features) or "-"
+                print(
+                    f"world={release.world_id} release={release.release_id} "
+                    f"bundle={release.bundle_hash} features={features}"
+                )
+            return 0
+        if args.headless_ticks is not None and args.headless_ticks < 0:
+            raise ValueError("--headless-ticks cannot be negative")
+        if (
+            not releases
+            and args.headless_ticks == 0
+            and args.world is None
+            and args.release is None
+            and args.load_slot is None
+            and args.quick_save_slot is None
+            and args.save_on_exit_slot is None
+        ):
+            print("world=- release=- tick=0 status=empty_catalog shell=ready")
+            return 0
+        selected = select_release(
+            releases,
+            world_id=args.world,
+            release_id=args.release,
+        )
+        bundle = verify_release(selected)
+        pack = load_worldpack(bundle.worldpack_path)
+        compatibility = pack.compatibility_with(
+            RUNTIME_API_VERSION,
+            SUPPORTED_RUNTIME_FEATURES,
+        )
+        if not compatibility.compatible:
+            raise CatalogError(
+                "Runtime is incompatible with the selected world: "
+                f"api_compatible={compatibility.api_compatible}, "
+                f"missing_features={list(compatibility.missing_required_features)}"
+            )
+        if compatibility.missing_optional_features:
+            print(
+                "WARNING optional runtime features unavailable: "
+                + ", ".join(compatibility.missing_optional_features),
+                file=sys.stderr,
+            )
+        renderpack = load_renderpack(bundle.renderpack_path, pack)
+        user_data = args.user_data.expanduser().resolve()
+        load_path = _save_path(
+            user_data,
+            selected.world_id,
+            selected.release_id,
+            args.load_slot,
+        )
+        quick_path = _save_path(
+            user_data,
+            selected.world_id,
+            selected.release_id,
+            args.quick_save_slot,
+        )
+        exit_path = _save_path(
+            user_data,
+            selected.world_id,
+            selected.release_id,
+            args.save_on_exit_slot,
+        )
+        initial = load_game(load_path, pack) if load_path is not None else None
+        app = GameApp(pack, initial, quick_path, renderpack)
+        if args.headless_ticks is not None:
+            state = app.run_headless(args.headless_ticks)
+            result = 0
+        else:
+            result = app.run()
+            state = app.simulation.state
+        if exit_path is not None:
+            save_game(exit_path, state, pack)
+        print(
+            f"world={pack.world_id} release={selected.release_id} tick={state.tick} "
+            f"day={state.day} minute={state.minute_of_day} "
+            f"active_actor={state.active_actor_id} digest={state_digest(state)}"
+        )
+        return result
+    except (
+        CatalogError,
+        PersistenceError,
+        RenderPackError,
+        WorldPackError,
+        OSError,
+        ValueError,
+    ) as exc:
+        print(f"ERROR {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

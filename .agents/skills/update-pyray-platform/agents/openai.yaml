@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update Pyray Platform"
+  short_description: "Migrate one locked raylib platform baseline"
+  default_prompt: "Use $update-pyray-platform to migrate and verify the standalone game's locked pyray platform baseline."

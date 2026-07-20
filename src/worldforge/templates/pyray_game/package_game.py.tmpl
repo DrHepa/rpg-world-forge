@@ -1,0 +1,582 @@
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import unicodedata
+import uuid
+import zipfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from verify_game import (  # noqa: E402
+    read_game_identity,
+    verify_dependencies,
+    verify_runtime_contract,
+    verify_runtime_snapshot,
+    verify_source_boundary,
+)
+
+ROOT_FILES = (
+    "LICENSE",
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "platform.lock.json",
+    "pyproject.toml",
+    "requirements.lock",
+    "run_game.py",
+    "runtime.lock.json",
+)
+FIXED_ZIP_TIME = (1980, 1, 1, 0, 0, 0)
+MAX_PACKAGE_FILES = 200_000
+MAX_PACKAGE_BYTES = 32 * 1024 * 1024 * 1024
+MAX_PACKAGE_PATH_BYTES = 1024
+MAX_TEST_FIXTURE_BYTES = 512 * 1024 * 1024
+WINDOWS_RESERVED_NAMES = {
+    "aux",
+    "con",
+    "nul",
+    "prn",
+    *(f"com{number}" for number in range(1, 10)),
+    *(f"lpt{number}" for number in range(1, 10)),
+}
+TEST_FIXTURE_MEDIA_TYPES = {
+    ".frag": "text/x-glsl",
+    ".fs": "text/x-glsl",
+    ".glsl": "text/x-glsl",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".json": "application/json",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".otf": "font/otf",
+    ".png": "image/png",
+    ".ttf": "font/ttf",
+    ".vert": "text/x-glsl",
+    ".vs": "text/x-glsl",
+    ".wav": "audio/wav",
+    ".webp": "image/webp",
+}
+FORBIDDEN_FIXTURE_JSON_KEYS = {
+    "api_key",
+    "candidate_file",
+    "checkpoint",
+    "credentials",
+    "extension_id",
+    "extension_version",
+    "model",
+    "model_id",
+    "model_name",
+    "model_version",
+    "negative_prompt",
+    "provider",
+    "provider_id",
+    "recipe",
+    "specification_file",
+    "weights",
+    "workflow",
+    "workflow_file",
+}
+FORBIDDEN_FIXTURE_JSON_FORMATS = {
+    "isoworld.source_manifest",
+    "rpg-world-forge.asset_manifest",
+    "rpg-world-forge.asset_spec",
+    "rpg-world-forge.narrative_analysis",
+    "rpg-world-forge.phase_catalog",
+    "rpg-world-forge.phase_report",
+    "rpg-world-forge.project",
+    "rpg-world-forge.reopen_log",
+    "rpg-world-forge.task_claim",
+    "rpg-world-forge.workflow_status",
+}
+
+
+@contextmanager
+def _exclusive_game_mutation() -> Iterator[None]:
+    """Share one identity-safe lock with all game mutation operations."""
+
+    lock_path = PROJECT_ROOT / ".isoworld-mutation.lock"
+    try:
+        descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError as exc:
+        raise ValueError("Another game mutation is already in progress") from exc
+    identity = os.fstat(descriptor)
+    try:
+        os.write(descriptor, f"pid={os.getpid()} operation=package\n".encode("ascii"))
+        yield
+    finally:
+        os.close(descriptor)
+        try:
+            current = lock_path.lstat()
+        except FileNotFoundError:
+            current = None
+        if current is not None and (current.st_dev, current.st_ino) == (
+            identity.st_dev,
+            identity.st_ino,
+        ):
+            lock_path.unlink()
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_path(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _regular_file(path: Path) -> None:
+    info = path.lstat()
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+        raise ValueError(f"package input is missing or unsafe: {path}")
+
+
+def _source_files() -> list[Path]:
+    source_root = PROJECT_ROOT / "src"
+    files: list[Path] = []
+    for current, directory_names, file_names in os.walk(
+        source_root,
+        topdown=True,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        directory_names.sort()
+        directory_names[:] = [name for name in directory_names if name != "__pycache__"]
+        file_names.sort()
+        for name in directory_names:
+            info = (current_path / name).lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise ValueError(f"source tree contains an unsafe directory: {current_path / name}")
+        for name in file_names:
+            path = current_path / name
+            _regular_file(path)
+            if path.suffix != ".py":
+                raise ValueError(f"source tree contains a non-Python package input: {path}")
+            files.append(path)
+    return files
+
+
+def _python_tree_files(relative_root: str) -> list[Path]:
+    root = PROJECT_ROOT / relative_root
+    info = root.lstat()
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise ValueError(f"{relative_root} must be a real directory")
+    files: list[Path] = []
+    for current, directory_names, file_names in os.walk(
+        root,
+        topdown=True,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        directory_names.sort()
+        directory_names[:] = [name for name in directory_names if name != "__pycache__"]
+        file_names.sort()
+        for name in directory_names:
+            directory = current_path / name
+            directory_info = directory.lstat()
+            if stat.S_ISLNK(directory_info.st_mode) or not stat.S_ISDIR(directory_info.st_mode):
+                raise ValueError(f"{relative_root} contains an unsafe directory: {directory}")
+        for name in file_names:
+            path = current_path / name
+            _regular_file(path)
+            if path.suffix != ".py":
+                raise ValueError(f"{relative_root} contains a non-Python source input: {path}")
+            files.append(path)
+    return files
+
+
+def _reject_fixture_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"test fixture contains duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _scan_fixture_json(value: Any, context: str) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key.casefold() in FORBIDDEN_FIXTURE_JSON_KEYS:
+                raise ValueError(f"test fixture contains authoring/provider metadata: {context}")
+            if (
+                key == "format"
+                and isinstance(child, str)
+                and child in FORBIDDEN_FIXTURE_JSON_FORMATS
+            ):
+                raise ValueError(f"test fixture contains authoring format: {context}")
+            _scan_fixture_json(child, context)
+    elif isinstance(value, list):
+        for child in value:
+            _scan_fixture_json(child, context)
+
+
+def _verify_test_fixture(path: Path, media_type: str) -> None:
+    relative = path.relative_to(PROJECT_ROOT).as_posix()
+    if path.stat().st_size > MAX_TEST_FIXTURE_BYTES:
+        raise ValueError(f"test fixture is oversized: {relative}")
+    if media_type == "application/json":
+        try:
+            value = json.loads(
+                path.read_text(encoding="utf-8"),
+                object_pairs_hook=_reject_fixture_duplicate_keys,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"test fixture is invalid JSON: {relative}") from exc
+        _scan_fixture_json(value, relative)
+    from isoworld.content.media import media_signature_matches
+
+    if not media_signature_matches(path, media_type):
+        raise ValueError(f"test fixture bytes disagree with its extension: {relative}")
+
+
+def _test_tree_files() -> list[Path]:
+    root = PROJECT_ROOT / "tests"
+    info = root.lstat()
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise ValueError("tests must be a real directory")
+    files: list[Path] = []
+    for current, directory_names, file_names in os.walk(
+        root,
+        topdown=True,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        directory_names.sort()
+        directory_names[:] = [name for name in directory_names if name != "__pycache__"]
+        file_names.sort()
+        for name in directory_names:
+            directory = current_path / name
+            directory_info = directory.lstat()
+            if stat.S_ISLNK(directory_info.st_mode) or not stat.S_ISDIR(directory_info.st_mode):
+                raise ValueError(f"tests contain an unsafe directory: {directory}")
+        for name in file_names:
+            path = current_path / name
+            _regular_file(path)
+            if path.suffix == ".py":
+                files.append(path)
+                continue
+            media_type = TEST_FIXTURE_MEDIA_TYPES.get(path.suffix.casefold())
+            if media_type is None:
+                raise ValueError(f"tests contain an unsupported fixture: {path}")
+            _verify_test_fixture(path, media_type)
+            files.append(path)
+    return files
+
+
+def _game_data_files(
+    bundles: tuple[Any, ...],
+    shared_assets: tuple[Any, ...],
+) -> list[Path]:
+    game_data = PROJECT_ROOT / "game_data"
+    expected = {
+        game_data / "shared.lock.json",
+        game_data / "worlds.lock.json",
+    }
+    for bundle in bundles:
+        expected.update(path for path in bundle.root.rglob("*") if path.is_file())
+    expected.update(PROJECT_ROOT / PurePosixPath(asset.path) for asset in shared_assets)
+    actual_files: set[Path] = set()
+    actual_directories: set[Path] = set()
+    for current, directory_names, file_names in os.walk(
+        game_data,
+        topdown=True,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        directory_names.sort()
+        file_names.sort()
+        for name in directory_names:
+            directory = current_path / name
+            info = directory.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise ValueError(f"game data contains an unsafe directory: {directory}")
+            actual_directories.add(directory)
+        for name in file_names:
+            path = current_path / name
+            _regular_file(path)
+            actual_files.add(path)
+    expected_directories = {
+        parent
+        for path in expected
+        for parent in path.parents
+        if parent != game_data and game_data in parent.parents
+    }
+    if actual_files != expected or actual_directories != expected_directories:
+        raise ValueError("game data differs from the verified package allowlist")
+    return sorted(expected, key=lambda path: path.relative_to(PROJECT_ROOT).as_posix())
+
+
+def _input_files(
+    bundles: tuple[Any, ...],
+    shared_assets: tuple[Any, ...],
+) -> list[Path]:
+    paths = [PROJECT_ROOT / name for name in ROOT_FILES]
+    paths.extend(_source_files())
+    paths.extend(_python_tree_files("scripts"))
+    paths.extend(_test_tree_files())
+    paths.extend(_game_data_files(bundles, shared_assets))
+    unique = sorted(set(paths), key=lambda path: path.relative_to(PROJECT_ROOT).as_posix())
+    if len(unique) > MAX_PACKAGE_FILES:
+        raise ValueError("package exceeds the file-count limit")
+    total = 0
+    for path in unique:
+        _regular_file(path)
+        total += path.stat().st_size
+        if total > MAX_PACKAGE_BYTES:
+            raise ValueError("package exceeds the total-byte limit")
+    _validate_archive_paths(unique)
+    return unique
+
+
+def _validate_archive_paths(paths: list[Path]) -> None:
+    folded_prefixes: dict[str, str] = {}
+    for path in paths:
+        relative = path.relative_to(PROJECT_ROOT).as_posix()
+        pure = PurePosixPath(relative)
+        if (
+            pure.is_absolute()
+            or pure.as_posix() != relative
+            or unicodedata.normalize("NFC", relative) != relative
+            or len(relative.encode("utf-8")) > MAX_PACKAGE_PATH_BYTES
+        ):
+            raise ValueError(f"package path is not portable: {relative!r}")
+        prefix: list[str] = []
+        for component in pure.parts:
+            prefix.append(component)
+            device_name = component.split(".", 1)[0].casefold()
+            if (
+                len(component.encode("utf-8")) > 255
+                or component.endswith((" ", "."))
+                or any(ord(character) < 32 or character in '<>:"|?*' for character in component)
+                or device_name in WINDOWS_RESERVED_NAMES
+            ):
+                raise ValueError(f"package path is not portable: {relative!r}")
+            exact_prefix = "/".join(prefix)
+            folded_prefix = exact_prefix.casefold()
+            previous = folded_prefixes.setdefault(folded_prefix, exact_prefix)
+            if previous != exact_prefix:
+                raise ValueError(
+                    "package paths collide on a case-insensitive platform: "
+                    f"{previous!r} and {exact_prefix!r}"
+                )
+
+
+def _zip_info(relative: str) -> zipfile.ZipInfo:
+    info = zipfile.ZipInfo(relative, FIXED_ZIP_TIME)
+    info.compress_type = zipfile.ZIP_STORED
+    info.create_system = 3
+    info.external_attr = 0o100644 << 16
+    return info
+
+
+def _write_file(archive: zipfile.ZipFile, relative: str, path: Path) -> None:
+    with (
+        path.open("rb") as source,
+        archive.open(
+            _zip_info(relative),
+            "w",
+            force_zip64=True,
+        ) as destination,
+    ):
+        shutil.copyfileobj(source, destination, length=1024 * 1024)
+
+
+def _snapshot_inputs(inputs: list[Path], snapshot_root: Path) -> dict[str, Path]:
+    snapshot: dict[str, Path] = {}
+    for source in inputs:
+        relative = source.relative_to(PROJECT_ROOT).as_posix()
+        before = source.lstat()
+        destination = snapshot_root / PurePosixPath(relative)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with source.open("rb") as reader, destination.open("xb") as writer:
+            shutil.copyfileobj(reader, writer, length=1024 * 1024)
+        after = source.lstat()
+        if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+        ) or _sha256_path(source) != _sha256_path(destination):
+            raise ValueError(f"package input changed while snapshotting: {relative}")
+        snapshot[relative] = destination
+    return snapshot
+
+
+def _verify_private_snapshot(snapshot_root: Path) -> dict[str, Any]:
+    environment = {
+        key: value for key, value in os.environ.items() if key not in {"PYTHONHOME", "PYTHONPATH"}
+    }
+    environment["PYTHONUTF8"] = "1"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            str(snapshot_root / "scripts/verify_game.py"),
+            "--json",
+        ],
+        cwd=snapshot_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
+        raise ValueError(f"private package snapshot failed verification: {detail}")
+    try:
+        report = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ValueError("private package snapshot returned an invalid report") from exc
+    if (
+        not isinstance(report, dict)
+        or set(report) != {"bundles", "game_id", "game_version", "runtime_hash"}
+        or isinstance(report["bundles"], bool)
+        or not isinstance(report["bundles"], int)
+        or report["bundles"] < 0
+        or not all(
+            isinstance(report[field], str) and report[field]
+            for field in ("game_id", "game_version", "runtime_hash")
+        )
+    ):
+        raise ValueError("private package snapshot report has an invalid shape")
+    return report
+
+
+def _verify_archive(
+    archive_path: Path,
+    manifest_bytes: bytes,
+    records: list[dict[str, Any]],
+) -> None:
+    expected_names = sorted({"PACKAGE-MANIFEST.json", *(record["path"] for record in records)})
+    with zipfile.ZipFile(archive_path) as archive:
+        infos = archive.infolist()
+        names = [info.filename for info in infos]
+        if names != expected_names or len(names) != len(set(names)):
+            raise ValueError("package archive inventory differs from its manifest")
+        for info in infos:
+            if (
+                info.date_time != FIXED_ZIP_TIME
+                or info.compress_type != zipfile.ZIP_STORED
+                or info.create_system != 3
+                or info.external_attr != 0o100644 << 16
+            ):
+                raise ValueError(f"package archive metadata is not deterministic: {info.filename}")
+        if archive.read("PACKAGE-MANIFEST.json") != manifest_bytes:
+            raise ValueError("package manifest bytes changed while archiving")
+        for record in records:
+            digest = hashlib.sha256()
+            size = 0
+            with archive.open(record["path"], "r") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(chunk)
+                    size += len(chunk)
+            if size != record["size"] or digest.hexdigest() != record["sha256"]:
+                raise ValueError(
+                    f"archived bytes disagree with the package manifest: {record['path']}"
+                )
+
+
+def build_package(output: Path) -> Path:
+    with _exclusive_game_mutation():
+        return _build_package_locked(output)
+
+
+def _build_package_locked(output: Path) -> Path:
+    identity = read_game_identity()
+    runtime = verify_runtime_snapshot()
+    verify_runtime_contract(runtime)
+    verify_source_boundary()
+    verify_dependencies(identity)
+    from isoworld.content.catalog import load_shared_assets, verify_catalog
+
+    bundles = verify_catalog(PROJECT_ROOT)
+    shared_assets = load_shared_assets(PROJECT_ROOT)
+    inputs = _input_files(bundles, shared_assets)
+    requested = output.expanduser()
+    output = requested.resolve()
+    if output == PROJECT_ROOT or PROJECT_ROOT in output.parents:
+        raise ValueError("package output must be outside the verified game source tree")
+    if requested.is_symlink() or output.exists():
+        raise ValueError(f"package output already exists or is unsafe: {requested}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_root = Path(tempfile.mkdtemp(prefix=f".{output.name}.snapshot-", dir=output.parent))
+    temporary = output.parent / f".{output.name}.tmp-{uuid.uuid4().hex}"
+    try:
+        inputs_by_name = _snapshot_inputs(inputs, snapshot_root)
+        snapshot_report = _verify_private_snapshot(snapshot_root)
+        if snapshot_report["bundles"] != len(bundles):
+            raise ValueError("package catalog changed before its private snapshot")
+        records = [
+            {
+                "path": relative,
+                "sha256": _sha256_path(path),
+                "size": path.stat().st_size,
+            }
+            for relative, path in sorted(inputs_by_name.items())
+        ]
+        manifest = {
+            "format": "isoworld.game_package",
+            "format_version": 1,
+            "game_id": snapshot_report["game_id"],
+            "game_version": snapshot_report["game_version"],
+            "runtime_hash": snapshot_report["runtime_hash"],
+            "platform_hash": _sha256_path(inputs_by_name["platform.lock.json"]),
+            "shared_assets_lock_hash": _sha256_path(inputs_by_name["game_data/shared.lock.json"]),
+            "catalog_hash": _sha256_path(inputs_by_name["game_data/worlds.lock.json"]),
+            "files": records,
+        }
+        manifest_bytes = (
+            json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        with zipfile.ZipFile(temporary, "x", compression=zipfile.ZIP_STORED) as archive:
+            for relative in sorted({*inputs_by_name, "PACKAGE-MANIFEST.json"}):
+                if relative == "PACKAGE-MANIFEST.json":
+                    archive.writestr(_zip_info(relative), manifest_bytes)
+                else:
+                    _write_file(archive, relative, inputs_by_name[relative])
+        _verify_archive(temporary, manifest_bytes, records)
+        os.link(temporary, output)
+    finally:
+        shutil.rmtree(snapshot_root, ignore_errors=True)
+        if temporary.exists():
+            temporary.unlink()
+    return output
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Build a deterministic portable game package")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+        help="explicit new package path outside the verified source tree",
+    )
+    args = parser.parse_args()
+    try:
+        output = build_package(args.output)
+    except (OSError, ValueError) as exc:
+        print(f"ERROR {exc}", file=sys.stderr)
+        return 2
+    print(f"package={output} sha256={_sha256_path(output)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

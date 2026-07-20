@@ -1,0 +1,87 @@
+from __future__ import annotations
+
+import argparse
+import json
+import statistics
+import sys
+import time
+import tracemalloc
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from game.catalog import load_catalog, select_release, verify_release  # noqa: E402
+from isoworld.content.loader import load_worldpack  # noqa: E402
+from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES  # noqa: E402
+from isoworld.core.app import GameApp  # noqa: E402
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Benchmark deterministic simulation")
+    parser.add_argument("--world", required=True)
+    parser.add_argument("--release", required=True)
+    parser.add_argument("--ticks", type=int, default=10_000)
+    parser.add_argument("--warmup-ticks", type=int, default=500)
+    parser.add_argument("--repeats", type=int, default=5)
+    parser.add_argument("--max-ms-per-tick", type=float)
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    if args.ticks <= 0 or args.warmup_ticks < 0 or args.repeats < 1:
+        raise SystemExit("ticks/repeats must be positive and warmup cannot be negative")
+    release = select_release(
+        load_catalog(PROJECT_ROOT),
+        world_id=args.world,
+        release_id=args.release,
+    )
+    bundle = verify_release(release, PROJECT_ROOT)
+    pack = load_worldpack(bundle.worldpack_path)
+    compatibility = pack.compatibility_with(
+        RUNTIME_API_VERSION,
+        SUPPORTED_RUNTIME_FEATURES,
+    )
+    if not compatibility.compatible:
+        raise SystemExit("selected release is incompatible with this runtime")
+
+    durations: list[float] = []
+    peaks: list[int] = []
+    digests: list[int] = []
+    for _ in range(args.repeats):
+        app = GameApp(pack)
+        app.run_headless(args.warmup_ticks)
+        tracemalloc.start()
+        started = time.perf_counter_ns()
+        state = app.run_headless(args.ticks)
+        elapsed_ns = time.perf_counter_ns() - started
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        durations.append(elapsed_ns / args.ticks / 1_000_000)
+        peaks.append(peak)
+        digests.append(state.tick)
+
+    ordered = sorted(durations)
+    result = {
+        "format": "isoworld.headless_benchmark",
+        "format_version": 1,
+        "world_id": release.world_id,
+        "release_id": release.release_id,
+        "bundle_hash": release.bundle_hash,
+        "ticks_per_repeat": args.ticks,
+        "repeats": args.repeats,
+        "median_ms_per_tick": statistics.median(durations),
+        "max_ms_per_tick": max(durations),
+        "p95_ms_per_tick": ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))],
+        "max_traced_bytes": max(peaks),
+        "final_ticks": digests,
+    }
+    print(json.dumps(result, indent=2, sort_keys=True))
+    if args.max_ms_per_tick is not None and result["median_ms_per_tick"] > args.max_ms_per_tick:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

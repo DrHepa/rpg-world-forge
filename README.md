@@ -19,7 +19,26 @@ knowledge boundaries. Its output is never accepted directly: a human or the
 authorized lead agent reviews it, `worldforge` validates it, and the build step
 compiles it into a static worldpack consumed by the runtime.
 
-## Current systemic slice (M3)
+## Current systemic slice (M4)
+
+- Atomic v2 creation, inspection, cloning, explicit legacy upgrade, and
+  optimistic-lock SemVer versioning for independent world repositories.
+- Worldpack v5 with typed BCP47 localization, per-playable-actor campaigns,
+  and pure runtime API/feature compatibility checks; v1-v4 remain loadable.
+- Deterministic runtime-only bundles with complete hashes/licenses, portable
+  paths, provider/authoring-metadata rejection, and stable SemVer releases.
+- Atomic multi-world/multi-release game import under a runtime-neutral locked
+  catalog, with rollback and verification of every existing release.
+- Clean standalone game materialization with a locked `isoworld` snapshot,
+  separate pyray platform lock, exact `raylib==6.0.1.0` baseline, independent
+  verifier, native smoke, benchmark, deterministic package, and desktop CI.
+- Canonical `game_data/shared.lock.json` for game-owned common presentation
+  assets, including byte/media validation and a hash-bound notices contract.
+- Twenty-four Forge-only skills: one bounded world operation or game
+  implementation phase per skill, with no all-in-one game-building skill.
+- Enforced immutable seams: game extensions live under `src/game`; vendored
+  runtime snapshots and imported bundles change only through dedicated Forge
+  operations.
 
 - Fixed-step game loop rendered through pyray.
 - Isometric projection and semantic terrain (ground, water, and rock).
@@ -128,8 +147,10 @@ does not invent lore or characters:
 worldforge new-world ../my-world \
   --id my_world \
   --title "My World" \
-  --language en
+  --language en \
+  --version 0.1.0
 
+worldforge world-status ../my-world
 worldforge phase-status ../my-world
 worldforge validate ../my-world/source/manifest.json --profile draft
 ```
@@ -139,6 +160,16 @@ repository. It includes `AGENTS.md`, 15 ordered phases, decision and task logs,
 multi-agent claims, phase reports, narrative source directories, and an
 asset-production workspace. GPT can run the entire process as lead agent;
 specialist roles are optional.
+
+World identity and lineage operations are explicit:
+
+```bash
+worldforge clone-world ../my-world ../another-world \
+  --id another_world --title "Another World" --version 0.1.0
+worldforge bump-world-version ../my-world \
+  --expected-version 0.1.0 --part minor \
+  --reason "Add a reviewed campaign" --approved-by lead-agent
+```
 
 After the canon is complete:
 
@@ -165,6 +196,27 @@ The production handoff is an immutable runtime bundle. Forge-side tooling
 verifies and copies that bundle into a separate game repository. It never
 copies the world's `AGENTS.md`, `.worldforge/`, editable `source/`, production
 manifests, prompts, candidates, or model/provider metadata.
+
+```bash
+worldforge export-bundle \
+  ../my-world/build/my_world.worldpack.json \
+  ../my-world/build/runtime/renderpack.json \
+  ../releases/my_world-1.0.0 \
+  --release-id 1.0.0 \
+  --licenses ../my-world/build/runtime/licenses
+
+worldforge verify-bundle ../releases/my_world-1.0.0 \
+  --expected-hash <bundle-sha256>
+
+worldforge new-game ../my-game \
+  --id my_game --title "My Game" --source-revision <forge-commit>
+worldforge import-bundle ../releases/my_world-1.0.0 ../my-game \
+  --expected-hash <bundle-sha256>
+worldforge audit-game ../my-game
+```
+
+The game is a normal standalone project. It contains no agent files or
+authoring control plane and verifies/runs without `worldforge` installed.
 
 ## Import a map
 
@@ -207,6 +259,8 @@ PYTHONPATH=src python -m worldforge audit-game /path/to/materialized-game
 ```text
 src/isoworld/              reference runtime; never imports worldforge or AI SDKs
 src/worldforge/            offline authoring, build, workflow, and QA tools
+src/worldforge/templates/  clean standalone pyray/raylib game materialization
+.agents/skills/            Forge-only, phase-scoped construction workflows
 examples/                  neutral vertical slice
 content/compiled/          generated worldpacks used by the example runtime
 authoring/prompts/         provider-agnostic authoring prompts
@@ -229,6 +283,12 @@ M2.5 presentation and renderpack contracts are documented in
 in [AUDIT_M2_5_2026-07-19.md](docs/AUDIT_M2_5_2026-07-19.md).
 The M4 repository boundary is defined by
 [ADR-0009](docs/decisions/0009-independent-world-and-game-repositories.md), and
+the multiple-world lifecycle, bundle, catalog, and game scaffold are documented
+in [M4_MULTIPLE_WORLD_PRODUCTION.md](docs/M4_MULTIPLE_WORLD_PRODUCTION.md).
+The corresponding adversarial implementation review is recorded in
+[AUDIT_M4_2026-07-19.md](docs/AUDIT_M4_2026-07-19.md).
+The one-skill-per-phase game workflow is defined in
+[GAME_IMPLEMENTATION_PHASES.md](docs/GAME_IMPLEMENTATION_PHASES.md), and
 the supported game-runtime conventions are documented in
 [PYRAY_RUNTIME_GUIDE.md](docs/PYRAY_RUNTIME_GUIDE.md).
 Visual and audio production is described in

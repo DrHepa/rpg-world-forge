@@ -1,9 +1,38 @@
 from __future__ import annotations
 
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
 Color = tuple[int, int, int, int]
+
+RUNTIME_API_VERSION = "0.5.0"
+SUPPORTED_RUNTIME_FEATURES = frozenset(
+    {
+        "action_replay",
+        "actor_needs",
+        "conditional_dialogue",
+        "construction",
+        "contextual_interactions",
+        "costed_abilities",
+        "delayed_consequences",
+        "directed_relationships",
+        "grid_movement",
+        "hierarchical_goals",
+        "locales",
+        "path_navigation",
+        "personal_campaigns",
+        "playable_actor_switching",
+        "reactive_quests",
+        "resource_economy",
+        "schedules",
+        "timed_scenes",
+        "typed_knowledge",
+        "versioned_persistence",
+        "world_clock",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,6 +328,93 @@ class SceneDefinition:
 
 
 @dataclass(frozen=True, slots=True)
+class PersonalCampaignActDefinition:
+    id: str
+    quest_ids: tuple[str, ...]
+    scene_ids: tuple[str, ...]
+    next_act_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PersonalCampaignDefinition:
+    id: str
+    actor_id: str
+    start_act_id: str
+    acts: dict[str, PersonalCampaignActDefinition]
+
+
+@dataclass(frozen=True, slots=True)
+class LocaleDefinition:
+    id: str
+    language_tag: str
+    strings: dict[str, str]
+
+
+_RUNTIME_VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+
+
+def _runtime_version_key(version: str) -> tuple[int, int, int]:
+    match = _RUNTIME_VERSION_PATTERN.fullmatch(version)
+    if match is None:
+        raise ValueError("runtime API versions must use major.minor.patch")
+    return tuple(int(value) for value in match.groups())  # type: ignore[return-value]
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeApiRange:
+    minimum: str
+    maximum_exclusive: str
+
+    def contains(self, version: str) -> bool:
+        value = _runtime_version_key(version)
+        return (
+            _runtime_version_key(self.minimum)
+            <= value
+            < _runtime_version_key(self.maximum_exclusive)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeRequirements:
+    runtime_api: RuntimeApiRange
+    required_features: tuple[str, ...]
+    optional_features: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeCompatibilityReport:
+    compatible: bool
+    api_compatible: bool
+    runtime_version: str
+    missing_required_features: tuple[str, ...]
+    missing_optional_features: tuple[str, ...]
+
+
+def check_runtime_compatibility(
+    requirements: RuntimeRequirements,
+    runtime_version: str,
+    runtime_features: Iterable[str],
+) -> RuntimeCompatibilityReport:
+    """Compare immutable content requirements with caller-owned runtime capabilities."""
+
+    available = frozenset(runtime_features)
+    missing_required = tuple(
+        feature for feature in requirements.required_features if feature not in available
+    )
+    missing_optional = tuple(
+        feature for feature in requirements.optional_features if feature not in available
+    )
+    api_compatible = requirements.runtime_api.contains(runtime_version)
+    return RuntimeCompatibilityReport(
+        compatible=api_compatible and not missing_required,
+        api_compatible=api_compatible,
+        runtime_version=runtime_version,
+        missing_required_features=missing_required,
+        missing_optional_features=missing_optional,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class ActorDefinition:
     id: str
     display_name: str
@@ -328,8 +444,11 @@ class WorldPack:
     world_id: str
     title: str
     language: str
+    default_locale: str
+    supported_locales: tuple[str, ...]
     start_map_id: str
     content_hash: str
+    runtime_requirements: RuntimeRequirements
     ui: dict[str, str]
     clock: ClockDefinition
     tile_types: dict[str, TileType]
@@ -343,6 +462,8 @@ class WorldPack:
     dialogues: dict[str, DialogueDefinition]
     quests: dict[str, QuestDefinition]
     scenes: dict[str, SceneDefinition]
+    personal_arcs: dict[str, PersonalCampaignDefinition]
+    locales: dict[str, LocaleDefinition]
     resources: dict[str, ResourceDefinition]
     needs: dict[str, NeedDefinition]
     goals: dict[str, GoalDefinition]
@@ -355,6 +476,38 @@ class WorldPack:
     @property
     def playable_actor_ids(self) -> tuple[str, ...]:
         return tuple(actor.id for actor in self.actors.values() if actor.playable)
+
+    @property
+    def personal_campaigns(self) -> dict[str, PersonalCampaignDefinition]:
+        """Typed alias using product terminology while preserving the collection name."""
+
+        return self.personal_arcs
+
+    def personal_campaign_for_actor(self, actor_id: str) -> PersonalCampaignDefinition | None:
+        return next(
+            (campaign for campaign in self.personal_arcs.values() if campaign.actor_id == actor_id),
+            None,
+        )
+
+    def locale_for_language_tag(self, language_tag: str) -> LocaleDefinition | None:
+        normalized = language_tag.casefold()
+        return next(
+            (
+                locale
+                for locale in self.locales.values()
+                if locale.language_tag.casefold() == normalized
+            ),
+            None,
+        )
+
+    def compatibility_with(
+        self, runtime_version: str, runtime_features: Iterable[str]
+    ) -> RuntimeCompatibilityReport:
+        return check_runtime_compatibility(
+            self.runtime_requirements,
+            runtime_version,
+            runtime_features,
+        )
 
     def is_walkable(self, map_id: str, x: int, y: int) -> bool:
         world_map = self.maps[map_id]

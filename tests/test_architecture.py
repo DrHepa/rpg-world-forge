@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -51,6 +52,63 @@ class ArchitectureTests(unittest.TestCase):
             value = json.loads(path.read_text(encoding="utf-8"))
             self.assertIsInstance(value, dict, path.name)
             self.assertIn("$schema", value, path.name)
+
+    def test_public_world_schemas_use_the_portable_id_contract(self) -> None:
+        schemas = {
+            path.name: json.loads(path.read_text(encoding="utf-8"))
+            for path in (ROOT / "schemas").glob("*.json")
+        }
+        patterns = {
+            "world project": schemas["world-project.schema.json"]["$defs"]["id"]["pattern"],
+            "runtime bundle": schemas["runtime-bundle.schema.json"]["$defs"]["world_id"]["pattern"],
+            "world catalog": schemas["world-catalog.schema.json"]["$defs"]["world_id"]["pattern"],
+            "worldpack": schemas["worldpack.schema.json"]["properties"]["world"]["properties"][
+                "id"
+            ]["pattern"],
+        }
+        reserved_names = (
+            "aux",
+            "con",
+            "nul",
+            "prn",
+            "com1",
+            "com9",
+            "lpt1",
+            "lpt9",
+        )
+        for context, pattern in patterns.items():
+            identifier = re.compile(pattern)
+            with self.subTest(context=context):
+                self.assertIsNotNone(identifier.fullmatch("portable_world"))
+            for reserved in reserved_names:
+                with self.subTest(context=context, reserved=reserved):
+                    self.assertIsNone(identifier.fullmatch(reserved))
+        catalog_path = re.compile(
+            schemas["world-catalog.schema.json"]["$defs"]["release"]["properties"]["path"][
+                "pattern"
+            ]
+        )
+        self.assertIsNotNone(catalog_path.fullmatch("game_data/worlds/portable_world/1.0.0"))
+        self.assertIsNone(catalog_path.fullmatch("game_data/worlds/con/1.0.0"))
+
+    def test_public_localization_schemas_share_the_bcp47_contract(self) -> None:
+        project = json.loads(
+            (ROOT / "schemas/world-project.schema.json").read_text(encoding="utf-8")
+        )
+        worldpack = json.loads((ROOT / "schemas/worldpack.schema.json").read_text(encoding="utf-8"))
+        narrative = json.loads(
+            (ROOT / "schemas/narrative-content.schema.json").read_text(encoding="utf-8")
+        )
+        patterns = (
+            project["properties"]["language"]["pattern"],
+            worldpack["$defs"]["language_tag"]["pattern"],
+            narrative["$defs"]["locale"]["properties"]["language_tag"]["pattern"],
+        )
+        for pattern in patterns:
+            language_tag = re.compile(pattern)
+            self.assertIsNotNone(language_tag.fullmatch("en-US"))
+            self.assertIsNotNone(language_tag.fullmatch("zh-Hant-TW"))
+            self.assertIsNone(language_tag.fullmatch("not_a_tag"))
 
     def test_clean_game_repository_has_no_authoring_control_plane(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -162,6 +220,28 @@ class ArchitectureTests(unittest.TestCase):
             self.assertEqual(
                 ["google-genai>=1", "transformers>=4"],
                 sorted(finding.detail for finding in findings),
+            )
+
+    def test_game_repository_checks_requirement_and_platform_lock_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "requirements.lock").write_text(
+                "raylib==6.0.1.0\nopenai==1.0.0\n",
+                encoding="utf-8",
+            )
+            (root / "platform.lock.json").write_text(
+                json.dumps({"locked_requirements": ["raylib==6.0.1.0", "torch==2.0.0"]}),
+                encoding="utf-8",
+            )
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(
+                [
+                    ("platform.lock.json", "torch==2.0.0"),
+                    ("requirements.lock", "openai==1.0.0"),
+                ],
+                [(str(finding.path), finding.detail) for finding in findings],
             )
 
     def test_game_repository_rejects_authoring_formats_even_at_other_paths(self) -> None:

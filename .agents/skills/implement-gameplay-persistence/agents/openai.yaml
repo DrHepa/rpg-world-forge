@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Persistence"
+  short_description: "Build versioned saves, restore, and migrations"
+  default_prompt: "Use $implement-gameplay-persistence to implement versioned saves, restore, migrations, and replay-equivalence checks."

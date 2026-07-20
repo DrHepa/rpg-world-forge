@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Living World"
+  short_description: "Build one deterministic systemic-world slice"
+  default_prompt: "Use $implement-gameplay-living-world to implement one named G14 system slice."

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,13 +22,18 @@ from isoworld.content.models import (
     GoalActionDefinition,
     GoalDefinition,
     InteractionDefinition,
+    LocaleDefinition,
     Location,
     MapDefinition,
     NeedDefinition,
+    PersonalCampaignActDefinition,
+    PersonalCampaignDefinition,
     ProductionRecipeDefinition,
     QuestDefinition,
     QuestStageDefinition,
     ResourceDefinition,
+    RuntimeApiRange,
+    RuntimeRequirements,
     SceneDefinition,
     ScheduleDefinition,
     ScheduleEntry,
@@ -36,6 +42,7 @@ from isoworld.content.models import (
     TileType,
     WorldPack,
 )
+from isoworld.content.portability import is_portable_path_component
 
 
 class WorldPackError(ValueError):
@@ -53,6 +60,21 @@ M3_COLLECTIONS = {
     "production_recipes",
     "consequences",
 }
+M4_COLLECTIONS = {"locales", "personal_arcs"}
+
+ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+BCP47_PATTERN = re.compile(
+    r"^(?:"
+    r"(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})"
+    r"(?:-[A-Za-z]{4})?"
+    r"(?:-(?:[A-Za-z]{2}|[0-9]{3}))?"
+    r"(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*"
+    r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
+    r"(?:-x(?:-[A-Za-z0-9]{1,8})+)?"
+    r"|x(?:-[A-Za-z0-9]{1,8})+"
+    r")$"
+)
+RUNTIME_VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
 
 def _integer(raw: Any, context: str) -> int:
@@ -96,6 +118,85 @@ def _optional_integer(raw: Any, context: str) -> int | None:
     if raw is None:
         return None
     return _integer(raw, context)
+
+
+def _stable_id(raw: Any, context: str) -> str:
+    if not isinstance(raw, str) or ID_PATTERN.fullmatch(raw) is None:
+        raise WorldPackError(f"{context}: must be a stable snake_case ID")
+    return raw
+
+
+def _stable_id_tuple(raw: Any, context: str) -> tuple[str, ...]:
+    values = _string_tuple(raw, context)
+    for position, value in enumerate(values):
+        _stable_id(value, f"{context}/{position}")
+    if len(set(values)) != len(values):
+        raise WorldPackError(f"{context}: must not contain duplicate IDs")
+    return values
+
+
+def _language_tag(raw: Any, context: str) -> str:
+    if not isinstance(raw, str) or BCP47_PATTERN.fullmatch(raw) is None:
+        raise WorldPackError(f"{context}: must be a BCP47 language tag")
+    return raw
+
+
+def _string_map(raw: Any, context: str) -> dict[str, str]:
+    if not isinstance(raw, dict) or not raw:
+        raise WorldPackError(f"{context}: must be a non-empty object of strings")
+    result: dict[str, str] = {}
+    for key, value in sorted(raw.items()):
+        if not isinstance(key, str) or not key:
+            raise WorldPackError(f"{context}: keys must be non-empty strings")
+        if not isinstance(value, str) or not value:
+            raise WorldPackError(f"{context}/{key}: must be a non-empty string")
+        result[key] = value
+    return result
+
+
+def _runtime_version(raw: Any, context: str) -> str:
+    if not isinstance(raw, str) or RUNTIME_VERSION_PATTERN.fullmatch(raw) is None:
+        raise WorldPackError(f"{context}: must use major.minor.patch")
+    return raw
+
+
+def _runtime_version_key(version: str) -> tuple[int, int, int]:
+    match = RUNTIME_VERSION_PATTERN.fullmatch(version)
+    if match is None:  # pragma: no cover - callers validate first
+        raise ValueError(version)
+    return tuple(int(value) for value in match.groups())  # type: ignore[return-value]
+
+
+def _runtime_requirements(raw: Any, version: int) -> RuntimeRequirements:
+    if version < 5:
+        return RuntimeRequirements(RuntimeApiRange("0.0.0", "1.0.0"), (), ())
+    if not isinstance(raw, dict):
+        raise WorldPackError("runtime_requirements must be an object")
+    runtime_api = raw.get("runtime_api")
+    if not isinstance(runtime_api, dict):
+        raise WorldPackError("runtime_requirements/runtime_api must be an object")
+    minimum = _runtime_version(
+        runtime_api.get("minimum"), "runtime_requirements/runtime_api/minimum"
+    )
+    maximum_exclusive = _runtime_version(
+        runtime_api.get("maximum_exclusive"),
+        "runtime_requirements/runtime_api/maximum_exclusive",
+    )
+    if _runtime_version_key(minimum) >= _runtime_version_key(maximum_exclusive):
+        raise WorldPackError("runtime_requirements/runtime_api is an empty range")
+    required = _stable_id_tuple(
+        raw.get("required_features"), "runtime_requirements/required_features"
+    )
+    optional = _stable_id_tuple(
+        raw.get("optional_features"), "runtime_requirements/optional_features"
+    )
+    if set(required) & set(optional):
+        raise WorldPackError("runtime feature IDs cannot be both required and optional")
+    return RuntimeRequirements(
+        runtime_api=RuntimeApiRange(minimum, maximum_exclusive),
+        required_features=required,
+        optional_features=optional,
+    )
 
 
 def _color(raw: Any, context: str) -> tuple[int, int, int, int]:
@@ -322,6 +423,74 @@ def _scenes(raw: list[dict[str, Any]]) -> dict[str, SceneDefinition]:
             effects=_effects(item.get("effects", []), f"{context}/effects"),
             once=_boolean(item.get("once", True), f"{context}/once"),
             priority=_integer(item.get("priority", 0), f"{context}/priority"),
+        )
+    return result
+
+
+def _personal_campaigns(
+    raw: list[dict[str, Any]],
+) -> dict[str, PersonalCampaignDefinition]:
+    result: dict[str, PersonalCampaignDefinition] = {}
+    owners: set[str] = set()
+    for position, item in enumerate(raw):
+        context = f"personal_arcs/{position}"
+        campaign_id = _stable_id(item.get("id"), f"{context}/id")
+        actor_id = _stable_id(item.get("actor_id"), f"{context}/actor_id")
+        start_act_id = _stable_id(item.get("start_act_id"), f"{context}/start_act_id")
+        if campaign_id in result:
+            raise WorldPackError(f"{context}: duplicate campaign ID")
+        if actor_id in owners:
+            raise WorldPackError(f"{context}: an actor cannot own multiple campaigns")
+        owners.add(actor_id)
+        raw_acts = item.get("acts")
+        if not isinstance(raw_acts, list) or not raw_acts:
+            raise WorldPackError(f"{context}/acts: must contain at least one act")
+        acts: dict[str, PersonalCampaignActDefinition] = {}
+        for act_position, raw_act in enumerate(raw_acts):
+            act_context = f"{context}/acts/{act_position}"
+            if not isinstance(raw_act, dict):
+                raise WorldPackError(f"{act_context}: must be an object")
+            act_id = _stable_id(raw_act.get("id"), f"{act_context}/id")
+            if act_id in acts:
+                raise WorldPackError(f"{act_context}: duplicate act ID")
+            acts[act_id] = PersonalCampaignActDefinition(
+                id=act_id,
+                quest_ids=_stable_id_tuple(
+                    raw_act.get("quest_ids", []), f"{act_context}/quest_ids"
+                ),
+                scene_ids=_stable_id_tuple(
+                    raw_act.get("scene_ids", []), f"{act_context}/scene_ids"
+                ),
+                next_act_ids=_stable_id_tuple(
+                    raw_act.get("next_act_ids", []), f"{act_context}/next_act_ids"
+                ),
+            )
+        result[campaign_id] = PersonalCampaignDefinition(
+            id=campaign_id,
+            actor_id=actor_id,
+            start_act_id=start_act_id,
+            acts=acts,
+        )
+    return result
+
+
+def _locales(raw: list[dict[str, Any]]) -> dict[str, LocaleDefinition]:
+    result: dict[str, LocaleDefinition] = {}
+    language_tags: set[str] = set()
+    for position, item in enumerate(raw):
+        context = f"locales/{position}"
+        locale_id = _stable_id(item.get("id"), f"{context}/id")
+        language_tag = _language_tag(item.get("language_tag"), f"{context}/language_tag")
+        if locale_id in result:
+            raise WorldPackError(f"{context}: duplicate locale ID")
+        normalized_tag = language_tag.casefold()
+        if normalized_tag in language_tags:
+            raise WorldPackError(f"{context}: duplicate language tag")
+        language_tags.add(normalized_tag)
+        result[locale_id] = LocaleDefinition(
+            id=locale_id,
+            language_tag=language_tag,
+            strings=_string_map(item.get("strings"), f"{context}/strings"),
         )
     return result
 
@@ -681,6 +850,12 @@ def _validate_runtime_pack(pack: WorldPack) -> None:
             not isinstance(actor.schedule_id, str) or actor.schedule_id not in pack.schedules
         ):
             raise WorldPackError(f"Actor {actor.id} references an unknown schedule")
+        if (
+            pack.format_version >= 5
+            and actor.personal_arc_id is not None
+            and actor.personal_arc_id not in pack.personal_arcs
+        ):
+            raise WorldPackError(f"Actor {actor.id} references an unknown personal campaign")
         if actor.schedule_mode not in {"always", "when_inactive", "never"}:
             raise WorldPackError(f"Actor {actor.id} has an invalid schedule mode")
         if any(
@@ -847,6 +1022,74 @@ def _validate_runtime_pack(pack: WorldPack) -> None:
             _validate_condition_contract(condition, pack, f"Scene {scene.id}")
         for effect in scene.effects:
             _validate_effect_contract(effect, pack, f"Scene {scene.id}")
+    campaign_owners: set[str] = set()
+    for campaign in pack.personal_arcs.values():
+        actor = pack.actors.get(campaign.actor_id)
+        if actor is None or not actor.playable:
+            raise WorldPackError(f"Personal campaign {campaign.id} must belong to a playable actor")
+        if campaign.actor_id in campaign_owners:
+            raise WorldPackError(f"Actor {campaign.actor_id} owns multiple personal campaigns")
+        campaign_owners.add(campaign.actor_id)
+        if actor.personal_arc_id != campaign.id:
+            raise WorldPackError(
+                f"Personal campaign {campaign.id} is not referenced by its owning actor"
+            )
+        if campaign.start_act_id not in campaign.acts:
+            raise WorldPackError(f"Personal campaign {campaign.id} has an unknown start act")
+        for act in campaign.acts.values():
+            if any(next_id not in campaign.acts for next_id in act.next_act_ids):
+                raise WorldPackError(
+                    f"Personal campaign {campaign.id} act {act.id} has an unknown next act"
+                )
+            if any(quest_id not in pack.quests for quest_id in act.quest_ids):
+                raise WorldPackError(
+                    f"Personal campaign {campaign.id} act {act.id} has an unknown quest"
+                )
+            if any(scene_id not in pack.scenes for scene_id in act.scene_ids):
+                raise WorldPackError(
+                    f"Personal campaign {campaign.id} act {act.id} has an unknown scene"
+                )
+        reachable_act_ids: set[str] = set()
+        pending_act_ids = [campaign.start_act_id]
+        while pending_act_ids:
+            current_act_id = pending_act_ids.pop()
+            if current_act_id in reachable_act_ids:
+                continue
+            reachable_act_ids.add(current_act_id)
+            pending_act_ids.extend(
+                next_act_id
+                for next_act_id in campaign.acts[current_act_id].next_act_ids
+                if next_act_id not in reachable_act_ids
+            )
+        unreachable_act_ids = sorted(set(campaign.acts) - reachable_act_ids)
+        if unreachable_act_ids:
+            raise WorldPackError(
+                f"Personal campaign {campaign.id} has acts unreachable from start act "
+                f"{campaign.start_act_id}: {', '.join(unreachable_act_ids)}"
+            )
+    if pack.format_version >= 5:
+        normalized_supported = tuple(tag.casefold() for tag in pack.supported_locales)
+        if (
+            BCP47_PATTERN.fullmatch(pack.language) is None
+            or BCP47_PATTERN.fullmatch(pack.default_locale) is None
+            or any(BCP47_PATTERN.fullmatch(tag) is None for tag in pack.supported_locales)
+            or len(set(normalized_supported)) != len(normalized_supported)
+            or pack.default_locale.casefold() not in normalized_supported
+            or pack.language.casefold() != pack.default_locale.casefold()
+        ):
+            raise WorldPackError("World locale metadata is invalid")
+        locale_tags = {locale.language_tag.casefold() for locale in pack.locales.values()}
+        if pack.locales:
+            if locale_tags != set(normalized_supported):
+                raise WorldPackError("World supported locales do not match locale definitions")
+            key_sets = {frozenset(locale.strings) for locale in pack.locales.values()}
+            if len(key_sets) != 1:
+                raise WorldPackError("Locale string maps are incomplete")
+            default_definition = pack.locale_for_language_tag(pack.default_locale)
+            if default_definition is None:
+                raise WorldPackError("The default locale has no locale definition")
+        elif normalized_supported != (pack.language.casefold(),):
+            raise WorldPackError("World declares locales without locale definitions")
     for resource in pack.resources.values():
         if resource.base_value < 0 or resource.scarcity_target < 0 or not resource.display_name:
             raise WorldPackError(f"Resource {resource.id} has an invalid contract")
@@ -962,9 +1205,10 @@ def load_worldpack(path: str | Path) -> WorldPack:
     if raw.get("format") != "isoworld.worldpack":
         raise WorldPackError("Unknown worldpack format")
     version = raw.get("format_version")
-    if not isinstance(version, int) or isinstance(version, bool) or version not in {1, 2, 3, 4}:
+    if not isinstance(version, int) or isinstance(version, bool) or version not in {1, 2, 3, 4, 5}:
         raise WorldPackError("Unsupported worldpack version")
     content_hash = _verify_hash(raw)
+    runtime_requirements = _runtime_requirements(raw.get("runtime_requirements"), version)
 
     try:
         world = raw["world"]
@@ -980,8 +1224,10 @@ def load_worldpack(path: str | Path) -> WorldPack:
             raise TypeError("collections must contain lists of objects")
         if version >= 3 and not M2_COLLECTIONS <= set(collections):
             raise WorldPackError("Worldpack is missing narrative collections")
-        if version == 4 and not M3_COLLECTIONS <= set(collections):
-            raise WorldPackError("Worldpack version 4 is missing living-world collections")
+        if version >= 4 and not M3_COLLECTIONS <= set(collections):
+            raise WorldPackError("Worldpack is missing living-world collections")
+        if version == 5 and not M4_COLLECTIONS <= set(collections):
+            raise WorldPackError("Worldpack version 5 is missing M4 content collections")
         for collection_name, items in collections.items():
             identifiers = [item.get("id") for item in items]
             if not all(isinstance(identifier, str) for identifier in identifiers):
@@ -1139,6 +1385,10 @@ def load_worldpack(path: str | Path) -> WorldPack:
         dialogues = _dialogues(collections.get("dialogues", []))
         quests = _quests(collections.get("quests", []))
         scenes = _scenes(collections.get("scenes", []))
+        personal_arcs = (
+            _personal_campaigns(collections.get("personal_arcs", [])) if version >= 5 else {}
+        )
+        locales = _locales(collections.get("locales", [])) if version >= 5 else {}
         (
             resources,
             needs,
@@ -1186,41 +1436,75 @@ def load_worldpack(path: str | Path) -> WorldPack:
     ):
         raise WorldPackError("world/ui must be an object of strings")
     default_ui.update(world["ui"])
-    extra_collections = {
-        key: tuple(value)
-        for key, value in collections.items()
-        if key
-        not in {
-            "tile_types",
-            "maps",
-            "actors",
-            "abilities",
-            "schedules",
-            "interactions",
-            "facts",
-            "factions",
-            "dialogues",
-            "quests",
-            "scenes",
-            "resources",
-            "needs",
-            "goals",
-            "stockpiles",
-            "constructions",
-            "production_recipes",
-            "consequences",
-        }
-    }
     for field in ("id", "title", "language", "start_map_id"):
         if not isinstance(world.get(field), str):
             raise WorldPackError(f"world/{field} must be a string")
+    if not is_portable_path_component(world["id"]):
+        raise WorldPackError("world/id is reserved or unsafe as a portable path")
+    if version >= 5:
+        default_locale = _language_tag(world.get("default_locale"), "world/default_locale")
+        raw_supported_locales = world.get("supported_locales")
+        if not isinstance(raw_supported_locales, list):
+            raise WorldPackError("world/supported_locales must be a list")
+        supported_locales = tuple(
+            _language_tag(value, f"world/supported_locales/{position}")
+            for position, value in enumerate(raw_supported_locales)
+        )
+        if not supported_locales:
+            raise WorldPackError("world/supported_locales must not be empty")
+        default_definition = next(
+            (
+                locale
+                for locale in locales.values()
+                if locale.language_tag.casefold() == default_locale.casefold()
+            ),
+            None,
+        )
+        if locales and (
+            default_definition is None
+            or any(
+                default_definition.strings.get(key) != value for key, value in world["ui"].items()
+            )
+        ):
+            raise WorldPackError("The default locale does not match legacy world UI strings")
+    else:
+        default_locale = world["language"]
+        supported_locales = (world["language"],)
+    typed_collections = {
+        "tile_types",
+        "maps",
+        "actors",
+        "abilities",
+        "schedules",
+        "interactions",
+        "facts",
+        "factions",
+        "dialogues",
+        "quests",
+        "scenes",
+        "resources",
+        "needs",
+        "goals",
+        "stockpiles",
+        "constructions",
+        "production_recipes",
+        "consequences",
+    }
+    if version >= 5:
+        typed_collections.update({"personal_arcs", "locales"})
+    extra_collections = {
+        key: tuple(value) for key, value in collections.items() if key not in typed_collections
+    }
     pack = WorldPack(
         format_version=version,
         world_id=world["id"],
         title=world["title"],
         language=world["language"],
+        default_locale=default_locale,
+        supported_locales=supported_locales,
         start_map_id=world["start_map_id"],
         content_hash=content_hash,
+        runtime_requirements=runtime_requirements,
         ui=default_ui,
         clock=clock,
         tile_types=tile_types,
@@ -1234,6 +1518,8 @@ def load_worldpack(path: str | Path) -> WorldPack:
         dialogues=dialogues,
         quests=quests,
         scenes=scenes,
+        personal_arcs=personal_arcs,
+        locales=locales,
         resources=resources,
         needs=needs,
         goals=goals,

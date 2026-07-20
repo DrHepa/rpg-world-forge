@@ -1,0 +1,4 @@
+interface:
+  display_name: "Version World Project"
+  short_description: "Apply one reviewed world SemVer bump"
+  default_prompt: "Use $version-world-project to apply and verify one optimistic-lock SemVer transition."

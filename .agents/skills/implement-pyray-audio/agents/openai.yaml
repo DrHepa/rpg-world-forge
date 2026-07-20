@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Pyray Audio"
+  short_description: "Build event-driven sound and music playback"
+  default_prompt: "Use $implement-pyray-audio to implement safe deterministic pyray audio presentation."

@@ -111,8 +111,7 @@ def _normalized_distribution(requirement: str) -> str | None:
 
 def _is_forbidden_import(module: str) -> bool:
     return any(
-        module == root or module.startswith(f"{root}.")
-        for root in FORBIDDEN_GAME_IMPORT_ROOTS
+        module == root or module.startswith(f"{root}.") for root in FORBIDDEN_GAME_IMPORT_ROOTS
     )
 
 
@@ -244,16 +243,34 @@ def _dependency_findings(base: Path) -> list[GameBoundaryFinding]:
 
     requirement_files = set(base.glob("requirements*.txt"))
     requirement_files.update(base.glob("requirements*.in"))
+    requirement_files.update(base.glob("requirements*.lock"))
     requirements_directory = base / "requirements"
     if requirements_directory.is_dir():
         requirement_files.update(requirements_directory.glob("*.txt"))
         requirement_files.update(requirements_directory.glob("*.in"))
+        requirement_files.update(requirements_directory.glob("*.lock"))
     for requirement_path in sorted(requirement_files):
         relative = requirement_path.relative_to(base)
         for raw_line in requirement_path.read_text(encoding="utf-8").splitlines():
             requirement = raw_line.split("#", 1)[0].strip()
             if requirement and not requirement.startswith("-"):
                 requirements.append((relative, requirement))
+
+    platform_lock = base / "platform.lock.json"
+    if platform_lock.is_file():
+        try:
+            platform = json.loads(platform_lock.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise GameBoundaryError(
+                f"cannot parse game platform dependency lock {platform_lock}: {exc}"
+            ) from exc
+        locked = platform.get("locked_requirements", []) if isinstance(platform, dict) else []
+        if isinstance(locked, list):
+            requirements.extend(
+                (Path("platform.lock.json"), requirement)
+                for requirement in locked
+                if isinstance(requirement, str)
+            )
 
     findings: list[GameBoundaryFinding] = []
     seen: set[tuple[Path, str]] = set()
@@ -272,9 +289,7 @@ def _dependency_findings(base: Path) -> list[GameBoundaryFinding]:
     return findings
 
 
-def _authoring_format_findings(
-    base: Path, blocked_roots: set[Path]
-) -> list[GameBoundaryFinding]:
+def _authoring_format_findings(base: Path, blocked_roots: set[Path]) -> list[GameBoundaryFinding]:
     findings: list[GameBoundaryFinding] = []
     for path in sorted(base.rglob("*.json")):
         if not path.is_file() or any(blocked in path.parents for blocked in blocked_roots):

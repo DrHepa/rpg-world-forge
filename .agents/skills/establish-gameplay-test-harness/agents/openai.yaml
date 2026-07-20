@@ -1,0 +1,4 @@
+interface:
+  display_name: "Establish Gameplay Test Harness"
+  short_description: "Build deterministic replay test infrastructure"
+  default_prompt: "Use $establish-gameplay-test-harness to establish the standalone game's deterministic test harness."

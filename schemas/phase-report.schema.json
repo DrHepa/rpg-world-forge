@@ -4,6 +4,14 @@
   "title": "RPG World Forge phase report",
   "type": "object",
   "additionalProperties": false,
+  "$defs": {
+    "projectPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*(?:^|/)(?:[Aa][Uu][Xx]|[Cc][Oo][Nn]|[Nn][Uu][Ll]|[Pp][Rr][Nn]|[Cc][Oo][Mm][1-9]|[Ll][Pp][Tt][1-9])(?:\\.|/|$))(?!.*(?:^|/)[^/]*[ .](?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+      "description": "Normalized portable relative POSIX path. Runtime validation also enforces NFC and the 255-byte component limit."
+    }
+  },
   "required": [
     "format",
     "format_version",
@@ -38,8 +46,7 @@
       "type": "array",
       "minItems": 1,
       "items": {
-        "type": "string",
-        "minLength": 1
+        "$ref": "#/$defs/projectPath"
       }
     },
     "decisions": {
@@ -57,6 +64,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "name",
           "passed",
@@ -64,13 +72,15 @@
         ],
         "properties": {
           "name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           },
           "passed": {
             "const": true
           },
           "evidence": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           }
         }
       }
@@ -80,24 +90,20 @@
       "minLength": 1
     },
     "worldpack_path": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "#/$defs/projectPath"
     },
     "worldpack_hash": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
     "asset_manifest_path": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "#/$defs/projectPath"
     },
     "renderpack_path": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "#/$defs/projectPath"
     },
     "handoff_path": {
-      "type": "string",
-      "minLength": 1
+      "$ref": "#/$defs/projectPath"
     }
   }
 }

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/shared-assets.schema.json",
+  "title": "Hash-locked game-owned shared runtime assets",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "files",
+    "notices_sha256",
+    "content_hash"
+  ],
+  "properties": {
+    "format": {"const": "isoworld.shared_assets"},
+    "format_version": {"const": 1},
+    "files": {
+      "type": "array",
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/file"}
+    },
+    "notices_sha256": {"$ref": "#/$defs/sha256"},
+    "content_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "shared_path": {
+      "type": "string",
+      "minLength": 18,
+      "maxLength": 1024,
+      "pattern": "^game_data/shared/[^\\\\]+$",
+      "not": {
+        "pattern": "(?:^|/)(?:\\.{1,2}|(?:aux|con|nul|prn|com[1-9]|lpt[1-9])(?:\\.[^/]*)?)(?:/|$)"
+      }
+    },
+    "media_type": {
+      "enum": [
+        "application/json",
+        "audio/mpeg",
+        "audio/ogg",
+        "audio/wav",
+        "font/otf",
+        "font/ttf",
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "text/x-glsl"
+      ]
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size", "media_type"],
+      "properties": {
+        "path": {"$ref": "#/$defs/shared_path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"type": "integer", "minimum": 0, "maximum": 536870912},
+        "media_type": {"$ref": "#/$defs/media_type"}
+      },
+      "oneOf": [
+        {"properties": {"path": {"pattern": "\\.[Jj][Ss][Oo][Nn]$"}, "media_type": {"const": "application/json"}}},
+        {"properties": {"path": {"pattern": "\\.[Mm][Pp]3$"}, "media_type": {"const": "audio/mpeg"}}},
+        {"properties": {"path": {"pattern": "\\.[Oo][Gg][Gg]$"}, "media_type": {"const": "audio/ogg"}}},
+        {"properties": {"path": {"pattern": "\\.[Ww][Aa][Vv]$"}, "media_type": {"const": "audio/wav"}}},
+        {"properties": {"path": {"pattern": "\\.[Oo][Tt][Ff]$"}, "media_type": {"const": "font/otf"}}},
+        {"properties": {"path": {"pattern": "\\.[Tt][Tt][Ff]$"}, "media_type": {"const": "font/ttf"}}},
+        {"properties": {"path": {"pattern": "\\.(?:[Jj][Pp][Gg]|[Jj][Pp][Ee][Gg])$"}, "media_type": {"const": "image/jpeg"}}},
+        {"properties": {"path": {"pattern": "\\.[Pp][Nn][Gg]$"}, "media_type": {"const": "image/png"}}},
+        {"properties": {"path": {"pattern": "\\.[Ww][Ee][Bb][Pp]$"}, "media_type": {"const": "image/webp"}}},
+        {"properties": {"path": {"pattern": "\\.(?:[Ff][Rr][Aa][Gg]|[Ff][Ss]|[Gg][Ll][Ss][Ll]|[Vv][Ee][Rr][Tt]|[Vv][Ss])$"}, "media_type": {"const": "text/x-glsl"}}}
+      ]
+    }
+  }
+}

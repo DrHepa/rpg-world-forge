@@ -89,9 +89,13 @@ exported as a new bundle; it is never patched in place inside a game.
 
 Each game is scaffolded into a separate repository. It owns:
 
-- its application entry point and game-specific UX;
-- the deterministic runtime snapshot and raylib adapter;
-- shared presentation resources and optional game-level binding overrides;
+- its application entry point, game-specific composition, adapters, and UX
+  under `src/game/`;
+- an immutable, hash-locked `src/isoworld/` runtime snapshot;
+- a separate `platform.lock.json` for the Python, binding, backend, and native
+  raylib baseline;
+- shared presentation resources under a canonical path/hash/media lock that
+  also binds the game notices file, plus optional game-level binding overrides;
 - a catalog of imported, immutable world bundles and their lock data;
 - saves/settings migration policy, packaging, platform CI, and releases; and
 - only the runtime licenses and notices required for distribution.
@@ -121,6 +125,12 @@ renderpacks, processed assets, and the bundle manifest through its runtime
 content layer. It also contains no AI/model inference, provider SDK, prompt
 execution, or network requirement.
 
+Game-specific work never edits the vendored `src/isoworld/` tree. Reusable
+runtime changes are implemented and tested in the Forge, then replace the
+complete snapshot and `runtime.lock.json` atomically with an expected current
+hash check. Game-owned extensions remain in `src/game/`, so a snapshot update
+cannot silently overwrite application work.
+
 ### Runtime distribution
 
 For M4, the runtime in this repository is the authoritative tested snapshot.
@@ -128,6 +138,23 @@ The game scaffold receives or vendors a versioned snapshot of the runtime
 contracts and implementation that it then owns. The imported snapshot records
 the Forge version/commit and retains its license; updates are deliberate and
 must pass the game suite instead of arriving implicitly.
+
+Runtime migration and platform migration are distinct operations. A runtime
+migration replaces all of `src/isoworld/` plus `runtime.lock.json`; it does not
+change the Python/raylib platform. A platform migration updates
+`platform.lock.json`, the CI-consumed `requirements.lock`, the closed
+direct/build dependency declarations, CI matrix, notices, and native evidence
+together; it does not patch the runtime snapshot. The M4
+desktop baseline is CPython 3.11/3.12, the standard
+`raylib==6.0.1.0` distribution imported as `pyray`, and native raylib 6.0.
+Both migrations invalidate their documented downstream evidence and require a
+fresh boundary and compatibility audit.
+
+Source-archive packaging never mixes pre-verification identity with later file
+reads. It copies the explicit allowlist into a private staging root, runs the
+game verifier against that root in an isolated Python process, derives package
+identity from the verified copy, and verifies the completed archive byte by
+byte before publishing it to a fresh external path.
 
 Once the runtime API and compatibility policy are sufficiently stable, it may
 move to a separately versioned `isoworld-runtime` distribution. That change

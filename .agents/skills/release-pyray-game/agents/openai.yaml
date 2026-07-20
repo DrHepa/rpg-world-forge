@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Pyray Game"
+  short_description: "Package an already verified locked release"
+  default_prompt: "Use $release-pyray-game to package an already verified standalone pyray/raylib game release."

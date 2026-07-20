@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from isoworld.content.media import media_signature_matches
 from isoworld.content.renderpack import RenderPackError, load_clipset
 from worldforge.integrity import declared_hash_matches
 from worldforge.validation import ID_PATTERN, PLACEHOLDER_PATTERN
@@ -136,7 +137,7 @@ def _verified_worldpack(path: Path) -> dict[str, Any]:
         pack.get("format") != "isoworld.worldpack"
         or isinstance(format_version, bool)
         or not isinstance(format_version, int)
-        or format_version not in {1, 2, 3, 4}
+        or format_version not in {1, 2, 3, 4, 5}
     ):
         raise AssetManifestError("The input file is not a compatible worldpack")
     content_hash = pack.get("content_hash")
@@ -239,33 +240,7 @@ def _validate_specification(
 
 
 def _media_signature_matches(path: Path, media_type: str) -> bool:
-    try:
-        with path.open("rb") as source:
-            head = source.read(16)
-        if media_type == "image/png":
-            return head.startswith(b"\x89PNG\r\n\x1a\n")
-        if media_type == "image/jpeg":
-            return head.startswith(b"\xff\xd8\xff")
-        if media_type == "image/webp":
-            return head.startswith(b"RIFF") and head[8:12] == b"WEBP"
-        if media_type == "audio/wav":
-            return head.startswith(b"RIFF") and head[8:12] == b"WAVE"
-        if media_type == "audio/ogg":
-            return head.startswith(b"OggS")
-        if media_type == "audio/mpeg":
-            return head.startswith(b"ID3") or (len(head) >= 2 and head[0] == 0xFF)
-        if media_type == "font/ttf":
-            return head.startswith((b"\x00\x01\x00\x00", b"true"))
-        if media_type == "font/otf":
-            return head.startswith(b"OTTO")
-        if media_type == "application/json":
-            json.loads(path.read_text(encoding="utf-8"))
-            return True
-        if media_type == "text/x-glsl":
-            return bool(path.read_text(encoding="utf-8").strip())
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    return False
+    return media_signature_matches(path, media_type)
 
 
 def _sha256_file(path: Path) -> str:

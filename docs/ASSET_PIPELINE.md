@@ -7,7 +7,7 @@ Finish and compile the world before producing its visual and audio material.
 `validate-assets` detects later canon changes.
 
 ```text
-validated, canon-locked worldpack
+validated, canon-locked worldpack v5
           |
           v
 art/audio direction + asset inventory
@@ -27,8 +27,9 @@ technical QA + licenses + hashes
           v
 asset manifest v2 --build-renderpack--> runtime-only renderpack
                                       |
+                                      | export + verify immutable bundle
                                       v
-                          processed assets loaded by raylib
+                     game catalog -> processed assets loaded by raylib
 ```
 
 Models, prompts, references, weights, and generation tools belong to authoring.
@@ -68,6 +69,10 @@ The compiler copies referenced processed files below `build/runtime/`, verifies
 them with the runtime loader, and strips production-only evidence.
 The subsequent release step creates an immutable bundle; a separate game
 repository imports only that bundle, never this production workspace.
+The bundle contains the worldpack, renderpack, approved processed outputs, and
+the runtime license subset. It contains no asset manifest, specification,
+recipe, prompt, reference, candidate, provider/model/workflow metadata, or
+generation tool.
 
 ## Production order
 

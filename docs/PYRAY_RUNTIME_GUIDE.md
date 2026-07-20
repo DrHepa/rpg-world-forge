@@ -22,8 +22,9 @@ The baseline was verified against primary sources on 2026-07-19:
   but raylib does not provide a first-party Python binding.
 - The stable Python distribution is
   [`raylib==6.0.1.0`](https://pypi.org/project/raylib/6.0.1.0/), which targets
-  raylib 6.0. Generated game repositories must pin this exact release and lock
-  all transitive dependencies. A newer repository revision is not a release.
+  raylib 6.0. Generated game repositories pin this exact release. The consumed
+  `requirements.lock` also pins its `cffi`/`pycparser` runtime graph and the
+  editable-build toolchain; a newer repository revision is not a release.
 - The distribution contains two importable modules: `raylib`, which closely
   follows the C API, and `pyray`, which supplies snake-case names, automatic
   string/pointer conversions, and structure helpers. There is no separate
@@ -52,6 +53,18 @@ be silent and whose calls are slower; see the
 but its maintainer describes that backend as not well tested. Keep backend
 selection outside domain code and prove an SDL switch with the full platform
 matrix before adopting it.
+
+The generated game records this baseline in `platform.lock.json`. That lock is
+separate from `runtime.lock.json`, which hashes the complete vendored
+`src/isoworld/` snapshot. `requirements.lock` is the resolver input actually
+installed by CI; the verifier requires it to agree with `platform.lock.json`
+and `pyproject.toml`. It also pins Ruff as CI-only quality tooling; Ruff is not
+a runtime import. A G01 runtime migration atomically replaces the whole
+snapshot and runtime lock without changing Python or raylib. A G02 platform
+migration changes both platform/dependency locks, exact direct dependency,
+build configuration, CI matrix, notices, and native evidence together without
+editing the runtime snapshot. Game-specific implementation remains under
+`src/game/` in both cases.
 
 ## Runtime boundary
 
@@ -256,6 +269,14 @@ read-only data root for packaged shared data and world bundles, plus a separate
 writable user-data root for saves and settings. Development hot reload is an
 optional adapter feature; release mode uses only hash-checked files.
 
+Game-owned common presentation files are declared by
+`game_data/shared.lock.json`. G23 may change shared graphics and G25 may change
+shared UI/common audio; both must run `python scripts/lock_shared_assets.py`
+before verification. Other phases consume the locked bytes read-only. The lock
+binds the full inventory and `THIRD_PARTY_NOTICES.md`; every shared file needs
+an origin and license entry there, including an explicit game-owned statement
+for original work. World-specific media remains in the world's bundle.
+
 ## Audio
 
 Initialize audio before loading sound or music. Use `Sound` for short resident
@@ -362,7 +383,8 @@ supported path must be proven before making them a CI requirement.
 ## Packaging and platform policy
 
 Desktop Windows, Linux, and macOS are the M4 game-template targets. Use a
-`pyproject.toml`, an exact dependency, and a committed lockfile. The binding's
+`pyproject.toml`, the exact `raylib==6.0.1.0` dependency, and the committed
+`platform.lock.json`. The binding's
 official [installation table](https://electronstudio.github.io/raylib-python-cffi/README.html#installation)
 documents available wheels and the native build fallback. Test the actual
 release runners rather than assuming that one wheel proves all targets.
@@ -375,6 +397,14 @@ for standalone binaries. Packaging scripts must explicitly include:
 - shader variants needed by the target;
 - the game license and third-party notices; and
 - no authoring source, prompts, credentials, model data, or production evidence.
+
+M4 G32 packages the exact read-only `GAME_ROOT` that passed G30 as one
+deterministic unpack-and-run source ZIP and writes only to an external
+staging/output root. It does not create a wheel, installer, or native
+executable; each of those requires a later dedicated release skill. If
+packaging reveals a needed source,
+configuration, lock, catalog, bundle, notice, or test change, return to the
+owning phase and rerun the complete G30 matrix before resuming release.
 
 The binding maintainer also provides a Python
 [project template](https://github.com/electronstudio/python-raylib-template)
@@ -413,22 +443,37 @@ game-repository path:
 - update the versioned runtime snapshot deliberately; and
 - audit template, dependency, capability, path, and authoring-boundary rules.
 
-The materialized game may expose ordinary cross-platform Python entry points
-for responsibilities it owns:
+The materialized game exposes ordinary cross-platform Python entry points for
+responsibilities it owns:
 
-- `verify-game`: validate imported catalogs, bundles, assets, paths, licenses,
-  and runtime imports without invoking `worldforge`;
-- `run-game`: select locked runtime data and start the desktop adapter;
-- `capture-scene`: produce a controlled screenshot for manual/golden review;
-- `benchmark-scene`: measure a representative isometric scene; and
-- `package-game`: create a platform artifact with an audited data manifest.
+- `python scripts/verify_game.py`: validate both locks, imported catalogs,
+  bundles, assets, paths, licenses, and runtime imports without `worldforge`;
+- `python -m game`: list/select locked releases, run headlessly, or start the
+  desktop adapter;
+- `python scripts/native_smoke.py`: record a parameterized native window,
+  DPI/input, drawing, and optional-audio probe;
+- `python scripts/benchmark_scene.py`: measure a representative deterministic
+  scene; and
+- `python scripts/package_game.py`: create and independently reverify one
+  private snapshot, then publish a deterministic allowlisted source archive
+  with scripts, tests/allowlisted fixtures, shared assets, file hashes, and notices.
 
-Reusable agent skills for game scaffolding, world integration, isometric
-rendering, resource lifecycle, input/audio, shaders, performance, and release
-packaging live in the Forge repository only. They must cite the primary sources
-above and enforce these guardrails. A generated game receives only the
-materialized runtime/application template and game-local entry points. It never
-receives `AGENTS.md`, `.agents/skills`, `.worldforge`, authoring source, prompts,
-or production evidence. M4 creates those Forge-side skills, contracts,
-templates, and operations plus the primitive fixture needed to prove the
-boundary. M5 owns assisted production of the final visual and audio assets.
+The Forge has 24 reusable, phase-scoped skills: four independent world/release
+operations and twenty standalone-game phases. Scaffolding, runtime migration,
+platform migration, bundle import, test harness, each gameplay family, each
+pyray presentation layer, verification, optimization, and release remain
+separate; there is no all-in-one game-builder skill. The exact order and exit
+gates are in [GAME_IMPLEMENTATION_PHASES.md](GAME_IMPLEMENTATION_PHASES.md).
+
+Every game-phase skill declares `Scope`, `Inputs`, `Outputs`, `Invariants`,
+`Workflow`, and `Completion`. G20 only owns window/loop orchestration; G21-G25
+separately own rendering, input/camera, graphics resources, one UI flow, and
+audio. G30 is read-only verification, G31 changes one measured bottleneck, and
+G32 packages the exact verified tree as the source ZIP only.
+
+These skills live in the Forge only and operate through explicit `FORGE_ROOT`
+and external `GAME_ROOT` paths. A generated game receives only the materialized
+runtime/application template and game-local entry points. It never receives
+`AGENTS.md`, `.agents/skills`, `.worldforge`, authoring source, prompts, or
+production evidence. M5 owns assisted production of the final visual and audio
+assets.

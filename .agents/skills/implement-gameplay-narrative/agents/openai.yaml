@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Narrative Gameplay"
+  short_description: "Execute dialogue, quests, scenes, and campaigns"
+  default_prompt: "Use $implement-gameplay-narrative to implement deterministic narrative execution without runtime AI."

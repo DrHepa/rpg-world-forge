@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update Game Runtime"
+  short_description: "Upgrade the locked isoworld snapshot"
+  default_prompt: "Use $update-game-runtime to upgrade and verify the vendored isoworld runtime in a standalone game."

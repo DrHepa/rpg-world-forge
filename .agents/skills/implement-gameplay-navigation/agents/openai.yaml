@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Navigation"
+  short_description: "Build deterministic movement and pathfinding"
+  default_prompt: "Use $implement-gameplay-navigation to implement deterministic navigation in the standalone game."

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import shutil
+import tempfile
 from pathlib import Path
 
-from worldforge.validation import ID_PATTERN
+from isoworld.content.portability import is_portable_path_component
+from worldforge.repository_boundary import assert_new_repository_target
+from worldforge.validation import BCP47_PATTERN, ID_PATTERN
 from worldforge.workflow import initial_status, phase_catalog
 
 
@@ -21,6 +27,7 @@ COLLECTIONS = (
     "factions",
     "goals",
     "interactions",
+    "locales",
     "maps",
     "needs",
     "personal_arcs",
@@ -68,6 +75,8 @@ SOURCE_GUIDES = {
     "implementation": "Contracts, catalogs, tests, and immutable game handoff.",
 }
 
+STABLE_SEMVER_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+
 
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -77,7 +86,7 @@ def _write_json(path: Path, value: object) -> None:
     )
 
 
-def create_world_project(
+def _populate_world_project(
     target: str | Path,
     *,
     world_id: str,
@@ -85,25 +94,32 @@ def create_world_project(
     language: str,
     actor_id: str | None = None,
     actor_name: str | None = None,
+    version: str = "0.1.0",
 ) -> Path:
-    if not ID_PATTERN.fullmatch(world_id):
+    if not ID_PATTERN.fullmatch(world_id) or not is_portable_path_component(world_id):
         raise ScaffoldError("world_id must use 2..64-character ASCII snake_case")
     if (actor_id is None) != (actor_name is None):
         raise ScaffoldError("actor_id and actor_name must be provided together")
-    if actor_id is not None and not ID_PATTERN.fullmatch(actor_id):
-        raise ScaffoldError("actor_id must use 2..64-character ASCII snake_case")
+    if actor_id is not None and (
+        not ID_PATTERN.fullmatch(actor_id) or not is_portable_path_component(actor_id)
+    ):
+        raise ScaffoldError("actor_id must be portable 2..64-character ASCII snake_case")
     if not title.strip() or (actor_name is not None and not actor_name.strip()):
         raise ScaffoldError("title and actor_name cannot be empty")
-    if len(language.strip()) < 2:
-        raise ScaffoldError("language is invalid")
+    normalized_language = language.strip()
+    if BCP47_PATTERN.fullmatch(normalized_language) is None:
+        raise ScaffoldError("language must be a BCP47 language tag")
+    if STABLE_SEMVER_PATTERN.fullmatch(version) is None:
+        raise ScaffoldError("version must be stable SemVer MAJOR.MINOR.PATCH")
 
     root = Path(target)
-    if root.exists():
-        raise ScaffoldError(f"The target already exists: {root}")
+    if root.exists() and any(root.iterdir()):
+        raise ScaffoldError(f"The staging target is not empty: {root}")
+    root.mkdir(parents=True, exist_ok=True)
     source = root / "source"
     source.mkdir(parents=True)
 
-    is_spanish = language.lower().startswith("es")
+    is_spanish = normalized_language.lower().startswith("es")
     ui = (
         {
             "active_actor": "Personaje activo",
@@ -155,7 +171,10 @@ def create_world_project(
         {
             "id": world_id,
             "title": title.strip(),
-            "language": language.strip(),
+            "version": version,
+            "language": normalized_language,
+            "default_locale": normalized_language,
+            "supported_locales": [normalized_language],
             "start_map_id": "starting_area",
             "capabilities": [
                 "grid_movement",
@@ -234,11 +253,12 @@ def create_world_project(
         root / ".worldforge/project.json",
         {
             "format": "rpg-world-forge.project",
-            "format_version": 1,
+            "format_version": 2,
             "project_kind": "world",
             "world_id": world_id,
             "title": title.strip(),
-            "language": language.strip(),
+            "world_version": version,
+            "language": normalized_language,
             "lead_agent": "gpt",
             "approval_mode": "lead_agent",
             "runtime_ai": False,
@@ -250,7 +270,9 @@ def create_world_project(
             "tool_repository": "rpg-world-forge",
         },
     )
-    _write_json(root / ".worldforge/status.json", initial_status(world_id))
+    status = initial_status(world_id)
+    status["world_version"] = version
+    _write_json(root / ".worldforge/status.json", status)
     _write_json(
         root / ".worldforge/phases.json",
         {
@@ -334,3 +356,42 @@ def create_world_project(
         encoding="utf-8",
     )
     return source / "manifest.json"
+
+
+def create_world_project(
+    target: str | Path,
+    *,
+    world_id: str,
+    title: str,
+    language: str,
+    actor_id: str | None = None,
+    actor_name: str | None = None,
+    version: str = "0.1.0",
+) -> Path:
+    """Atomically scaffold an independent v2 world-authoring project."""
+
+    try:
+        destination = assert_new_repository_target(
+            target,
+            repository_type="world",
+        )
+    except ValueError as exc:
+        raise ScaffoldError(str(exc)) from exc
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}.world-", dir=destination.parent))
+    try:
+        _populate_world_project(
+            staging,
+            world_id=world_id,
+            title=title,
+            language=language,
+            actor_id=actor_id,
+            actor_name=actor_name,
+            version=version,
+        )
+        os.replace(staging, destination)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return destination / "source/manifest.json"

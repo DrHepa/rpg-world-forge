@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/runtime-bundle.schema.json",
+  "title": "Immutable IsoWorld runtime bundle manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "world_id",
+    "release_id",
+    "source_hashes",
+    "worldpack",
+    "renderpack",
+    "required_runtime_features",
+    "files",
+    "licenses",
+    "bundle_hash"
+  ],
+  "properties": {
+    "format": {"const": "isoworld.runtime_bundle"},
+    "format_version": {"const": 1},
+    "world_id": {"$ref": "#/$defs/world_id"},
+    "release_id": {"$ref": "#/$defs/release_id"},
+    "source_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worldpack_content_hash", "renderpack_content_hash"],
+      "properties": {
+        "worldpack_content_hash": {"$ref": "#/$defs/sha256"},
+        "renderpack_content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "worldpack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "format_version", "content_hash"],
+      "properties": {
+        "path": {"const": "worldpack.json"},
+        "format_version": {"type": "integer", "minimum": 1},
+        "content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "renderpack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "format_version", "content_hash", "world_content_hash"],
+      "properties": {
+        "path": {"const": "renderpack.json"},
+        "format_version": {"const": 1},
+        "content_hash": {"$ref": "#/$defs/sha256"},
+        "world_content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "required_runtime_features": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/runtime_feature"}
+    },
+    "files": {
+      "type": "array",
+      "minItems": 4,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/file"}
+    },
+    "licenses": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/license_file"}
+    },
+    "bundle_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "world_id": {
+      "type": "string",
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"
+    },
+    "release_id": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "runtime_feature": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:worldpack\\.json|renderpack\\.json|assets/[^\\\\]+|licenses/[^\\\\]+)$",
+      "not": {"pattern": "(?:^|/)\\.{1,2}(?:/|$)"}
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size", "media_type"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relative_path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"type": "integer", "minimum": 0, "maximum": 536870912},
+        "media_type": {"type": "string", "minLength": 1, "pattern": "^[^\\s]+$"}
+      }
+    },
+    "license_file": {
+      "allOf": [
+        {"$ref": "#/$defs/file"},
+        {
+          "properties": {"size": {"maximum": 4194304}},
+          "oneOf": [
+            {
+              "properties": {
+                "path": {"pattern": "^licenses/.+\\.[Tt][Xx][Tt]$"},
+                "media_type": {"const": "text/plain"}
+              }
+            },
+            {
+              "properties": {
+                "path": {"pattern": "^licenses/.+\\.[Rr][Ss][Tt]$"},
+                "media_type": {"const": "text/plain"}
+              }
+            },
+            {
+              "properties": {
+                "path": {"pattern": "^licenses/.+\\.[Mm][Dd]$"},
+                "media_type": {"const": "text/markdown"}
+              }
+            },
+            {
+              "properties": {
+                "path": {"pattern": "^licenses/.+\\.[Hh][Tt][Mm][Ll]$"},
+                "media_type": {"const": "text/html"}
+              }
+            },
+            {
+              "properties": {
+                "path": {"pattern": "^licenses/.+\\.[Jj][Ss][Oo][Nn]$"},
+                "media_type": {"const": "application/json"}
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

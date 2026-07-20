@@ -69,9 +69,10 @@ save/replay -> world ID + content hash + state/action digest
 5. `ui`: presentation in the worldpack's language; no domain rules.
 6. `worldforge`: authoring/build tools that runtime never imports.
 
-The worldpack owns simulation and narrative semantics. Version 4 adds typed
+The worldpack owns simulation and narrative semantics. Version 4 added typed
 resource, need, goal, stockpile, construction, production, and consequence
-collections. The renderpack owns the
+collections. Version 5 adds explicit runtime API/features, BCP47 locales, and
+typed personal campaigns while retaining v1-v4 loading compatibility. The renderpack owns the
 replaceable mapping from semantic slots such as `actor:hero` or
 `tile_type:ground` or `construction:workshop` to processed textures,
 deterministic clipsets, fonts,
@@ -97,8 +98,25 @@ materialized into the game.
 `worldforge audit-game <game-repo>` enforces this seam. It rejects known agent
 and workflow paths, editable source roots, authoring-only JSON formats,
 `worldforge`/Modly/AI imports, and corresponding Python project dependencies.
-Future game materialization and bundle-import operations must pass this command
-before handoff.
+Game materialization, runtime/platform migrations, and bundle imports must pass
+this command before handoff.
+
+The generated game has two independent locks:
+
+- `runtime.lock.json` inventories the complete vendored `src/isoworld` snapshot;
+- `platform.lock.json` records the Python range, exact binding distribution and
+  version, backend, native raylib API, and `pyray` import boundary.
+
+The platform contract is enforced by a resolver-facing artifact:
+`requirements.lock` lists the exact dependency/build graph consumed by CI and
+must agree with both the platform lock and `pyproject.toml`.
+
+Game-specific implementation lives under `src/game`. Agents never edit the
+locked `src/isoworld` tree in place: reusable runtime changes are implemented
+and tested here, then replace the whole snapshot through an optimistic-hash
+Forge operation. Imported bundles are similarly replaced only by importing a
+new stable SemVer release. Platform migration is a separate phase that updates
+its lock, exact dependency, CI, notices, and native evidence together.
 
 ## Repository responsibility matrix
 
@@ -109,6 +127,7 @@ before handoff.
 | Asset candidates and production evidence | Generic tools only | Owns | Never | Never |
 | Worldpack, renderpack, processed assets | Builds/verifies | Releases | Owns immutable copies | Imports locked copies |
 | Pyray/raylib application, UX, saves, packaging | Templates/reference | Never | Never | Owns |
+| Runtime/platform locks and migrations | Builds and operates externally | Never | Declares requirements only | Owns locked copies/config |
 
 ## Non-negotiable contracts
 
@@ -133,3 +152,5 @@ before handoff.
 - Game repositories live outside the Forge, pass the clean-game boundary
   audit, and distribute only game-owned runtime code plus approved immutable
   bundles and processed assets.
+- Runtime bundles likewise use standalone external roots; neither export nor
+  import accepts a bundle nested in Forge, world, bundle, or game storage.

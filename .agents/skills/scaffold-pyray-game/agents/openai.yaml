@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scaffold Pyray Game"
+  short_description: "Bootstrap a clean standalone game repository"
+  default_prompt: "Use $scaffold-pyray-game to create and verify a clean standalone pyray/raylib game repository."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Time and Schedules"
+  short_description: "Build deterministic clocks and NPC routines"
+  default_prompt: "Use $implement-gameplay-time-schedules to implement the world clock and NPC schedules."

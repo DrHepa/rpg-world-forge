@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/world-project.schema.json",
+  "title": "RPG World Forge world-authoring project",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "project_kind",
+    "world_id",
+    "title",
+    "world_version",
+    "lead_agent",
+    "approval_mode",
+    "runtime_ai",
+    "asset_generation",
+    "tool_repository"
+  ],
+  "properties": {
+    "format": {"const": "rpg-world-forge.project"},
+    "format_version": {"const": 2},
+    "project_kind": {"const": "world"},
+    "world_id": {"$ref": "#/$defs/id"},
+    "title": {"type": "string", "minLength": 1},
+    "world_version": {"$ref": "#/$defs/semver"},
+    "language": {
+      "type": "string",
+      "pattern": "^(?:(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*(?:-x(?:-[A-Za-z0-9]{1,8})+)?|x(?:-[A-Za-z0-9]{1,8})+)$"
+    },
+    "lead_agent": {"type": "string", "minLength": 1},
+    "approval_mode": {"type": "string", "minLength": 1},
+    "runtime_ai": {"const": false},
+    "asset_generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled_routes", "local_model_route", "runtime_inference"],
+      "properties": {
+        "enabled_routes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["openai", "modly"]}
+        },
+        "local_model_route": {"const": "modly"},
+        "runtime_inference": {"const": false}
+      }
+    },
+    "tool_repository": {"const": "rpg-world-forge"},
+    "derived_from": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["world_id", "world_version", "world_content_hash"],
+      "properties": {
+        "world_id": {"$ref": "#/$defs/id"},
+        "world_version": {"$ref": "#/$defs/semver"},
+        "world_content_hash": {
+          "oneOf": [
+            {"$ref": "#/$defs/sha256"},
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

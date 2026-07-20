@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create World Project"
+  short_description: "Scaffold one independent authored world"
+  default_prompt: "Use $create-world-project to create and validate one new external world-authoring project."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Optimize Pyray Game"
+  short_description: "Profile and improve measured bottlenecks"
+  default_prompt: "Use $optimize-pyray-game to profile a representative scene and optimize one proven bottleneck."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Pyray App Loop"
+  short_description: "Build the window lifecycle and fixed-step loop"
+  default_prompt: "Use $implement-pyray-app-loop to implement the pyray application lifecycle."

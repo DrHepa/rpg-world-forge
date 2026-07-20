@@ -1,0 +1,616 @@
+from __future__ import annotations
+
+import argparse
+import ast
+import hashlib
+import json
+import os
+import re
+import stat
+import sys
+import tomllib
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = PROJECT_ROOT / "src"
+sys.path.insert(0, str(SOURCE_ROOT))
+
+MAX_LOCK_BYTES = 16 * 1024 * 1024
+FORBIDDEN_NAMES = {
+    ".agents",
+    ".claude",
+    ".codex",
+    ".cursor",
+    ".gemini",
+    ".worldforge",
+    ".cursorrules",
+    "agents.md",
+    "agents.override.md",
+    "authoring",
+    "claude.md",
+    "copilot-instructions.md",
+    "gemini.md",
+    "phase_reports",
+    "prompts",
+    "skill.md",
+    "source",
+}
+FORBIDDEN_IMPORTS = {
+    "anthropic",
+    "cohere",
+    "diffusers",
+    "google",
+    "groq",
+    "huggingface_hub",
+    "langchain",
+    "litellm",
+    "llama_cpp",
+    "mistralai",
+    "modly",
+    "mlx",
+    "ollama",
+    "openai",
+    "sentence_transformers",
+    "tensorflow",
+    "torch",
+    "transformers",
+    "vertexai",
+    "worldforge",
+}
+IGNORED_TOP_LEVEL = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "build",
+    "dist",
+    "package_output",
+    "saves",
+    "screenshots",
+}
+
+
+class VerificationError(ValueError):
+    pass
+
+
+class _DuplicateKeyError(ValueError):
+    pass
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateKeyError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _canonical_hash(document: dict[str, Any], field: str) -> str:
+    payload = dict(document)
+    payload.pop(field, None)
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def read_game_identity() -> dict[str, str]:
+    """Read declarative identity constants without importing mutable game code."""
+
+    path = PROJECT_ROOT / "src/game/__init__.py"
+    if path.is_symlink() or not path.is_file() or path.stat().st_nlink != 1:
+        raise VerificationError("game identity module is missing or unsafe")
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    allowed = {"GAME_ID", "GAME_TITLE", "__version__"}
+    values: dict[str, str] = {}
+    for index, node in enumerate(tree.body):
+        if (
+            index == 0
+            and isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            continue
+        if (
+            not isinstance(node, ast.Assign)
+            or len(node.targets) != 1
+            or not isinstance(node.targets[0], ast.Name)
+            or node.targets[0].id not in allowed
+            or not isinstance(node.value, ast.Constant)
+            or not isinstance(node.value.value, str)
+        ):
+            raise VerificationError("game identity module must contain constants only")
+        name = node.targets[0].id
+        if name in values:
+            raise VerificationError(f"game identity constant is duplicated: {name}")
+        values[name] = node.value.value
+    if set(values) != allowed:
+        raise VerificationError("game identity constants are incomplete")
+    game_id = values["GAME_ID"]
+    device = game_id.split(".", 1)[0].casefold()
+    reserved = {"aux", "con", "nul", "prn"} | {
+        f"{prefix}{number}" for prefix in ("com", "lpt") for number in range(1, 10)
+    }
+    if re.fullmatch(r"[a-z][a-z0-9_]{1,63}", game_id) is None or device in reserved:
+        raise VerificationError("game ID is invalid or not portable")
+    if (
+        not values["GAME_TITLE"]
+        or any(ord(character) < 32 or ord(character) == 127 for character in values["GAME_TITLE"])
+        or re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", values["__version__"]) is None
+    ):
+        raise VerificationError("game title or version is invalid")
+    return {
+        "game_id": game_id,
+        "title": values["GAME_TITLE"],
+        "version": values["__version__"],
+    }
+
+
+def verify_runtime_snapshot() -> dict[str, Any]:
+    path = PROJECT_ROOT / "runtime.lock.json"
+    if (
+        path.is_symlink()
+        or not path.is_file()
+        or path.stat().st_nlink != 1
+        or path.stat().st_size > MAX_LOCK_BYTES
+    ):
+        raise VerificationError("runtime.lock.json is missing, unsafe, or too large")
+    data = path.read_bytes()
+    try:
+        document = json.loads(
+            data.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateKeyError) as exc:
+        raise VerificationError(f"runtime.lock.json is invalid: {exc}") from exc
+    if not isinstance(document, dict):
+        raise VerificationError("runtime.lock.json must contain an object")
+    expected_keys = {
+        "format",
+        "format_version",
+        "runtime_version",
+        "runtime_api_version",
+        "supported_runtime_features",
+        "source_revision",
+        "files",
+        "content_hash",
+    }
+    if set(document) != expected_keys:
+        raise VerificationError("runtime.lock.json keys differ from the contract")
+    if document["format"] != "isoworld.runtime_snapshot" or document["format_version"] != 1:
+        raise VerificationError("unknown runtime snapshot format")
+    if not all(
+        isinstance(document[field], str) and document[field]
+        for field in (
+            "runtime_version",
+            "runtime_api_version",
+            "source_revision",
+            "content_hash",
+        )
+    ):
+        raise VerificationError("runtime snapshot identity fields are invalid")
+    if (
+        re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", document["runtime_version"]) is None
+        or re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", document["runtime_api_version"]) is None
+    ):
+        raise VerificationError("runtime snapshot versions are invalid")
+    features = document["supported_runtime_features"]
+    if (
+        not isinstance(features, list)
+        or not all(
+            isinstance(feature, str) and re.fullmatch(r"[a-z][a-z0-9_]{1,63}", feature)
+            for feature in features
+        )
+        or features != sorted(set(features))
+    ):
+        raise VerificationError("runtime snapshot feature inventory is invalid")
+    if _canonical_hash(document, "content_hash") != document["content_hash"]:
+        raise VerificationError("runtime snapshot content hash does not verify")
+    canonical_bytes = (
+        json.dumps(document, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    if data != canonical_bytes:
+        raise VerificationError("runtime lock bytes are not canonical")
+    records = document["files"]
+    if not isinstance(records, list) or not records:
+        raise VerificationError("runtime snapshot files must be a non-empty list")
+    paths: list[str] = []
+    for index, record in enumerate(records):
+        if not isinstance(record, dict) or set(record) != {"path", "sha256", "size"}:
+            raise VerificationError(f"runtime files/{index} has invalid fields")
+        if (
+            not isinstance(record["sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", record["sha256"]) is None
+            or isinstance(record["size"], bool)
+            or not isinstance(record["size"], int)
+            or record["size"] < 0
+        ):
+            raise VerificationError(f"runtime files/{index} metadata is invalid")
+        relative = record["path"]
+        pure = PurePosixPath(relative) if isinstance(relative, str) else PurePosixPath(".")
+        if (
+            not isinstance(relative, str)
+            or pure.parts[:2] != ("src", "isoworld")
+            or pure.suffix != ".py"
+            or pure.as_posix() != relative
+            or "\\" in relative
+            or any(part in {"", ".", ".."} for part in pure.parts)
+        ):
+            raise VerificationError(f"runtime files/{index}/path is invalid")
+        target = PROJECT_ROOT / relative
+        if target.is_symlink() or not target.is_file():
+            raise VerificationError(f"runtime file is missing or unsafe: {relative}")
+        info = target.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise VerificationError(f"runtime path is not a regular file: {relative}")
+        if record["size"] != info.st_size or record["sha256"] != _sha256(target):
+            raise VerificationError(f"runtime file hash/size failed: {relative}")
+        paths.append(relative)
+    if paths != sorted(set(paths)):
+        raise VerificationError("runtime file records must be unique and sorted")
+    runtime_root = PROJECT_ROOT / "src/isoworld"
+    if runtime_root.is_symlink() or not runtime_root.is_dir():
+        raise VerificationError("vendored runtime root is missing or unsafe")
+    actual: list[str] = []
+    actual_directories: set[str] = set()
+    for current, directory_names, file_names in os.walk(
+        runtime_root,
+        topdown=True,
+        followlinks=False,
+    ):
+        current_path = Path(current)
+        directory_names.sort()
+        directory_names[:] = [name for name in directory_names if name != "__pycache__"]
+        file_names.sort()
+        for name in directory_names:
+            directory = current_path / name
+            info = directory.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                raise VerificationError("vendored runtime contains an unsafe directory")
+            actual_directories.add(directory.relative_to(PROJECT_ROOT).as_posix())
+        for name in file_names:
+            file = current_path / name
+            info = file.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise VerificationError("vendored runtime contains an unsafe file")
+            actual.append(file.relative_to(PROJECT_ROOT).as_posix())
+    actual.sort()
+    expected_directories = {
+        parent.as_posix()
+        for relative in paths
+        for parent in PurePosixPath(relative).parents
+        if parent.as_posix() not in {".", "src", "src/isoworld"}
+    }
+    if actual != paths:
+        raise VerificationError("vendored runtime tree differs from its lock")
+    if actual_directories != expected_directories:
+        raise VerificationError("vendored runtime directories differ from the lock")
+    return document
+
+
+def verify_runtime_contract(runtime: dict[str, Any]) -> None:
+    """Import constants only after the complete runtime snapshot hash verifies."""
+
+    from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
+
+    if runtime["runtime_api_version"] != RUNTIME_API_VERSION:
+        raise VerificationError("runtime lock API version differs from vendored runtime")
+    if runtime["supported_runtime_features"] != sorted(SUPPORTED_RUNTIME_FEATURES):
+        raise VerificationError("runtime lock features differ from vendored runtime")
+
+
+def _import_roots(tree: ast.AST) -> set[str]:
+    roots: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.split(".", 1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            roots.add(node.module.split(".", 1)[0])
+        elif isinstance(node, ast.Call) and node.args:
+            function = node.func
+            dynamic_import = (
+                isinstance(function, ast.Name) and function.id in {"__import__", "import_module"}
+            ) or (
+                isinstance(function, ast.Attribute)
+                and function.attr == "import_module"
+                and isinstance(function.value, ast.Name)
+                and function.value.id == "importlib"
+            )
+            module = node.args[0]
+            if (
+                dynamic_import
+                and isinstance(module, ast.Constant)
+                and isinstance(module.value, str)
+            ):
+                roots.add(module.value.split(".", 1)[0])
+    return roots
+
+
+def verify_source_boundary() -> None:
+    for path in sorted(PROJECT_ROOT.rglob("*")):
+        relative = path.relative_to(PROJECT_ROOT)
+        if relative.parts and relative.parts[0] in IGNORED_TOP_LEVEL:
+            continue
+        if path.name.casefold() in FORBIDDEN_NAMES:
+            raise VerificationError(f"forbidden control/authoring path: {relative}")
+        if path.is_symlink():
+            raise VerificationError(f"repository contains a symlink: {relative}")
+    python_files = []
+    for path in sorted(PROJECT_ROOT.rglob("*.py")):
+        relative_to_project = path.relative_to(PROJECT_ROOT)
+        if relative_to_project.parts and relative_to_project.parts[0] in IGNORED_TOP_LEVEL:
+            continue
+        python_files.append(path)
+    for path in python_files:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        roots = _import_roots(tree)
+        forbidden = sorted(roots & FORBIDDEN_IMPORTS)
+        if forbidden:
+            raise VerificationError(
+                f"forbidden runtime import in {path.relative_to(PROJECT_ROOT)}: {forbidden}"
+            )
+        try:
+            relative = path.relative_to(SOURCE_ROOT).as_posix()
+        except ValueError:
+            relative = None
+        if "pyray" in roots and relative is not None:
+            locked_runtime_adapter = relative == "isoworld/core/app.py"
+            game_presentation = relative in {"game/__main__.py", "game/app.py"} or any(
+                relative.startswith(prefix)
+                for prefix in ("game/adapters/", "game/presentation/", "game/ui/")
+            )
+            if not locked_runtime_adapter and not game_presentation:
+                raise VerificationError(
+                    f"pyray import outside a game presentation adapter: {relative}"
+                )
+
+
+def verify_dependencies(identity: dict[str, str] | None = None) -> dict[str, Any]:
+    identity = read_game_identity() if identity is None else identity
+    platform_path = PROJECT_ROOT / "platform.lock.json"
+    if (
+        platform_path.is_symlink()
+        or not platform_path.is_file()
+        or platform_path.stat().st_nlink != 1
+        or platform_path.stat().st_size > MAX_LOCK_BYTES
+    ):
+        raise VerificationError("platform.lock.json is missing or unsafe")
+    platform_bytes = platform_path.read_bytes()
+    try:
+        platform = json.loads(
+            platform_bytes.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, _DuplicateKeyError) as exc:
+        raise VerificationError(f"platform.lock.json is invalid: {exc}") from exc
+    expected_keys = {
+        "format",
+        "format_version",
+        "python",
+        "backend",
+        "binding_distribution",
+        "binding_version",
+        "import_module",
+        "locked_requirements",
+        "native_api_version",
+    }
+    if not isinstance(platform, dict) or set(platform) != expected_keys:
+        raise VerificationError("platform.lock.json keys differ from the contract")
+    if not all(
+        isinstance(platform[field], str) and platform[field]
+        for field in (
+            "python",
+            "backend",
+            "binding_distribution",
+            "binding_version",
+            "import_module",
+            "native_api_version",
+        )
+    ):
+        raise VerificationError("platform lock string fields are invalid")
+    if (
+        platform["format"] != "isoworld.pyray_platform"
+        or platform["format_version"] != 1
+        or platform["import_module"] != "pyray"
+        or platform["backend"] not in {"standard", "sdl", "dynamic"}
+        or re.fullmatch(r"[0-9]+(?:\.[0-9]+){2,3}", platform["binding_version"] or "") is None
+        or re.fullmatch(r"[0-9]+\.[0-9]+", platform["native_api_version"] or "") is None
+    ):
+        raise VerificationError("platform lock values are invalid")
+    python_match = re.fullmatch(
+        r">=([0-9]+)\.([0-9]+),<([0-9]+)\.([0-9]+)",
+        platform["python"],
+    )
+    if python_match is None:
+        raise VerificationError("platform Python range must be a bounded major/minor interval")
+    minimum_python = (int(python_match[1]), int(python_match[2]))
+    maximum_python = (int(python_match[3]), int(python_match[4]))
+    if minimum_python >= maximum_python:
+        raise VerificationError("platform Python range is empty")
+    if not minimum_python <= sys.version_info[:2] < maximum_python:
+        raise VerificationError(
+            f"running Python is outside the locked platform range: {platform['python']}"
+        )
+    expected_distribution = {
+        "standard": "raylib",
+        "sdl": "raylib_sdl",
+        "dynamic": "raylib_dynamic",
+    }[platform["backend"]]
+    if platform["binding_distribution"] != expected_distribution:
+        raise VerificationError("platform backend and binding distribution disagree")
+    locked_requirements = platform["locked_requirements"]
+    if (
+        not isinstance(locked_requirements, list)
+        or not locked_requirements
+        or not all(
+            isinstance(requirement, str)
+            and re.fullmatch(r"[A-Za-z0-9_.-]+==[A-Za-z0-9_.+!-]+", requirement)
+            for requirement in locked_requirements
+        )
+        or locked_requirements != sorted(set(locked_requirements), key=str.casefold)
+    ):
+        raise VerificationError("platform locked requirements are invalid")
+    expected_binding = f"{platform['binding_distribution']}=={platform['binding_version']}"
+    if expected_binding not in locked_requirements:
+        raise VerificationError("platform dependency lock omits the selected binding")
+    locked_names = [
+        re.sub(r"[-_.]+", "-", requirement.split("==", 1)[0]).casefold()
+        for requirement in locked_requirements
+    ]
+    expected_locked_names = {
+        "cffi",
+        "pycparser",
+        re.sub(r"[-_.]+", "-", platform["binding_distribution"]).casefold(),
+        "ruff",
+        "setuptools",
+        "wheel",
+    }
+    if len(locked_names) != len(set(locked_names)) or set(locked_names) != expected_locked_names:
+        raise VerificationError(
+            "platform dependency lock differs from the supported exact dependency closure"
+        )
+    requirements_path = PROJECT_ROOT / "requirements.lock"
+    if (
+        requirements_path.is_symlink()
+        or not requirements_path.is_file()
+        or requirements_path.stat().st_nlink != 1
+        or requirements_path.stat().st_size > MAX_LOCK_BYTES
+    ):
+        raise VerificationError("requirements.lock is missing or unsafe")
+    try:
+        requirement_lines = [
+            line.strip()
+            for line in requirements_path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+    except UnicodeDecodeError as exc:
+        raise VerificationError("requirements.lock is not UTF-8") from exc
+    if requirement_lines != locked_requirements:
+        raise VerificationError("requirements.lock differs from the platform lock")
+    canonical = (json.dumps(platform, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+    if platform_bytes != canonical:
+        raise VerificationError("platform lock bytes are not canonical")
+    with (PROJECT_ROOT / "pyproject.toml").open("rb") as source:
+        document = tomllib.load(source)
+    if set(document) != {"build-system", "project", "tool"}:
+        raise VerificationError("pyproject.toml contains an unsupported declaration surface")
+    project = document.get("project", {})
+    build_system = document.get("build-system", {})
+    if (
+        not isinstance(build_system, dict)
+        or set(build_system) != {"requires", "build-backend"}
+        or build_system.get("build-backend") != "setuptools.build_meta"
+    ):
+        raise VerificationError("build backend differs from the locked platform")
+    expected_project_keys = {
+        "name",
+        "version",
+        "description",
+        "readme",
+        "requires-python",
+        "license",
+        "dependencies",
+        "classifiers",
+        "scripts",
+    }
+    if not isinstance(project, dict) or set(project) != expected_project_keys:
+        raise VerificationError("project metadata contains an unsupported declaration surface")
+    project_version = project.get("version")
+    if (
+        not isinstance(project_version, str)
+        or re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", project_version) is None
+        or project_version != identity["version"]
+    ):
+        raise VerificationError("project and game package versions do not match")
+    if project.get("requires-python") != platform["python"]:
+        raise VerificationError("project Python range does not match the platform lock")
+    dependencies = project.get("dependencies", [])
+    if project.get("name") != identity["game_id"].replace("_", "-"):
+        raise VerificationError("project and game IDs do not match")
+    if dependencies != [expected_binding]:
+        raise VerificationError("runtime dependency does not match the platform lock")
+    if (
+        project.get("description") != "Standalone deterministic 2D/2.5D isometric RPG"
+        or project.get("readme") != "README.md"
+        or project.get("license") != {"file": "LICENSE"}
+        or project.get("scripts") != {identity["game_id"].replace("_", "-"): "game.__main__:main"}
+        or project.get("classifiers")
+        != [
+            "Development Status :: 3 - Alpha",
+            "License :: OSI Approved :: MIT License",
+            "Programming Language :: Python :: 3",
+            "Programming Language :: Python :: 3.11",
+            "Programming Language :: Python :: 3.12",
+            "Topic :: Games/Entertainment :: Role-Playing",
+        ]
+    ):
+        raise VerificationError("project packaging metadata differs from the game contract")
+    build_requirements = build_system.get("requires")
+    expected_build_requirements = [
+        requirement
+        for requirement in locked_requirements
+        if requirement.split("==", 1)[0].casefold() == "setuptools"
+    ]
+    if build_requirements != expected_build_requirements:
+        raise VerificationError("build dependencies are not covered by requirements.lock")
+    tool = document.get("tool", {})
+    if not isinstance(tool, dict) or set(tool) != {"ruff", "setuptools"}:
+        raise VerificationError("unsupported dependency declaration surface")
+    setuptools_config = tool.get("setuptools")
+    if setuptools_config != {"packages": {"find": {"where": ["src"]}}}:
+        raise VerificationError("unsupported setuptools declaration surface")
+    return platform
+
+
+def main(arguments: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Verify the standalone game repository")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit one machine-readable verification report",
+    )
+    args = parser.parse_args(arguments)
+    try:
+        identity = read_game_identity()
+        runtime = verify_runtime_snapshot()
+        verify_runtime_contract(runtime)
+        verify_source_boundary()
+        verify_dependencies(identity)
+        from isoworld.content.catalog import verify_catalog
+
+        bundles = verify_catalog(PROJECT_ROOT)
+    except (OSError, SyntaxError, ValueError) as exc:
+        print(f"ERROR {exc}", file=sys.stderr)
+        return 1
+    report = {
+        "bundles": len(bundles),
+        "game_id": identity["game_id"],
+        "game_version": identity["version"],
+        "runtime_hash": runtime["content_hash"],
+    }
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+    else:
+        print(f"verification=pass runtime={runtime['content_hash']} bundles={len(bundles)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

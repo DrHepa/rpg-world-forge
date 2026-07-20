@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://isoworld.local/schemas/world-catalog.schema.json",
+  "title": "Deterministic catalog of imported IsoWorld releases",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "releases"],
+  "properties": {
+    "format": {"const": "isoworld.world_catalog"},
+    "format_version": {"const": 1},
+    "releases": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/release"}
+    }
+  },
+  "$defs": {
+    "world_id": {
+      "type": "string",
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"
+    },
+    "release_id": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "world_id",
+        "release_id",
+        "bundle_hash",
+        "path",
+        "worldpack_hash",
+        "renderpack_hash",
+        "required_runtime_features"
+      ],
+      "properties": {
+        "world_id": {"$ref": "#/$defs/world_id"},
+        "release_id": {"$ref": "#/$defs/release_id"},
+        "bundle_hash": {"$ref": "#/$defs/sha256"},
+        "path": {
+          "type": "string",
+          "pattern": "^game_data/worlds/(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])/)[a-z][a-z0-9_]{1,63}/(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "worldpack_hash": {"$ref": "#/$defs/sha256"},
+        "renderpack_hash": {"$ref": "#/$defs/sha256"},
+        "required_runtime_features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"}
+        }
+      }
+    }
+  }
+}

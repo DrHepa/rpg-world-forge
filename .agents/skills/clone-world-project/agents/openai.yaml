@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clone World Project"
+  short_description: "Clone canon into one new world lineage"
+  default_prompt: "Use $clone-world-project to safely clone canonical inputs into a new world identity."

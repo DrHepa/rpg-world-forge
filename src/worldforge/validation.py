@@ -4,9 +4,22 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from isoworld.content.portability import is_portable_path_component
 from worldforge.project import SourceProject
 
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+BCP47_PATTERN = re.compile(
+    r"^(?:"
+    r"(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})"
+    r"(?:-[A-Za-z]{4})?"
+    r"(?:-(?:[A-Za-z]{2}|[0-9]{3}))?"
+    r"(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*"
+    r"(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*"
+    r"(?:-x(?:-[A-Za-z0-9]{1,8})+)?"
+    r"|x(?:-[A-Za-z0-9]{1,8})+"
+    r")$"
+)
+RUNTIME_VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 PLACEHOLDER_PATTERN = re.compile(
     r"(\{\{[^}]+\}\}|\bTODO\b|\bTBD\b|<\s*(?:fill|replace|pending)[^>]*>)",
     re.IGNORECASE,
@@ -25,6 +38,7 @@ KNOWN_COLLECTIONS = (
     "quests",
     "scenes",
     "personal_arcs",
+    "locales",
     "resources",
     "needs",
     "goals",
@@ -67,6 +81,30 @@ def _valid_id(value: Any, path: str) -> list[ValidationIssue]:
     if not isinstance(value, str) or not ID_PATTERN.fullmatch(value):
         return [ValidationIssue(path, "invalid ID; use 2..64-character ASCII snake_case")]
     return []
+
+
+def _valid_repository_id(value: Any, path: str) -> list[ValidationIssue]:
+    issues = _valid_id(value, path)
+    if not issues and not is_portable_path_component(value):
+        issues.append(ValidationIssue(path, "ID is reserved or unsafe as a portable path"))
+    return issues
+
+
+def _valid_language_tag(value: Any, path: str) -> list[ValidationIssue]:
+    if not isinstance(value, str) or BCP47_PATTERN.fullmatch(value) is None:
+        return [ValidationIssue(path, "must be a BCP47 language tag")]
+    return []
+
+
+def _runtime_version_key(
+    value: Any, path: str
+) -> tuple[tuple[int, int, int] | None, list[ValidationIssue]]:
+    if not isinstance(value, str):
+        return None, [ValidationIssue(path, "must use major.minor.patch")]
+    match = RUNTIME_VERSION_PATTERN.fullmatch(value)
+    if match is None:
+        return None, [ValidationIssue(path, "must use major.minor.patch")]
+    return tuple(int(part) for part in match.groups()), []  # type: ignore[return-value]
 
 
 def _validate_color(value: Any, path: str) -> list[ValidationIssue]:
@@ -466,11 +504,10 @@ def validate_project(
     world = project.world
     issues.extend(_require(world, ("id", "title", "language", "start_map_id", "ui"), "world"))
     if "id" in world:
-        issues.extend(_valid_id(world["id"], "world/id"))
+        issues.extend(_valid_repository_id(world["id"], "world/id"))
     if not isinstance(world.get("title"), str) or not world.get("title", "").strip():
         issues.append(ValidationIssue("world/title", "must contain a title"))
-    if not isinstance(world.get("language"), str) or len(world.get("language", "")) < 2:
-        issues.append(ValidationIssue("world/language", "invalid language"))
+    issues.extend(_valid_language_tag(world.get("language"), "world/language"))
     ui = world.get("ui")
     required_ui = {"move_help", "switch_help", "active_actor"}
     capabilities = world.get("capabilities", [])
@@ -492,6 +529,96 @@ def validate_project(
         }
         for capability in capabilities:
             required_ui.update(capability_ui.get(capability, set()))
+            issues.extend(_valid_id(capability, "world/capabilities"))
+        if len(set(capabilities)) != len(capabilities):
+            issues.append(ValidationIssue("world/capabilities", "contains duplicate feature IDs"))
+
+    configured_requirements = world.get("runtime_requirements")
+    if configured_requirements is not None:
+        requirements_path = "world/runtime_requirements"
+        if not isinstance(configured_requirements, dict):
+            issues.append(ValidationIssue(requirements_path, "must be an object"))
+        else:
+            issues.extend(
+                _require(
+                    configured_requirements,
+                    ("runtime_api", "required_features", "optional_features"),
+                    requirements_path,
+                )
+            )
+            runtime_api = configured_requirements.get("runtime_api")
+            if not isinstance(runtime_api, dict):
+                issues.append(
+                    ValidationIssue(f"{requirements_path}/runtime_api", "must be an object")
+                )
+            else:
+                issues.extend(
+                    _require(
+                        runtime_api,
+                        ("minimum", "maximum_exclusive"),
+                        f"{requirements_path}/runtime_api",
+                    )
+                )
+                minimum, minimum_issues = _runtime_version_key(
+                    runtime_api.get("minimum"), f"{requirements_path}/runtime_api/minimum"
+                )
+                maximum, maximum_issues = _runtime_version_key(
+                    runtime_api.get("maximum_exclusive"),
+                    f"{requirements_path}/runtime_api/maximum_exclusive",
+                )
+                issues.extend(minimum_issues)
+                issues.extend(maximum_issues)
+                if minimum is not None and maximum is not None and minimum >= maximum:
+                    issues.append(
+                        ValidationIssue(
+                            f"{requirements_path}/runtime_api", "must define a non-empty range"
+                        )
+                    )
+            requirement_features: dict[str, list[str]] = {}
+            for field in ("required_features", "optional_features"):
+                feature_values = configured_requirements.get(field)
+                if not isinstance(feature_values, list):
+                    issues.append(ValidationIssue(f"{requirements_path}/{field}", "must be a list"))
+                    continue
+                valid_features: list[str] = []
+                for position, feature in enumerate(feature_values):
+                    feature_issues = _valid_id(feature, f"{requirements_path}/{field}/{position}")
+                    issues.extend(feature_issues)
+                    if not feature_issues:
+                        valid_features.append(feature)
+                if len(set(valid_features)) != len(valid_features):
+                    issues.append(
+                        ValidationIssue(
+                            f"{requirements_path}/{field}", "contains duplicate feature IDs"
+                        )
+                    )
+                requirement_features[field] = valid_features
+            required_features = set(requirement_features.get("required_features", []))
+            optional_features = set(requirement_features.get("optional_features", []))
+            if required_features & optional_features:
+                issues.append(
+                    ValidationIssue(
+                        requirements_path,
+                        "a feature cannot be both required and optional",
+                    )
+                )
+            if isinstance(capabilities, list):
+                content_features = {
+                    feature
+                    for collection, feature in (
+                        ("personal_arcs", "personal_campaigns"),
+                        ("locales", "locales"),
+                    )
+                    if project.collections.get(collection)
+                }
+                for capability in [*capabilities, *sorted(content_features)]:
+                    if isinstance(capability, str) and capability not in required_features:
+                        issues.append(
+                            ValidationIssue(
+                                f"{requirements_path}/required_features",
+                                f"content feature must be required: {capability}",
+                            )
+                        )
     if not isinstance(ui, dict):
         issues.append(ValidationIssue("world/ui", "must be an object of localized strings"))
     else:
@@ -555,6 +682,7 @@ def validate_project(
     quests = indexes.get("quests", {})
     scenes = indexes.get("scenes", {})
     arcs = indexes.get("personal_arcs", {})
+    locales = indexes.get("locales", {})
     resource_definitions = indexes.get("resources", {})
     needs = indexes.get("needs", {})
     goals = indexes.get("goals", {})
@@ -567,6 +695,108 @@ def validate_project(
     if not isinstance(policy, dict):
         issues.append(ValidationIssue("world/content_policy", "must be an object"))
         policy = {}
+
+    language = world.get("language")
+    default_locale = world.get("default_locale", language)
+    issues.extend(_valid_language_tag(default_locale, "world/default_locale"))
+    locale_tags: dict[str, str] = {}
+    locale_key_sets: set[frozenset[str]] = set()
+    for locale_id, locale in locales.items():
+        path = f"locales/{locale_id}"
+        issues.extend(_require(locale, ("language_tag", "strings"), path))
+        language_tag = locale.get("language_tag")
+        tag_issues = _valid_language_tag(language_tag, f"{path}/language_tag")
+        issues.extend(tag_issues)
+        if not tag_issues:
+            normalized_tag = language_tag.casefold()
+            if normalized_tag in locale_tags:
+                issues.append(
+                    ValidationIssue(
+                        f"{path}/language_tag",
+                        f"duplicate language tag used by locale: {locale_tags[normalized_tag]}",
+                    )
+                )
+            locale_tags[normalized_tag] = locale_id
+        strings = locale.get("strings")
+        if not isinstance(strings, dict) or not strings:
+            issues.append(
+                ValidationIssue(f"{path}/strings", "must be a non-empty object of strings")
+            )
+            continue
+        valid_keys: set[str] = set()
+        for key, value in strings.items():
+            if not isinstance(key, str) or not key:
+                issues.append(ValidationIssue(f"{path}/strings", "keys must be non-empty strings"))
+                continue
+            valid_keys.add(key)
+            if not isinstance(value, str) or not value:
+                issues.append(
+                    ValidationIssue(f"{path}/strings/{key}", "must be a non-empty string")
+                )
+        locale_key_sets.add(frozenset(valid_keys))
+    if len(locale_key_sets) > 1:
+        issues.append(ValidationIssue("locales", "locale string maps must contain identical keys"))
+
+    declared_supported = world.get("supported_locales")
+    if declared_supported is None:
+        supported_locales = (
+            sorted(
+                (locale.get("language_tag") for locale in locales.values()),
+                key=lambda value: value.casefold() if isinstance(value, str) else "",
+            )
+            if locales
+            else [default_locale]
+        )
+    elif not isinstance(declared_supported, list) or not declared_supported:
+        issues.append(
+            ValidationIssue("world/supported_locales", "must be a non-empty list of BCP47 tags")
+        )
+        supported_locales = []
+    else:
+        supported_locales = declared_supported
+    normalized_supported: list[str] = []
+    for position, language_tag in enumerate(supported_locales):
+        tag_issues = _valid_language_tag(language_tag, f"world/supported_locales/{position}")
+        issues.extend(tag_issues)
+        if not tag_issues:
+            normalized_supported.append(language_tag.casefold())
+    if len(set(normalized_supported)) != len(normalized_supported):
+        issues.append(ValidationIssue("world/supported_locales", "contains duplicate tags"))
+    if isinstance(default_locale, str) and default_locale.casefold() not in normalized_supported:
+        issues.append(
+            ValidationIssue("world/default_locale", "must be included in supported_locales")
+        )
+    if (
+        isinstance(language, str)
+        and isinstance(default_locale, str)
+        and language.casefold() != default_locale.casefold()
+    ):
+        issues.append(
+            ValidationIssue("world/language", "legacy language must match default_locale")
+        )
+    if locales and set(normalized_supported) != set(locale_tags):
+        issues.append(
+            ValidationIssue("world/supported_locales", "does not match locale language tags")
+        )
+    if not locales and isinstance(language, str) and normalized_supported != [language.casefold()]:
+        issues.append(
+            ValidationIssue(
+                "world/supported_locales", "declares locales without locale definitions"
+            )
+        )
+    if locales and isinstance(default_locale, str):
+        default_locale_id = locale_tags.get(default_locale.casefold())
+        if default_locale_id is not None:
+            default_strings = locales[default_locale_id].get("strings")
+            if isinstance(default_strings, dict) and isinstance(ui, dict):
+                for key, value in ui.items():
+                    if default_strings.get(key) != value:
+                        issues.append(
+                            ValidationIssue(
+                                f"locales/{default_locale_id}/strings/{key}",
+                                "must match the legacy world UI string",
+                            )
+                        )
 
     for fact_id, fact in facts.items():
         path = f"facts/{fact_id}"
@@ -685,8 +915,11 @@ def validate_project(
                 )
             spawn_cells[cell] = actor_id
         arc_id = actor.get("personal_arc_id")
-        if arc_id is not None and arc_id not in arcs:
-            issues.append(ValidationIssue(f"{path}/personal_arc_id", f"unknown arc: {arc_id}"))
+        if arc_id is not None:
+            arc_id_issues = _valid_id(arc_id, f"{path}/personal_arc_id")
+            issues.extend(arc_id_issues)
+            if not arc_id_issues and arc_id not in arcs:
+                issues.append(ValidationIssue(f"{path}/personal_arc_id", f"unknown arc: {arc_id}"))
         schedule_id = actor.get("schedule_id")
         if schedule_id is not None and (
             not isinstance(schedule_id, str) or schedule_id not in schedules
@@ -927,17 +1160,119 @@ def validate_project(
                         )
                     )
 
+    campaign_owners: dict[str, str] = {}
     for arc_id, arc in arcs.items():
         path = f"personal_arcs/{arc_id}"
-        issues.extend(_require(arc, ("actor_id", "acts"), path))
+        issues.extend(_require(arc, ("actor_id", "start_act_id", "acts"), path))
         actor_id = arc.get("actor_id")
-        if not isinstance(actor_id, str) or actor_id not in actors:
+        actor_id_issues = _valid_id(actor_id, f"{path}/actor_id")
+        issues.extend(actor_id_issues)
+        if actor_id_issues or actor_id not in actors:
             issues.append(ValidationIssue(f"{path}/actor_id", f"unknown actor: {actor_id}"))
-        elif actors[actor_id].get("personal_arc_id") != arc_id:
-            issues.append(ValidationIssue(f"{path}/actor_id", "actor does not reference this arc"))
+        else:
+            if actors[actor_id].get("playable") is not True:
+                issues.append(
+                    ValidationIssue(f"{path}/actor_id", "campaign owner must be playable")
+                )
+            if actors[actor_id].get("personal_arc_id") != arc_id:
+                issues.append(
+                    ValidationIssue(f"{path}/actor_id", "actor does not reference this arc")
+                )
+            if actor_id in campaign_owners:
+                issues.append(
+                    ValidationIssue(
+                        f"{path}/actor_id",
+                        f"actor already owns campaign: {campaign_owners[actor_id]}",
+                    )
+                )
+            campaign_owners[actor_id] = arc_id
+        start_act_id = arc.get("start_act_id")
+        issues.extend(_valid_id(start_act_id, f"{path}/start_act_id"))
         acts = arc.get("acts")
         if not isinstance(acts, list) or not acts:
             issues.append(ValidationIssue(f"{path}/acts", "must contain at least one act"))
+            continue
+        act_index: dict[str, dict[str, Any]] = {}
+        for position, act in enumerate(acts):
+            act_path = f"{path}/acts/{position}"
+            if not isinstance(act, dict):
+                issues.append(ValidationIssue(act_path, "must be an object"))
+                continue
+            issues.extend(_require(act, ("id",), act_path))
+            act_id = act.get("id")
+            act_id_issues = _valid_id(act_id, f"{act_path}/id")
+            issues.extend(act_id_issues)
+            if act_id_issues:
+                continue
+            if act_id in act_index:
+                issues.append(ValidationIssue(f"{act_path}/id", f"duplicate act ID: {act_id}"))
+            act_index[act_id] = act
+            for field, references in (
+                ("quest_ids", quests),
+                ("scene_ids", scenes),
+                ("next_act_ids", None),
+            ):
+                values = act.get(field, [])
+                if not isinstance(values, list):
+                    issues.append(ValidationIssue(f"{act_path}/{field}", "must be a list"))
+                    continue
+                valid_values: list[str] = []
+                for ref_position, reference in enumerate(values):
+                    reference_issues = _valid_id(reference, f"{act_path}/{field}/{ref_position}")
+                    issues.extend(reference_issues)
+                    if reference_issues:
+                        continue
+                    valid_values.append(reference)
+                    if references is not None and reference not in references:
+                        issues.append(
+                            ValidationIssue(
+                                f"{act_path}/{field}/{ref_position}",
+                                f"unknown reference: {reference}",
+                            )
+                        )
+                if len(set(valid_values)) != len(valid_values):
+                    issues.append(
+                        ValidationIssue(f"{act_path}/{field}", "contains duplicate references")
+                    )
+        if isinstance(start_act_id, str) and start_act_id not in act_index:
+            issues.append(ValidationIssue(f"{path}/start_act_id", "unknown start act"))
+        for act_id, act in act_index.items():
+            next_act_ids = act.get("next_act_ids", [])
+            if not isinstance(next_act_ids, list):
+                continue
+            for position, next_act_id in enumerate(next_act_ids):
+                if isinstance(next_act_id, str) and next_act_id not in act_index:
+                    issues.append(
+                        ValidationIssue(
+                            f"{path}/acts/{act_id}/next_act_ids/{position}",
+                            f"unknown act: {next_act_id}",
+                        )
+                    )
+        if isinstance(start_act_id, str) and start_act_id in act_index:
+            reachable_act_ids: set[str] = set()
+            pending_act_ids = [start_act_id]
+            while pending_act_ids:
+                current_act_id = pending_act_ids.pop()
+                if current_act_id in reachable_act_ids:
+                    continue
+                reachable_act_ids.add(current_act_id)
+                next_act_ids = act_index[current_act_id].get("next_act_ids", [])
+                if not isinstance(next_act_ids, list):
+                    continue
+                pending_act_ids.extend(
+                    next_act_id
+                    for next_act_id in next_act_ids
+                    if isinstance(next_act_id, str)
+                    and next_act_id in act_index
+                    and next_act_id not in reachable_act_ids
+                )
+            for unreachable_act_id in sorted(set(act_index) - reachable_act_ids):
+                issues.append(
+                    ValidationIssue(
+                        f"{path}/acts/{unreachable_act_id}",
+                        f"act is unreachable from start act: {start_act_id}",
+                    )
+                )
 
     for schedule_id, schedule in schedules.items():
         path = f"schedules/{schedule_id}"

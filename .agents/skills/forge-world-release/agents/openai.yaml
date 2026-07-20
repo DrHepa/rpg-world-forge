@@ -1,0 +1,4 @@
+interface:
+  display_name: "Forge World Release"
+  short_description: "Build one immutable runtime bundle"
+  default_prompt: "Use $forge-world-release to package and verify one immutable world release without modifying a game."

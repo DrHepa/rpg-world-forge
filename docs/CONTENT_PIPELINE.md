@@ -48,7 +48,7 @@ Every world fact has an ID. An actor may act or speak only from:
 The compiler rejects incompatible intersections and references to nonexistent
 facts, preventing accidental omniscience without an LLM.
 
-## Executable content through M2
+## Executable content through M4
 
 The runtime executes a deliberately bounded subset of compiled content:
 
@@ -62,16 +62,29 @@ The runtime executes a deliberately bounded subset of compiled content:
 - `dialogues`: conditional localized graphs with fact-gated nodes.
 - `quests`: event/state-reactive stage machines.
 - `scenes`: prioritized time-windowed narrative overlays.
+- `resources`, `stockpiles`, and `production_recipes`: finite economy and
+  scarcity rules.
+- `needs`, `goals`, `constructions`, and `consequences`: deterministic living-
+  world state and delayed causal chains.
+- `personal_arcs`: validated per-playable-actor campaign graphs.
+- `locales`: typed BCP47 locale tables with one explicit default locale.
+- `runtime_requirements`: a bounded runtime API interval plus required and
+  optional feature IDs.
 
 The shared effect vocabulary is `set_flag`, `clear_flag`, `change_resource`,
-`learn_fact`, `change_relationship`, and `change_reputation`. Unknown operations
-are rejected during source validation and loading; the runtime never evaluates
-arbitrary expressions or scripts.
+`learn_fact`, `change_relationship`, `change_reputation`,
+`change_stockpile_resource`, and `change_need`. Unknown operations are rejected
+during source validation and loading; the runtime never evaluates arbitrary
+expressions or scripts.
 
-The compiler emits worldpack format 3. The loader accepts formats 1, 2, and 3 and
-verifies the canonical content hash before constructing typed runtime models.
-See [M1_SYSTEMS.md](M1_SYSTEMS.md) and [M2_NARRATIVE.md](M2_NARRATIVE.md) for
-exact semantics and accepted limits.
+The compiler emits worldpack format 5. The loader retains explicit compatibility
+with formats 1 through 5 and verifies the canonical content hash before
+constructing typed runtime models. Format 5 requires the localization and
+runtime-compatibility contracts; it does not infer either from a game. See
+[M1_SYSTEMS.md](M1_SYSTEMS.md), [M2_NARRATIVE.md](M2_NARRATIVE.md),
+[M3_LIVING_WORLD.md](M3_LIVING_WORLD.md), and
+[M4_MULTIPLE_WORLD_PRODUCTION.md](M4_MULTIPLE_WORLD_PRODUCTION.md) for exact
+semantics and accepted limits.
 
 ## Sources and artifacts
 
@@ -83,6 +96,25 @@ exact semantics and accepted limits.
 Only an immutable runtime bundle crosses into a game repository. The editable
 directories above, `.worldforge/`, `AGENTS.md`, prompts, candidates, and
 production evidence never do.
+
+The release boundary is:
+
+```text
+worldpack v5 + renderpack + approved processed assets + runtime licenses
+        |
+        | worldforge export-bundle / verify-bundle
+        v
+content-addressed immutable runtime bundle
+        |
+        | worldforge import-bundle
+        v
+game_data/worlds/<world-id>/<release-id> + worlds.lock.json
+```
+
+The bundle and game catalog are runtime-neutral JSON contracts. Import verifies
+every declared byte, runtime requirement, license entry, and cross-file ID/hash
+before an atomic catalog update. The game does not read the authoring repository
+or rebuild content at startup.
 
 For external resources, track source-code, model, weight, dataset, and final
 asset licenses separately. An MIT or Apache-2.0 repository does not

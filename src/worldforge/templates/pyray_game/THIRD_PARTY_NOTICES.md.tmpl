@@ -1,0 +1,52 @@
+# Third-party notices
+
+This project depends on the following software. Review and preserve the full
+license texts required by the release process when producing platform binaries.
+
+## raylib 6.0
+
+- Project: <https://github.com/raysan5/raylib>
+- License: zlib/libpng
+- Copyright: Ramon Santamaria (@raysan5) and contributors
+
+## raylib-python-cffi 6.0.1.0
+
+- Distribution: `raylib==6.0.1.0`
+- Project: <https://github.com/electronstudio/raylib-python-cffi>
+- License: Eclipse Public License 2.0
+
+## CFFI runtime closure
+
+- `cffi==1.17.1`: <https://github.com/python-cffi/cffi>, MIT
+- `pycparser==2.23`: <https://github.com/eliben/pycparser>, BSD-3-Clause
+
+## Python build tooling
+
+- `setuptools==82.0.1`: <https://github.com/pypa/setuptools>, MIT
+- `wheel==0.47.0`: <https://github.com/pypa/wheel>, MIT
+
+## Static quality tooling
+
+- `ruff==0.15.22`: <https://github.com/astral-sh/ruff>, MIT
+
+These versions are the exact entries in `requirements.lock`. Build tooling is
+listed because the reproducible source build consumes it, and Ruff is listed
+because CI consumes it; neither is imported by the running game.
+
+## isoworld runtime snapshot
+
+- License: MIT
+- Exact source revision and file hashes: `runtime.lock.json`
+
+Imported runtime bundles carry their own license inventory. Fonts, images,
+audio, shaders, and other media must retain the notices recorded by each
+bundle. This file does not grant rights to third-party or imported media.
+
+## Game-owned shared assets
+
+The initial scaffold contains no shared asset bytes. Before adding a file below
+`game_data/shared/`, record its origin, copyright holder, license identifier,
+source URL when applicable, and whether it was modified in this section. For an
+original asset, identify the game copyright owner and distribution license.
+`game_data/shared.lock.json` hashes this complete notices file so the reviewed
+attribution and the shared runtime inventory travel together.

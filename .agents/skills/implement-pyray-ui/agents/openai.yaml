@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Pyray UI"
+  short_description: "Build one accessible game UI flow"
+  default_prompt: "Use $implement-pyray-ui to implement and test one focused pyray UI flow."

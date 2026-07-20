@@ -1,0 +1,4 @@
+interface:
+  display_name: "Import World Bundle"
+  short_description: "Ingest one immutable world release"
+  default_prompt: "Use $import-world-bundle to verify and import one immutable world bundle into a standalone game."

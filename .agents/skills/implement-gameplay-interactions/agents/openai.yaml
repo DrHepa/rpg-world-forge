@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Interactions"
+  short_description: "Build contextual actions and abilities"
+  default_prompt: "Use $implement-gameplay-interactions to implement deterministic interactions and abilities."

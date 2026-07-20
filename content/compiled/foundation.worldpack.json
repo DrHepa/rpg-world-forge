@@ -320,6 +320,7 @@
         "y": 0
       }
     ],
+    "locales": [],
     "maps": [
       {
         "display_name": "Jardín de pruebas",
@@ -554,9 +555,37 @@
       }
     ]
   },
-  "content_hash": "e76ba2f3ee76c533371e8b5fd6c3132c9e7d7c83ea9c251694091264f8b75366",
+  "content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70",
   "format": "isoworld.worldpack",
-  "format_version": 4,
+  "format_version": 5,
+  "runtime_requirements": {
+    "optional_features": [],
+    "required_features": [
+      "action_replay",
+      "actor_needs",
+      "conditional_dialogue",
+      "construction",
+      "contextual_interactions",
+      "costed_abilities",
+      "delayed_consequences",
+      "directed_relationships",
+      "grid_movement",
+      "hierarchical_goals",
+      "path_navigation",
+      "playable_actor_switching",
+      "reactive_quests",
+      "resource_economy",
+      "schedules",
+      "timed_scenes",
+      "typed_knowledge",
+      "versioned_persistence",
+      "world_clock"
+    ],
+    "runtime_api": {
+      "maximum_exclusive": "0.6.0",
+      "minimum": "0.5.0"
+    }
+  },
   "world": {
     "capabilities": [
       "grid_movement",
@@ -579,6 +608,7 @@
       "resource_economy",
       "delayed_consequences"
     ],
+    "default_locale": "es",
     "id": "foundation_slice",
     "language": "es",
     "simulation": {
@@ -588,6 +618,9 @@
       "ticks_per_minute": 20
     },
     "start_map_id": "test_garden",
+    "supported_locales": [
+      "es"
+    ],
     "title": "Jardín de pruebas",
     "ui": {
       "ability_help": "1: usar Concentración",

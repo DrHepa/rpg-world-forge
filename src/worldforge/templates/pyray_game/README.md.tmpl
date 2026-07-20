@@ -1,0 +1,68 @@
+# __GAME_TITLE__
+
+Standalone 2D/2.5D isometric RPG built with Python and raylib through the
+`pyray` API. Game rules run deterministically and can be tested without opening
+a window. Playable content is installed as immutable, hash-verified runtime
+bundles under `game_data/worlds/`.
+
+## Requirements
+
+- Python 3.11 or 3.12
+- the pinned `raylib==6.0.1.0` Python distribution
+
+## Development
+
+```bash
+python -m pip install --requirement requirements.lock
+python -m pip install --no-build-isolation --no-deps -e .
+python scripts/verify_game.py
+ruff check src tests scripts run_game.py
+ruff format --check src tests scripts run_game.py
+python -m unittest discover -s tests
+python scripts/native_smoke.py
+python -m game --world WORLD_ID --release RELEASE_ID
+```
+
+List installed releases with `python -m game --list-worlds`. Run a selected
+release without graphics with `--headless-ticks N`.
+
+The process working directory is irrelevant: application data is resolved from
+the installed project, while saves are written only to the explicit user-data
+path. `game_data/worlds.lock.json` is the authority for installed releases.
+
+## Shared game assets
+
+World-specific processed assets stay inside immutable imported bundles. Only
+presentation resources genuinely shared by the game belong under
+`game_data/shared/`. After adding, replacing, or removing one, update its
+attribution in `THIRD_PARTY_NOTICES.md`, then regenerate and verify the lock:
+
+```bash
+python scripts/lock_shared_assets.py
+python scripts/verify_game.py
+```
+
+`game_data/shared.lock.json` binds every shared path, size, media type, byte
+hash, and the notices file. Never edit the lock manually. It rejects unlisted
+files, extension/media mismatches, symlinks, unsafe paths, and authoring,
+provider, model, or workflow metadata. A missing license or provenance entry is
+a release blocker even when the bytes are technically valid.
+
+## Release checks
+
+```bash
+python scripts/benchmark_scene.py --world WORLD_ID --release RELEASE_ID
+python scripts/package_game.py --output ../releases/__GAME_ID__-0.1.0.zip
+```
+
+Every package includes its runtime lock, shared-asset lock, bundle catalog,
+licenses, and a deterministic file manifest. The explicit output must be outside the verified
+source tree and must not already exist. It is an unpack-and-run source
+artifact, not a wheel: extract it and start it with `python run_game.py` so the
+locked data root remains beside `src/`. A later native packaging tool may wrap
+the same verified tree as an executable. See `THIRD_PARTY_NOTICES.md`
+before distribution.
+
+The source ZIP includes recursive Python tests and bounded runtime-boundary-
+checked `.json`, image, audio, font, and GLSL fixtures. Other test artifact types must be added
+as an explicit packaging-contract change; they are never swept in implicitly.

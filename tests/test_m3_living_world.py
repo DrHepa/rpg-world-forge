@@ -50,8 +50,8 @@ class M3LivingWorldTests(unittest.TestCase):
     def setUp(self) -> None:
         self.pack = load_worldpack(COMPILED)
 
-    def test_v4_loads_typed_living_world_contracts(self) -> None:
-        self.assertEqual(4, self.pack.format_version)
+    def test_current_worldpack_loads_typed_living_world_contracts(self) -> None:
+        self.assertEqual(5, self.pack.format_version)
         self.assertEqual("berries", self.pack.needs["hunger"].resource_id)
         self.assertEqual("survive", self.pack.goals["eat_berries"].parent_id)
         self.assertEqual("garden_store", self.pack.constructions["workshop"].stockpile_id)
@@ -60,6 +60,9 @@ class M3LivingWorldTests(unittest.TestCase):
     def test_v3_worldpacks_still_load_with_empty_living_world_systems(self) -> None:
         raw = json.loads(COMPILED.read_text(encoding="utf-8"))
         raw["format_version"] = 3
+        raw.pop("runtime_requirements")
+        raw["world"].pop("default_locale")
+        raw["world"].pop("supported_locales")
         for collection in (
             "resources",
             "needs",
@@ -68,6 +71,8 @@ class M3LivingWorldTests(unittest.TestCase):
             "constructions",
             "production_recipes",
             "consequences",
+            "personal_arcs",
+            "locales",
         ):
             raw["collections"].pop(collection)
         for actor in raw["collections"]["actors"]:
@@ -251,7 +256,7 @@ class M3LivingWorldTests(unittest.TestCase):
         self.assertEqual("workshop", snapshot.constructions[0].blueprint_id)
         self.assertEqual("building", snapshot.constructions[0].status)
 
-    def test_goal_cycle_and_incomplete_v4_pack_fail_closed(self) -> None:
+    def test_goal_cycle_and_incomplete_current_pack_fail_closed(self) -> None:
         project = load_source_project(MANIFEST)
         collections = {key: list(value) for key, value in project.collections.items()}
         goals = [dict(value) for value in collections["goals"]]

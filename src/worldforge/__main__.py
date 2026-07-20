@@ -4,10 +4,23 @@ import argparse
 import json
 from pathlib import Path
 
+from isoworld.content.loader import WorldPackError, load_worldpack
+from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
 from worldforge.assets import AssetManifestError, init_asset_manifest, validate_asset_manifest
+from worldforge.bundle import (
+    BundleError,
+    export_runtime_bundle,
+    import_runtime_bundle,
+    verify_runtime_bundle,
+)
 from worldforge.claims import validate_claims
 from worldforge.compiler import CompilationError, compile_project
 from worldforge.game_boundary import GameBoundaryError, audit_game_repository
+from worldforge.game_scaffold import (
+    GameScaffoldError,
+    create_game_project,
+    update_game_runtime_snapshot,
+)
 from worldforge.map_import import (
     MapImportError,
     import_map_file,
@@ -21,6 +34,12 @@ from worldforge.runtime_audit import audit_runtime
 from worldforge.scaffold import ScaffoldError, create_world_project
 from worldforge.validation import validate_project
 from worldforge.workflow import WorkflowError, complete_phase, describe_status, reopen_phase
+from worldforge.world_lifecycle import (
+    bump_world_version,
+    clone_world_project,
+    inspect_world_project,
+    upgrade_legacy_world_project,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,8 +51,44 @@ def build_parser() -> argparse.ArgumentParser:
     new_world.add_argument("--id", dest="world_id", required=True)
     new_world.add_argument("--title", required=True)
     new_world.add_argument("--language", default="es")
+    new_world.add_argument("--version", default="0.1.0")
     new_world.add_argument("--actor-id")
     new_world.add_argument("--actor-name")
+
+    world_status = commands.add_parser(
+        "world-status",
+        help="inspect a canonical v2 world-authoring project",
+    )
+    world_status.add_argument("project_root", type=Path)
+
+    upgrade_world = commands.add_parser(
+        "upgrade-world",
+        help="explicitly migrate a legacy v1 world project to v2",
+    )
+    upgrade_world.add_argument("project_root", type=Path)
+    upgrade_world.add_argument("--version", required=True)
+    upgrade_world.add_argument("--reason", required=True)
+    upgrade_world.add_argument("--approved-by", required=True)
+
+    clone_world = commands.add_parser(
+        "clone-world",
+        help="derive a new independent world project from canonical source",
+    )
+    clone_world.add_argument("source_root", type=Path)
+    clone_world.add_argument("target_root", type=Path)
+    clone_world.add_argument("--id", dest="world_id", required=True)
+    clone_world.add_argument("--title", required=True)
+    clone_world.add_argument("--version", default="0.1.0")
+
+    bump_world = commands.add_parser(
+        "bump-world-version",
+        help="apply an optimistic-lock stable SemVer bump to a world",
+    )
+    bump_world.add_argument("project_root", type=Path)
+    bump_world.add_argument("--expected-version", required=True)
+    bump_world.add_argument("--part", choices=("major", "minor", "patch"), required=True)
+    bump_world.add_argument("--reason", required=True)
+    bump_world.add_argument("--approved-by", required=True)
 
     phase_status = commands.add_parser("phase-status", help="show the active creation phase")
     phase_status.add_argument("project_root", type=Path)
@@ -120,6 +175,61 @@ def build_parser() -> argparse.ArgumentParser:
         help="reject Forge, world-authoring, and AI leakage in a game repository",
     )
     audit_game.add_argument("game_root", type=Path)
+
+    export_bundle = commands.add_parser(
+        "export-bundle",
+        help="export a deterministic runtime-only world bundle",
+    )
+    export_bundle.add_argument("worldpack", type=Path)
+    export_bundle.add_argument("renderpack", type=Path)
+    export_bundle.add_argument("destination", type=Path)
+    export_bundle.add_argument("--release-id", required=True)
+    export_bundle.add_argument("--licenses", type=Path, required=True)
+
+    verify_bundle = commands.add_parser(
+        "verify-bundle",
+        help="verify an immutable runtime bundle and every payload hash",
+    )
+    verify_bundle.add_argument("bundle", type=Path)
+    verify_bundle.add_argument("--expected-hash")
+
+    import_bundle = commands.add_parser(
+        "import-bundle",
+        help="atomically import one verified release into a standalone game",
+    )
+    import_bundle.add_argument("bundle", type=Path)
+    import_bundle.add_argument("game_root", type=Path)
+    import_bundle.add_argument("--expected-hash", required=True)
+
+    check_compatibility = commands.add_parser(
+        "check-compatibility",
+        help="compare a worldpack with an explicit runtime API/features",
+    )
+    check_compatibility.add_argument("worldpack", type=Path)
+    check_compatibility.add_argument("--runtime-version", default=RUNTIME_API_VERSION)
+    check_compatibility.add_argument(
+        "--feature",
+        action="append",
+        dest="features",
+        help="runtime feature ID; repeat to define a custom feature set",
+    )
+
+    new_game = commands.add_parser(
+        "new-game",
+        help="materialize a clean standalone pyray/raylib game project",
+    )
+    new_game.add_argument("target", type=Path)
+    new_game.add_argument("--id", dest="game_id", required=True)
+    new_game.add_argument("--title", required=True)
+    new_game.add_argument("--source-revision")
+
+    update_runtime = commands.add_parser(
+        "update-game-runtime",
+        help="atomically replace a game's complete vendored runtime snapshot",
+    )
+    update_runtime.add_argument("game_root", type=Path)
+    update_runtime.add_argument("--expected-hash", required=True)
+    update_runtime.add_argument("--source-revision")
     return parser
 
 
@@ -134,8 +244,54 @@ def main() -> int:
                 language=args.language,
                 actor_id=args.actor_id,
                 actor_name=args.actor_name,
+                version=args.version,
             )
             print(f"OK manifest={manifest}")
+            return 0
+
+        if args.command == "world-status":
+            inspection = inspect_world_project(args.project_root)
+            print(
+                f"OK world={inspection.world_id} version={inspection.world_version} "
+                f"phase={inspection.current_phase or 'complete'} "
+                f"revision={inspection.revision} "
+                f"canon_locked={str(inspection.canon_locked).lower()}"
+            )
+            return 0
+
+        if args.command == "upgrade-world":
+            inspection = upgrade_legacy_world_project(
+                args.project_root,
+                version=args.version,
+                reason=args.reason,
+                approved_by=args.approved_by,
+            )
+            print(
+                f"OK world={inspection.world_id} version={inspection.world_version} "
+                "format_version=2"
+            )
+            return 0
+
+        if args.command == "clone-world":
+            manifest = clone_world_project(
+                args.source_root,
+                args.target_root,
+                world_id=args.world_id,
+                title=args.title,
+                version=args.version,
+            )
+            print(f"OK manifest={manifest} world={args.world_id} version={args.version}")
+            return 0
+
+        if args.command == "bump-world-version":
+            version = bump_world_version(
+                args.project_root,
+                expected_version=args.expected_version,
+                part=args.part,
+                reason=args.reason,
+                approved_by=args.approved_by,
+            )
+            print(f"OK world={args.project_root} version={version}")
             return 0
 
         if args.command == "phase-status":
@@ -272,13 +428,93 @@ def main() -> int:
             print(f"OK runtime={args.runtime_root} ai_imports=0")
             return 0
 
-        findings = audit_game_repository(args.game_root)
-        if findings:
-            for finding in findings:
-                print(f"ERROR {finding}")
-            return 1
-        print(f"OK game={args.game_root} authoring_leaks=0")
-        return 0
+        if args.command == "export-bundle":
+            bundle = export_runtime_bundle(
+                args.worldpack,
+                args.renderpack,
+                args.destination,
+                release_id=args.release_id,
+                licenses_directory=args.licenses,
+            )
+            print(
+                f"OK bundle={bundle.root} world={bundle.world_id} "
+                f"release={bundle.release_id} hash={bundle.bundle_hash}"
+            )
+            return 0
+
+        if args.command == "verify-bundle":
+            bundle = verify_runtime_bundle(
+                args.bundle,
+                expected_bundle_hash=args.expected_hash,
+            )
+            print(
+                f"OK bundle={bundle.root} world={bundle.world_id} "
+                f"release={bundle.release_id} hash={bundle.bundle_hash}"
+            )
+            return 0
+
+        if args.command == "import-bundle":
+            imported = import_runtime_bundle(
+                args.bundle,
+                args.game_root,
+                expected_bundle_hash=args.expected_hash,
+            )
+            bundle = verify_runtime_bundle(
+                args.bundle,
+                expected_bundle_hash=args.expected_hash,
+            )
+            print(
+                f"OK imported={imported} world={bundle.world_id} "
+                f"release={bundle.release_id} hash={bundle.bundle_hash}"
+            )
+            return 0
+
+        if args.command == "check-compatibility":
+            pack = load_worldpack(args.worldpack)
+            features = (
+                SUPPORTED_RUNTIME_FEATURES if args.features is None else frozenset(args.features)
+            )
+            report = pack.compatibility_with(args.runtime_version, features)
+            print(
+                f"{'OK' if report.compatible else 'INCOMPATIBLE'} world={pack.world_id} "
+                f"runtime={report.runtime_version} "
+                f"api_compatible={str(report.api_compatible).lower()} "
+                f"missing_required={','.join(report.missing_required_features) or '-'} "
+                f"missing_optional={','.join(report.missing_optional_features) or '-'}"
+            )
+            return 0 if report.compatible else 1
+
+        if args.command == "new-game":
+            game = create_game_project(
+                args.target,
+                game_id=args.game_id,
+                title=args.title,
+                source_revision=args.source_revision,
+            )
+            print(f"OK game={game}")
+            return 0
+
+        if args.command == "update-game-runtime":
+            manifest = update_game_runtime_snapshot(
+                args.game_root,
+                expected_content_hash=args.expected_hash,
+                source_revision=args.source_revision,
+            )
+            print(
+                f"OK game={args.game_root} runtime={manifest['runtime_version']} "
+                f"hash={manifest['content_hash']}"
+            )
+            return 0
+
+        if args.command == "audit-game":
+            findings = audit_game_repository(args.game_root)
+            if findings:
+                for finding in findings:
+                    print(f"ERROR {finding}")
+                return 1
+            print(f"OK game={args.game_root} authoring_leaks=0")
+            return 0
+        raise AssertionError(f"unhandled command: {args.command}")
     except SourceProjectError as exc:
         print(f"ERROR {exc}")
         return 1
@@ -302,6 +538,12 @@ def main() -> int:
         print(f"ERROR {exc}")
         return 1
     except GameBoundaryError as exc:
+        print(f"ERROR {exc}")
+        return 1
+    except (BundleError, GameScaffoldError, WorldPackError) as exc:
+        print(f"ERROR {exc}")
+        return 1
+    except ValueError as exc:
         print(f"ERROR {exc}")
         return 1
 

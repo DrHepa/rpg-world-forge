@@ -7,11 +7,58 @@
   "required": ["format", "format_version", "world", "collections", "content_hash"],
   "properties": {
     "format": {"const": "isoworld.worldpack"},
-    "format_version": {"enum": [1, 2, 3, 4]},
+    "format_version": {"enum": [1, 2, 3, 4, 5]},
     "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "runtime_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_api", "required_features", "optional_features"],
+      "properties": {
+        "runtime_api": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum", "maximum_exclusive"],
+          "properties": {
+            "minimum": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"},
+            "maximum_exclusive": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"}
+          }
+        },
+        "required_features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"}
+        },
+        "optional_features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"}
+        }
+      }
+    },
     "world": {
       "type": "object",
-      "required": ["id", "title", "language", "start_map_id", "ui"]
+      "required": ["id", "title", "language", "start_map_id", "ui"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"
+        },
+        "title": {"type": "string", "minLength": 1},
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+        },
+        "language": {"$ref": "#/$defs/language_tag"},
+        "default_locale": {"$ref": "#/$defs/language_tag"},
+        "supported_locales": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/language_tag"}
+        },
+        "start_map_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+        "ui": {"type": "object", "additionalProperties": {"type": "string"}}
+      }
     },
     "collections": {
       "type": "object",
@@ -37,6 +84,14 @@
           "type": "array",
           "items": {"$ref": "narrative-content.schema.json#/$defs/scene"}
         },
+        "personal_arcs": {
+          "type": "array",
+          "items": {"$ref": "narrative-content.schema.json#/$defs/personal_campaign"}
+        },
+        "locales": {
+          "type": "array",
+          "items": {"$ref": "narrative-content.schema.json#/$defs/locale"}
+        },
         "resources": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/resource"}},
         "needs": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/need"}},
         "goals": {"type": "array", "items": {"$ref": "living-world.schema.json#/$defs/goal"}},
@@ -49,6 +104,12 @@
         "type": "array",
         "items": {"type": "object", "required": ["id"]}
       }
+    }
+  },
+  "$defs": {
+    "language_tag": {
+      "type": "string",
+      "pattern": "^(?:(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})(?:-[A-Za-z]{4})?(?:-(?:[A-Za-z]{2}|[0-9]{3}))?(?:-(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*(?:-[0-9A-WY-Za-wy-z](?:-[A-Za-z0-9]{2,8})+)*(?:-x(?:-[A-Za-z0-9]{1,8})+)?|x(?:-[A-Za-z0-9]{1,8})+)$"
     }
   },
   "allOf": [
@@ -71,6 +132,24 @@
               "facts", "factions", "dialogues", "quests", "scenes",
               "resources", "needs", "goals", "stockpiles", "constructions",
               "production_recipes", "consequences"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"format_version": {"const": 5}}},
+      "then": {
+        "required": ["runtime_requirements"],
+        "properties": {
+          "world": {
+            "required": ["default_locale", "supported_locales"]
+          },
+          "collections": {
+            "required": [
+              "facts", "factions", "dialogues", "quests", "scenes",
+              "resources", "needs", "goals", "stockpiles", "constructions",
+              "production_recipes", "consequences", "personal_arcs", "locales"
             ]
           }
         }

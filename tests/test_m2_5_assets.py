@@ -18,8 +18,11 @@ from isoworld.render.render_state import build_render_state
 from isoworld.render.resources import RaylibAssetRegistry, ResourceError
 from isoworld.world.state import DomainEvent, initial_world_state
 from worldforge.assets import AssetManifestError, init_asset_manifest, validate_asset_manifest
+from worldforge.compiler import compile_project
+from worldforge.integrity import canonical_payload_hash
 from worldforge.renderpack import build_renderpack
-from worldforge.workflow import PHASES, complete_phase, initial_status, reopen_phase
+from worldforge.scaffold import create_world_project
+from worldforge.workflow import PHASES, WorkflowError, complete_phase, reopen_phase
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPILED = ROOT / "content/compiled/foundation.worldpack.json"
@@ -90,9 +93,9 @@ def _license() -> dict[str, str]:
     }
 
 
-def _release_manifest(directory: Path) -> Path:
+def _release_manifest(directory: Path, worldpack_path: Path = COMPILED) -> Path:
     manifest_path = directory / "assets/manifest.json"
-    init_asset_manifest(COMPILED, manifest_path)
+    init_asset_manifest(worldpack_path, manifest_path)
     asset_root = manifest_path.parent
     texture = asset_root / "processed/neutral_atlas.png"
     clipset = asset_root / "processed/neutral_atlas.clips.json"
@@ -206,7 +209,7 @@ def _release_manifest(directory: Path) -> Path:
             ],
         },
     ]
-    pack = json.loads(COMPILED.read_text(encoding="utf-8"))
+    pack = json.loads(worldpack_path.read_text(encoding="utf-8"))
     raw["bindings"] = [
         *(
             {
@@ -581,15 +584,23 @@ class M25AssetTests(unittest.TestCase):
 
     def test_p13_records_renderpack_and_reopen_invalidates_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            manifest = _release_manifest(root)
+            root = Path(directory) / "world"
+            source_manifest = create_world_project(
+                root,
+                world_id="asset_world",
+                title="Asset World",
+                language="en",
+                actor_id="hero",
+                actor_name="Hero",
+            )
             worldpack_path = root / "build/foundation.worldpack.json"
-            worldpack_path.parent.mkdir(parents=True, exist_ok=True)
-            worldpack_path.write_bytes(COMPILED.read_bytes())
+            compile_project(source_manifest, worldpack_path)
+            manifest = _release_manifest(root, worldpack_path)
             renderpack_path = root / "build/runtime/renderpack.json"
             build_renderpack(manifest, worldpack_path, renderpack_path)
 
-            status = initial_status("foundation_slice")
+            status_path = root / ".worldforge/status.json"
+            status = json.loads(status_path.read_text(encoding="utf-8"))
             status.update(
                 {
                     "current_phase": "p13_asset_production",
@@ -599,8 +610,6 @@ class M25AssetTests(unittest.TestCase):
                     "worldpack_path": "build/foundation.worldpack.json",
                 }
             )
-            status_path = root / ".worldforge/status.json"
-            status_path.parent.mkdir(parents=True, exist_ok=True)
             status_path.write_text(json.dumps(status), encoding="utf-8")
             report = root / "p13.json"
             report.write_text(
@@ -627,6 +636,14 @@ class M25AssetTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            original_worldpack = worldpack_path.read_bytes()
+            changed = json.loads(original_worldpack.decode("utf-8"))
+            changed["world"]["title"] = "Changed after P10"
+            changed["content_hash"] = canonical_payload_hash(changed)
+            worldpack_path.write_text(json.dumps(changed), encoding="utf-8")
+            with self.assertRaisesRegex(WorkflowError, "content hash does not match"):
+                complete_phase(root, report)
+            worldpack_path.write_bytes(original_worldpack)
             completed = complete_phase(root, report)
             self.assertEqual("build/runtime/renderpack.json", completed["renderpack"])
             reopened = reopen_phase(

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verify Pyray Game"
+  short_description: "Run deterministic and native game gates"
+  default_prompt: "Use $verify-pyray-game to run and report the standalone game's verification phase."
