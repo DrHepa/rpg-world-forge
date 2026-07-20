@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/asset-target.schema.json",
+  "title": "Executable target-scoped asset-production target v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "id", "world_id", "world_content_hash", "dimension", "delivery_profile", "runtime_adapter", "coordinate_system", "content_hash"],
+  "properties": {
+    "format": {"const": "rpg-world-forge.asset_target"},
+    "format_version": {"const": 1},
+    "id": {"$ref": "#/$defs/id"},
+    "world_id": {"$ref": "#/$defs/id"},
+    "world_content_hash": {"$ref": "#/$defs/sha256"},
+    "dimension": {"enum": ["2d", "2_5d", "3d"]},
+    "delivery_profile": {"enum": ["renderpack_v1", "assetpack_v1"]},
+    "runtime_adapter": {"oneOf": [{"const": "isoworld_raylib_2_5d"}, {"type": "null"}]},
+    "coordinate_system": {"oneOf": [{"$ref": "#/$defs/coordinates_2d"}, {"$ref": "#/$defs/coordinates_2_5d"}, {"$ref": "#/$defs/coordinates_3d"}]},
+    "content_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"dimension": {"const": "2d"}}, "required": ["dimension"]},
+      "then": {"properties": {"delivery_profile": {"const": "renderpack_v1"}, "runtime_adapter": {"const": "isoworld_raylib_2_5d"}, "coordinate_system": {"$ref": "#/$defs/coordinates_2d"}}}
+    },
+    {
+      "if": {"properties": {"dimension": {"const": "2_5d"}}, "required": ["dimension"]},
+      "then": {"properties": {"delivery_profile": {"const": "renderpack_v1"}, "runtime_adapter": {"const": "isoworld_raylib_2_5d"}, "coordinate_system": {"$ref": "#/$defs/coordinates_2_5d"}}}
+    },
+    {
+      "if": {"properties": {"dimension": {"const": "3d"}}, "required": ["dimension"]},
+      "then": {"properties": {"delivery_profile": {"const": "assetpack_v1"}, "runtime_adapter": {"type": "null"}, "coordinate_system": {"$ref": "#/$defs/coordinates_3d"}}}
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "coordinates_2d": {
+      "type": "object", "additionalProperties": false,
+      "required": ["origin", "x_axis", "y_axis", "pixels_per_unit"],
+      "properties": {"origin": {"const": "top_left"}, "x_axis": {"const": "right"}, "y_axis": {"const": "down"}, "pixels_per_unit": {"const": 32}}
+    },
+    "coordinates_2_5d": {
+      "type": "object", "additionalProperties": false,
+      "required": ["origin", "x_axis", "y_axis", "up_axis", "tile_width_pixels", "tile_height_pixels"],
+      "properties": {"origin": {"const": "tile_anchor"}, "x_axis": {"const": "east"}, "y_axis": {"const": "south"}, "up_axis": {"const": "screen_up"}, "tile_width_pixels": {"const": 64}, "tile_height_pixels": {"const": 32}}
+    },
+    "coordinates_3d": {
+      "type": "object", "additionalProperties": false,
+      "required": ["handedness", "up_axis", "forward_axis", "units_per_meter"],
+      "properties": {"handedness": {"const": "right"}, "up_axis": {"const": "Y"}, "forward_axis": {"const": "-Z"}, "units_per_meter": {"const": 1.0}}
+    }
+  }
+}

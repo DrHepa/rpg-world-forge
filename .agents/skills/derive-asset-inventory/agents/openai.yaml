@@ -1,0 +1,4 @@
+interface:
+  display_name: "Derive Asset Inventory"
+  short_description: "Map locked canon to target asset requirements"
+  default_prompt: "Use $derive-asset-inventory to derive and validate one target-scoped M5 asset inventory."

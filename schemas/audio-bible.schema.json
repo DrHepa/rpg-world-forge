@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/audio-bible.schema.json",
+  "title": "Executable target-scoped audio bible v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "world_id", "world_content_hash", "target_id", "target_hash", "format_policy", "mix", "timbral_families", "ambience", "music", "sfx", "acceptance_tests", "approved_by", "content_hash"],
+  "properties": {
+    "format": {"const": "rpg-world-forge.audio_bible"},
+    "format_version": {"const": 1},
+    "world_id": {"$ref": "#/$defs/id"},
+    "world_content_hash": {"$ref": "#/$defs/sha256"},
+    "target_id": {"$ref": "#/$defs/id"},
+    "target_hash": {"$ref": "#/$defs/sha256"},
+    "format_policy": {"$ref": "#/$defs/decision"},
+    "mix": {"$ref": "#/$defs/decision"},
+    "timbral_families": {"$ref": "#/$defs/nonempty_collection"},
+    "ambience": {"$ref": "#/$defs/nonempty_collection"},
+    "music": {"$ref": "#/$defs/nonempty_collection"},
+    "sfx": {"$ref": "#/$defs/nonempty_collection"},
+    "acceptance_tests": {"$ref": "#/$defs/test_list"},
+    "approved_by": {"type": "string", "minLength": 1, "maxLength": 256},
+    "content_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "decision": {"type": "object", "minProperties": 1, "maxProperties": 128},
+    "nonempty_collection": {"oneOf": [{"type": "object", "minProperties": 1, "maxProperties": 128}, {"type": "array", "minItems": 1, "maxItems": 256}]},
+    "test_list": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 4096}}
+  }
+}

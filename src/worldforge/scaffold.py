@@ -323,8 +323,9 @@ def _populate_world_project(
         "- AI is permitted only during offline authoring and asset production.\n"
         "- Runtime receives compiled data and processed assets, never models, "
         "prompts, provider SDKs, credentials or inference calls.\n"
-        "- OpenAI and optional Modly extensions are authoring routes; every local "
-        "model must run through a recorded Modly extension workflow.\n"
+        "- OpenAI Image and Blender MCP are external authoring executors. Local "
+        "models may run only through a supported, reviewed Modly extension "
+        "discovered via modly-cli-mcp.\n"
         "- Do not invent unresolved canon when evidence or a user decision is required.\n"
         "- Characters may use only facts allowed by their knowledge boundaries.\n"
         "- Every narrative choice must map to implementable state, events and effects.\n"
@@ -342,17 +343,29 @@ def _populate_world_project(
         "worldforge phase-status .\n"
         "worldforge validate source/manifest.json --profile draft\n"
         f"worldforge compile source/manifest.json --output build/{world_id}.worldpack.json\n"
-        f"worldforge init-assets build/{world_id}.worldpack.json --output assets/manifest.json\n"
+        f"worldforge init-assets build/{world_id}.worldpack.json "
+        "--target-dimension 2_5d --output assets/manifest.json\n"
+        "# Approve bibles, derive inventory, then add and bind reviewed specs.\n"
+        "worldforge validate-asset-bibles --target assets/target.json "
+        "--visual assets/bibles/visual.json --audio assets/bibles/audio.json\n"
+        f"worldforge derive-asset-inventory build/{world_id}.worldpack.json "
+        "--target assets/target.json --visual-bible assets/bibles/visual.json "
+        "--audio-bible assets/bibles/audio.json --output assets/inventory/assets.json\n"
         f"worldforge build-renderpack assets/manifest.json --worldpack "
-        f"build/{world_id}.worldpack.json --output build/runtime/renderpack.json\n"
+        f"build/{world_id}.worldpack.json --output assets/release/renderpack.json\n"
+        "worldforge finalize-asset-release assets/manifest.json --deliverable "
+        f"assets/release/renderpack.json --worldpack build/{world_id}.worldpack.json "
+        "--expected-hash <production-manifest-content-hash>\n"
+        "worldforge validate-assets assets/manifest.json --profile release --worldpack "
+        f"build/{world_id}.worldpack.json\n"
         "# Optional reference-runtime preview only:\n"
         f"isoworld --pack build/{world_id}.worldpack.json --renderpack "
-        "build/runtime/renderpack.json\n"
+        "assets/release/renderpack.json\n"
         "```\n",
         encoding="utf-8",
     )
     (root / ".gitignore").write_text(
-        ".venv/\n__pycache__/\n*.py[cod]\nbuild/\nassets/generated/\n",
+        ".venv/\n__pycache__/\n*.py[cod]\nbuild/\nassets/generated/\nassets/work/\n",
         encoding="utf-8",
     )
     return source / "manifest.json"

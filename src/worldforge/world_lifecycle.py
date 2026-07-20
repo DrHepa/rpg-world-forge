@@ -31,7 +31,7 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 _ROOT_COPY_FILES = (".gitignore", "LICENSE", "SECURITY.md")
 _CONTROL_COPY_FILES = ("DECISIONS.md",)
-_ASSET_COPY_DIRECTORIES = ("specs", "references", "recipes", "qa", "licenses")
+_ASSET_COPY_DIRECTORIES = ("references", "recipes", "licenses")
 _SENSITIVE_FILENAMES = {
     ".env",
     ".env.local",
@@ -39,11 +39,16 @@ _SENSITIVE_FILENAMES = {
 }
 _VCS_CONTROL_NAMES = frozenset({".git", ".hg", ".svn"})
 _INVALIDATED_STATUS_FIELDS = (
+    "asset_inventory",
     "asset_manifest",
+    "asset_target",
+    "assetpack",
+    "audio_bible",
     "compatibility_report",
     "release_hash",
     "release_package",
     "renderpack",
+    "visual_bible",
     "worldpack_hash",
     "worldpack_path",
 )

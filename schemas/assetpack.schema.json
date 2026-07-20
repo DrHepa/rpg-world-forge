@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/assetpack.schema.json",
+  "title": "Engine-neutral runtime-only assetpack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "world_id", "world_content_hash", "target_id", "target_hash", "dimension", "delivery_profile", "coordinate_system", "assets", "bindings", "content_hash"],
+  "properties": {
+    "format": {"const": "rpg-world-forge.assetpack"},
+    "format_version": {"const": 1},
+    "world_id": {"$ref": "#/$defs/id"},
+    "world_content_hash": {"$ref": "#/$defs/sha256"},
+    "target_id": {"$ref": "#/$defs/id"},
+    "target_hash": {"$ref": "#/$defs/sha256"},
+    "dimension": {"const": "3d"},
+    "delivery_profile": {"const": "assetpack_v1"},
+    "coordinate_system": {"$ref": "#/$defs/coordinate_system"},
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100000,
+      "items": {"$ref": "#/$defs/asset"},
+      "contains": {
+        "type": "object",
+        "required": ["files"],
+        "properties": {
+          "files": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "required": ["role", "media_type"],
+              "properties": {
+                "role": {"const": "model"},
+                "media_type": {"const": "model/gltf-binary"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "bindings": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/binding"}},
+    "content_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "runtime_path": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^assets/[a-z][a-z0-9_]{1,63}/(?!.*/(?:\\.{1,2})(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F]+$"},
+    "coordinate_system": {
+      "type": "object", "additionalProperties": false,
+      "required": ["handedness", "up_axis", "forward_axis", "units_per_meter"],
+      "properties": {"handedness": {"const": "right"}, "up_axis": {"const": "Y"}, "forward_axis": {"const": "-Z"}, "units_per_meter": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000}}
+    },
+    "kind": {"enum": ["animation_3d", "character_3d", "collision_3d", "environment_3d", "font", "material_set", "model_3d", "music", "portrait", "rig", "sfx", "shader", "sprite", "spritesheet", "tileset", "ui", "vfx", "vfx_3d"]},
+    "representation": {"enum": ["2d", "2_5d", "3d", "audio"]},
+    "role": {"enum": ["animation", "audio", "clipset", "collision", "font", "fragment_shader", "material_metadata", "model", "model_metadata", "preview", "skeleton", "texture", "vertex_shader"]},
+    "media_type": {"enum": ["application/json", "audio/mpeg", "audio/ogg", "audio/wav", "font/otf", "font/ttf", "image/jpeg", "image/png", "image/webp", "model/gltf-binary", "text/x-glsl"]},
+    "file": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "path", "sha256", "size", "media_type"],
+      "properties": {"role": {"$ref": "#/$defs/role"}, "path": {"$ref": "#/$defs/runtime_path"}, "sha256": {"$ref": "#/$defs/sha256"}, "size": {"type": "integer", "minimum": 1, "maximum": 2147483648}, "media_type": {"$ref": "#/$defs/media_type"}},
+      "allOf": [
+        {"if": {"properties": {"role": {"enum": ["animation", "collision", "model", "skeleton"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "model/gltf-binary"}, "path": {"type": "string", "pattern": "\\.[Gg][Ll][Bb]$"}}}},
+        {"if": {"properties": {"role": {"enum": ["clipset", "material_metadata", "model_metadata"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "application/json"}}}},
+        {"if": {"properties": {"role": {"const": "audio"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["audio/mpeg", "audio/ogg", "audio/wav"]}}}},
+        {"if": {"properties": {"role": {"const": "font"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["font/otf", "font/ttf"]}}}},
+        {"if": {"properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "text/x-glsl"}}}},
+        {"if": {"properties": {"role": {"enum": ["preview", "texture"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}}
+      ]
+    },
+    "metrics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["triangles", "vertices", "materials", "textures", "nodes", "meshes", "skins", "bones", "influences", "animations", "external_uris"],
+      "properties": {
+        "triangles": {"type": "integer", "minimum": 0, "maximum": 1000000000},
+        "vertices": {"type": "integer", "minimum": 0, "maximum": 1000000000},
+        "materials": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "textures": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "nodes": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "meshes": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "skins": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "bones": {"type": "integer", "minimum": 0, "maximum": 1000000},
+        "influences": {"type": "integer", "minimum": 0, "maximum": 1024},
+        "animations": {"type": "integer", "minimum": 0, "maximum": 100000},
+        "external_uris": {"const": 0}
+      }
+    },
+    "asset": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "representation", "files", "metrics"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "kind": {"$ref": "#/$defs/kind"}, "representation": {"$ref": "#/$defs/representation"}, "files": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/file"}}, "metrics": {"$ref": "#/$defs/metrics"}},
+      "allOf": [
+        {"if": {"properties": {"kind": {"enum": ["music", "sfx"]}}, "required": ["kind"]}, "then": {"properties": {"representation": {"const": "audio"}}}},
+        {"if": {"properties": {"kind": {"enum": ["animation_3d", "character_3d", "collision_3d", "environment_3d", "material_set", "model_3d", "rig", "vfx_3d"]}}, "required": ["kind"]}, "then": {"properties": {"representation": {"const": "3d"}}}},
+        {"if": {"properties": {"representation": {"const": "audio"}}, "required": ["representation"]}, "then": {"properties": {"files": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "audio"}}, "required": ["role"]}}}}},
+        {"if": {"properties": {"representation": {"const": "3d"}, "kind": {"enum": ["character_3d", "environment_3d", "model_3d", "vfx_3d"]}}, "required": ["representation", "kind"]}, "then": {"properties": {"files": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "model"}}, "required": ["role"]}}}}},
+        {"if": {"properties": {"kind": {"const": "animation_3d"}}, "required": ["kind"]}, "then": {"properties": {"representation": {"const": "3d"}, "files": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "animation"}}, "required": ["role"]}}}}},
+        {"if": {"properties": {"kind": {"const": "collision_3d"}}, "required": ["kind"]}, "then": {"properties": {"representation": {"const": "3d"}, "files": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "collision"}}, "required": ["role"]}}}}},
+        {"if": {"properties": {"kind": {"const": "material_set"}}, "required": ["kind"]}, "then": {"properties": {"representation": {"const": "3d"}, "files": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "model"}}, "required": ["role"]}}}}},
+        {"if": {"properties": {"kind": {"const": "rig"}}, "required": ["kind"]}, "then": {"properties": {"representation": {"const": "3d"}, "files": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "skeleton"}}, "required": ["role"]}}}}},
+        {"if": {"properties": {"representation": {"enum": ["2d", "2_5d"]}, "kind": {"const": "font"}}, "required": ["representation", "kind"]}, "then": {"properties": {"files": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "font"}}, "required": ["role"]}}}}},
+        {"if": {"properties": {"representation": {"enum": ["2d", "2_5d"]}, "kind": {"const": "shader"}}, "required": ["representation", "kind"]}, "then": {"properties": {"files": {"type": "array", "contains": {"type": "object", "properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}, "required": ["role"]}}}}},
+        {"if": {"properties": {"representation": {"enum": ["2d", "2_5d"]}, "kind": {"not": {"enum": ["font", "shader"]}}}, "required": ["representation", "kind"]}, "then": {"properties": {"files": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "texture"}}, "required": ["role"]}}}}}
+      ]
+    },
+    "semantic_slot": {"type": "string", "minLength": 3, "maxLength": 194, "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$"},
+    "entrypoint": {
+      "type": "object", "additionalProperties": false,
+      "required": ["node", "scale", "layer"],
+      "properties": {"node": {"type": "string", "minLength": 1, "maxLength": 256}, "default_animation": {"type": "string", "minLength": 1, "maxLength": 256}, "moving_animation": {"type": "string", "minLength": 1, "maxLength": 256}, "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000}, "layer": {"type": "integer", "minimum": -100000, "maximum": 100000}}
+    },
+    "binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["slot", "asset_id", "representation"],
+      "properties": {"slot": {"$ref": "#/$defs/semantic_slot"}, "asset_id": {"$ref": "#/$defs/id"}, "representation": {"$ref": "#/$defs/representation"}, "entrypoint": {"$ref": "#/$defs/entrypoint"}},
+      "allOf": [
+        {"if": {"properties": {"representation": {"const": "3d"}}, "required": ["representation"]}, "then": {"required": ["entrypoint"], "properties": {"entrypoint": {"$ref": "#/$defs/entrypoint"}}}, "else": {"properties": {"entrypoint": false}}}
+      ]
+    }
+  }
+}

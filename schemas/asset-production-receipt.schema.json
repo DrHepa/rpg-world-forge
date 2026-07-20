@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/asset-production-receipt.schema.json",
+  "title": "Executable sanitized asset-production receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "id", "request", "asset_id", "route", "executor", "operation", "status", "started_at", "completed_at", "parent_receipt_hashes", "toolchain", "replayability", "outputs", "content_hash"],
+  "properties": {
+    "format": {"const": "rpg-world-forge.asset_production_receipt"},
+    "format_version": {"const": 1},
+    "id": {"$ref": "#/$defs/id"},
+    "request": {"$ref": "#/$defs/file_ref"},
+    "asset_id": {"$ref": "#/$defs/id"},
+    "route": {"enum": ["modly", "openai"]},
+    "executor": {"$ref": "#/$defs/executor"},
+    "operation": {"$ref": "#/$defs/operation"},
+    "status": {"const": "succeeded"},
+    "started_at": {"$ref": "#/$defs/timestamp"},
+    "completed_at": {"$ref": "#/$defs/timestamp"},
+    "parent_receipt_hashes": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/sha256"}},
+    "toolchain": {"type": "object", "minProperties": 1},
+    "replayability": {"enum": ["deterministic_seeded", "traceable_not_bit_reproducible"]},
+    "reviewed_script": {"$ref": "#/$defs/python_file_ref"},
+    "approval_mode": {"const": "explicit"},
+    "outputs": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/output"}},
+    "content_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"executor": {"const": "openai_image"}}, "required": ["executor"]},
+      "then": {"properties": {"route": {"const": "openai"}, "operation": {"enum": ["concept_reference", "image_edit", "image_generate"]}, "toolchain": {"$ref": "#/$defs/openai_toolchain"}, "replayability": {"const": "traceable_not_bit_reproducible"}, "reviewed_script": false, "approval_mode": false}}
+    },
+    {
+      "if": {"properties": {"executor": {"const": "blender_mcp"}}, "required": ["executor"]},
+      "then": {"required": ["reviewed_script", "approval_mode"], "properties": {"route": {"enum": ["modly", "openai"]}, "operation": {"enum": ["animate", "collision", "export_glb", "material_bake", "model_from_reference", "refine", "retopology", "rig", "uv_unwrap"]}, "parent_receipt_hashes": {"type": "array", "minItems": 1}, "toolchain": {"$ref": "#/$defs/blender_toolchain"}, "reviewed_script": {"$ref": "#/$defs/python_file_ref"}, "approval_mode": {"const": "explicit"}}}
+    },
+    {
+      "if": {"properties": {"executor": {"const": "modly_cli_mcp"}}, "required": ["executor"]},
+      "then": {"properties": {"route": {"const": "modly"}, "operation": {"enum": ["capability_execute", "process_run", "workflow_run"]}, "toolchain": {"$ref": "#/$defs/modly_toolchain"}, "replayability": {"enum": ["deterministic_seeded", "traceable_not_bit_reproducible"]}, "reviewed_script": false, "approval_mode": false}}
+    },
+    {
+      "if": {"properties": {"executor": {"enum": ["human", "procedural"]}}, "required": ["executor"]},
+      "then": {"properties": {"toolchain": {"type": "object", "minProperties": 1, "maxProperties": 128}, "reviewed_script": false, "approval_mode": false}}
+    },
+    {
+      "if": {"properties": {"operation": {"enum": ["image_edit", "image_generate"]}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["preview", "texture"]}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "concept_reference"}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"const": "preview"}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "model_from_reference"}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["authoring_source", "model", "preview"]}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"operation": {"enum": ["retopology", "uv_unwrap"]}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["authoring_source", "model"]}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "material_bake"}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["authoring_source", "material_metadata", "model", "texture"]}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "rig"}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["authoring_source", "model", "skeleton"]}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "animate"}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["animation", "authoring_source", "model"]}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "collision"}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["authoring_source", "collision", "model"]}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "export_glb"}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["animation", "authoring_source", "collision", "model", "skeleton"]}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "refine"}}, "required": ["operation"]},
+      "then": {"properties": {"outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["animation", "authoring_source", "collision", "material_metadata", "model", "skeleton", "texture"]}}, "required": ["role"]}}}}
+    },
+    {
+      "if": {"properties": {"executor": {"const": "blender_mcp"}, "operation": {"const": "model_from_reference"}}, "required": ["executor", "operation"]},
+      "then": {"properties": {"route": {"const": "openai"}}}
+    },
+    {
+      "if": {"properties": {"executor": {"const": "modly_cli_mcp"}, "operation": {"const": "process_run"}}, "required": ["executor", "operation"]},
+      "then": {"properties": {"toolchain": {"type": "object", "properties": {"canonical_surface": {"const": "process_run"}}, "required": ["canonical_surface"]}}}
+    },
+    {
+      "if": {"properties": {"executor": {"const": "modly_cli_mcp"}, "operation": {"const": "workflow_run"}}, "required": ["executor", "operation"]},
+      "then": {"properties": {"toolchain": {"type": "object", "properties": {"canonical_surface": {"const": "workflow_run"}}, "required": ["canonical_surface"]}}}
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "timestamp": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"},
+    "project_path": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?!/)(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$"},
+    "file_ref": {"type": "object", "additionalProperties": false, "required": ["file", "sha256"], "properties": {"file": {"$ref": "#/$defs/project_path"}, "sha256": {"$ref": "#/$defs/sha256"}, "size": {"type": "integer", "minimum": 0, "maximum": 2147483648}}},
+    "python_file_ref": {"allOf": [{"$ref": "#/$defs/file_ref"}, {"type": "object", "properties": {"file": {"type": "string", "pattern": "\\.[Pp][Yy]$"}}}]},
+    "executor": {"enum": ["blender_mcp", "human", "modly_cli_mcp", "openai_image", "procedural"]},
+    "operation": {"enum": ["animate", "capability_execute", "collision", "concept_reference", "export_glb", "image_edit", "image_generate", "material_bake", "model_from_reference", "process_run", "refine", "retopology", "rig", "uv_unwrap", "workflow_run"]},
+    "candidate_role": {"enum": ["animation", "audio", "authoring_source", "clipset", "collision", "font", "fragment_shader", "material_metadata", "model", "model_metadata", "preview", "skeleton", "texture", "vertex_shader"]},
+    "candidate_media_type": {"enum": ["application/json", "application/x-blender", "audio/mpeg", "audio/ogg", "audio/wav", "font/otf", "font/ttf", "image/jpeg", "image/png", "image/webp", "model/gltf-binary", "text/x-glsl"]},
+    "output": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "file", "sha256", "media_type"],
+      "properties": {
+        "role": {"$ref": "#/$defs/candidate_role"},
+        "file": {"$ref": "#/$defs/project_path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"type": "integer", "minimum": 0, "maximum": 2147483648},
+        "media_type": {"$ref": "#/$defs/candidate_media_type"},
+        "width": {"type": "integer", "minimum": 1, "maximum": 32768},
+        "height": {"type": "integer", "minimum": 1, "maximum": 32768}
+      },
+      "allOf": [
+        {"if": {"properties": {"role": {"enum": ["animation", "collision", "model", "skeleton"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "model/gltf-binary"}}}},
+        {"if": {"properties": {"role": {"const": "authoring_source"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "application/x-blender"}}}},
+        {"if": {"properties": {"role": {"enum": ["clipset", "material_metadata", "model_metadata"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "application/json"}}}},
+        {"if": {"properties": {"role": {"const": "audio"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["audio/mpeg", "audio/ogg", "audio/wav"]}}}},
+        {"if": {"properties": {"role": {"const": "font"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["font/otf", "font/ttf"]}}}},
+        {"if": {"properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "text/x-glsl"}}}},
+        {"if": {"properties": {"role": {"enum": ["preview", "texture"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}}
+      ]
+    },
+    "openai_toolchain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["surface", "requested_model", "resolved_model", "version_resolution"],
+      "properties": {
+        "surface": {"enum": ["images_api", "responses_api"]},
+        "requested_model": {"type": "string", "minLength": 1, "maxLength": 256},
+        "resolved_model": {"oneOf": [{"type": "string", "minLength": 1, "maxLength": 256}, {"type": "null"}]},
+        "version_resolution": {"enum": ["exact_snapshot", "unavailable_from_surface"]}
+      },
+      "allOf": [
+        {"if": {"properties": {"version_resolution": {"const": "exact_snapshot"}}, "required": ["version_resolution"]}, "then": {"properties": {"resolved_model": {"type": "string", "minLength": 1}}}},
+        {"if": {"properties": {"version_resolution": {"const": "unavailable_from_surface"}}, "required": ["version_resolution"]}, "then": {"properties": {"resolved_model": {"type": "null"}}}}
+      ]
+    },
+    "blender_toolchain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["blender_version", "blender_mcp_version", "addon_revision", "telemetry_disabled"],
+      "properties": {
+        "blender_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "blender_mcp_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "addon_revision": {"type": "string", "minLength": 1, "maxLength": 256},
+        "telemetry_disabled": {"const": true}
+      }
+    },
+    "modly_extension": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version", "revision", "manifest_hash", "workflow_hash"],
+      "properties": {"id": {"type": "string", "minLength": 1, "maxLength": 256}, "version": {"type": "string", "minLength": 1, "maxLength": 128}, "revision": {"type": "string", "minLength": 1, "maxLength": 256}, "manifest_hash": {"$ref": "#/$defs/sha256"}, "workflow_hash": {"$ref": "#/$defs/sha256"}}
+    },
+    "modly_model": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version", "weights_hash"],
+      "properties": {"id": {"type": "string", "minLength": 1, "maxLength": 256}, "version": {"type": "string", "minLength": 1, "maxLength": 128}, "weights_hash": {"$ref": "#/$defs/sha256"}}
+    },
+    "modly_toolchain": {
+      "type": "object", "additionalProperties": false,
+      "required": ["modly_cli_mcp_version", "modly_version", "canonical_surface", "capability_id", "run_id", "support_state", "capability_discovery_hash", "extension", "model", "setup_reviewed"],
+      "properties": {
+        "modly_cli_mcp_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "modly_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "canonical_surface": {"enum": ["process_run", "workflow_run"]},
+        "capability_id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "support_state": {"const": "supported"},
+        "capability_discovery_hash": {"$ref": "#/$defs/sha256"},
+        "extension": {"$ref": "#/$defs/modly_extension"},
+        "model": {"$ref": "#/$defs/modly_model"},
+        "setup_reviewed": {"const": true}
+      }
+    }
+  }
+}

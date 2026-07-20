@@ -1,0 +1,4 @@
+interface:
+  display_name: "Refine Export 3D Asset"
+  short_description: "Finalize and export one neutral GLB candidate"
+  default_prompt: "Use $refine-export-3d-asset-with-blender to apply approved fixes and export one M5 asset to neutral GLB."

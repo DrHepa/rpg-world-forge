@@ -176,6 +176,7 @@ class ContentPipelineTests(unittest.TestCase):
             )
             readme = (target / "README.md").read_text(encoding="utf-8")
             self.assertIn("World-authoring project", readme)
+            self.assertIn("--output assets/release/renderpack.json", readme)
             self.assertNotIn("Game project created", readme)
             self.assertFalse((target / ".agents").exists())
             self.assertFalse((target / "src").exists())

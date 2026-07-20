@@ -65,23 +65,47 @@ worldpack.
 
 ## P11 — Visual and audio direction
 
-Derive art/audio bibles from the locked world: camera, palette, silhouettes,
-animation, UI, VFX, musical language, ambience, SFX families and budgets.
+Create one target (`2d`, `2_5d`, or `3d`) bound to the locked world hash. Derive
+and approve target-scoped visual/audio bibles: camera and coordinates, scale,
+palette, silhouettes, materials, animation, UI, VFX, musical language, ambience,
+SFX families, runtime formats, budgets, and observable acceptance tests.
+
+Asset initialization creates only the target and an `art_direction` manifest;
+null bible/inventory references are valid until decisions exist. Produce no
+candidates in this phase.
 
 ## P12 — Asset inventory and specifications
 
-Derive every required asset from maps, actors, actions, events and UI. Write
-provider-agnostic specifications and acceptance tests before generation.
+Derive every required asset from maps, actors, actions, events, construction,
+audio and UI, with canonical sources and semantic slots. Keep manual additions
+separate. Write strict provider-neutral v2 specifications, exact 2D/audio or 3D
+technical budgets, canonical sources, semantic slots, expected outputs, allowed
+routes/executors, and acceptance tests before generation. Keep authorized
+reference files and permissions as separate hash-bound authoring evidence.
 
 ## P13 — Asset production and QA
 
-Use GPT Image/Codex through the OpenAI route, optional local models exclusively
-through Modly extensions, procedural tools, or human work offline.
-Record provenance/licenses, process deterministic runtime files and validate
-them in-engine.
+GPT orchestrates bounded offline executors. Complete OpenAI Image/Codex 2D and
+2.5D production first. Stabilize the neutral GLB contract, then use OpenAI Image
+for 3D reference design and Blender MCP in separate model, rig, animate,
+refine, and export operations; run independent QA afterward. Add the local flow
+last: GPT uses only reviewed Modly extensions through `modly-cli-mcp`; Blender
+MCP may refine selected Modly outputs without breaking lineage.
+
+Record typed requests/receipts, parent receipt hashes, selection, deterministic
+processing (`png_canonical`, `atlas`, `wav_pcm`, or `glb_validate`), provenance/
+licenses, output hashes, semantic bindings, and approved QA. Complete the
+`production` manifest first; build the renderpack or assetpack under
+`assets/release/`, then hash-seal it with `finalize-asset-release` and validate
+the resulting `release` manifest. Never ship provider/MCP configuration,
+authoring sources, model weights, or production evidence.
 
 ## P14 — Implementation handoff
 
-Deliver worldpack, processed assets, schemas, asset metadata, map contracts,
-state/event catalog, UI text, test scenarios, open risks and a prioritized
-implementation plan for the separate game repository.
+For 2D/2.5D, deliver the worldpack plus the sealed renderpack, processed runtime
+assets, bindings and notices for the current immutable-bundle/game flow. For 3D,
+deliver the worldpack plus the sealed engine-neutral assetpack to a separate
+implementation/runtime-adapter phase; do not represent it as supported by the
+current pyray reference game or M4 bundle. Also provide map contracts,
+state/event catalog, UI text, test scenarios, open risks, and a prioritized
+implementation plan. Exclude all Forge skills and M5 authoring records.

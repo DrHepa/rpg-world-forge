@@ -1,0 +1,4 @@
+interface:
+  display_name: "Refine Modly Output"
+  short_description: "Repair a Modly 3D result without losing lineage"
+  default_prompt: "Use $refine-modly-output to apply a bounded Blender refinement pass to one selected Modly 3D candidate."

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rpg-world-forge"
-version = "0.6.0"
+version = "0.7.0"
 description = "World-agnostic GPT-led RPG authoring forge with a deterministic Python/raylib runtime"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,7 +27,8 @@ Issues = "https://github.com/DrHepa/rpg-world-forge/issues"
 
 [project.optional-dependencies]
 game = ["raylib>=6.0.1,<7"]
-dev = ["ruff>=0.6,<1"]
+asset-production = ["Pillow==12.2.0"]
+dev = ["Pillow==12.2.0", "ruff>=0.6,<1"]
 
 [project.scripts]
 isoworld = "isoworld.__main__:main"

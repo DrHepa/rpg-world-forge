@@ -24,6 +24,58 @@
     "validations",
     "reviewed_by"
   ],
+  "allOf": [
+    {
+      "if": {"properties": {"phase": {"const": "p11_art_audio"}}},
+      "then": {
+        "required": ["asset_target_path", "visual_bible_path", "audio_bible_path"],
+        "properties": {
+          "asset_target_path": {"$ref": "#/$defs/projectPath"},
+          "visual_bible_path": {"$ref": "#/$defs/projectPath"},
+          "audio_bible_path": {"$ref": "#/$defs/projectPath"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"phase": {"const": "p12_asset_specs"}}},
+      "then": {
+        "required": ["asset_inventory_path", "asset_manifest_path"],
+        "properties": {
+          "asset_inventory_path": {"$ref": "#/$defs/projectPath"},
+          "asset_manifest_path": {"$ref": "#/$defs/projectPath"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"phase": {"const": "p13_asset_production"}}},
+      "then": {
+        "required": ["asset_manifest_path"],
+        "properties": {
+          "asset_manifest_path": {"$ref": "#/$defs/projectPath"},
+          "renderpack_path": {"$ref": "#/$defs/projectPath"},
+          "assetpack_path": {"$ref": "#/$defs/projectPath"}
+        },
+        "oneOf": [
+          {
+            "required": ["renderpack_path"],
+            "properties": {"renderpack_path": {"$ref": "#/$defs/projectPath"}},
+            "not": {
+              "required": ["assetpack_path"],
+              "properties": {"assetpack_path": {"$ref": "#/$defs/projectPath"}}
+            }
+          },
+          {
+            "required": ["assetpack_path"],
+            "properties": {"assetpack_path": {"$ref": "#/$defs/projectPath"}},
+            "not": {
+              "required": ["renderpack_path"],
+              "properties": {"renderpack_path": {"$ref": "#/$defs/projectPath"}}
+            }
+          }
+        ]
+      }
+    }
+  ],
   "properties": {
     "format": {
       "const": "rpg-world-forge.phase_report"
@@ -99,7 +151,22 @@
     "asset_manifest_path": {
       "$ref": "#/$defs/projectPath"
     },
+    "asset_target_path": {
+      "$ref": "#/$defs/projectPath"
+    },
+    "visual_bible_path": {
+      "$ref": "#/$defs/projectPath"
+    },
+    "audio_bible_path": {
+      "$ref": "#/$defs/projectPath"
+    },
+    "asset_inventory_path": {
+      "$ref": "#/$defs/projectPath"
+    },
     "renderpack_path": {
+      "$ref": "#/$defs/projectPath"
+    },
+    "assetpack_path": {
       "$ref": "#/$defs/projectPath"
     },
     "handoff_path": {

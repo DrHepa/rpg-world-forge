@@ -56,16 +56,26 @@ PHASE_REPORT_REQUIRED_KEYS = frozenset(
     }
 )
 PHASE_REPORT_ALLOWED_KEYS = PHASE_REPORT_REQUIRED_KEYS | {
+    "asset_inventory_path",
     "asset_manifest_path",
+    "asset_target_path",
+    "assetpack_path",
+    "audio_bible_path",
     "handoff_path",
     "renderpack_path",
+    "visual_bible_path",
     "worldpack_hash",
     "worldpack_path",
 }
 PHASE_REPORT_PATH_KEYS = (
+    "asset_inventory_path",
     "asset_manifest_path",
+    "asset_target_path",
+    "assetpack_path",
+    "audio_bible_path",
     "handoff_path",
     "renderpack_path",
+    "visual_bible_path",
     "worldpack_path",
 )
 
@@ -190,8 +200,13 @@ def initial_status(world_id: str) -> dict[str, Any]:
         "canon_locked": False,
         "worldpack_hash": None,
         "worldpack_path": None,
+        "asset_target": None,
+        "visual_bible": None,
+        "audio_bible": None,
+        "asset_inventory": None,
         "asset_manifest": None,
         "renderpack": None,
+        "assetpack": None,
     }
 
 
@@ -260,19 +275,53 @@ def validate_workflow_status(
     if status["canon_locked"] != canon_completed or (worldpack_hash is not None) != canon_completed:
         raise WorkflowError("P10 completion, canon lock, and worldpack metadata must agree")
 
-    for first, second, label in (
-        ("asset_manifest", "renderpack", "asset release"),
-        ("release_hash", "release_package", "world bundle"),
-    ):
+    for first, second, label in (("release_hash", "release_package", "world bundle"),):
         left, right = status.get(first), status.get(second)
         if (left is None) != (right is None):
             raise WorkflowError(f"{label} metadata must be complete or empty")
         for field, value in ((first, left), (second, right)):
             if value is not None and (not isinstance(value, str) or not value.strip()):
                 raise WorkflowError(f"Workflow status has an invalid {field}")
+    direction_completed = "p11_art_audio" in completed
+    direction_values = (
+        status.get("asset_target"),
+        status.get("visual_bible"),
+        status.get("audio_bible"),
+    )
+    # Status v1 predates the P11/P12 evidence fields. Once any P11 evidence is
+    # present, the status is an M5 status and the complete chain is mandatory.
+    # This keeps read-only lifecycle operations compatible with historical v1
+    # statuses while preventing a partially populated M5 chain.
+    if any(value is not None for value in direction_values):
+        if not direction_completed or not all(value is not None for value in direction_values):
+            raise WorkflowError("P11 completion and asset-direction metadata must agree")
+
+        plan_completed = "p12_asset_specs" in completed
+        plan_values = (status.get("asset_inventory"), status.get("asset_manifest"))
+        if plan_completed != all(value is not None for value in plan_values) or (
+            not plan_completed and any(value is not None for value in plan_values)
+        ):
+            raise WorkflowError("P12 completion and asset-plan metadata must agree")
+
     asset_completed = "p13_asset_production" in completed
-    if (status.get("asset_manifest") is not None) != asset_completed:
-        raise WorkflowError("P13 completion and asset release metadata must agree")
+    renderpack = status.get("renderpack")
+    assetpack = status.get("assetpack")
+    if renderpack is not None and assetpack is not None:
+        raise WorkflowError("An asset release cannot contain both renderpack and assetpack")
+    if asset_completed != (renderpack is not None or assetpack is not None):
+        raise WorkflowError("P13 completion requires exactly one asset delivery pack")
+    for field in (
+        "asset_target",
+        "visual_bible",
+        "audio_bible",
+        "asset_inventory",
+        "asset_manifest",
+        "renderpack",
+        "assetpack",
+    ):
+        value = status.get(field)
+        if value is not None and _normalized_project_path(value) is None:
+            raise WorkflowError(f"Workflow status has an invalid {field}")
     release_hash = status.get("release_hash")
     if release_hash is not None and SHA256_PATTERN.fullmatch(release_hash) is None:
         raise WorkflowError("Workflow status has an invalid release hash")
@@ -344,6 +393,59 @@ def _safe_deliverable(root: Path, relative: Any) -> Path | None:
     if not stat.S_ISREG(info.st_mode) or target.is_symlink() or info.st_nlink != 1:
         return None
     return target
+
+
+def _asset_plan_continuity_errors(
+    root: Path,
+    manifest_path: Path,
+    manifest: dict[str, Any],
+    *,
+    target_path: object,
+    visual_bible_path: object,
+    audio_bible_path: object,
+    inventory_path: object,
+    phase: str,
+) -> list[str]:
+    """Verify that one manifest hash-binds the exact P11/P12 project paths."""
+
+    from worldforge.asset_io import verify_artifact_reference
+
+    bibles = manifest.get("bibles")
+    references = (
+        ("target", manifest.get("target"), target_path),
+        (
+            "visual bible",
+            bibles.get("visual") if isinstance(bibles, dict) else None,
+            visual_bible_path,
+        ),
+        (
+            "audio bible",
+            bibles.get("audio") if isinstance(bibles, dict) else None,
+            audio_bible_path,
+        ),
+        ("inventory", manifest.get("inventory"), inventory_path),
+    )
+    errors: list[str] = []
+    for label, reference, expected in references:
+        if _normalized_project_path(expected) is None:
+            errors.append(f"{phase} has no canonical {label} path from the prior phase")
+            continue
+        try:
+            referenced = verify_artifact_reference(
+                manifest_path.parent,
+                reference,
+                context=label,
+            )
+            project_relative = referenced.relative_to(root).as_posix()
+        except (ValueError, OSError) as exc:
+            errors.append(f"{phase} {label} reference is invalid: {exc}")
+            continue
+        if project_relative != expected:
+            errors.append(
+                f"{phase} {label} path {project_relative!r} does not match "
+                f"the prior phase path {expected!r}"
+            )
+    return errors
 
 
 def _validate_phase_report_contract(report: dict[str, Any]) -> list[str]:
@@ -528,12 +630,141 @@ def validate_phase_report(
         if not isinstance(reported_hash, str) or not SHA256_PATTERN.fullmatch(reported_hash):
             errors.append("P10 requires a valid SHA-256 worldpack_hash")
 
+    if current == "p11_art_audio":
+        target_path = _safe_deliverable(root, report.get("asset_target_path"))
+        visual_path = _safe_deliverable(root, report.get("visual_bible_path"))
+        audio_path = _safe_deliverable(root, report.get("audio_bible_path"))
+        if target_path is None:
+            errors.append("P11 requires an existing asset_target_path inside the project")
+        if visual_path is None:
+            errors.append("P11 requires an existing visual_bible_path inside the project")
+        if audio_path is None:
+            errors.append("P11 requires an existing audio_bible_path inside the project")
+        if target_path is not None and visual_path is not None and audio_path is not None:
+            from worldforge.asset_contracts import validate_asset_bibles
+
+            bible_issues = validate_asset_bibles(visual_path, audio_path, target_path)
+            errors.extend(f"P11 asset direction: {issue}" for issue in bible_issues)
+            try:
+                from worldforge.asset_io import read_json_object
+
+                target_raw = read_json_object(target_path)
+            except ValueError as exc:
+                errors.append(f"P11 asset target: {exc}")
+            else:
+                if target_raw.get("world_id") != status["world_id"]:
+                    errors.append("P11 asset target world_id does not match the world project")
+                if target_raw.get("world_content_hash") != status.get("worldpack_hash"):
+                    errors.append("P11 asset target is not bound to the P10 worldpack")
+
+    if current == "p12_asset_specs":
+        for report_field, status_field, label in (
+            ("asset_target_path", "asset_target", "asset target"),
+            ("visual_bible_path", "visual_bible", "visual bible"),
+            ("audio_bible_path", "audio_bible", "audio bible"),
+        ):
+            if report_field in report and report.get(report_field) != status.get(status_field):
+                errors.append(f"P12 {label} path does not match P11")
+        inventory_path = _safe_deliverable(root, report.get("asset_inventory_path"))
+        manifest_path = _safe_deliverable(root, report.get("asset_manifest_path"))
+        worldpack_path = _safe_deliverable(root, status.get("worldpack_path"))
+        if inventory_path is None:
+            errors.append("P12 requires an existing asset_inventory_path inside the project")
+        if manifest_path is None:
+            errors.append("P12 requires an existing asset_manifest_path inside the project")
+        if worldpack_path is None:
+            errors.append("P12 requires the canon-locked P10 worldpack")
+        if inventory_path is not None and worldpack_path is not None:
+            from worldforge.asset_inventory import validate_asset_inventory
+
+            errors.extend(
+                f"P12 inventory: {message}"
+                for message in validate_asset_inventory(
+                    inventory_path,
+                    worldpack_path=worldpack_path,
+                )
+            )
+        if manifest_path is not None and worldpack_path is not None:
+            from worldforge.assets import validate_asset_manifest
+
+            errors.extend(
+                f"P12 asset plan: {issue}"
+                for issue in validate_asset_manifest(
+                    manifest_path,
+                    profile="draft",
+                    worldpack_path=worldpack_path,
+                )
+            )
+            try:
+                from worldforge.asset_io import read_json_object
+
+                manifest_raw = read_json_object(manifest_path)
+            except ValueError as exc:
+                errors.append(f"P12 asset plan: {exc}")
+            else:
+                if manifest_raw.get("format_version") != 3:
+                    errors.append("P12 M5 asset planning requires asset manifest version 3")
+                if manifest_raw.get("phase") != "production":
+                    errors.append("P12 asset manifest must be bound and ready for production")
+                errors.extend(
+                    _asset_plan_continuity_errors(
+                        root,
+                        manifest_path,
+                        manifest_raw,
+                        target_path=status.get("asset_target"),
+                        visual_bible_path=status.get("visual_bible"),
+                        audio_bible_path=status.get("audio_bible"),
+                        inventory_path=report.get("asset_inventory_path"),
+                        phase="P12",
+                    )
+                )
+
     if current == "p13_asset_production":
+        m5_continuity = status.get("asset_target") is not None
+        for report_field, status_field, label in (
+            ("asset_target_path", "asset_target", "asset target"),
+            ("visual_bible_path", "visual_bible", "visual bible"),
+            ("audio_bible_path", "audio_bible", "audio bible"),
+            ("asset_inventory_path", "asset_inventory", "asset inventory"),
+        ):
+            if report_field in report and report.get(report_field) != status.get(status_field):
+                errors.append(f"P13 {label} path does not match the prior phase")
+        if m5_continuity and report.get("asset_manifest_path") != status.get("asset_manifest"):
+            errors.append("P13 asset_manifest_path must exactly match the P12 asset manifest")
         asset_manifest = _safe_deliverable(root, report.get("asset_manifest_path"))
         if asset_manifest is None or not asset_manifest.is_file():
             errors.append("P13 requires an existing asset_manifest_path inside the project")
         else:
             from worldforge.assets import validate_asset_manifest
+
+            try:
+                from worldforge.asset_io import (
+                    read_json_object,
+                    require_content_hash,
+                    verify_artifact_reference,
+                )
+
+                manifest_raw = read_json_object(asset_manifest)
+            except ValueError as exc:
+                errors.append(f"P13 asset manifest is invalid: {exc}")
+                manifest_raw = {}
+            if m5_continuity and manifest_raw.get("format_version") != 3:
+                errors.append("P13 asset release requires asset manifest version 3")
+            if m5_continuity and manifest_raw.get("phase") != "release":
+                errors.append("P13 asset manifest must be a finalized release")
+            if m5_continuity:
+                errors.extend(
+                    _asset_plan_continuity_errors(
+                        root,
+                        asset_manifest,
+                        manifest_raw,
+                        target_path=status.get("asset_target"),
+                        visual_bible_path=status.get("visual_bible"),
+                        audio_bible_path=status.get("audio_bible"),
+                        inventory_path=status.get("asset_inventory"),
+                        phase="P13",
+                    )
+                )
 
             worldpack_path = _safe_deliverable(root, status.get("worldpack_path"))
             if worldpack_path is None or not worldpack_path.is_file():
@@ -561,18 +792,103 @@ def validate_phase_report(
                             worldpack_path=worldpack_path,
                         )
                         errors.extend(f"asset release: {issue}" for issue in asset_issues)
-                        renderpack_path = _safe_deliverable(root, report.get("renderpack_path"))
-                        if renderpack_path is None or not renderpack_path.is_file():
-                            errors.append(
-                                "P13 requires an existing renderpack_path inside the project"
-                            )
-                        else:
+                        delivery_profile = "renderpack_v1"
+                        if manifest_raw.get("format_version") == 3:
                             try:
-                                from isoworld.content.renderpack import load_renderpack
-
-                                load_renderpack(renderpack_path, locked_pack)
+                                target_path = verify_artifact_reference(
+                                    asset_manifest.parent,
+                                    manifest_raw.get("target"),
+                                    context="target",
+                                )
+                                target_raw = read_json_object(target_path)
+                                delivery_profile = target_raw.get("delivery_profile")
                             except ValueError as exc:
-                                errors.append(f"P13 renderpack is invalid: {exc}")
+                                errors.append(f"P13 asset target is invalid: {exc}")
+                        report_pack_path: object = None
+                        pack_path: Path | None = None
+                        expected_format: str | None = None
+                        if delivery_profile == "assetpack_v1":
+                            report_pack_path = report.get("assetpack_path")
+                            pack_path = _safe_deliverable(root, report_pack_path)
+                            expected_format = "rpg-world-forge.assetpack"
+                            if pack_path is None:
+                                errors.append(
+                                    "P13 3d handoff requires an existing assetpack_path "
+                                    "inside the project"
+                                )
+                            else:
+                                try:
+                                    from worldforge.assetpack import verify_assetpack
+
+                                    verify_assetpack(pack_path, worldpack_path)
+                                except ValueError as exc:
+                                    errors.append(f"P13 assetpack is invalid: {exc}")
+                            if report.get("renderpack_path") is not None:
+                                errors.append("P13 3d handoff must not declare a renderpack")
+                        elif delivery_profile == "renderpack_v1":
+                            report_pack_path = report.get("renderpack_path")
+                            pack_path = _safe_deliverable(root, report_pack_path)
+                            expected_format = "isoworld.renderpack"
+                            if pack_path is None or not pack_path.is_file():
+                                errors.append(
+                                    "P13 requires an existing renderpack_path inside the project"
+                                )
+                            else:
+                                try:
+                                    from isoworld.content.renderpack import load_renderpack
+
+                                    load_renderpack(pack_path, locked_pack)
+                                except ValueError as exc:
+                                    errors.append(f"P13 renderpack is invalid: {exc}")
+                            if report.get("assetpack_path") is not None:
+                                errors.append("P13 2d handoff must not declare an assetpack")
+                        else:
+                            errors.append("P13 asset target has an unsupported delivery profile")
+
+                        deliverable = manifest_raw.get("deliverable")
+                        if m5_continuity and not isinstance(deliverable, dict):
+                            errors.append("P13 asset manifest requires a hash-bound deliverable")
+                        elif m5_continuity and expected_format is not None:
+                            if deliverable.get("format") != expected_format:
+                                errors.append(
+                                    "P13 manifest deliverable format does not match "
+                                    "the asset target"
+                                )
+                            try:
+                                bound_pack = verify_artifact_reference(
+                                    asset_manifest.parent,
+                                    deliverable,
+                                    context="deliverable",
+                                    allowed_extra=frozenset({"format", "content_hash"}),
+                                )
+                                bound_pack_relative = bound_pack.relative_to(root).as_posix()
+                                bound_payload = read_json_object(
+                                    bound_pack,
+                                    limit=64 * 1024 * 1024,
+                                )
+                                require_content_hash(
+                                    bound_payload,
+                                    context="asset deliverable",
+                                )
+                            except (ValueError, OSError) as exc:
+                                errors.append(f"P13 manifest deliverable is invalid: {exc}")
+                            else:
+                                if bound_pack_relative != report_pack_path:
+                                    errors.append(
+                                        "P13 reported delivery pack path does not match "
+                                        "manifest.deliverable"
+                                    )
+                                if pack_path is not None and bound_pack != pack_path:
+                                    errors.append(
+                                        "P13 reported delivery pack is not the manifest deliverable"
+                                    )
+                                if bound_payload.get("content_hash") != deliverable.get(
+                                    "content_hash"
+                                ):
+                                    errors.append(
+                                        "P13 delivery pack content_hash does not match "
+                                        "manifest.deliverable"
+                                    )
 
     if current == "p14_handoff":
         handoff = _safe_deliverable(root, report.get("handoff_path"))
@@ -608,9 +924,17 @@ def _complete_phase_locked(root: Path, report_path: str | Path) -> dict[str, Any
         status["canon_locked"] = True
         status["worldpack_hash"] = report["worldpack_hash"]
         status["worldpack_path"] = report["worldpack_path"]
+    elif current == "p11_art_audio":
+        status["asset_target"] = report["asset_target_path"]
+        status["visual_bible"] = report["visual_bible_path"]
+        status["audio_bible"] = report["audio_bible_path"]
+    elif current == "p12_asset_specs":
+        status["asset_inventory"] = report["asset_inventory_path"]
+        status["asset_manifest"] = report["asset_manifest_path"]
     elif current == "p13_asset_production":
         status["asset_manifest"] = report["asset_manifest_path"]
-        status["renderpack"] = report["renderpack_path"]
+        status["renderpack"] = report.get("renderpack_path")
+        status["assetpack"] = report.get("assetpack_path")
 
     report_target = root / ".worldforge/phase_reports" / f"{current}.json"
     _commit_json_transaction(root, {report_target: report, status_path: status})
@@ -660,9 +984,27 @@ def _reopen_phase_locked(
         status["worldpack_path"] = None
         status["asset_manifest"] = None
         status["renderpack"] = None
-    elif reopen_index <= PHASE_INDEX["p13_asset_production"]:
+        status["assetpack"] = None
+        status["asset_target"] = None
+        status["visual_bible"] = None
+        status["audio_bible"] = None
+        status["asset_inventory"] = None
+    elif reopen_index <= PHASE_INDEX["p11_art_audio"]:
         status["asset_manifest"] = None
         status["renderpack"] = None
+        status["assetpack"] = None
+        status["asset_target"] = None
+        status["visual_bible"] = None
+        status["audio_bible"] = None
+        status["asset_inventory"] = None
+    elif reopen_index <= PHASE_INDEX["p12_asset_specs"]:
+        status["asset_manifest"] = None
+        status["renderpack"] = None
+        status["assetpack"] = None
+        status["asset_inventory"] = None
+    elif reopen_index <= PHASE_INDEX["p13_asset_production"]:
+        status["renderpack"] = None
+        status["assetpack"] = None
     for field in ("compatibility_report", "release_hash", "release_package"):
         status[field] = None
 

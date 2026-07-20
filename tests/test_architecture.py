@@ -161,10 +161,13 @@ class ArchitectureTests(unittest.TestCase):
             (root / "src").mkdir()
             (root / "src/app.py").write_text(
                 "import importlib\n"
+                "import blender_mcp\n"
+                "import bpy\n"
                 "import openai\n"
                 "import worldforge.compiler\n"
                 "from google import genai\n"
                 "from modly import workflow\n"
+                "from modly_cli_mcp import server\n"
                 'importlib.import_module("transformers")\n',
                 encoding="utf-8",
             )
@@ -173,8 +176,11 @@ class ArchitectureTests(unittest.TestCase):
 
             self.assertEqual(
                 [
+                    "blender_mcp",
+                    "bpy",
                     "google.genai",
                     "modly",
+                    "modly_cli_mcp",
                     "openai",
                     "transformers",
                     "worldforge.compiler",
@@ -200,6 +206,92 @@ class ArchitectureTests(unittest.TestCase):
                 all(finding.rule == "forbidden_game_dependency" for finding in findings)
             )
 
+    def test_game_repository_rejects_mcp_npm_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "package.json").write_text(
+                json.dumps(
+                    {
+                        "dependencies": {"modly-cli-mcp": "0.1.1"},
+                        "devDependencies": {"blender-mcp": "1.6.4"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(
+                [
+                    ("package.json", "blender-mcp"),
+                    ("package.json", "modly-cli-mcp"),
+                ],
+                sorted((str(finding.path), finding.detail) for finding in findings),
+            )
+
+    def test_game_repository_rejects_npm_aliases_to_mcp_distributions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "package.json").write_text(
+                json.dumps(
+                    {
+                        "dependencies": {
+                            "render-bridge": "npm:modly-cli-mcp@0.1.1",
+                            "safe-runtime": "1.0.0",
+                        },
+                        "devDependencies": {
+                            "scene-bridge": "npm:blender-mcp@^1.6.4",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(
+                [
+                    ("package.json", "npm:blender-mcp@^1.6.4"),
+                    ("package.json", "npm:modly-cli-mcp@0.1.1"),
+                ],
+                sorted((str(finding.path), finding.detail) for finding in findings),
+            )
+
+    def test_game_repository_rejects_indirect_packages_scripts_and_included_ai_requirements(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "package.json").write_text(
+                json.dumps(
+                    {
+                        "dependencies": {
+                            "render-bridge": "github:DrHepa/modly_CLI_MCP",
+                        },
+                        "scripts": {"author": "npx modly-cli-mcp"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "requirements.txt").write_text("-r config/runtime.in\n", encoding="utf-8")
+            (root / "config").mkdir()
+            (root / "config/runtime.in").write_text("openai==2.0.0\n", encoding="utf-8")
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(
+                [
+                    "author: npx modly-cli-mcp",
+                    "github:DrHepa/modly_CLI_MCP",
+                    "openai==2.0.0",
+                ],
+                sorted(finding.detail for finding in findings),
+            )
+            self.assertEqual(
+                {"forbidden_game_dependency", "forbidden_game_script"},
+                {finding.rule for finding in findings},
+            )
+
     def test_game_repository_checks_dependency_groups_and_requirements_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -221,6 +313,20 @@ class ArchitectureTests(unittest.TestCase):
                 ["google-genai>=1", "transformers>=4"],
                 sorted(finding.detail for finding in findings),
             )
+
+    def test_game_repository_rejects_editable_authoring_dependencies(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "requirements.txt").write_text(
+                "-e git+https://example.invalid/DrHepa/modly.git#egg=runtime-bridge\n",
+                encoding="utf-8",
+            )
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(1, len(findings))
+            self.assertEqual("forbidden_game_dependency", findings[0].rule)
+            self.assertIn("modly.git", findings[0].detail)
 
     def test_game_repository_checks_requirement_and_platform_lock_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -257,6 +363,66 @@ class ArchitectureTests(unittest.TestCase):
 
             self.assertEqual(1, len(findings))
             self.assertEqual("forbidden_authoring_format", findings[0].rule)
+
+    def test_game_repository_rejects_blender_authoring_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "assets/models").mkdir(parents=True)
+            (root / "assets/models/hero.BLEND").write_bytes(b"BLENDER")
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(1, len(findings))
+            self.assertEqual("assets/models/hero.BLEND", str(findings[0].path))
+            self.assertEqual("forbidden_game_path", findings[0].rule)
+
+    def test_game_repository_rejects_authoring_metadata_in_runtime_json(self) -> None:
+        documents = {
+            "provider.json": {"render": {"provider": "openai"}},
+            "bridge.json": {"transport": "mcp://blender"},
+            "weights.json": {"asset": "models/weights/hero.bin"},
+            "workflow.json": {"input": "workflows/hero.json"},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            data = root / "game_data/config"
+            data.mkdir(parents=True)
+            for name, document in documents.items():
+                (data / name).write_text(json.dumps(document), encoding="utf-8")
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(sorted(documents), sorted(finding.path.name for finding in findings))
+            self.assertTrue(
+                all(finding.rule == "forbidden_authoring_metadata" for finding in findings)
+            )
+
+    def test_game_repository_rejects_provider_and_secret_json_values(self) -> None:
+        documents = {
+            "engine.json": {"engine": "openai"},
+            "tool.json": {"tool": "modly_cli_mcp"},
+            "token.json": {"result": "Bearer abcdefghijklmnop"},
+            "aws.json": {"result": "AKIAABCDEFGHIJKLMNOP"},
+            "private.json": {
+                "result": "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----"
+            },
+        }
+        safe_documents = {
+            "catalog.json": {
+                "path": "game_data/worlds/modly_foundation/1.0.0",
+                "world_id": "modly_foundation",
+            },
+            "narrative.json": {"secrets": ["the sealed archive"]},
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root.mkdir(exist_ok=True)
+            for name, document in {**documents, **safe_documents}.items():
+                (root / name).write_text(json.dumps(document), encoding="utf-8")
+
+            findings = audit_game_repository(root)
+
+            self.assertEqual(sorted(documents), sorted(finding.path.name for finding in findings))
 
 
 if __name__ == "__main__":

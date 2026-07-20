@@ -6,6 +6,13 @@ from pathlib import Path
 
 from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
+from worldforge.asset_contracts import validate_asset_bibles
+from worldforge.asset_inventory import derive_asset_inventory
+from worldforge.asset_io import AssetContractError, read_json_object
+from worldforge.asset_manifest_v3 import bind_asset_plan, finalize_asset_release
+from worldforge.asset_processing import process_asset_recipe, verify_processing_receipt
+from worldforge.asset_production import create_production_request, validate_production_receipt
+from worldforge.assetpack import build_assetpack, verify_assetpack
 from worldforge.assets import AssetManifestError, init_asset_manifest, validate_asset_manifest
 from worldforge.bundle import (
     BundleError,
@@ -121,6 +128,103 @@ def build_parser() -> argparse.ArgumentParser:
     )
     init_assets.add_argument("worldpack", type=Path)
     init_assets.add_argument("--output", type=Path, required=True)
+    init_assets.add_argument("--target-id", default="primary")
+    init_assets.add_argument("--target-dimension", choices=("2d", "2_5d", "3d"))
+    init_assets.add_argument(
+        "--enable-modly",
+        action="store_true",
+        help="explicitly enable the reviewed local Modly route (disabled by default)",
+    )
+
+    validate_bibles = commands.add_parser(
+        "validate-asset-bibles",
+        help="validate approved visual/audio direction against one target",
+    )
+    validate_bibles.add_argument("--target", type=Path, required=True)
+    validate_bibles.add_argument("--visual", type=Path, required=True)
+    validate_bibles.add_argument("--audio", type=Path, required=True)
+
+    derive_inventory = commands.add_parser(
+        "derive-asset-inventory",
+        help="derive a deterministic target-specific inventory from locked canon",
+    )
+    derive_inventory.add_argument("worldpack", type=Path)
+    derive_inventory.add_argument("--target", type=Path, required=True)
+    derive_inventory.add_argument("--visual-bible", type=Path, required=True)
+    derive_inventory.add_argument("--audio-bible", type=Path, required=True)
+    derive_inventory.add_argument("--output", type=Path, required=True)
+
+    bind_plan = commands.add_parser(
+        "bind-asset-plan",
+        help="bind approved bibles, derived inventory, and exact specs to manifest v3",
+    )
+    bind_plan.add_argument("manifest", type=Path)
+    bind_plan.add_argument("--visual-bible", type=Path, required=True)
+    bind_plan.add_argument("--audio-bible", type=Path, required=True)
+    bind_plan.add_argument("--inventory", type=Path, required=True)
+    bind_plan.add_argument("--expected-hash", required=True)
+
+    finalize_assets = commands.add_parser(
+        "finalize-asset-release",
+        help="seal a built renderpack or assetpack into manifest v3 by exact hash",
+    )
+    finalize_assets.add_argument("manifest", type=Path)
+    finalize_assets.add_argument("--deliverable", type=Path, required=True)
+    finalize_assets.add_argument("--worldpack", type=Path, required=True)
+    finalize_assets.add_argument("--expected-hash", required=True)
+
+    production_request = commands.add_parser(
+        "create-production-request",
+        help="emit a hash-bound external asset-production request without calling a provider",
+    )
+    production_request.add_argument("asset_root", type=Path)
+    production_request.add_argument("specification_file")
+    production_request.add_argument("--output", type=Path, required=True)
+    production_request.add_argument("--id", dest="request_id", required=True)
+    production_request.add_argument("--route", choices=("openai", "modly"), required=True)
+    production_request.add_argument(
+        "--executor",
+        choices=("openai_image", "blender_mcp", "modly_cli_mcp", "human", "procedural"),
+        required=True,
+    )
+    production_request.add_argument("--operation", required=True)
+    production_request.add_argument(
+        "--input",
+        action="append",
+        default=[],
+        metavar="ROLE=FILE",
+    )
+    production_request.add_argument("--parameters", type=Path)
+    production_request.add_argument(
+        "--expected-output",
+        action="append",
+        default=[],
+        metavar="ROLE=MEDIA_TYPE",
+        help="override final spec outputs for one intermediate production operation",
+    )
+    production_request.add_argument("--parent-receipt-hash", action="append", default=[])
+    production_request.add_argument("--reviewed-script")
+
+    production_receipt = commands.add_parser(
+        "validate-production-receipt",
+        help="validate a sanitized OpenAI, Blender MCP, or Modly CLI MCP receipt",
+    )
+    production_receipt.add_argument("receipt", type=Path)
+    production_receipt.add_argument("--asset-root", type=Path, required=True)
+
+    process_asset = commands.add_parser(
+        "process-asset",
+        help="execute one finite deterministic asset-processing recipe",
+    )
+    process_asset.add_argument("recipe", type=Path)
+    process_asset.add_argument("--asset-root", type=Path, required=True)
+    process_asset.add_argument("--output-directory", type=Path, required=True)
+
+    verify_processing = commands.add_parser(
+        "verify-processing",
+        help="re-verify a deterministic processing receipt and output bytes",
+    )
+    verify_processing.add_argument("receipt", type=Path)
 
     validate_assets = commands.add_parser(
         "validate-assets",
@@ -137,6 +241,21 @@ def build_parser() -> argparse.ArgumentParser:
     renderpack.add_argument("manifest", type=Path)
     renderpack.add_argument("--worldpack", type=Path, required=True)
     renderpack.add_argument("--output", type=Path, required=True)
+
+    assetpack = commands.add_parser(
+        "build-assetpack",
+        help="compile processed 3d assets into a provider-neutral GLB handoff",
+    )
+    assetpack.add_argument("manifest", type=Path)
+    assetpack.add_argument("--worldpack", type=Path, required=True)
+    assetpack.add_argument("--output", type=Path, required=True)
+
+    verify_assets_3d = commands.add_parser(
+        "verify-assetpack",
+        help="verify a neutral 3d assetpack and every contained file",
+    )
+    verify_assets_3d.add_argument("assetpack", type=Path)
+    verify_assets_3d.add_argument("--worldpack", type=Path)
 
     validate = commands.add_parser("validate", help="validate source data and references")
     validate.add_argument("manifest", type=Path)
@@ -329,10 +448,135 @@ def main() -> int:
             return 0
 
         if args.command == "init-assets":
-            manifest = init_asset_manifest(args.worldpack, args.output)
+            manifest = init_asset_manifest(
+                args.worldpack,
+                args.output,
+                target_dimension=args.target_dimension,
+                target_id=args.target_id,
+                enable_modly=args.enable_modly,
+            )
             print(
                 f"OK output={args.output} world={manifest['world_id']} "
                 f"hash={manifest['world_content_hash']}"
+            )
+            return 0
+
+        if args.command == "validate-asset-bibles":
+            issues = validate_asset_bibles(args.visual, args.audio, args.target)
+            if issues:
+                for issue in issues:
+                    print(f"ERROR {issue}")
+                return 1
+            print(f"OK target={args.target} visual={args.visual} audio={args.audio}")
+            return 0
+
+        if args.command == "derive-asset-inventory":
+            inventory = derive_asset_inventory(
+                args.worldpack,
+                args.target,
+                args.visual_bible,
+                args.audio_bible,
+                args.output,
+            )
+            required = sum(1 for item in inventory["requirements"] if item["required"])
+            print(
+                f"OK output={args.output} target={inventory['target_id']} "
+                f"requirements={len(inventory['requirements'])} required={required} "
+                f"hash={inventory['content_hash']}"
+            )
+            return 0
+
+        if args.command == "bind-asset-plan":
+            manifest = bind_asset_plan(
+                args.manifest,
+                visual_bible_path=args.visual_bible,
+                audio_bible_path=args.audio_bible,
+                inventory_path=args.inventory,
+                expected_manifest_hash=args.expected_hash,
+            )
+            print(
+                f"OK manifest={args.manifest} assets={len(manifest['assets'])} "
+                f"hash={manifest['content_hash']}"
+            )
+            return 0
+
+        if args.command == "finalize-asset-release":
+            manifest = finalize_asset_release(
+                args.manifest,
+                args.deliverable,
+                args.worldpack,
+                expected_manifest_hash=args.expected_hash,
+            )
+            print(
+                f"OK manifest={args.manifest} deliverable={manifest['deliverable']['file']} "
+                f"hash={manifest['content_hash']}"
+            )
+            return 0
+
+        if args.command == "create-production-request":
+            inputs: list[tuple[str, str]] = []
+            for raw_input in args.input:
+                if "=" not in raw_input:
+                    raise AssetContractError("--input must use ROLE=FILE")
+                role, relative = raw_input.split("=", 1)
+                if not role or not relative:
+                    raise AssetContractError("--input must use non-empty ROLE=FILE")
+                inputs.append((role, relative))
+            parameters = None if args.parameters is None else read_json_object(args.parameters)
+            expected_outputs: list[dict[str, str]] = []
+            for raw_output in args.expected_output:
+                if "=" not in raw_output:
+                    raise AssetContractError("--expected-output must use ROLE=MEDIA_TYPE")
+                role, media_type = raw_output.split("=", 1)
+                if not role or not media_type:
+                    raise AssetContractError("--expected-output must use non-empty ROLE=MEDIA_TYPE")
+                expected_outputs.append({"role": role, "media_type": media_type})
+            request = create_production_request(
+                args.asset_root,
+                args.specification_file,
+                args.output,
+                request_id=args.request_id,
+                route=args.route,
+                executor=args.executor,
+                operation=args.operation,
+                inputs=inputs,
+                parameters=parameters,
+                expected_outputs=expected_outputs or None,
+                parent_receipt_hashes=args.parent_receipt_hash,
+                reviewed_script_file=args.reviewed_script,
+            )
+            print(
+                f"OK request={args.output} asset={request['asset_id']} "
+                f"executor={request['executor']} hash={request['content_hash']}"
+            )
+            return 0
+
+        if args.command == "validate-production-receipt":
+            issues = validate_production_receipt(args.receipt, asset_root=args.asset_root)
+            if issues:
+                for issue in issues:
+                    print(f"ERROR {issue}")
+                return 1
+            print(f"OK receipt={args.receipt}")
+            return 0
+
+        if args.command == "process-asset":
+            receipt = process_asset_recipe(
+                args.recipe,
+                args.output_directory,
+                asset_root=args.asset_root,
+            )
+            print(
+                f"OK output={args.output_directory} operation={receipt['operation']} "
+                f"hash={receipt['content_hash']}"
+            )
+            return 0
+
+        if args.command == "verify-processing":
+            receipt = verify_processing_receipt(args.receipt)
+            print(
+                f"OK receipt={args.receipt} operation={receipt['operation']} "
+                f"hash={receipt['content_hash']}"
             )
             return 0
 
@@ -353,6 +597,22 @@ def main() -> int:
             payload = build_renderpack(args.manifest, args.worldpack, args.output)
             print(
                 f"OK output={args.output} world={payload['world_id']} "
+                f"assets={len(payload['assets'])} hash={payload['content_hash']}"
+            )
+            return 0
+
+        if args.command == "build-assetpack":
+            payload = build_assetpack(args.manifest, args.worldpack, args.output)
+            print(
+                f"OK output={args.output} world={payload['world_id']} "
+                f"assets={len(payload['assets'])} hash={payload['content_hash']}"
+            )
+            return 0
+
+        if args.command == "verify-assetpack":
+            payload = verify_assetpack(args.assetpack, args.worldpack)
+            print(
+                f"OK assetpack={args.assetpack} world={payload['world_id']} "
                 f"assets={len(payload['assets'])} hash={payload['content_hash']}"
             )
             return 0

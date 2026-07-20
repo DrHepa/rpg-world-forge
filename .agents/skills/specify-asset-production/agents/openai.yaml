@@ -1,0 +1,4 @@
+interface:
+  display_name: "Specify Asset Production"
+  short_description: "Write one provider-neutral asset contract"
+  default_prompt: "Use $specify-asset-production to write and validate one M5 asset specification from an inventory requirement."

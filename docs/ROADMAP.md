@@ -67,10 +67,62 @@
   exact dependency/build/quality lock, with headless, native-smoke, benchmark, package,
   and platform-CI entry points.
 
-## M5 - Asset production
+## M5 - Asset production (complete)
 
-- Derive inventories from canon-locked worldpacks.
-- Manage art/audio bibles and per-asset specifications.
-- Offline adapters for GPT Image/Codex and optional local generation through Modly extensions.
-- Deterministic spritesheet, tileset, atlas, SFX, and music processing.
-- In-engine QA, provenance, licenses, and release hashes.
+- [x] Derive target-specific inventories from canon-locked worldpacks and bind
+  approved visual/audio bibles plus per-asset specifications by hash.
+- [x] Complete the OpenAI/Codex 2D/2.5D authoring route with immutable requests,
+  sanitized receipts, explicit candidate selection, and no provider SDK in the
+  Forge or runtime.
+- [x] Canonicalize PNGs, build deterministic atlases/clipsets, and process PCM
+  WAV audio through finite recipes with independently verifiable receipts.
+- [x] Extend the provider-neutral contract to 3D targets, strict GLB inspection,
+  structural budgets, semantic bindings, and runtime-only `assetpack_v1`.
+- [x] Enforce two-step publication: validate a complete `production` manifest
+  while building under `assets/release/`, then hash-seal the exact deliverable
+  and validate the resulting `release` manifest.
+- [x] Add reference-image-first Blender MCP workflows for modeling, rigging,
+  animation, refinement/export, and independent QA under GPT orchestration.
+- [x] Add the optional local route through `modly-cli-mcp`, gated by live
+  capability discovery, pinned extension/model/weights evidence, reviewed setup,
+  and Blender refinement that preserves the Modly parent lineage.
+- [x] Reject bibles, requests, receipts, MCP packages, provider data, authoring
+  formats, `.blend` files, weights, and workflows at runtime/game boundaries.
+
+The Modly route deliberately rejects an operation when the installed package
+and extension cannot report a supported, versioned capability. That is an
+availability result, not permission to call a model or infer a workflow
+directly. The researched `modly-cli-mcp@0.1.1` baseline executes only TripoSG or
+Hunyuan3D image-to-mesh, mesh optimization, and default-path mesh export through
+`capability_execute`; UniRig, 2D/2.5D, unknown/UI capabilities, and generic
+chains remain unavailable or require a separately discovered future extension.
+
+The current pyray reference runtime and M4 immutable game bundle remain
+2D/2.5D renderpack consumers. M5's 3D result is an engine-neutral assetpack for
+a later game implementation/runtime-adapter phase, not a claim that the
+reference game already loads 3D assets.
+
+## M6 - 3D game implementation and runtime adapters (planned)
+
+M6 starts from a sealed M5 `assetpack_v1`; it does not reopen asset production.
+The milestone will:
+
+- Select and pin at least one explicit 3D game runtime/engine contract outside
+  the Forge, including platform, renderer, physics, animation, packaging, and
+  performance budgets.
+- Map provider-neutral assetpack coordinates, semantic bindings, node names,
+  materials, rigs, animation clips, colliders, and LODs into that adapter with
+  deterministic validation and compatibility reporting.
+- Integrate the existing worldpack systems, narrative, living-world state,
+  saves, replay, and multi-world catalog without introducing Blender, Modly,
+  MCP, provider SDKs, authoring evidence, or weights into the game repository.
+- Add a standalone 3D game scaffold, native smoke scenes, representative
+  benchmarks, package verification, and desktop CI while preserving the
+  supported 2D/2.5D pyray path unchanged.
+- Define the immutable 3D bundle/import boundary only after the adapter proves
+  end-to-end load, animation, collision, save/replay, and release verification.
+
+Entry gate: M5 release validation is green and the exact assetpack hash is
+recorded. Exit gate: a separate game repository imports a verified 3D bundle,
+runs without Forge or network access, and passes boundary, native-smoke,
+determinism, performance, and packaging checks.

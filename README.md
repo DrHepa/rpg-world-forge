@@ -3,9 +3,10 @@
 [![CI](https://github.com/DrHepa/rpg-world-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/DrHepa/rpg-world-forge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-lilac.svg)](LICENSE)
 
-A toolkit and tested reference runtime for creating 2D/2.5D isometric RPGs in
-Python with `pyray`/raylib. The runtime is deterministic, data-driven, and
-works without an LLM, an AI API, or an Internet connection.
+A toolkit for producing world-agnostic RPG content and a tested 2D/2.5D
+isometric reference runtime in Python with `pyray`/raylib. The authoring
+contracts also cover engine-neutral 3D asset handoff. Runtime data is
+deterministic and works without an LLM, an AI API, or an Internet connection.
 
 This repository contains **the Forge**, not a particular world or game. A world
 authoring repository owns canon, characters, editable content, asset production,
@@ -19,7 +20,22 @@ knowledge boundaries. Its output is never accepted directly: a human or the
 authorized lead agent reviews it, `worldforge` validates it, and the build step
 compiles it into a static worldpack consumed by the runtime.
 
-## Current systemic slice (M4)
+## Current systemic slice (M5)
+
+- Canon-locked asset targets for 2D, 2.5D, or 3D, with approved visual/audio
+  bibles, deterministic inventory derivation, and per-asset specifications.
+- Hash-bound production requests and sanitized receipts for OpenAI Image,
+  Blender MCP, and capability-discovered Modly extensions; GPT remains the
+  orchestrator and provider tooling stays outside Forge and runtime code.
+- Deterministic PNG canonicalization, atlas/clipset assembly, PCM WAV
+  processing, strict TTF/OTF/GLSL validation, and receipt re-verification.
+- Provider-neutral GLB inspection and runtime-only `assetpack_v1` handoff for
+  3D targets, plus a two-step build/hash-seal release lifecycle. The pyray
+  reference runtime and current immutable game bundle remain explicitly
+  2D/2.5D renderpack consumers.
+- Thirteen bounded M5 skills covering OpenAI/Codex 2D/2.5D production,
+  reference-led Blender modeling/rigging/animation/export, independent 3D QA,
+  and fail-closed Modly operation/refinement.
 
 - Atomic v2 creation, inspection, cloning, explicit legacy upgrade, and
   optimistic-lock SemVer versioning for independent world repositories.
@@ -34,7 +50,7 @@ compiles it into a static worldpack consumed by the runtime.
   verifier, native smoke, benchmark, deterministic package, and desktop CI.
 - Canonical `game_data/shared.lock.json` for game-owned common presentation
   assets, including byte/media validation and a hash-bound notices contract.
-- Twenty-four Forge-only skills: one bounded world operation or game
+- Thirty-seven Forge-only skills: one bounded world, asset-production, or game
   implementation phase per skill, with no all-in-one game-building skill.
 - Enforced immutable seams: game extensions live under `src/game`; vendored
   runtime snapshots and imported bundles change only through dedicated Forge
@@ -66,8 +82,9 @@ compiles it into a static worldpack consumed by the runtime.
 - Offline narrative reachability, producer, and softlock analysis.
 - Offline content compiler and cross-reference validator.
 - Offline asset pipeline with provenance and license tracking.
-- Asset manifest v2 with typed specifications, multi-file processed outputs,
-  semantic bindings, and strict OpenAI/optional-Modly generation routes.
+- Target-scoped asset manifest v3 with hash-bound specifications, complete
+  receipt lineage, multi-file processed outputs, semantic bindings, and strict
+  OpenAI/optional-Modly generation routes.
 - Runtime-only hashed renderpacks compiled without prompts, model data,
   workflows, credentials, or production evidence.
 - Pyray resource registry for textures, clipsets, fonts, shaders, SFX, and
@@ -180,30 +197,68 @@ worldforge analyze-narrative ../my-world/source/manifest.json \
   --output ../my-world/build/narrative-analysis.json \
   --fail-on warning
 worldforge init-assets ../my-world/build/my_world.worldpack.json \
+  --target-dimension 2_5d \
   --output ../my-world/assets/manifest.json
 
-# After approved production and release validation:
+# Optional and fail-closed: add only after reviewing the installed Modly stack.
+# Omit this flag to keep the local route and executor disabled.
+worldforge init-assets ../my-world/build/my_world.worldpack.json \
+  --target-dimension 3d --enable-modly \
+  --output ../my-world/assets-3d/manifest.json
+
+# After authoring and approving target-bound visual/audio bibles:
+worldforge validate-asset-bibles \
+  --target ../my-world/assets/target.json \
+  --visual ../my-world/assets/bibles/visual.json \
+  --audio ../my-world/assets/bibles/audio.json
+worldforge derive-asset-inventory \
+  ../my-world/build/my_world.worldpack.json \
+  --target ../my-world/assets/target.json \
+  --visual-bible ../my-world/assets/bibles/visual.json \
+  --audio-bible ../my-world/assets/bibles/audio.json \
+  --output ../my-world/assets/inventory/assets.json
+
+# After every required asset has complete production, processing, license, and
+# QA evidence, the builder validates the manifest's production/build profile:
 worldforge build-renderpack ../my-world/assets/manifest.json \
   --worldpack ../my-world/build/my_world.worldpack.json \
-  --output ../my-world/build/runtime/renderpack.json
+  --output ../my-world/assets/release/renderpack.json
+
+# Seal that exact deliverable into the manifest, then validate the release:
+worldforge finalize-asset-release ../my-world/assets/manifest.json \
+  --deliverable ../my-world/assets/release/renderpack.json \
+  --worldpack ../my-world/build/my_world.worldpack.json \
+  --expected-hash <production-manifest-content-hash>
+worldforge validate-assets ../my-world/assets/manifest.json \
+  --profile release \
+  --worldpack ../my-world/build/my_world.worldpack.json
 
 # Optional reference-runtime preview only; this is not the game handoff:
 isoworld --pack ../my-world/build/my_world.worldpack.json \
-  --renderpack ../my-world/build/runtime/renderpack.json
+  --renderpack ../my-world/assets/release/renderpack.json
 ```
 
-The production handoff is an immutable runtime bundle. Forge-side tooling
-verifies and copies that bundle into a separate game repository. It never
-copies the world's `AGENTS.md`, `.worldforge/`, editable `source/`, production
-manifests, prompts, candidates, or model/provider metadata.
+For a 3D target, replace `build-renderpack` with `build-assetpack` and write
+`../my-world/assets/release/assetpack.json`; verify it with
+`worldforge verify-assetpack`, then use the same `finalize-asset-release` and
+release-validation steps. The assetpack is an engine-neutral implementation
+handoff. The current `isoworld` reference runtime, `export-bundle`, and generated
+standalone game consume only the 2D/2.5D renderpack path; a 3D game must add and
+validate its own runtime adapter before importing the assetpack.
+
+The current 2D/2.5D production handoff becomes an immutable runtime bundle.
+Forge-side tooling verifies and copies that bundle into a separate game
+repository. It never copies the world's `AGENTS.md`, `.worldforge/`, editable
+`source/`, production manifests, prompts, candidates, or model/provider
+metadata.
 
 ```bash
 worldforge export-bundle \
   ../my-world/build/my_world.worldpack.json \
-  ../my-world/build/runtime/renderpack.json \
+  ../my-world/assets/release/renderpack.json \
   ../releases/my_world-1.0.0 \
   --release-id 1.0.0 \
-  --licenses ../my-world/build/runtime/licenses
+  --licenses ../my-world/assets/release/licenses
 
 worldforge verify-bundle ../releases/my_world-1.0.0 \
   --expected-hash <bundle-sha256>
@@ -292,7 +347,8 @@ The one-skill-per-phase game workflow is defined in
 the supported game-runtime conventions are documented in
 [PYRAY_RUNTIME_GUIDE.md](docs/PYRAY_RUNTIME_GUIDE.md).
 Visual and audio production is described in
-[ASSET_PIPELINE.md](docs/ASSET_PIPELINE.md). The GPT and multi-agent protocol is
+[ASSET_PIPELINE.md](docs/ASSET_PIPELINE.md), including the 3D/Blender and
+capability-gated Modly routes. The GPT and multi-agent protocol is
 documented in [agents/README.md](agents/README.md).
 
 ## Public project

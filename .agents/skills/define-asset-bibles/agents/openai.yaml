@@ -1,0 +1,4 @@
+interface:
+  display_name: "Define Asset Bibles"
+  short_description: "Lock target-specific visual and audio direction"
+  default_prompt: "Use $define-asset-bibles to create and validate the target-scoped M5 visual and audio bibles."

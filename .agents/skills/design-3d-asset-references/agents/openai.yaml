@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design 3D Asset References"
+  short_description: "Create coherent model-ready reference views"
+  default_prompt: "Use $design-3d-asset-references to produce a reviewed reference-image set for one 3D M5 specification."

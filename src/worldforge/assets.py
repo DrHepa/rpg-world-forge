@@ -152,14 +152,38 @@ def _verified_worldpack(path: Path) -> dict[str, Any]:
     return pack
 
 
-def init_asset_manifest(worldpack_path: str | Path, output_path: str | Path) -> dict[str, Any]:
+def init_asset_manifest(
+    worldpack_path: str | Path,
+    output_path: str | Path,
+    *,
+    target_dimension: str | None = None,
+    target_id: str = "primary",
+    enable_modly: bool = False,
+) -> dict[str, Any]:
+    if target_dimension is not None:
+        from worldforge.asset_manifest_v3 import init_asset_manifest_v3
+
+        return init_asset_manifest_v3(
+            worldpack_path,
+            output_path,
+            target_id=target_id,
+            dimension=target_dimension,
+            enable_modly=enable_modly,
+        )
+    if enable_modly:
+        raise AssetManifestError("--enable-modly requires --target-dimension and manifest v3")
     pack = _verified_worldpack(Path(worldpack_path))
-    output = Path(output_path)
-    if output.exists():
+    from worldforge.asset_io import prepare_output_path, write_json_atomic
+
+    output = prepare_output_path(output_path)
+    try:
+        output.lstat()
+    except FileNotFoundError:
+        pass
+    else:
         raise AssetManifestError(f"The asset manifest already exists: {output}")
-    output.parent.mkdir(parents=True, exist_ok=True)
     for directory in ("specs", "generated", "processed", "references", "recipes", "qa"):
-        (output.parent / directory).mkdir(exist_ok=True)
+        prepare_output_path(output.parent / directory / ".directory-probe")
 
     manifest: dict[str, Any] = {
         "format": "rpg-world-forge.asset_manifest",
@@ -174,10 +198,7 @@ def init_asset_manifest(worldpack_path: str | Path, output_path: str | Path) -> 
         "assets": [],
         "bindings": [],
     }
-    output.write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    write_json_atomic(output, manifest)
     return manifest
 
 
@@ -609,12 +630,26 @@ def validate_asset_manifest(
     profile: str = "draft",
     worldpack_path: str | Path | None = None,
 ) -> list[AssetIssue]:
-    if profile not in {"draft", "release"}:
-        raise AssetManifestError("profile must be draft or release")
+    if profile not in {"build", "draft", "release"}:
+        raise AssetManifestError("profile must be build, draft, or release")
+    if profile == "build":
+        path = Path(manifest_path)
+        raw = _read_json(path)
+        if raw.get("format_version") != 3:
+            raise AssetManifestError("the build profile is only valid for asset manifest v3")
     path = Path(manifest_path)
     raw = _read_json(path)
     root = path.parent.resolve()
     issues: list[AssetIssue] = []
+
+    if raw.get("format_version") == 3:
+        from worldforge.asset_manifest_v3 import validate_asset_manifest_v3
+
+        return validate_asset_manifest_v3(
+            path,
+            profile=profile,
+            worldpack_path=worldpack_path,
+        )
 
     if raw.get("format") != "rpg-world-forge.asset_manifest":
         issues.append(AssetIssue("format", "unknown format"))

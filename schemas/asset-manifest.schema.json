@@ -1,238 +1,203 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rpg-world-forge.local/schemas/asset-manifest.schema.json",
-  "title": "RPG World Forge asset-production manifest v2",
+  "title": "Executable target-scoped asset-production manifest v3",
   "type": "object",
   "additionalProperties": false,
-  "required": [
-    "format",
-    "format_version",
-    "world_id",
-    "world_content_hash",
-    "phase",
-    "generation_policy",
-    "assets",
-    "bindings"
-  ],
+  "required": ["format", "format_version", "world_id", "world_content_hash", "target", "phase", "generation_policy", "bibles", "inventory", "assets", "bindings", "content_hash"],
   "properties": {
     "format": {"const": "rpg-world-forge.asset_manifest"},
-    "format_version": {"const": 2},
+    "format_version": {"const": 3},
     "world_id": {"$ref": "#/$defs/id"},
     "world_content_hash": {"$ref": "#/$defs/sha256"},
+    "target": {"$ref": "#/$defs/file_ref"},
     "phase": {"enum": ["art_direction", "production", "release"]},
-    "generation_policy": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["enabled_routes", "local_model_route"],
-      "properties": {
-        "enabled_routes": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {"enum": ["openai", "modly"]}
-        },
-        "local_model_route": {"const": "modly"}
-      }
-    },
-    "assets": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/asset"}
-    },
-    "bindings": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/binding"}
-    }
+    "generation_policy": {"$ref": "#/$defs/generation_policy"},
+    "bibles": {"$ref": "#/$defs/bibles"},
+    "inventory": {"oneOf": [{"$ref": "#/$defs/file_ref"}, {"type": "null"}]},
+    "assets": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/asset"}},
+    "bindings": {"type": "array", "maxItems": 100000, "items": {"$ref": "#/$defs/binding"}},
+    "deliverable": {"$ref": "#/$defs/deliverable"},
+    "content_hash": {"$ref": "#/$defs/sha256"}
   },
-  "$defs": {
-    "id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_]{1,63}$"
-    },
-    "sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "output": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["role", "runtime_file", "sha256", "media_type"],
-      "properties": {
-        "role": {
-          "enum": [
-            "audio",
-            "clipset",
-            "font",
-            "fragment_shader",
-            "texture",
-            "vertex_shader"
-          ]
-        },
-        "runtime_file": {"type": "string", "minLength": 1},
-        "sha256": {"$ref": "#/$defs/sha256"},
-        "media_type": {
-          "enum": [
-            "application/json",
-            "audio/mpeg",
-            "audio/ogg",
-            "audio/wav",
-            "font/otf",
-            "font/ttf",
-            "image/jpeg",
-            "image/png",
-            "image/webp",
-            "text/x-glsl"
-          ]
+  "allOf": [
+    {
+      "if": {"properties": {"phase": {"enum": ["production", "release"]}}, "required": ["phase"]},
+      "then": {
+        "properties": {
+          "bibles": {"$ref": "#/$defs/bibles_bound"},
+          "inventory": {"$ref": "#/$defs/file_ref"}
         }
-      },
-      "allOf": [
-        {
-          "if": {"properties": {"role": {"const": "audio"}}},
-          "then": {"properties": {"media_type": {"enum": ["audio/mpeg", "audio/ogg", "audio/wav"]}}}
-        },
-        {
-          "if": {"properties": {"role": {"const": "clipset"}}},
-          "then": {"properties": {"media_type": {"const": "application/json"}}}
-        },
-        {
-          "if": {"properties": {"role": {"const": "font"}}},
-          "then": {"properties": {"media_type": {"enum": ["font/otf", "font/ttf"]}}}
-        },
-        {
-          "if": {"properties": {"role": {"const": "texture"}}},
-          "then": {"properties": {"media_type": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}
-        },
-        {
-          "if": {"properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}},
-          "then": {"properties": {"media_type": {"const": "text/x-glsl"}}}
-        }
-      ]
-    },
-    "provenance": {
-      "type": "object",
-      "required": ["origin"],
-      "properties": {
-        "origin": {
-          "enum": [
-            "codex_assisted",
-            "gpt_image",
-            "human",
-            "local_model",
-            "procedural",
-            "third_party"
-          ]
-        },
-        "generation_route": {"enum": ["openai", "modly"]},
-        "model_id": {"type": "string", "minLength": 1},
-        "model_version": {"type": "string", "minLength": 1},
-        "recipe_file": {"type": "string", "minLength": 1},
-        "extension_id": {"type": "string", "minLength": 1},
-        "extension_version": {"type": "string", "minLength": 1},
-        "workflow_file": {"type": "string", "minLength": 1}
       }
     },
-    "license": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "asset_license",
-        "source_license",
-        "model_license",
-        "weights_license",
-        "dataset_license"
-      ],
-      "properties": {
-        "asset_license": {"type": "string", "minLength": 1},
-        "source_license": {"type": "string", "minLength": 1},
-        "model_license": {"type": "string", "minLength": 1},
-        "weights_license": {"type": "string", "minLength": 1},
-        "dataset_license": {"type": "string", "minLength": 1}
-      }
+    {
+      "if": {"properties": {"phase": {"enum": ["art_direction", "production"]}}, "required": ["phase"]},
+      "then": {"properties": {"deliverable": false}}
     },
-    "asset": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "kind", "status", "specification_file"],
-      "properties": {
-        "id": {"$ref": "#/$defs/id"},
-        "kind": {
-          "enum": [
-            "font",
-            "music",
-            "portrait",
-            "shader",
-            "sfx",
-            "sprite",
-            "spritesheet",
-            "tileset",
-            "ui",
-            "vfx"
-          ]
-        },
-        "status": {"enum": ["planned", "generated", "approved", "processed"]},
-        "specification_file": {"type": "string", "minLength": 1},
-        "provenance": {"$ref": "#/$defs/provenance"},
-        "license": {"$ref": "#/$defs/license"},
-        "approved_by": {"type": "string", "minLength": 1},
-        "references": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["file", "permission", "license"],
-            "properties": {
-              "file": {"type": "string", "minLength": 1},
-              "permission": {"type": "string", "minLength": 1},
-              "license": {"type": "string", "minLength": 1}
+    {
+      "if": {"properties": {"phase": {"const": "release"}}, "required": ["phase"]},
+      "then": {
+        "required": ["deliverable"],
+        "properties": {
+          "deliverable": {"$ref": "#/$defs/deliverable"},
+          "assets": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "allOf": [
+                {"$ref": "#/$defs/asset"},
+                {
+                  "if": {"type": "object", "properties": {"required": {"const": false}}, "required": ["required"]},
+                  "else": {"type": "object", "properties": {"status": {"const": "processed"}}}
+                }
+              ]
+            }
+          },
+          "bindings": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {"$ref": "#/$defs/binding"},
+                {
+                  "if": {"type": "object", "properties": {"representation": {"enum": ["2d", "2_5d"]}, "slot": {"type": "string", "pattern": "^(?:actor|tile_type|construction):"}}, "required": ["representation", "slot"]},
+                  "then": {"type": "object", "required": ["clip"], "properties": {"clip": {"$ref": "#/$defs/id"}}}
+                },
+                {
+                  "if": {"type": "object", "properties": {"representation": {"const": "3d"}}, "required": ["representation"]},
+                  "then": {"type": "object", "required": ["presentation"], "properties": {"presentation": {"$ref": "#/$defs/presentation"}}}
+                }
+              ]
             }
           }
-        },
-        "qa": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["report_file", "in_engine_passed", "raylib_load_passed"],
-          "properties": {
-            "report_file": {"type": "string", "minLength": 1},
-            "in_engine_passed": {"const": true},
-            "raylib_load_passed": {"const": true}
-          }
-        },
-        "outputs": {
-          "type": "array",
-          "items": {"$ref": "#/$defs/output"}
         }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "project_path": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?!/)(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$"},
+    "file_ref": {"type": "object", "additionalProperties": false, "required": ["file", "sha256"], "properties": {"file": {"$ref": "#/$defs/project_path"}, "sha256": {"$ref": "#/$defs/sha256"}, "size": {"type": "integer", "minimum": 0, "maximum": 2147483648}}},
+    "bibles": {
+      "type": "object", "additionalProperties": false,
+      "required": ["visual", "audio"],
+      "properties": {"visual": {"oneOf": [{"$ref": "#/$defs/file_ref"}, {"type": "null"}]}, "audio": {"oneOf": [{"$ref": "#/$defs/file_ref"}, {"type": "null"}]}}
+    },
+    "bibles_bound": {
+      "type": "object", "additionalProperties": false,
+      "required": ["visual", "audio"],
+      "properties": {"visual": {"$ref": "#/$defs/file_ref"}, "audio": {"$ref": "#/$defs/file_ref"}}
+    },
+    "executor": {"enum": ["blender_mcp", "human", "modly_cli_mcp", "openai_image", "procedural"]},
+    "generation_policy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["orchestrator", "enabled_routes", "local_model_route", "executors"],
+      "properties": {
+        "orchestrator": {"const": "gpt"},
+        "enabled_routes": {"type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": {"enum": ["modly", "openai"]}},
+        "local_model_route": {"const": "modly"},
+        "executors": {"type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true, "items": {"$ref": "#/$defs/executor"}}
       },
       "allOf": [
         {
-          "if": {
-            "properties": {"status": {"enum": ["generated", "approved", "processed"]}}
-          },
-          "then": {"required": ["provenance"]}
-        },
-        {
-          "if": {"properties": {"status": {"enum": ["approved", "processed"]}}},
-          "then": {"required": ["license", "approved_by"]}
-        },
-        {
-          "if": {"properties": {"status": {"const": "processed"}}},
-          "then": {"required": ["outputs", "qa"]}
+          "if": {"properties": {"executors": {"type": "array", "contains": {"const": "modly_cli_mcp"}}}, "required": ["executors"]},
+          "then": {"properties": {"enabled_routes": {"type": "array", "contains": {"const": "modly"}}}}
         }
       ]
     },
-    "binding": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["slot", "asset_id"],
+    "kind": {"enum": ["animation_3d", "character_3d", "collision_3d", "environment_3d", "font", "material_set", "model_3d", "music", "portrait", "rig", "sfx", "shader", "sprite", "spritesheet", "tileset", "ui", "vfx", "vfx_3d"]},
+    "representation": {"enum": ["2d", "2_5d", "3d", "audio"]},
+    "selected_candidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["file", "sha256", "approved_by"],
+      "properties": {"file": {"$ref": "#/$defs/project_path"}, "sha256": {"$ref": "#/$defs/sha256"}, "approved_by": {"type": "string", "minLength": 1, "maxLength": 256}}
+    },
+    "output_role": {"enum": ["animation", "audio", "clipset", "collision", "font", "fragment_shader", "material_metadata", "model", "model_metadata", "preview", "skeleton", "texture", "vertex_shader"]},
+    "media_type": {"enum": ["application/json", "audio/mpeg", "audio/ogg", "audio/wav", "font/otf", "font/ttf", "image/jpeg", "image/png", "image/webp", "model/gltf-binary", "text/x-glsl"]},
+    "output": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "runtime_file", "sha256", "media_type"],
+      "properties": {"role": {"$ref": "#/$defs/output_role"}, "runtime_file": {"$ref": "#/$defs/project_path"}, "sha256": {"$ref": "#/$defs/sha256"}, "size": {"type": "integer", "minimum": 1, "maximum": 2147483648}, "media_type": {"$ref": "#/$defs/media_type"}},
+      "allOf": [
+        {"if": {"properties": {"role": {"enum": ["animation", "collision", "model", "skeleton"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "model/gltf-binary"}, "runtime_file": {"type": "string", "pattern": "\\.[Gg][Ll][Bb]$"}}}},
+        {"if": {"properties": {"role": {"enum": ["clipset", "material_metadata", "model_metadata"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "application/json"}}}},
+        {"if": {"properties": {"role": {"const": "audio"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["audio/mpeg", "audio/ogg", "audio/wav"]}}}},
+        {"if": {"properties": {"role": {"const": "font"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["font/otf", "font/ttf"]}}}},
+        {"if": {"properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "text/x-glsl"}}}},
+        {"if": {"properties": {"role": {"enum": ["preview", "texture"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}}
+      ]
+    },
+    "asset": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "representation", "required", "status", "specification", "production_receipts", "outputs"],
       "properties": {
-        "slot": {
-          "type": "string",
-          "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$"
-        },
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {"$ref": "#/$defs/kind"},
+        "representation": {"$ref": "#/$defs/representation"},
+        "required": {"type": "boolean"},
+        "status": {"enum": ["planned", "generated", "approved", "processed"]},
+        "specification": {"$ref": "#/$defs/file_ref"},
+        "production_receipts": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/file_ref"}},
+        "processing_receipt": {"$ref": "#/$defs/file_ref"},
+        "selected_candidates": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/selected_candidate"}},
+        "license": {"$ref": "#/$defs/file_ref"},
+        "qa": {"$ref": "#/$defs/file_ref"},
+        "outputs": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/output"}}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"enum": ["music", "sfx"]}}, "required": ["kind"]}, "then": {"properties": {"representation": {"const": "audio"}}}},
+        {"if": {"properties": {"kind": {"enum": ["animation_3d", "character_3d", "collision_3d", "environment_3d", "material_set", "model_3d", "rig", "vfx_3d"]}}, "required": ["kind"]}, "then": {"properties": {"representation": {"const": "3d"}}}},
+        {"if": {"properties": {"kind": {"enum": ["font", "portrait", "shader", "sprite", "spritesheet", "tileset", "ui", "vfx"]}}, "required": ["kind"]}, "then": {"properties": {"representation": {"enum": ["2d", "2_5d"]}}}},
+        {"if": {"properties": {"status": {"enum": ["generated", "approved", "processed"]}}, "required": ["status"]}, "then": {"properties": {"production_receipts": {"type": "array", "minItems": 1}}}},
+        {"if": {"properties": {"status": {"enum": ["approved", "processed"]}}, "required": ["status"]}, "then": {"required": ["selected_candidates"], "properties": {"selected_candidates": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/selected_candidate"}}}}, "else": {"properties": {"selected_candidates": false}}},
+        {"if": {"properties": {"status": {"const": "processed"}}, "required": ["status"]}, "then": {"required": ["processing_receipt", "license", "qa"], "properties": {"processing_receipt": {"$ref": "#/$defs/file_ref"}, "license": {"$ref": "#/$defs/file_ref"}, "qa": {"$ref": "#/$defs/file_ref"}, "outputs": {"type": "array", "minItems": 1}}}, "else": {"properties": {"processing_receipt": false, "license": false, "qa": false}}},
+        {"if": {"properties": {"status": {"enum": ["planned", "generated", "approved"]}}, "required": ["status"]}, "then": {"properties": {"outputs": {"type": "array", "maxItems": 0}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"enum": ["portrait", "sprite", "ui", "vfx"]}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"type": "object", "properties": {"role": {"const": "texture"}, "media_type": {"const": "image/png"}}, "required": ["role", "media_type"]}}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"enum": ["spritesheet", "tileset"]}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "minItems": 2, "maxItems": 2, "allOf": [{"contains": {"type": "object", "properties": {"role": {"const": "texture"}, "media_type": {"const": "image/png"}}, "required": ["role", "media_type"]}, "minContains": 1, "maxContains": 1}, {"contains": {"type": "object", "properties": {"role": {"const": "clipset"}, "media_type": {"const": "application/json"}}, "required": ["role", "media_type"]}, "minContains": 1, "maxContains": 1}]}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"enum": ["music", "sfx"]}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"type": "object", "properties": {"role": {"const": "audio"}, "media_type": {"const": "audio/wav"}}, "required": ["role", "media_type"]}}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"const": "font"}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"type": "object", "properties": {"role": {"const": "font"}, "media_type": {"enum": ["font/otf", "font/ttf"]}}, "required": ["role", "media_type"]}}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"const": "shader"}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"type": "object", "properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}, "media_type": {"const": "text/x-glsl"}}, "required": ["role", "media_type"]}, "allOf": [{"contains": {"type": "object", "properties": {"role": {"const": "fragment_shader"}}, "required": ["role"]}, "minContains": 0, "maxContains": 1}, {"contains": {"type": "object", "properties": {"role": {"const": "vertex_shader"}}, "required": ["role"]}, "minContains": 0, "maxContains": 1}]}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"enum": ["animation_3d", "character_3d", "collision_3d", "environment_3d", "material_set", "model_3d", "rig", "vfx_3d"]}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "object", "properties": {"role": {"enum": ["animation", "collision", "model", "skeleton"]}, "media_type": {"const": "model/gltf-binary"}}, "required": ["role", "media_type"]}, "allOf": [{"contains": {"type": "object", "properties": {"role": {"const": "animation"}}, "required": ["role"]}, "minContains": 0, "maxContains": 1}, {"contains": {"type": "object", "properties": {"role": {"const": "collision"}}, "required": ["role"]}, "minContains": 0, "maxContains": 1}, {"contains": {"type": "object", "properties": {"role": {"const": "model"}}, "required": ["role"]}, "minContains": 0, "maxContains": 1}, {"contains": {"type": "object", "properties": {"role": {"const": "skeleton"}}, "required": ["role"]}, "minContains": 0, "maxContains": 1}]}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"enum": ["character_3d", "environment_3d", "material_set", "model_3d", "vfx_3d"]}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "model"}}, "required": ["role"]}, "minContains": 1, "maxContains": 1}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"const": "animation_3d"}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "animation"}}, "required": ["role"]}, "minContains": 1, "maxContains": 1}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"const": "collision_3d"}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "collision"}}, "required": ["role"]}, "minContains": 1, "maxContains": 1}}}},
+        {"if": {"properties": {"status": {"const": "processed"}, "kind": {"const": "rig"}}, "required": ["status", "kind"]}, "then": {"properties": {"outputs": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "skeleton"}}, "required": ["role"]}, "minContains": 1, "maxContains": 1}}}}
+      ]
+    },
+    "semantic_slot": {"type": "string", "minLength": 3, "maxLength": 194, "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$"},
+    "presentation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["node", "scale", "layer"],
+      "properties": {
+        "type": {"const": "visual_3d"},
+        "node": {"type": "string", "minLength": 1, "maxLength": 256},
+        "default_animation": {"type": "string", "minLength": 1, "maxLength": 256},
+        "moving_animation": {"type": "string", "minLength": 1, "maxLength": 256},
+        "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000},
+        "layer": {"type": "integer", "minimum": -100000, "maximum": 100000}
+      }
+    },
+    "binding": {
+      "type": "object", "additionalProperties": false,
+      "required": ["slot", "asset_id", "representation"],
+      "properties": {
+        "slot": {"$ref": "#/$defs/semantic_slot"},
         "asset_id": {"$ref": "#/$defs/id"},
+        "representation": {"$ref": "#/$defs/representation"},
         "clip": {"$ref": "#/$defs/id"},
         "moving_clip": {"$ref": "#/$defs/id"},
-        "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 16},
-        "layer": {"type": "integer", "minimum": -1000, "maximum": 1000}
-      }
+        "scale": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000},
+        "layer": {"type": "integer", "minimum": -100000, "maximum": 100000},
+        "presentation": {"$ref": "#/$defs/presentation"}
+      },
+      "allOf": [
+        {"if": {"properties": {"representation": {"const": "3d"}}, "required": ["representation"]}, "then": {"properties": {"clip": false, "moving_clip": false}}, "else": {"properties": {"presentation": false}}}
+      ]
+    },
+    "deliverable": {
+      "type": "object", "additionalProperties": false,
+      "required": ["format", "file", "sha256", "content_hash"],
+      "properties": {"format": {"enum": ["isoworld.renderpack", "rpg-world-forge.assetpack"]}, "file": {"$ref": "#/$defs/project_path"}, "sha256": {"$ref": "#/$defs/sha256"}, "content_hash": {"$ref": "#/$defs/sha256"}}
     }
   }
 }

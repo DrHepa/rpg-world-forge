@@ -10,13 +10,19 @@ No game path is in scope.
 
 ## Release sequence
 
-1. Read ADR-0009 and `docs/CONTENT_PIPELINE.md`.
-2. Require a release-valid, canon-locked world source and approved renderpack.
+1. Read ADR-0009, `docs/CONTENT_PIPELINE.md`, and
+   `docs/ASSET_PIPELINE.md`.
+2. Require a release-valid, canon-locked world source.
 3. Compile the worldpack and run narrative analysis.
-4. Validate asset provenance and build the runtime-only renderpack.
-5. Export a new release ID with `worldforge export-bundle`.
-6. Run `worldforge verify-bundle` against the completed directory.
-7. Record the verified output path and bundle hash for the import phase.
+4. Require a complete v3 asset manifest in `production`, bound to that exact
+   worldpack and containing no self-declared deliverable.
+5. Build the runtime-only renderpack under `assets/release/`; the builder must
+   pass the internal build profile against the exact worldpack.
+6. Run `worldforge finalize-asset-release` with the production-manifest hash,
+   then require `worldforge validate-assets --profile release` to pass.
+7. Export a new release ID with `worldforge export-bundle`.
+8. Run `worldforge verify-bundle` against the completed directory.
+9. Record the verified output path and bundle hash for the import phase.
 
 ## Release invariants
 
@@ -29,6 +35,9 @@ No game path is in scope.
   features agree at every layer.
 - Prompts, provider/model metadata, references, candidates, phase state, and
   production manifests never cross the bundle boundary.
+- This skill releases the current 2D/2.5D renderpack bundle only. A sealed 3D
+  assetpack is an engine-neutral implementation handoff and is not accepted by
+  `export-bundle` or the generated pyray game.
 
 Do not modify a game repository in this phase. `$import-world-bundle` owns the
 separate compatibility, copy, catalog-update, and game-load gate.

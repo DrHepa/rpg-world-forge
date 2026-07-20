@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rig 3D Asset With Blender"
+  short_description: "Add and verify one specification-bound rig"
+  default_prompt: "Use $rig-3d-asset-with-blender to rig one reviewed Blender model under its M5 specification."

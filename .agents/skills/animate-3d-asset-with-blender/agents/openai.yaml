@@ -1,0 +1,4 @@
+interface:
+  display_name: "Animate 3D Asset With Blender"
+  short_description: "Author exact clips on one reviewed rig"
+  default_prompt: "Use $animate-3d-asset-with-blender to animate the specified clips on one reviewed M5 rig."

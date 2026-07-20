@@ -1,0 +1,4 @@
+interface:
+  display_name: "QA 3D Asset"
+  short_description: "Verify one neutral GLB and its M5 lineage"
+  default_prompt: "Use $qa-3d-asset to run read-only neutral-GLB and lineage QA for one processed M5 asset."

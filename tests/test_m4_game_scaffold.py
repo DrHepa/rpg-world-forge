@@ -918,11 +918,15 @@ class GameSkillLayoutTests(unittest.TestCase):
     def test_every_skill_maps_to_one_bounded_forge_phase(self) -> None:
         skills_root = ROOT / ".agents/skills"
         skill_names = {path.parent.name for path in skills_root.glob("*/SKILL.md")}
-        self.assertEqual(24, len(skill_names))
-        phase_document = (ROOT / "docs/GAME_IMPLEMENTATION_PHASES.md").read_text(encoding="utf-8")
+        self.assertEqual(37, len(skill_names))
+        phase_documents = (
+            ROOT / "docs/GAME_IMPLEMENTATION_PHASES.md",
+            ROOT / "docs/ASSET_PIPELINE.md",
+        )
         table_names = {
             line.split("`$")[1].split("`")[0]
-            for line in phase_document.splitlines()
+            for document in phase_documents
+            for line in document.read_text(encoding="utf-8").splitlines()
             if line.startswith("| ") and "`$" in line
         }
         self.assertEqual(skill_names, table_names)
@@ -936,6 +940,21 @@ class GameSkillLayoutTests(unittest.TestCase):
             "version-world-project",
             "forge-world-release",
         }
+        asset_skills = {
+            "animate-3d-asset-with-blender",
+            "define-asset-bibles",
+            "derive-asset-inventory",
+            "design-3d-asset-references",
+            "model-3d-asset-with-blender",
+            "operate-modly-asset",
+            "process-asset-deterministically",
+            "produce-openai-2d-asset",
+            "qa-3d-asset",
+            "refine-export-3d-asset-with-blender",
+            "refine-modly-output",
+            "rig-3d-asset-with-blender",
+            "specify-asset-production",
+        }
         for name in sorted(skill_names):
             skill = (skills_root / name / "SKILL.md").read_text(encoding="utf-8")
             self.assertTrue(skill.startswith("---\n"), name)
@@ -946,7 +965,10 @@ class GameSkillLayoutTests(unittest.TestCase):
             self.assertNotIn("TODO", skill, name)
             metadata = (skills_root / name / "agents/openai.yaml").read_text(encoding="utf-8")
             self.assertIn(f"${name}", metadata, name)
-            if name not in world_skills:
+            if name in asset_skills:
+                self.assertIn("FORGE_ROOT", skill, name)
+                self.assertIn("WORLD_ROOT", skill, name)
+            elif name not in world_skills:
                 self.assertIn("GAME_ROOT", skill, name)
 
 

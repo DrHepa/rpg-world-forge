@@ -1,0 +1,4 @@
+interface:
+  display_name: "Process Asset Deterministically"
+  short_description: "Build reproducible runtime-ready asset files"
+  default_prompt: "Use $process-asset-deterministically to apply and verify one declarative M5 processing recipe."

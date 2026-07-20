@@ -1,30 +1,40 @@
-# Session: art and audio bibles
+# Session: target-scoped visual and audio bibles
 
-Work only from a canon-locked worldpack and its canonical documentation. Produce
-applicable decisions, not vague adjectives.
+Work only from a canon-locked worldpack, its canonical documentation, and one
+reviewed `rpg-world-forge.asset_target`. GPT is the decision orchestrator. Do not
+generate assets, choose providers, or invent requirements that canon and the
+target do not support.
 
-## Art bible
+Return one strict `rpg-world-forge.visual_bible` and one strict
+`rpg-world-forge.audio_bible`, both bound to the exact world and target hashes.
+Use applicable, testable decisions rather than vague adjectives.
 
-- Projection, camera, tile size, and units per meter.
-- Base resolution and scaling policy.
-- Palette, contrast, lighting, and materials.
-- Silhouette language by faction and role.
-- Actor anatomy and proportions.
-- Required directions and animations.
-- Tile, prop, VFX, UI, portrait, and shadow rules.
-- Allowed/forbidden examples and in-engine acceptance tests.
+## Visual bible
+
+- Dimension (`2d`, `2_5d`, or `3d`), projection, camera, axes, units, scale,
+  base resolution, and scaling policy.
+- Palette, contrast, lighting, material response, and shadow rules.
+- Silhouette and proportion language by faction, role, and asset family.
+- Animation cadence, locomotion, transition, direction, deformation, and loop
+  rules appropriate to the target dimension.
+- Tile/prop/texture/model, VFX, UI, portrait, and accessibility rules.
+- Authorized examples, explicitly forbidden imitation, and observable
+  acceptance tests at target presentation scale.
+- For 3D, the intended neutral GLB appearance and stable camera/reference-sheet
+  views without choosing a modeling executor.
 
 ## Audio bible
 
-- Timbral families for the world and each group.
-- Loudness, sample rate, channel, and runtime format policy.
-- Ambience layers, music, and mixing priorities.
-- Duration, variations, loops, and cooldowns per SFX family.
-- Personal motifs that can evolve with each campaign.
+- Runtime format, sample rate, channels, loudness targets, peak limits, and mix
+  buses.
+- Timbral families for the world, environments, groups, objects, and UI.
+- Ambience layers, music structure, transitions, priorities, and ducking.
+- SFX duration, variations, loops, cooldowns, distance behavior, and tails.
+- Accessibility rules and acceptance tests for clarity, masking, repetition,
+  clicks, truncation, and seamless loops.
 
-Flag every decision that cannot be derived from canon. Do not begin mass
-production until both bibles are approved.
-
-Record whether production enables `openai`, `modly`, or both. OpenAI covers
-GPT/Codex/GPT Image. Modly is optional and is the only permitted route for local
-models; name the intended extensions without making them part of runtime.
+Flag every decision that cannot be derived from canon. Record an authorized
+approver and canonical hashes. Do not advance the manifest beyond
+`art_direction` until both bibles validate and are approved. The bibles may
+describe outcomes but must contain no provider, MCP server, Modly extension,
+credential, or game-runtime generation configuration.

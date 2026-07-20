@@ -7,7 +7,7 @@ from typing import Any
 from isoworld.content.portability import is_portable_path_component
 from worldforge.project import SourceProject
 
-ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
+ID_PATTERN = re.compile(r"^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$")
 BCP47_PATTERN = re.compile(
     r"^(?:"
     r"(?:[A-Za-z]{2,3}(?:-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8})"

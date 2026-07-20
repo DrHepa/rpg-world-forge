@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/asset-processing-receipt.schema.json",
+  "title": "Executable deterministic asset-processing receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "inputs", "operation", "outputs", "recipe", "toolchain", "content_hash"],
+  "properties": {
+    "format": {"const": "rpg-world-forge.asset_processing_receipt"},
+    "format_version": {"const": 1},
+    "inputs": {"type": "array", "minItems": 1, "maxItems": 100000, "items": {"$ref": "#/$defs/input"}},
+    "operation": {"enum": ["atlas", "file_validate", "glb_validate", "png_canonical", "wav_pcm"]},
+    "outputs": {"type": "array", "minItems": 1, "maxItems": 2},
+    "recipe": {"$ref": "#/$defs/recipe_ref"},
+    "toolchain": {"type": "object", "minProperties": 1},
+    "content_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"operation": {"const": "png_canonical"}}},
+      "then": {
+        "properties": {
+          "outputs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [{"$ref": "#/$defs/png_output"}],
+            "items": false
+          },
+          "toolchain": {"$ref": "#/$defs/image_toolchain"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"operation": {"const": "atlas"}}},
+      "then": {
+        "properties": {
+          "outputs": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "prefixItems": [{"$ref": "#/$defs/png_output"}, {"$ref": "#/$defs/clipset_output"}],
+            "items": false
+          },
+          "toolchain": {"$ref": "#/$defs/image_toolchain"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"operation": {"const": "wav_pcm"}}},
+      "then": {
+        "properties": {
+          "outputs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [{"$ref": "#/$defs/wav_output"}],
+            "items": false
+          },
+          "toolchain": {"$ref": "#/$defs/wav_toolchain"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"operation": {"const": "glb_validate"}}},
+      "then": {
+        "properties": {
+          "outputs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [{"$ref": "#/$defs/glb_output"}],
+            "items": false
+          },
+          "toolchain": {"$ref": "#/$defs/glb_toolchain"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"operation": {"const": "file_validate"}}},
+      "then": {
+        "properties": {
+          "outputs": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "prefixItems": [{"$ref": "#/$defs/file_output"}],
+            "items": false
+          },
+          "toolchain": {"$ref": "#/$defs/file_toolchain"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "id": {"type": "string", "pattern": "^(?:source|(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63})$"},
+    "project_path": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?!/)(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$"},
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "sha256"],
+      "properties": {
+        "file": {"$ref": "#/$defs/project_path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"type": "integer", "minimum": 0, "maximum": 2147483648}
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "id"],
+      "properties": {
+        "artifact": {"$ref": "#/$defs/artifact_ref"},
+        "id": {"$ref": "#/$defs/id"}
+      }
+    },
+    "recipe_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content_hash", "sha256"],
+      "properties": {
+        "content_hash": {"$ref": "#/$defs/sha256"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "png_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["height", "mode", "width"],
+      "properties": {
+        "height": {"type": "integer", "minimum": 1, "maximum": 16384},
+        "mode": {"const": "RGBA"},
+        "width": {"type": "integer", "minimum": 1, "maximum": 16384}
+      }
+    },
+    "clipset_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["clips", "frames"],
+      "properties": {
+        "clips": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "frames": {"type": "integer", "minimum": 1, "maximum": 1000000}
+      }
+    },
+    "wav_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["channels", "frames", "peak", "sample_rate", "sample_width"],
+      "properties": {
+        "channels": {"enum": [1, 2]},
+        "frames": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "peak": {"type": "integer", "minimum": 0, "maximum": 32767},
+        "sample_rate": {"type": "integer", "minimum": 1, "maximum": 384000},
+        "sample_width": {"const": 2}
+      }
+    },
+    "file_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["byte_length"],
+      "properties": {
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 67108864}
+      }
+    },
+    "png_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "details", "media_type", "role"],
+      "properties": {
+        "artifact": {"allOf": [{"$ref": "#/$defs/artifact_ref"}, {"type": "object", "properties": {"file": {"type": "string", "pattern": "\\.[Pp][Nn][Gg]$"}}}]},
+        "details": {"$ref": "#/$defs/png_details"},
+        "media_type": {"const": "image/png"},
+        "role": {"const": "texture"}
+      }
+    },
+    "clipset_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "details", "media_type", "role"],
+      "properties": {
+        "artifact": {"allOf": [{"$ref": "#/$defs/artifact_ref"}, {"type": "object", "properties": {"file": {"type": "string", "pattern": "\\.[Jj][Ss][Oo][Nn]$"}}}]},
+        "details": {"$ref": "#/$defs/clipset_details"},
+        "media_type": {"const": "application/json"},
+        "role": {"const": "clipset"}
+      }
+    },
+    "wav_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "details", "media_type", "role"],
+      "properties": {
+        "artifact": {"allOf": [{"$ref": "#/$defs/artifact_ref"}, {"type": "object", "properties": {"file": {"type": "string", "pattern": "\\.[Ww][Aa][Vv]$"}}}]},
+        "details": {"$ref": "#/$defs/wav_details"},
+        "media_type": {"const": "audio/wav"},
+        "role": {"const": "audio"}
+      }
+    },
+    "glb_metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodes", "meshes", "materials", "textures", "skins", "bones", "influences", "animations", "vertices", "triangles", "external_uris"],
+      "properties": {
+        "nodes": {"type": "integer", "minimum": 0},
+        "meshes": {"type": "integer", "minimum": 0},
+        "materials": {"type": "integer", "minimum": 0},
+        "textures": {"type": "integer", "minimum": 0},
+        "skins": {"type": "integer", "minimum": 0},
+        "bones": {"type": "integer", "minimum": 0},
+        "influences": {"type": "integer", "minimum": 0},
+        "animations": {"type": "integer", "minimum": 0},
+        "vertices": {"type": "integer", "minimum": 0},
+        "triangles": {"type": "integer", "minimum": 0},
+        "external_uris": {"const": 0}
+      }
+    },
+    "glb_details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["byte_length", "json_chunk_bytes", "bin_chunk_bytes", "extensions_used", "extensions_required", "external_uris", "embedded_uris", "max_texture_dimension", "metrics"],
+      "properties": {
+        "byte_length": {"type": "integer", "minimum": 1},
+        "json_chunk_bytes": {"type": "integer", "minimum": 1},
+        "bin_chunk_bytes": {"type": "integer", "minimum": 0},
+        "extensions_used": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "extensions_required": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "external_uris": {"type": "array", "maxItems": 0},
+        "embedded_uris": {"type": "integer", "minimum": 0},
+        "max_texture_dimension": {"type": "integer", "minimum": 0},
+        "metrics": {"$ref": "#/$defs/glb_metrics"}
+      }
+    },
+    "glb_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "details", "media_type", "role"],
+      "properties": {
+        "artifact": {"allOf": [{"$ref": "#/$defs/artifact_ref"}, {"type": "object", "properties": {"file": {"type": "string", "pattern": "\\.[Gg][Ll][Bb]$"}}}]},
+        "details": {"$ref": "#/$defs/glb_details"},
+        "media_type": {"const": "model/gltf-binary"},
+        "role": {"enum": ["animation", "collision", "model", "skeleton"]}
+      }
+    },
+    "file_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "details", "media_type", "role"],
+      "properties": {
+        "artifact": {"$ref": "#/$defs/artifact_ref"},
+        "details": {"$ref": "#/$defs/file_details"},
+        "media_type": {"enum": ["font/otf", "font/ttf", "text/x-glsl"]},
+        "role": {"enum": ["font", "fragment_shader", "vertex_shader"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"media_type": {"enum": ["font/otf", "font/ttf"]}}},
+          "then": {"properties": {"role": {"const": "font"}}}
+        },
+        {
+          "if": {"properties": {"media_type": {"const": "text/x-glsl"}}},
+          "then": {"properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}}
+        },
+        {
+          "if": {"properties": {"media_type": {"const": "font/otf"}}},
+          "then": {"properties": {"artifact": {"type": "object", "properties": {"file": {"type": "string", "pattern": "\\.[Oo][Tt][Ff]$"}}}}}
+        },
+        {
+          "if": {"properties": {"media_type": {"const": "font/ttf"}}},
+          "then": {"properties": {"artifact": {"type": "object", "properties": {"file": {"type": "string", "pattern": "\\.[Tt][Tt][Ff]$"}}}}}
+        },
+        {
+          "if": {"properties": {"media_type": {"const": "text/x-glsl"}, "role": {"const": "vertex_shader"}}},
+          "then": {"properties": {"artifact": {"type": "object", "properties": {"file": {"type": "string", "pattern": "\\.(?:[Gg][Ll][Ss][Ll]|[Vv][Ee][Rr][Tt]|[Vv][Ss])$"}}}}}
+        },
+        {
+          "if": {"properties": {"media_type": {"const": "text/x-glsl"}, "role": {"const": "fragment_shader"}}},
+          "then": {"properties": {"artifact": {"type": "object", "properties": {"file": {"type": "string", "pattern": "\\.(?:[Ff][Rr][Aa][Gg]|[Ff][Ss]|[Gg][Ll][Ss][Ll])$"}}}}}
+        }
+      ]
+    },
+    "image_toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pillow_version", "processor", "python_version", "zlib_runtime_version"],
+      "properties": {
+        "pillow_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "processor": {"const": "worldforge.asset_processing"},
+        "python_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "zlib_runtime_version": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "wav_toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["processor", "python_version", "wave_module"],
+      "properties": {
+        "processor": {"const": "worldforge.asset_processing"},
+        "python_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "wave_module": {"const": "stdlib"}
+      }
+    },
+    "glb_toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_extensions", "external_uris_allowed", "inspector", "processor", "python_version"],
+      "properties": {
+        "allowed_extensions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "external_uris_allowed": {"const": false},
+        "inspector": {"const": "worldforge.asset_formats.gltf"},
+        "processor": {"const": "worldforge.asset_processing"},
+        "python_version": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "file_toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["processor", "python_version", "validator"],
+      "properties": {
+        "processor": {"const": "worldforge.asset_processing"},
+        "python_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        "validator": {"const": "strict_builtin_v1"}
+      }
+    }
+  }
+}

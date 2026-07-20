@@ -143,17 +143,21 @@ _FORBIDDEN_PATH_COMPONENTS = frozenset(
         ".agents",
         ".worldforge",
         "authoring",
+        "bibles",
         "candidates",
         "claims",
         "credentials",
         "phase_reports",
         "prompts",
         "recipes",
+        "receipts",
         "references",
+        "requests",
         "source",
         "specs",
         "weights",
         "workflows",
+        "work",
     }
 )
 _FORBIDDEN_RUNTIME_FILENAMES = frozenset(
@@ -193,7 +197,16 @@ _FORBIDDEN_JSON_FORMATS = frozenset(
     {
         "isoworld.source_manifest",
         "rpg-world-forge.asset_manifest",
+        "rpg-world-forge.asset_inventory",
+        "rpg-world-forge.asset_license_record",
+        "rpg-world-forge.asset_processing_receipt",
+        "rpg-world-forge.asset_processing_recipe",
+        "rpg-world-forge.asset_production_receipt",
+        "rpg-world-forge.asset_production_request",
+        "rpg-world-forge.asset_qa_report",
         "rpg-world-forge.asset_spec",
+        "rpg-world-forge.asset_target",
+        "rpg-world-forge.audio_bible",
         "rpg-world-forge.narrative_analysis",
         "rpg-world-forge.phase_catalog",
         "rpg-world-forge.phase_report",
@@ -201,6 +214,7 @@ _FORBIDDEN_JSON_FORMATS = frozenset(
         "rpg-world-forge.reopen_log",
         "rpg-world-forge.task_claim",
         "rpg-world-forge.workflow_status",
+        "rpg-world-forge.visual_bible",
     }
 )
 _MEDIA_EXTENSIONS = {

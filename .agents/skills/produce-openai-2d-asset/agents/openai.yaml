@@ -1,0 +1,4 @@
+interface:
+  display_name: "Produce OpenAI 2D Asset"
+  short_description: "Generate one hash-tracked 2D candidate set"
+  default_prompt: "Use $produce-openai-2d-asset to generate candidates for one approved 2D or 2.5D M5 specification."

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/asset-qa-report.schema.json",
+  "title": "Executable release asset-QA report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "asset_id", "target_hash", "output_hashes", "checks", "blockers", "approved_by", "content_hash"],
+  "properties": {
+    "format": {"const": "rpg-world-forge.asset_qa_report"},
+    "format_version": {"const": 1},
+    "asset_id": {"$ref": "#/$defs/id"},
+    "target_hash": {"$ref": "#/$defs/sha256"},
+    "output_hashes": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/sha256"}},
+    "checks": {"type": "array", "minItems": 1, "maxItems": 1024, "items": {"$ref": "#/$defs/check"}},
+    "blockers": {"type": "array", "maxItems": 0},
+    "approved_by": {"type": "string", "minLength": 1, "maxLength": 256},
+    "content_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "project_path": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?!/)(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$"},
+    "file_ref": {"type": "object", "additionalProperties": false, "required": ["file", "sha256"], "properties": {"file": {"$ref": "#/$defs/project_path"}, "sha256": {"$ref": "#/$defs/sha256"}, "size": {"type": "integer", "minimum": 0, "maximum": 2147483648}}},
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "passed", "evidence"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "passed": {"const": true},
+        "evidence": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/file_ref"}}
+      }
+    }
+  }
+}

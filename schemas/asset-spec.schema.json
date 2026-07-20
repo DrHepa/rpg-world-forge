@@ -1,67 +1,264 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rpg-world-forge.local/schemas/asset-spec.schema.json",
-  "title": "Provider-independent asset specification",
+  "title": "Executable provider-neutral asset specification v2",
   "type": "object",
-  "additionalProperties": true,
+  "additionalProperties": false,
   "required": [
     "format",
     "format_version",
     "id",
     "kind",
+    "representation",
+    "target_id",
+    "target_hash",
+    "inventory_hash",
+    "visual_bible_hash",
+    "audio_bible_hash",
     "purpose",
+    "canonical_sources",
     "acceptance_criteria",
-    "technical"
+    "semantic_slots",
+    "technical",
+    "production",
+    "expected_outputs",
+    "content_hash"
   ],
   "properties": {
     "format": {"const": "rpg-world-forge.asset_spec"},
-    "format_version": {"const": 1},
-    "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
-    "kind": {
-      "enum": [
-        "font",
-        "music",
-        "portrait",
-        "shader",
-        "sfx",
-        "sprite",
-        "spritesheet",
-        "tileset",
-        "ui",
-        "vfx"
-      ]
-    },
-    "purpose": {"type": "string", "minLength": 1},
-    "acceptance_criteria": {
-      "type": "array",
-      "minItems": 1,
-      "items": {"type": "string", "minLength": 1}
-    },
-    "technical": {
-      "type": "object",
-      "required": ["runtime_format", "memory_budget_bytes"],
-      "properties": {
-        "runtime_format": {"type": "string", "minLength": 1},
-        "memory_budget_bytes": {"type": "integer", "minimum": 1},
-        "width": {"type": "integer", "minimum": 1},
-        "height": {"type": "integer", "minimum": 1},
-        "sample_rate": {"type": "integer", "minimum": 8000, "maximum": 192000},
-        "channels": {"enum": [1, 2]}
-      }
-    }
+    "format_version": {"const": 2},
+    "id": {"$ref": "#/$defs/id"},
+    "kind": {"$ref": "#/$defs/kind"},
+    "representation": {"$ref": "#/$defs/representation"},
+    "target_id": {"$ref": "#/$defs/id"},
+    "target_hash": {"$ref": "#/$defs/sha256"},
+    "inventory_hash": {"$ref": "#/$defs/sha256"},
+    "visual_bible_hash": {"$ref": "#/$defs/sha256"},
+    "audio_bible_hash": {"$ref": "#/$defs/sha256"},
+    "purpose": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "canonical_sources": {"$ref": "#/$defs/nonempty_string_set"},
+    "acceptance_criteria": {"$ref": "#/$defs/qa_check_set"},
+    "semantic_slots": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/semantic_slot"}},
+    "technical": {"oneOf": [{"$ref": "#/$defs/technical_2d"}, {"$ref": "#/$defs/technical_audio"}, {"$ref": "#/$defs/technical_font"}, {"$ref": "#/$defs/technical_shader"}, {"$ref": "#/$defs/technical_3d"}]},
+    "production": {"$ref": "#/$defs/production"},
+    "expected_outputs": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/expected_output"}},
+    "content_hash": {"$ref": "#/$defs/sha256"}
   },
   "allOf": [
     {
       "if": {
         "properties": {
-          "kind": {"enum": ["portrait", "sprite", "spritesheet", "tileset", "ui", "vfx"]}
-        }
+          "representation": {"enum": ["2d", "2_5d"]},
+          "kind": {"not": {"enum": ["font", "shader"]}}
+        },
+        "required": ["representation", "kind"]
       },
-      "then": {"properties": {"technical": {"required": ["width", "height"]}}}
+      "then": {"properties": {"technical": {"$ref": "#/$defs/technical_2d"}}}
     },
     {
-      "if": {"properties": {"kind": {"enum": ["music", "sfx"]}}},
-      "then": {"properties": {"technical": {"required": ["sample_rate", "channels"]}}}
+      "if": {"properties": {"representation": {"const": "audio"}}, "required": ["representation"]},
+      "then": {"properties": {"technical": {"$ref": "#/$defs/technical_audio"}}}
+    },
+    {
+      "if": {"properties": {"representation": {"const": "3d"}}, "required": ["representation"]},
+      "then": {"properties": {"technical": {"$ref": "#/$defs/technical_3d"}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "font"}}, "required": ["kind"]},
+      "then": {"properties": {"technical": {"$ref": "#/$defs/technical_font"}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "shader"}}, "required": ["kind"]},
+      "then": {"properties": {"technical": {"$ref": "#/$defs/technical_shader"}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["music", "sfx"]}}, "required": ["kind"]},
+      "then": {"properties": {"representation": {"const": "audio"}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["animation_3d", "character_3d", "collision_3d", "environment_3d", "material_set", "model_3d", "rig", "vfx_3d"]}}, "required": ["kind"]},
+      "then": {"properties": {"representation": {"const": "3d"}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["font", "portrait", "shader", "sprite", "spritesheet", "tileset", "ui", "vfx"]}}, "required": ["kind"]},
+      "then": {"properties": {"representation": {"enum": ["2d", "2_5d"]}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["portrait", "sprite", "ui", "vfx"]}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "prefixItems": [{"type": "object", "properties": {"role": {"const": "texture"}, "media_type": {"const": "image/png"}}, "required": ["role", "media_type"]}], "minItems": 1, "maxItems": 1}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["spritesheet", "tileset"]}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "minItems": 2, "maxItems": 2, "allOf": [{"contains": {"type": "object", "properties": {"role": {"const": "texture"}, "media_type": {"const": "image/png"}}, "required": ["role", "media_type"]}, "minContains": 1, "maxContains": 1}, {"contains": {"type": "object", "properties": {"role": {"const": "clipset"}, "media_type": {"const": "application/json"}}, "required": ["role", "media_type"]}, "minContains": 1, "maxContains": 1}]}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["music", "sfx"]}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "prefixItems": [{"type": "object", "properties": {"role": {"const": "audio"}, "media_type": {"const": "audio/wav"}}, "required": ["role", "media_type"]}], "minItems": 1, "maxItems": 1}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "font"}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "prefixItems": [{"type": "object", "properties": {"role": {"const": "font"}}, "required": ["role"]}], "minItems": 1, "maxItems": 1}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "font"}, "technical": {"type": "object", "properties": {"runtime_format": {"const": "ttf"}}, "required": ["runtime_format"]}}, "required": ["kind", "technical"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "prefixItems": [{"type": "object", "properties": {"media_type": {"const": "font/ttf"}}, "required": ["media_type"]}], "minItems": 1, "maxItems": 1}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "font"}, "technical": {"type": "object", "properties": {"runtime_format": {"const": "otf"}}, "required": ["runtime_format"]}}, "required": ["kind", "technical"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "prefixItems": [{"type": "object", "properties": {"media_type": {"const": "font/otf"}}, "required": ["media_type"]}], "minItems": 1, "maxItems": 1}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "shader"}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "minItems": 1, "maxItems": 2, "items": {"type": "object", "properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}, "media_type": {"const": "text/x-glsl"}}, "required": ["role", "media_type"]}}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["animation_3d", "character_3d", "collision_3d", "environment_3d", "material_set", "model_3d", "rig", "vfx_3d"]}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "items": {"type": "object", "properties": {"role": {"enum": ["animation", "collision", "model", "skeleton"]}, "media_type": {"const": "model/gltf-binary"}}, "required": ["role", "media_type"]}}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "animation_3d"}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "animation"}}, "required": ["role"]}, "minContains": 1, "maxContains": 1}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "collision_3d"}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "collision"}}, "required": ["role"]}, "minContains": 1, "maxContains": 1}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "rig"}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "skeleton"}}, "required": ["role"]}, "minContains": 1, "maxContains": 1}}}
+    },
+    {
+      "if": {"properties": {"kind": {"enum": ["character_3d", "environment_3d", "material_set", "model_3d", "vfx_3d"]}}, "required": ["kind"]},
+      "then": {"properties": {"expected_outputs": {"type": "array", "contains": {"type": "object", "properties": {"role": {"const": "model"}}, "required": ["role"]}, "minContains": 1, "maxContains": 1}}}
     }
-  ]
+  ],
+  "$defs": {
+    "id": {"type": "string", "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "kind": {"enum": ["animation_3d", "character_3d", "collision_3d", "environment_3d", "font", "material_set", "model_3d", "music", "portrait", "rig", "sfx", "shader", "sprite", "spritesheet", "tileset", "ui", "vfx", "vfx_3d"]},
+    "representation": {"enum": ["2d", "2_5d", "3d", "audio"]},
+    "executor": {"enum": ["blender_mcp", "human", "modly_cli_mcp", "openai_image", "procedural"]},
+    "route": {"enum": ["modly", "openai"]},
+    "semantic_slot": {"type": "string", "minLength": 3, "maxLength": 194, "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$"},
+    "nonempty_string_set": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 4096}},
+    "qa_check_set": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "memory_budget": {"type": "integer", "minimum": 1, "maximum": 2147483648},
+    "technical_2d": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_format", "memory_budget_bytes", "width", "height", "alpha_mode"],
+      "properties": {
+        "runtime_format": {"const": "png"},
+        "memory_budget_bytes": {"$ref": "#/$defs/memory_budget"},
+        "width": {"type": "integer", "minimum": 1, "maximum": 32768},
+        "height": {"type": "integer", "minimum": 1, "maximum": 32768},
+        "alpha_mode": {"enum": ["opaque", "mask", "blend"]},
+        "pivot": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "integer", "minimum": -32768, "maximum": 32768}},
+        "directions": {"type": "integer", "minimum": 1, "maximum": 64},
+        "actions": {"type": "array", "maxItems": 128, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+        "frame_layout": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "cell_layout": {"type": "string", "minLength": 1, "maxLength": 2048},
+        "palette": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$"}},
+        "frames": {"type": "integer", "minimum": 1, "maximum": 65536},
+        "fps": {"type": "number", "exclusiveMinimum": 0, "maximum": 240},
+        "padding": {"type": "integer", "minimum": 0, "maximum": 4096}
+      }
+    },
+    "technical_audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_format", "memory_budget_bytes", "sample_rate", "channels"],
+      "properties": {
+        "runtime_format": {"const": "wav"},
+        "memory_budget_bytes": {"$ref": "#/$defs/memory_budget"},
+        "sample_rate": {"type": "integer", "minimum": 8000, "maximum": 192000},
+        "channels": {"enum": [1, 2]},
+        "duration_seconds_max": {"type": "number", "exclusiveMinimum": 0, "maximum": 86400},
+        "loop": {"type": "boolean"},
+        "integrated_lufs": {"type": "number", "minimum": -70, "maximum": 0},
+        "peak": {"type": "integer", "minimum": 1, "maximum": 32767},
+        "event": {"$ref": "#/$defs/semantic_slot"},
+        "variants": {"type": "integer", "minimum": 1, "maximum": 256},
+        "priority": {"type": "integer", "minimum": 0, "maximum": 255},
+        "max_distance": {"type": "number", "minimum": 0, "maximum": 1000000},
+        "cooldown_seconds": {"type": "number", "minimum": 0, "maximum": 86400}
+      }
+    },
+    "technical_font": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_format", "memory_budget_bytes"],
+      "properties": {
+        "runtime_format": {"enum": ["otf", "ttf"]},
+        "memory_budget_bytes": {"$ref": "#/$defs/memory_budget"}
+      }
+    },
+    "technical_shader": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_format", "memory_budget_bytes"],
+      "properties": {
+        "runtime_format": {"const": "glsl"},
+        "memory_budget_bytes": {"$ref": "#/$defs/memory_budget"}
+      }
+    },
+    "budgets_3d": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_vertices", "max_triangles", "max_materials", "max_texture_size"],
+      "properties": {
+        "max_vertices": {"type": "integer", "minimum": 1, "maximum": 1000000000},
+        "max_triangles": {"type": "integer", "minimum": 1, "maximum": 1000000000},
+        "max_materials": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "max_texture_size": {"type": "integer", "minimum": 1, "maximum": 32768},
+        "max_bones": {"type": "integer", "minimum": 0, "maximum": 4096},
+        "max_influences": {"type": "integer", "minimum": 0, "maximum": 16}
+      }
+    },
+    "technical_3d": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_format", "memory_budget_bytes", "physical_dimensions_m", "budgets"],
+      "properties": {
+        "runtime_format": {"const": "glb"},
+        "memory_budget_bytes": {"$ref": "#/$defs/memory_budget"},
+        "physical_dimensions_m": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000}},
+        "budgets": {"$ref": "#/$defs/budgets_3d"},
+        "lod_count": {"type": "integer", "minimum": 1, "maximum": 16},
+        "collision_policy": {"enum": ["none", "primitive", "convex", "triangle_mesh", "separate_glb"]},
+        "required_animations": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}
+      }
+    },
+    "production": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed_routes", "allowed_executors"],
+      "properties": {
+        "allowed_routes": {"type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/route"}},
+        "allowed_executors": {"type": "array", "minItems": 1, "maxItems": 5, "uniqueItems": true, "items": {"$ref": "#/$defs/executor"}}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"allowed_routes": {"type": "array", "contains": {"const": "modly"}}}, "required": ["allowed_routes"]},
+          "then": {"properties": {"allowed_executors": {"type": "array", "contains": {"const": "modly_cli_mcp"}}}}
+        }
+      ]
+    },
+    "output_role": {"enum": ["animation", "audio", "clipset", "collision", "font", "fragment_shader", "material_metadata", "model", "model_metadata", "preview", "skeleton", "texture", "vertex_shader"]},
+    "media_type": {"enum": ["application/json", "audio/mpeg", "audio/ogg", "audio/wav", "font/otf", "font/ttf", "image/jpeg", "image/png", "image/webp", "model/gltf-binary", "text/x-glsl"]},
+    "expected_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "media_type"],
+      "properties": {"role": {"$ref": "#/$defs/output_role"}, "media_type": {"$ref": "#/$defs/media_type"}},
+      "allOf": [
+        {"if": {"properties": {"role": {"enum": ["animation", "collision", "model", "skeleton"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "model/gltf-binary"}}}},
+        {"if": {"properties": {"role": {"enum": ["clipset", "material_metadata", "model_metadata"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "application/json"}}}},
+        {"if": {"properties": {"role": {"const": "audio"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["audio/mpeg", "audio/ogg", "audio/wav"]}}}},
+        {"if": {"properties": {"role": {"const": "font"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["font/otf", "font/ttf"]}}}},
+        {"if": {"properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "text/x-glsl"}}}},
+        {"if": {"properties": {"role": {"enum": ["preview", "texture"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}}
+      ]
+    }
+  }
 }

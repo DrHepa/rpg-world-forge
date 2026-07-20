@@ -1,0 +1,4 @@
+interface:
+  display_name: "Model 3D Asset With Blender"
+  short_description: "Build one contract-bound Blender model"
+  default_prompt: "Use $model-3d-asset-with-blender to model one approved 3D M5 asset with bounded Blender MCP operations."

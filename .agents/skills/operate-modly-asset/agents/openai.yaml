@@ -1,0 +1,4 @@
+interface:
+  display_name: "Operate Modly Asset"
+  short_description: "Run one reviewed local Modly extension"
+  default_prompt: "Use $operate-modly-asset to run one approved M5 local-production request through modly-cli-mcp."
