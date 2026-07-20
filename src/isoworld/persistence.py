@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from isoworld.content.models import WorldPack
+from isoworld.runtime_io import RuntimeIOError, read_json_object
 from isoworld.world.state import (
     ActorState,
     ConstructionState,
@@ -154,16 +155,10 @@ def state_digest(state: WorldState) -> str:
 
 
 def _read_object(path: str | Path) -> dict[str, Any]:
-    source = Path(path)
     try:
-        if source.stat().st_size > MAX_PERSISTENCE_BYTES:
-            raise PersistenceError("The persistence document exceeds the 64 MiB limit")
-        raw = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        return read_json_object(path, limit=MAX_PERSISTENCE_BYTES)
+    except RuntimeIOError as exc:
         raise PersistenceError(f"Could not read {path}: {exc}") from exc
-    if not isinstance(raw, dict):
-        raise PersistenceError("The persistence document must be an object")
-    return raw
 
 
 def _write_object(path: str | Path, value: dict[str, Any]) -> None:

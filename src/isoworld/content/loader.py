@@ -43,6 +43,7 @@ from isoworld.content.models import (
     WorldPack,
 )
 from isoworld.content.portability import is_portable_path_component
+from isoworld.runtime_io import RuntimeIOError, read_json_object
 
 
 class WorldPackError(ValueError):
@@ -1195,13 +1196,9 @@ def _validate_runtime_pack(pack: WorldPack) -> None:
 def load_worldpack(path: str | Path) -> WorldPack:
     pack_path = Path(path)
     try:
-        if pack_path.stat().st_size > MAX_WORLDPACK_BYTES:
-            raise WorldPackError("The worldpack exceeds the 64 MiB limit")
-        raw = json.loads(pack_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        raw = read_json_object(pack_path, limit=MAX_WORLDPACK_BYTES)
+    except RuntimeIOError as exc:
         raise WorldPackError(f"Could not load {pack_path}: {exc}") from exc
-    if not isinstance(raw, dict):
-        raise WorldPackError("The worldpack root must be an object")
     if raw.get("format") != "isoworld.worldpack":
         raise WorldPackError("Unknown worldpack format")
     version = raw.get("format_version")

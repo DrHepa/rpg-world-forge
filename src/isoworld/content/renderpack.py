@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from isoworld.content.models import WorldPack
+from isoworld.runtime_io import RuntimeIOError, read_json_object
 
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 SLOT_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$")
@@ -141,17 +142,9 @@ class RenderPack:
 
 def _read_json(path: Path, *, limit: int) -> dict[str, Any]:
     try:
-        size = path.stat().st_size
-        if size > limit:
-            raise RenderPackError(f"{path} exceeds the {limit}-byte limit")
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except RenderPackError:
-        raise
-    except (OSError, json.JSONDecodeError) as exc:
+        return read_json_object(path, limit=limit)
+    except RuntimeIOError as exc:
         raise RenderPackError(f"Could not read {path}: {exc}") from exc
-    if not isinstance(value, dict):
-        raise RenderPackError(f"{path} must contain a JSON object")
-    return value
 
 
 def _canonical_hash(raw: dict[str, Any]) -> str:

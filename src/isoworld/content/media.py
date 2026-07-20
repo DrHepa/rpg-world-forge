@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+from isoworld.runtime_io import RuntimeIOError, read_json_object
 
 
 def media_signature_matches(path: Path, media_type: str) -> bool:
@@ -29,11 +30,11 @@ def media_signature_matches(path: Path, media_type: str) -> bool:
         if media_type == "font/otf":
             return head.startswith(b"OTTO")
         if media_type == "application/json":
-            json.loads(path.read_text(encoding="utf-8"))
+            read_json_object(path)
             return True
         if media_type == "text/x-glsl":
             text = path.read_text(encoding="utf-8")
             return "\x00" not in text and bool(text.strip())
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except (OSError, UnicodeDecodeError, RuntimeIOError):
         return False
     return False
