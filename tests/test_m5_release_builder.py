@@ -118,6 +118,8 @@ class M5ReleaseBuilderTests(unittest.TestCase):
             self.assertTrue(any(name.endswith("README.md") for name in names))
             self.assertTrue(any("/docs/ARCHITECTURE.md" in name for name in names))
             self.assertTrue(any("/tests/test_m5_release_builder.py" in name for name in names))
+            self.assertTrue(any("/tests/test_m5_release_readiness.py" in name for name in names))
+            self.assertTrue(any("/scripts/verify_m5_release.py" in name for name in names))
             self.assertTrue(any("/.agents/skills/" in name for name in names))
             self.assertTrue(any("/authoring/prompts/00_BOUNDARY.md" in name for name in names))
             self.assertTrue(any("/examples/foundation/" in name for name in names))

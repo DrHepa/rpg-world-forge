@@ -5,6 +5,7 @@ release toolchain uses these pinned third-party distributions:
 
 - Pillow 12.3.0 — Pillow project, HPND License.
 - build 1.5.0 — PyPA build, MIT License.
+- pip-audit 2.10.1 — PyPA pip-audit, Apache License 2.0.
 - raylib 6.0.1.0 — raylib-python-cffi, Eclipse Public License 2.0; bundled raylib uses the zlib/libpng License.
 - Ruff 0.15.22 — Astral Ruff, MIT License.
 - setuptools 83.0.0 — PyPA setuptools, MIT License.

@@ -11,6 +11,7 @@ GAME_TEMPLATE = ROOT / "src/worldforge/templates/pyray_game"
 AUDITED_TOOLCHAIN = {
     "Pillow": "12.3.0",
     "build": "1.5.0",
+    "pip-audit": "2.10.1",
     "raylib": "6.0.1.0",
     "ruff": "0.15.22",
     "setuptools": "83.0.0",
@@ -55,6 +56,7 @@ class M5ToolchainTests(unittest.TestCase):
             [
                 "Pillow==12.3.0",
                 "build==1.5.0",
+                "pip-audit==2.10.1",
                 "ruff==0.15.22",
                 "wheel==0.47.0",
             ],

@@ -28,7 +28,13 @@ Issues = "https://github.com/DrHepa/rpg-world-forge/issues"
 [project.optional-dependencies]
 game = ["raylib==6.0.1.0"]
 asset-production = ["Pillow==12.3.0"]
-dev = ["Pillow==12.3.0", "build==1.5.0", "ruff==0.15.22", "wheel==0.47.0"]
+dev = [
+  "Pillow==12.3.0",
+  "build==1.5.0",
+  "pip-audit==2.10.1",
+  "ruff==0.15.22",
+  "wheel==0.47.0",
+]
 
 [project.scripts]
 isoworld = "isoworld.__main__:main"

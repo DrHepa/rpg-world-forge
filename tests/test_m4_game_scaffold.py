@@ -151,9 +151,25 @@ class GameScaffoldTests(unittest.TestCase):
             ci = (game / ".github/workflows/ci.yml").read_text(encoding="utf-8")
             self.assertIn("ruff check src tests scripts run_game.py", ci)
             self.assertIn("ruff format --check src tests scripts run_game.py", ci)
+            self.assertIn("ubuntu-24.04", ci)
+            self.assertIn("windows-2022", ci)
+            self.assertNotIn("ubuntu-latest", ci)
+            self.assertNotIn("windows-latest", ci)
+            self.assertNotIn("macos", ci.casefold())
+            self.assertNotIn("actions/checkout@v", ci)
+            self.assertNotIn("actions/setup-python@v", ci)
+            self.assertIn(
+                "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+                ci,
+            )
+            self.assertIn(
+                "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+                ci,
+            )
+            self.assertIn("sudo apt-get install --yes --no-install-recommends xvfb xauth", ci)
             native_matrix = ci.split("  native-smoke:\n", 1)[1]
-            self.assertIn("        profile:\n", native_matrix)
-            self.assertIn("matrix.profile.width", native_matrix)
+            self.assertNotIn("        profile:\n", native_matrix)
+            self.assertIn('python-version: "3.12"', native_matrix)
 
             outside = root / "outside"
             outside.mkdir()

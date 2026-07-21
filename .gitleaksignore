@@ -1,0 +1,2 @@
+# Intentional AWS-shaped test fixture used to prove architecture redaction.
+92b3134cb549bb625fcd71b202096c308e74ff09:tests/test_architecture.py:aws-access-token:405
