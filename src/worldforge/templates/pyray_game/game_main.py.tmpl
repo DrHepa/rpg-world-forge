@@ -4,10 +4,12 @@ import argparse
 import os
 import re
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from game import GAME_ID, GAME_TITLE
 from game.catalog import (
+    PROJECT_ROOT,
     CatalogError,
     load_catalog,
     select_release,
@@ -17,19 +19,65 @@ from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
 from isoworld.content.renderpack import RenderPackError, load_renderpack
 from isoworld.core.app import GameApp
-from isoworld.persistence import PersistenceError, load_game, save_game, state_digest
+from isoworld.persistence import (
+    PersistenceError,
+    load_game,
+    load_replay,
+    save_game,
+    state_digest,
+    write_replay,
+)
 
 SLOT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
+def _absolute_environment_root(name: str, fallback: Path) -> Path:
+    raw = os.environ.get(name)
+    candidate = Path(raw) if raw else None
+    return candidate if candidate is not None and candidate.is_absolute() else fallback
+
+
 def _default_user_data_root() -> Path:
+    home = Path.home()
     if sys.platform == "win32":
-        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local"))
+        base = _absolute_environment_root("LOCALAPPDATA", home / "AppData/Local")
     elif sys.platform == "darwin":
-        base = Path.home() / "Library/Application Support"
+        base = home / "Library/Application Support"
     else:
-        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+        base = _absolute_environment_root("XDG_DATA_HOME", home / ".local/share")
     return (base / GAME_ID).resolve()
+
+
+def _slot_name(value: str) -> str:
+    if SLOT_PATTERN.fullmatch(value) is None:
+        raise argparse.ArgumentTypeError(
+            "must use lowercase letters, digits, underscore, or hyphen"
+        )
+    return value
+
+
+def _nonnegative_ticks(value: str) -> int:
+    try:
+        ticks = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if ticks < 0:
+        raise argparse.ArgumentTypeError("must be zero or greater")
+    return ticks
+
+
+def _slot_path(
+    root: Path,
+    category: str,
+    world_id: str,
+    release_id: str,
+    slot: str | None,
+) -> Path | None:
+    if slot is None:
+        return None
+    if SLOT_PATTERN.fullmatch(slot) is None:
+        raise ValueError("slot names must satisfy the safe slot policy")
+    return root / category / world_id / release_id / f"{slot}.json"
 
 
 def _save_path(
@@ -38,11 +86,16 @@ def _save_path(
     release_id: str,
     slot: str | None,
 ) -> Path | None:
-    if slot is None:
-        return None
-    if SLOT_PATTERN.fullmatch(slot) is None:
-        raise ValueError("save slots use lowercase letters, digits, underscore, and hyphen")
-    return root / "saves" / world_id / release_id / f"{slot}.json"
+    return _slot_path(root, "saves", world_id, release_id, slot)
+
+
+def _replay_path(
+    root: Path,
+    world_id: str,
+    release_id: str,
+    slot: str | None,
+) -> Path | None:
+    return _slot_path(root, "replays", world_id, release_id, slot)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,24 +105,66 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--list-worlds", action="store_true", help="list installed releases")
     parser.add_argument(
         "--headless-ticks",
-        type=int,
+        type=_nonnegative_ticks,
         metavar="N",
         help="simulate N ticks without importing pyray or opening a window",
     )
-    parser.add_argument("--load-slot", help="load a named save slot before running")
-    parser.add_argument("--quick-save-slot", help="F5/F9 quick-save slot")
-    parser.add_argument("--save-on-exit-slot", help="write a named save after the run")
+    parser.add_argument("--load-slot", type=_slot_name, help="load a named save slot")
+    parser.add_argument(
+        "--quick-save-slot",
+        type=_slot_name,
+        help="F5/F9 quick-save slot",
+    )
+    parser.add_argument(
+        "--save-on-exit-slot",
+        type=_slot_name,
+        help="write a named save after the run",
+    )
+    parser.add_argument(
+        "--record-replay-slot",
+        type=_slot_name,
+        help="record deterministic actions to a named replay slot",
+    )
+    parser.add_argument(
+        "--replay-slot",
+        type=_slot_name,
+        help="verify and reproduce a named replay slot",
+    )
     parser.add_argument(
         "--user-data",
         type=Path,
         default=_default_user_data_root(),
-        help="writable settings/save root (defaults to the platform user-data directory)",
+        help="writable settings/save/replay root (defaults to platform user data)",
     )
     return parser
 
 
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.list_worlds and (args.record_replay_slot is not None or args.replay_slot is not None):
+        parser.error("--list-worlds cannot be combined with replay execution")
+    if args.replay_slot is not None:
+        conflicts = [
+            flag
+            for flag, selected in (
+                ("--headless-ticks", args.headless_ticks is not None),
+                ("--load-slot", args.load_slot is not None),
+                ("--quick-save-slot", args.quick_save_slot is not None),
+                ("--save-on-exit-slot", args.save_on_exit_slot is not None),
+                ("--record-replay-slot", args.record_replay_slot is not None),
+            )
+            if selected
+        ]
+        if conflicts:
+            parser.error(f"--replay-slot cannot be combined with {', '.join(conflicts)}")
+    if args.record_replay_slot is not None and args.load_slot is not None:
+        parser.error("--record-replay-slot cannot be combined with --load-slot")
+    return args
+
+
 def main() -> int:
-    args = build_parser().parse_args()
+    args = _parse_args()
     try:
         releases = load_catalog()
         if args.list_worlds:
@@ -80,8 +175,6 @@ def main() -> int:
                     f"bundle={release.bundle_hash} features={features}"
                 )
             return 0
-        if args.headless_ticks is not None and args.headless_ticks < 0:
-            raise ValueError("--headless-ticks cannot be negative")
         if (
             not releases
             and args.headless_ticks == 0
@@ -90,6 +183,8 @@ def main() -> int:
             and args.load_slot is None
             and args.quick_save_slot is None
             and args.save_on_exit_slot is None
+            and args.record_replay_slot is None
+            and args.replay_slot is None
         ):
             print("world=- release=- tick=0 status=empty_catalog shell=ready")
             return 0
@@ -118,6 +213,28 @@ def main() -> int:
             )
         renderpack = load_renderpack(bundle.renderpack_path, pack)
         user_data = args.user_data.expanduser().resolve()
+        if user_data == PROJECT_ROOT or PROJECT_ROOT in user_data.parents:
+            raise ValueError("--user-data must be outside the installed game tree")
+        replay_path = _replay_path(
+            user_data,
+            selected.world_id,
+            selected.release_id,
+            args.replay_slot,
+        )
+        if replay_path is not None:
+            actions, state = load_replay(replay_path, pack)
+            print(
+                f"world={pack.world_id} release={selected.release_id} "
+                f"replay_actions={len(actions)} tick={state.tick} "
+                f"digest={state_digest(state)}"
+            )
+            return 0
+        record_path = _replay_path(
+            user_data,
+            selected.world_id,
+            selected.release_id,
+            args.record_replay_slot,
+        )
         load_path = _save_path(
             user_data,
             selected.world_id,
@@ -137,7 +254,13 @@ def main() -> int:
             args.save_on_exit_slot,
         )
         initial = load_game(load_path, pack) if load_path is not None else None
-        app = GameApp(pack, initial, quick_path, renderpack)
+        app = GameApp(
+            pack,
+            initial,
+            quick_path,
+            renderpack,
+            replay_recording=record_path is not None,
+        )
         if args.headless_ticks is not None:
             state = app.run_headless(args.headless_ticks)
             result = 0
@@ -146,6 +269,8 @@ def main() -> int:
             state = app.simulation.state
         if exit_path is not None:
             save_game(exit_path, state, pack)
+        if record_path is not None:
+            write_replay(record_path, app.simulation.action_log, state, pack)
         print(
             f"world={pack.world_id} release={selected.release_id} tick={state.tick} "
             f"day={state.day} minute={state.minute_of_day} "

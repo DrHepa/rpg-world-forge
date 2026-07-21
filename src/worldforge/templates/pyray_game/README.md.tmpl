@@ -26,9 +26,19 @@ python -m game --world WORLD_ID --release RELEASE_ID
 List installed releases with `python -m game --list-worlds`. Run a selected
 release without graphics with `--headless-ticks N`.
 
+Record deterministic gameplay with `--record-replay-slot SLOT`, then verify and
+reproduce it with `--replay-slot SLOT`. Replay recording always starts from a
+clean initial state and cannot be combined with `--load-slot`. Playback is a
+separate execution mode and cannot be combined with save, load, recording, or
+headless-tick options.
+
 The process working directory is irrelevant: application data is resolved from
-the installed project, while saves are written only to the explicit user-data
-path. `game_data/worlds.lock.json` is the authority for installed releases.
+the installed project, while saves and replays are written only to the explicit
+user-data root outside the game tree. Replays use
+`replays/WORLD_ID/RELEASE_ID/SLOT.json`; saves use the parallel `saves/` tree.
+Empty or relative `XDG_DATA_HOME`/`LOCALAPPDATA` values are ignored in favor of
+an absolute home-based platform default. `game_data/worlds.lock.json` is the
+authority for installed releases.
 
 ## Shared game assets
 

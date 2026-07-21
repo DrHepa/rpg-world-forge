@@ -13,8 +13,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from game import GAME_ID, GAME_TITLE
+from game import __main__ as game_main
 from game.catalog import PROJECT_ROOT, load_catalog
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
+
+
+def _output_digest(output: str) -> str:
+    for field in output.split():
+        if field.startswith("digest="):
+            return field.removeprefix("digest=")
+    raise AssertionError(f"runtime output has no digest: {output!r}")
 
 
 class GameShellTests(unittest.TestCase):
@@ -28,6 +36,44 @@ class GameShellTests(unittest.TestCase):
         self.assertEqual(GAME_TITLE, __GAME_TITLE_PY__)
         self.assertRegex(RUNTIME_API_VERSION, r"^\d+\.\d+\.\d+$")
         self.assertIsInstance(SUPPORTED_RUNTIME_FEATURES, frozenset)
+
+    def test_platform_user_data_defaults_are_absolute_and_fail_safe(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            home = root / "home"
+            linux_root = root / "xdg-data"
+            windows_root = root / "local-app-data"
+            selected_cases = (
+                ("linux", "XDG_DATA_HOME", linux_root),
+                ("win32", "LOCALAPPDATA", windows_root),
+            )
+            for platform, variable, selected in selected_cases:
+                with (
+                    self.subTest(platform=platform, selected=selected),
+                    patch.object(game_main.sys, "platform", platform),
+                    patch.object(game_main.Path, "home", return_value=home),
+                    patch.dict(os.environ, {variable: str(selected)}, clear=True),
+                ):
+                    actual = game_main._default_user_data_root()
+                    self.assertEqual((selected / GAME_ID).resolve(), actual)
+                    self.assertTrue(actual.is_absolute())
+
+            fallback_cases = (
+                ("linux", "XDG_DATA_HOME", Path(".local/share")),
+                ("win32", "LOCALAPPDATA", Path("AppData/Local")),
+            )
+            for platform, variable, suffix in fallback_cases:
+                for value in (None, "", "relative/data"):
+                    environment = {} if value is None else {variable: value}
+                    with (
+                        self.subTest(platform=platform, value=value),
+                        patch.object(game_main.sys, "platform", platform),
+                        patch.object(game_main.Path, "home", return_value=home),
+                        patch.dict(os.environ, environment, clear=True),
+                    ):
+                        actual = game_main._default_user_data_root()
+                        self.assertEqual((home / suffix / GAME_ID).resolve(), actual)
+                        self.assertTrue(actual.is_absolute())
 
     def test_catalog_shell_starts_headlessly(self) -> None:
         releases = load_catalog(PROJECT_ROOT)
@@ -58,6 +104,172 @@ class GameShellTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(expected, result.stdout)
+
+    def test_replay_slots_round_trip_outside_the_game_tree(self) -> None:
+        releases = load_catalog(PROJECT_ROOT)
+        if not releases:
+            self.skipTest("an installed release is required for replay execution")
+        release = releases[0]
+        clean_environment = {
+            key: value for key, value in os.environ.items() if key != "PYTHONPATH"
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            user_data = Path(temporary) / "user-data"
+            base = [
+                sys.executable,
+                "-S",
+                str(PROJECT_ROOT / "run_game.py"),
+                "--world",
+                release.world_id,
+                "--release",
+                release.release_id,
+                "--user-data",
+                str(user_data),
+            ]
+            recorded = subprocess.run(
+                [*base, "--headless-ticks", "3", "--record-replay-slot", "smoke"],
+                cwd=Path(temporary),
+                env=clean_environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
+            replay = (
+                user_data
+                / "replays"
+                / release.world_id
+                / release.release_id
+                / "smoke.json"
+            )
+            self.assertTrue(replay.is_file())
+            played = subprocess.run(
+                [*base, "--replay-slot", "smoke"],
+                cwd=Path(temporary),
+                env=clean_environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(played.returncode, 0, played.stdout + played.stderr)
+            self.assertIn("replay_actions=3 tick=3", played.stdout)
+            self.assertEqual(_output_digest(recorded.stdout), _output_digest(played.stdout))
+
+            original = replay.read_bytes()
+            corrupted = json.loads(original)
+            corrupted["final_state_digest"] = "0" * 64
+            try:
+                replay.write_text(
+                    json.dumps(corrupted, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+                rejected = subprocess.run(
+                    [*base, "--replay-slot", "smoke"],
+                    cwd=Path(temporary),
+                    env=clean_environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+            finally:
+                replay.write_bytes(original)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertEqual("", rejected.stdout)
+            self.assertIn("Replay result differs", rejected.stderr)
+            self.assertNotIn("Traceback", rejected.stderr)
+            restored = subprocess.run(
+                [*base, "--replay-slot", "smoke"],
+                cwd=Path(temporary),
+                env=clean_environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(restored.returncode, 0, restored.stdout + restored.stderr)
+            self.assertEqual(_output_digest(recorded.stdout), _output_digest(restored.stdout))
+
+            zero_recorded = subprocess.run(
+                [*base, "--headless-ticks", "0", "--record-replay-slot", "zero"],
+                cwd=Path(temporary),
+                env=clean_environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                zero_recorded.returncode,
+                0,
+                zero_recorded.stdout + zero_recorded.stderr,
+            )
+            zero_played = subprocess.run(
+                [*base, "--replay-slot", "zero"],
+                cwd=Path(temporary),
+                env=clean_environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                zero_played.returncode,
+                0,
+                zero_played.stdout + zero_played.stderr,
+            )
+            self.assertIn("replay_actions=0 tick=0", zero_played.stdout)
+            self.assertEqual(
+                _output_digest(zero_recorded.stdout),
+                _output_digest(zero_played.stdout),
+            )
+
+            forbidden_user_data = PROJECT_ROOT / "forbidden-user-data"
+            self.assertFalse(forbidden_user_data.exists())
+            forbidden = subprocess.run(
+                [
+                    sys.executable,
+                    "-S",
+                    str(PROJECT_ROOT / "run_game.py"),
+                    "--world",
+                    release.world_id,
+                    "--release",
+                    release.release_id,
+                    "--user-data",
+                    str(forbidden_user_data),
+                    "--headless-ticks",
+                    "0",
+                    "--record-replay-slot",
+                    "forbidden",
+                ],
+                cwd=Path(temporary),
+                env=clean_environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(forbidden.returncode, 0)
+            self.assertIn("outside the installed game tree", forbidden.stderr)
+            self.assertNotIn("Traceback", forbidden.stderr)
+            self.assertFalse(forbidden_user_data.exists())
+        self.assertFalse((PROJECT_ROOT / "replays").exists())
+
+    def test_replay_cli_rejects_unsafe_slots_and_conflicts(self) -> None:
+        cases = (
+            ("--record-replay-slot", "../unsafe"),
+            ("--record-replay-slot", "record", "--load-slot", "save"),
+            ("--replay-slot", "replay", "--quick-save-slot", "quick"),
+            ("--replay-slot", "replay", "--record-replay-slot", "record"),
+        )
+        for arguments in cases:
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(
+                    [sys.executable, "-S", "-m", "game", *arguments],
+                    cwd=PROJECT_ROOT,
+                    env=self._environment(),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn("error:", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
 
     def test_verifier_is_independent_of_working_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -130,6 +342,58 @@ class GameShellTests(unittest.TestCase):
             self.assertEqual(launched.returncode, 0, launched.stdout + launched.stderr)
             expected = "tick=0" if releases else "status=empty_catalog shell=ready"
             self.assertIn(expected, launched.stdout)
+            if releases:
+                release = releases[0]
+                user_data = Path(temporary) / "package-user-data"
+                clean_environment = {
+                    key: value for key, value in os.environ.items() if key != "PYTHONPATH"
+                }
+                package_base = [
+                    sys.executable,
+                    "-S",
+                    str(extracted / "run_game.py"),
+                    "--world",
+                    release.world_id,
+                    "--release",
+                    release.release_id,
+                    "--user-data",
+                    str(user_data),
+                ]
+                recorded = subprocess.run(
+                    [
+                        *package_base,
+                        "--headless-ticks",
+                        "2",
+                        "--record-replay-slot",
+                        "package",
+                    ],
+                    cwd=extracted,
+                    env=clean_environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
+                replay = (
+                    user_data
+                    / "replays"
+                    / release.world_id
+                    / release.release_id
+                    / "package.json"
+                )
+                self.assertTrue(replay.is_file())
+                played = subprocess.run(
+                    [*package_base, "--replay-slot", "package"],
+                    cwd=extracted,
+                    env=clean_environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(played.returncode, 0, played.stdout + played.stderr)
+                self.assertIn("replay_actions=2 tick=2", played.stdout)
+                self.assertEqual(_output_digest(recorded.stdout), _output_digest(played.stdout))
+                self.assertFalse((extracted / "replays").exists())
             second_output = Path(temporary) / "game-b.zip"
             second = subprocess.run(
                 [
