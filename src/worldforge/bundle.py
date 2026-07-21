@@ -19,6 +19,14 @@ from isoworld.content.media import media_signature_matches
 from isoworld.content.models import WorldPack
 from isoworld.content.portability import is_portable_path_component
 from isoworld.content.renderpack import RenderPack, RenderPackError, load_renderpack
+from worldforge.directory_publish import (
+    DirectoryIdentity,
+    DirectoryPublishError,
+    directory_identity,
+    publish_directory_noreplace,
+    quarantine_and_remove_owned_directory,
+    remove_owned_empty_directory,
+)
 from worldforge.game_boundary import GameBoundaryError, audit_game_repository
 from worldforge.game_lock import GameMutationLockError, exclusive_game_mutation
 from worldforge.game_scaffold import verify_game_runtime_snapshot
@@ -51,6 +59,9 @@ CATALOG_FORMAT_VERSION = 1
 BUNDLE_MANIFEST = "bundle.manifest.json"
 WORLD_CATALOG = "game_data/worlds.lock.json"
 SHARED_ASSET_LOCK = "game_data/shared.lock.json"
+IMPORT_JOURNAL = "game_data/bundle-import.journal.json"
+IMPORT_JOURNAL_FORMAT = "isoworld.bundle_import_journal"
+IMPORT_JOURNAL_FORMAT_VERSION = 1
 
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 WORLD_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
@@ -88,6 +99,25 @@ _MANIFEST_KEYS = frozenset(
     }
 )
 _SOURCE_HASH_KEYS = frozenset({"worldpack_content_hash", "renderpack_content_hash"})
+_IMPORT_JOURNAL_KEYS = frozenset(
+    {
+        "format",
+        "format_version",
+        "operation_id",
+        "state",
+        "world_id",
+        "release_id",
+        "temporary",
+        "destination",
+        "bundle_hash",
+        "directory_identity",
+        "created_directories",
+        "catalog_before_hash",
+        "catalog_after_hash",
+    }
+)
+_IDENTITY_KEYS = frozenset({"device", "inode"})
+_CREATED_DIRECTORY_KEYS = frozenset({"path", "device", "inode"})
 _WORLDPACK_KEYS = frozenset({"path", "format_version", "content_hash"})
 _RENDERPACK_KEYS = frozenset({"path", "format_version", "content_hash", "world_content_hash"})
 _FILE_KEYS = frozenset({"path", "sha256", "size", "media_type"})
@@ -889,6 +919,7 @@ def export_runtime_bundle(
     if stage.exists():
         raise BundleError(f"Temporary export path unexpectedly exists: {stage}")
     stage.mkdir()
+    stage_identity = directory_identity(stage, context="bundle export stage")
     installed = False
     try:
         worldpack, renderpack, worldpack_raw, source_renderpack_raw, asset_media = (
@@ -932,23 +963,31 @@ def export_runtime_bundle(
         manifest["bundle_hash"] = _canonical_bundle_hash(manifest)
         (stage / BUNDLE_MANIFEST).write_bytes(_pretty_json(manifest))
         verified = verify_runtime_bundle(stage, expected_bundle_hash=manifest["bundle_hash"])
-        os.replace(stage, destination_path)
+        try:
+            publish_directory_noreplace(stage, destination_path)
+        except FileExistsError as exc:
+            raise BundleError(f"Bundle destination already exists: {destination_path}") from exc
+        except DirectoryPublishError as exc:
+            raise BundleError(str(exc)) from exc
         installed = True
-        installed_worldpack = load_worldpack(destination_path / "worldpack.json")
         return VerifiedRuntimeBundle(
             root=destination_path,
             manifest=verified.manifest,
-            worldpack=installed_worldpack,
-            renderpack=load_renderpack(
-                destination_path / "renderpack.json",
-                installed_worldpack,
-            ),
+            worldpack=verified.worldpack,
+            renderpack=verified.renderpack,
         )
-    except Exception:
-        if stage.exists():
-            shutil.rmtree(stage)
-        if installed and destination_path.exists():
-            shutil.rmtree(destination_path)
+    except Exception as original_error:
+        if not installed and stage.exists():
+            try:
+                quarantine_and_remove_owned_directory(
+                    stage,
+                    stage_identity,
+                    verify=lambda candidate: None,
+                )
+            except DirectoryPublishError as cleanup_error:
+                raise BundleError(
+                    f"Bundle export failed and staged cleanup could not complete: {cleanup_error}"
+                ) from original_error
         raise
 
 
@@ -1371,12 +1410,256 @@ def _write_catalog_atomic(path: Path, catalog: dict[str, Any]) -> None:
             temporary.unlink()
 
 
-def _remove_empty(paths: Iterable[Path]) -> None:
-    for path in paths:
+def _identity_document(identity: DirectoryIdentity) -> dict[str, int]:
+    return {"device": identity[0], "inode": identity[1]}
+
+
+def _identity_from_document(value: Any, context: str) -> DirectoryIdentity:
+    record = _exact_keys(value, _IDENTITY_KEYS, context)
+    device = record["device"]
+    inode = record["inode"]
+    if (
+        isinstance(device, bool)
+        or not isinstance(device, int)
+        or device < 0
+        or isinstance(inode, bool)
+        or not isinstance(inode, int)
+        or inode < 0
+    ):
+        raise BundleError(f"{context} must contain non-negative integer identities")
+    return device, inode
+
+
+def _catalog_snapshot(root: Path) -> tuple[dict[str, Any], str]:
+    catalog_path = root / WORLD_CATALOG
+    _assert_game_path_component(catalog_path, directory=False)
+    if not catalog_path.exists():
+        catalog: dict[str, Any] = {
+            "format": CATALOG_FORMAT,
+            "format_version": CATALOG_FORMAT_VERSION,
+            "releases": [],
+        }
+    else:
+        catalog = _read_json(catalog_path, limit=MAX_CATALOG_BYTES, context="world catalog")
+        _validate_catalog_document(catalog)
+        if catalog_path.read_bytes() != _pretty_json(catalog):
+            raise BundleError("World catalog is not canonically serialized")
+    return catalog, _sha256_bytes(_pretty_json(catalog))
+
+
+def _write_import_journal(path: Path, journal: dict[str, Any]) -> None:
+    payload = _pretty_json(journal)
+    try:
+        with path.open("xb") as target:
+            target.write(payload)
+            target.flush()
+            os.fsync(target.fileno())
+    except FileExistsError as exc:
+        raise BundleError(f"Unrecovered bundle import journal already exists: {path}") from exc
+    except OSError as exc:
+        raise BundleError(f"Could not persist bundle import journal {path}: {exc}") from exc
+
+
+def _replace_import_journal(
+    root: Path,
+    current: dict[str, Any],
+    updated: dict[str, Any],
+) -> None:
+    path = root / IMPORT_JOURNAL
+    temporary = path.parent / f".{path.name}.tmp-{uuid.uuid4().hex}"
+    try:
+        with temporary.open("xb") as target:
+            target.write(_pretty_json(updated))
+            target.flush()
+            os.fsync(target.fileno())
+        info = path.lstat()
+        if (
+            stat.S_ISLNK(info.st_mode)
+            or not stat.S_ISREG(info.st_mode)
+            or info.st_nlink != 1
+            or path.read_bytes() != _pretty_json(current)
+        ):
+            raise BundleError("Bundle import journal changed before state transition")
+        os.replace(temporary, path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _read_import_journal(root: Path) -> dict[str, Any] | None:
+    path = root / IMPORT_JOURNAL
+    if not path.exists() and not path.is_symlink():
+        return None
+    _assert_game_path_component(path, directory=False)
+    journal = _exact_keys(
+        _read_json(path, limit=MAX_CATALOG_BYTES, context="bundle import journal"),
+        _IMPORT_JOURNAL_KEYS,
+        "bundle import journal",
+    )
+    if (
+        journal["format"] != IMPORT_JOURNAL_FORMAT
+        or journal["format_version"] != IMPORT_JOURNAL_FORMAT_VERSION
+    ):
+        raise BundleError("Unknown bundle import journal format")
+    if path.read_bytes() != _pretty_json(journal):
+        raise BundleError("Bundle import journal is not canonically serialized")
+    operation_id = journal["operation_id"]
+    if not isinstance(operation_id, str) or re.fullmatch(r"[0-9a-f]{32}", operation_id) is None:
+        raise BundleError("Bundle import journal has an invalid operation_id")
+    if journal["state"] not in {"copying", "ready"}:
+        raise BundleError("Bundle import journal has an invalid state")
+    world_id = _validate_world_id(journal["world_id"], "journal world_id")
+    release_id = _validate_release_id(journal["release_id"], "journal release_id")
+    temporary = _relative_posix_path(journal["temporary"], "journal temporary")
+    destination = _relative_posix_path(journal["destination"], "journal destination")
+    expected_temporary = f"game_data/worlds/{world_id}/.{release_id}.import-{operation_id}"
+    expected_destination = f"game_data/worlds/{world_id}/{release_id}"
+    if temporary != expected_temporary or destination != expected_destination:
+        raise BundleError("Bundle import journal paths do not match its release identity")
+    _valid_sha256(journal["bundle_hash"], "journal bundle_hash")
+    _valid_sha256(journal["catalog_before_hash"], "journal catalog_before_hash")
+    _valid_sha256(journal["catalog_after_hash"], "journal catalog_after_hash")
+    _identity_from_document(journal["directory_identity"], "journal directory_identity")
+    created = journal["created_directories"]
+    if not isinstance(created, list):
+        raise BundleError("journal created_directories must be a list")
+    allowed_created = {
+        "game_data",
+        "game_data/worlds",
+        f"game_data/worlds/{world_id}",
+    }
+    seen: set[str] = set()
+    for index, item in enumerate(created):
+        record = _exact_keys(
+            item,
+            _CREATED_DIRECTORY_KEYS,
+            f"journal created_directories/{index}",
+        )
+        relative = _relative_posix_path(
+            record["path"],
+            f"journal created_directories/{index}/path",
+        )
+        if relative not in allowed_created or relative in seen:
+            raise BundleError("Bundle import journal has an invalid created directory")
+        _identity_from_document(
+            {"device": record["device"], "inode": record["inode"]},
+            f"journal created_directories/{index}",
+        )
+        seen.add(relative)
+    return journal
+
+
+def _remove_import_journal(root: Path, journal: dict[str, Any]) -> None:
+    path = root / IMPORT_JOURNAL
+    try:
+        info = path.lstat()
+        if (
+            stat.S_ISLNK(info.st_mode)
+            or not stat.S_ISREG(info.st_mode)
+            or info.st_nlink != 1
+            or path.read_bytes() != _pretty_json(journal)
+        ):
+            raise BundleError("Bundle import journal changed before cleanup")
+        path.unlink()
+    except BundleError:
+        raise
+    except OSError as exc:
+        raise BundleError(f"Could not remove bundle import journal {path}: {exc}") from exc
+
+
+def _journal_path(root: Path, relative: str) -> Path:
+    return root / PurePosixPath(relative)
+
+
+def _verify_journal_bundle(
+    path: Path,
+    identity: DirectoryIdentity,
+    bundle_hash: str,
+) -> None:
+    try:
+        if directory_identity(path, context="journalled bundle") != identity:
+            raise BundleError("Journalled bundle directory identity changed")
+        verify_runtime_bundle(path, expected_bundle_hash=bundle_hash)
+        if directory_identity(path, context="journalled bundle") != identity:
+            raise BundleError("Journalled bundle directory changed during verification")
+    except DirectoryPublishError as exc:
+        raise BundleError(str(exc)) from exc
+
+
+def _rollback_journal_bundle(
+    path: Path,
+    identity: DirectoryIdentity,
+    bundle_hash: str,
+) -> None:
+    try:
+        quarantine_and_remove_owned_directory(
+            path,
+            identity,
+            verify=lambda candidate: _verify_journal_bundle(
+                candidate,
+                identity,
+                bundle_hash,
+            ),
+        )
+    except DirectoryPublishError as exc:
+        raise BundleError(f"Could not safely roll back bundle import: {exc}") from exc
+
+
+def _remove_created_directories(root: Path, records: list[dict[str, Any]]) -> None:
+    for record in reversed(records):
+        identity = _identity_from_document(
+            {"device": record["device"], "inode": record["inode"]},
+            "journal created directory",
+        )
         try:
-            path.rmdir()
-        except OSError:
-            pass
+            remove_owned_empty_directory(_journal_path(root, record["path"]), identity)
+        except DirectoryPublishError as exc:
+            raise BundleError(f"Could not safely clean import directories: {exc}") from exc
+
+
+def _recover_import_journal(root: Path) -> Path | None:
+    journal = _read_import_journal(root)
+    if journal is None:
+        return None
+    _, catalog_hash = _catalog_snapshot(root)
+    identity = _identity_from_document(
+        journal["directory_identity"],
+        "journal directory_identity",
+    )
+    temporary = _journal_path(root, journal["temporary"])
+    destination = _journal_path(root, journal["destination"])
+    temporary_exists = temporary.exists() or temporary.is_symlink()
+    destination_exists = destination.exists() or destination.is_symlink()
+
+    if catalog_hash == journal["catalog_after_hash"]:
+        if journal["state"] != "ready" or temporary_exists or not destination_exists:
+            raise BundleError("Committed bundle import journal disagrees with storage")
+        _verify_journal_bundle(destination, identity, journal["bundle_hash"])
+        _remove_import_journal(root, journal)
+        return destination
+    if catalog_hash != journal["catalog_before_hash"]:
+        raise BundleError("Bundle import journal disagrees with the current catalog")
+    if temporary_exists and destination_exists:
+        raise BundleError("Bundle import journal has both staged and published directories")
+    if journal["state"] == "copying" and destination_exists:
+        raise BundleError("Copying bundle import journal unexpectedly has a published directory")
+
+    rollback = destination if destination_exists else temporary if temporary_exists else None
+    if rollback is not None:
+        if journal["state"] == "ready":
+            _rollback_journal_bundle(rollback, identity, journal["bundle_hash"])
+        else:
+            try:
+                quarantine_and_remove_owned_directory(
+                    rollback,
+                    identity,
+                    verify=lambda candidate: None,
+                )
+            except DirectoryPublishError as exc:
+                raise BundleError(f"Could not safely roll back partial import: {exc}") from exc
+    _remove_created_directories(root, journal["created_directories"])
+    _remove_import_journal(root, journal)
+    return None
 
 
 def _ensure_runtime_compatible(
@@ -1448,6 +1731,7 @@ def import_runtime_bundle(
         raise BundleError(f"Refusing to import into a boundary-invalid game: {findings[0]}")
     try:
         with exclusive_game_mutation(root, "bundle-import"):
+            recovered = _recover_import_journal(root)
             runtime_contract = verify_game_runtime_snapshot(root)
             _ensure_runtime_compatible(
                 verified.worldpack,
@@ -1455,6 +1739,17 @@ def import_runtime_bundle(
                 runtime_contract["supported_runtime_features"],
                 f"candidate {verified.world_id}/{verified.release_id}",
             )
+            expected_destination = (
+                root / "game_data/worlds" / verified.world_id / verified.release_id
+            )
+            if recovered == expected_destination:
+                verify_runtime_bundle(recovered, expected_bundle_hash=verified.bundle_hash)
+                verify_game_catalog_compatibility(
+                    root,
+                    runtime_contract["runtime_api_version"],
+                    runtime_contract["supported_runtime_features"],
+                )
+                return recovered
             return _import_verified_bundle(
                 verified,
                 root,
@@ -1472,7 +1767,7 @@ def _import_verified_bundle(
     runtime_api_version: str,
     runtime_features: Iterable[str],
 ) -> Path:
-    _, releases = _load_verified_catalog(root)
+    catalog_before, releases = _load_verified_catalog(root)
     verify_game_catalog_compatibility(
         root,
         runtime_api_version,
@@ -1495,32 +1790,93 @@ def _import_verified_bundle(
     if destination.exists() or destination.is_symlink():
         raise BundleError(f"Import destination already exists: {destination}")
 
-    created: list[Path] = []
+    created: list[dict[str, Any]] = []
     for directory in (game_data, worlds_root, world_root):
         if not directory.exists():
-            directory.mkdir()
-            created.append(directory)
-    temporary = world_root / f".{verified.release_id}.import-{uuid.uuid4().hex}"
-    installed = False
+            try:
+                directory.mkdir()
+            except FileExistsError as exc:
+                raise BundleError(f"Import directory appeared concurrently: {directory}") from exc
+            identity = directory_identity(directory, context="created import directory")
+            created.append(
+                {
+                    "path": directory.relative_to(root).as_posix(),
+                    "device": identity[0],
+                    "inode": identity[1],
+                }
+            )
+
+    updated_releases = [*releases, _catalog_release(verified)]
+    updated_releases.sort(key=lambda item: (item["world_id"], item["release_id"]))
+    catalog_after = {
+        "format": CATALOG_FORMAT,
+        "format_version": CATALOG_FORMAT_VERSION,
+        "releases": updated_releases,
+    }
+    _validate_catalog_document(catalog_after)
+
+    operation_id = uuid.uuid4().hex
+    temporary = world_root / f".{verified.release_id}.import-{operation_id}"
+    temporary_identity: DirectoryIdentity | None = None
+    journal: dict[str, Any] | None = None
     try:
-        shutil.copytree(verified.root, temporary, symlinks=False)
-        verify_runtime_bundle(temporary, expected_bundle_hash=verified.bundle_hash)
-        os.replace(temporary, destination)
-        installed = True
-        updated_releases = [*releases, _catalog_release(verified)]
-        updated_releases.sort(key=lambda item: (item["world_id"], item["release_id"]))
-        catalog = {
-            "format": CATALOG_FORMAT,
-            "format_version": CATALOG_FORMAT_VERSION,
-            "releases": updated_releases,
+        temporary.mkdir()
+        temporary_identity = directory_identity(temporary, context="staged bundle import")
+        journal = {
+            "format": IMPORT_JOURNAL_FORMAT,
+            "format_version": IMPORT_JOURNAL_FORMAT_VERSION,
+            "operation_id": operation_id,
+            "state": "copying",
+            "world_id": verified.world_id,
+            "release_id": verified.release_id,
+            "temporary": temporary.relative_to(root).as_posix(),
+            "destination": destination.relative_to(root).as_posix(),
+            "bundle_hash": verified.bundle_hash,
+            "directory_identity": _identity_document(temporary_identity),
+            "created_directories": created,
+            "catalog_before_hash": _sha256_bytes(_pretty_json(catalog_before)),
+            "catalog_after_hash": _sha256_bytes(_pretty_json(catalog_after)),
         }
-        _validate_catalog_document(catalog)
-        _write_catalog_atomic(root / WORLD_CATALOG, catalog)
+        _write_import_journal(root / IMPORT_JOURNAL, journal)
+        shutil.copytree(verified.root, temporary, symlinks=False, dirs_exist_ok=True)
+        verify_runtime_bundle(temporary, expected_bundle_hash=verified.bundle_hash)
+        ready_journal = {**journal, "state": "ready"}
+        _replace_import_journal(root, journal, ready_journal)
+        journal = ready_journal
+        try:
+            published_identity = publish_directory_noreplace(temporary, destination)
+        except FileExistsError as exc:
+            raise BundleError(f"Import destination already exists: {destination}") from exc
+        except DirectoryPublishError as exc:
+            raise BundleError(str(exc)) from exc
+        if published_identity != temporary_identity:
+            raise BundleError("Published bundle identity disagrees with its journal")
+        _verify_journal_bundle(destination, temporary_identity, verified.bundle_hash)
+        _write_catalog_atomic(root / WORLD_CATALOG, catalog_after)
+        _remove_import_journal(root, journal)
         return destination
-    except Exception:
-        if temporary.exists():
-            shutil.rmtree(temporary)
-        if installed and destination.exists():
-            shutil.rmtree(destination)
-        _remove_empty(reversed(created))
+    except Exception as original_error:
+        if journal is not None and (root / IMPORT_JOURNAL).exists():
+            try:
+                recovered = _recover_import_journal(root)
+            except Exception as recovery_error:
+                raise BundleError(
+                    f"Bundle import failed and recovery could not complete: {recovery_error}"
+                ) from original_error
+            if recovered == destination:
+                return destination
+        elif temporary_identity is not None and temporary.exists():
+            try:
+                quarantine_and_remove_owned_directory(
+                    temporary,
+                    temporary_identity,
+                    verify=lambda candidate: None,
+                )
+                _remove_created_directories(root, created)
+            except Exception as cleanup_error:
+                raise BundleError(
+                    f"Bundle import failed and staged cleanup could not complete: {cleanup_error}"
+                ) from original_error
+        else:
+            _remove_created_directories(root, created)
         raise
