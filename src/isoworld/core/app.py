@@ -21,6 +21,8 @@ class GameApp:
         state: WorldState | None = None,
         quick_save_path: Path | None = None,
         renderpack: RenderPack | None = None,
+        *,
+        replay_recording: bool = False,
     ) -> None:
         self.pack = pack
         self.simulation = Simulation(pack, state)
@@ -32,6 +34,7 @@ class GameApp:
         self.renderer = IsometricRenderer()
         self.quick_save_path = quick_save_path
         self.renderpack = renderpack
+        self.replay_recording = replay_recording
         self._resources: RaylibAssetRegistry | None = None
         self._quit_requested = False
 
@@ -169,7 +172,8 @@ class GameApp:
             self._sync_render_state()
 
         if (
-            self.quick_save_path is not None
+            not self.replay_recording
+            and self.quick_save_path is not None
             and self.quick_save_path.is_file()
             and key_pressed(pr.KEY_F9)  # type: ignore[attr-defined]
         ):

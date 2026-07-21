@@ -32,6 +32,29 @@ def _run_cli(*arguments: str | Path, cwd: Path | None = None) -> subprocess.Comp
     )
 
 
+def _run_runtime_cli(
+    *arguments: str | Path,
+    cwd: Path | None = None,
+    pythonpath_prefix: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    environment = os.environ.copy()
+    paths = [str(ROOT / "src")]
+    if pythonpath_prefix is not None:
+        paths.insert(0, str(pythonpath_prefix))
+    current = environment.get("PYTHONPATH")
+    if current:
+        paths.append(current)
+    environment["PYTHONPATH"] = os.pathsep.join(paths)
+    return subprocess.run(
+        [sys.executable, "-m", "isoworld", *(str(argument) for argument in arguments)],
+        cwd=cwd or ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def _assert_ok(test: unittest.TestCase, result: subprocess.CompletedProcess[str]) -> None:
     test.assertEqual(0, result.returncode, result.stdout + result.stderr)
     test.assertTrue(result.stdout.startswith("OK "), result.stdout + result.stderr)
@@ -90,6 +113,98 @@ def _write_bundle_inputs(root: Path) -> tuple[Path, Path, Path]:
         encoding="utf-8",
     )
     return worldpack, renderpack, licenses
+
+
+class M5RuntimeExecutionCliTests(unittest.TestCase):
+    def test_explicit_zero_ticks_is_headless_without_importing_pyray(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            blocker = Path(directory)
+            (blocker / "pyray.py").write_text(
+                'raise RuntimeError("pyray must not be imported in headless mode")\n',
+                encoding="utf-8",
+            )
+
+            result = _run_runtime_cli(
+                "--pack",
+                COMPILED,
+                "--headless-ticks",
+                "0",
+                pythonpath_prefix=blocker,
+            )
+
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("world=foundation_slice tick=0", result.stdout)
+        self.assertEqual("", result.stderr)
+
+    def test_negative_headless_ticks_is_an_argparse_usage_error(self) -> None:
+        result = _run_runtime_cli("--headless-ticks", "-1")
+
+        self.assertEqual(2, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertIn("--headless-ticks: must be zero or greater", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_contract_failures_are_concise_stderr_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            malformed = root / "malformed.json"
+            malformed.write_text("{}", encoding="utf-8")
+            output_directory = root / "save-target"
+            output_directory.mkdir()
+            cases = (
+                ("worldpack", ("--pack", root / "missing-worldpack.json", "--headless-ticks", "0")),
+                (
+                    "renderpack",
+                    (
+                        "--pack",
+                        COMPILED,
+                        "--renderpack",
+                        root / "missing-renderpack.json",
+                        "--headless-ticks",
+                        "0",
+                    ),
+                ),
+                (
+                    "load-save",
+                    ("--pack", COMPILED, "--load-save", malformed, "--headless-ticks", "0"),
+                ),
+                ("replay", ("--pack", COMPILED, "--replay", malformed)),
+                (
+                    "save-on-exit",
+                    (
+                        "--pack",
+                        COMPILED,
+                        "--save-on-exit",
+                        output_directory,
+                        "--headless-ticks",
+                        "0",
+                    ),
+                ),
+            )
+            for name, arguments in cases:
+                with self.subTest(name=name):
+                    result = _run_runtime_cli(*arguments)
+                    self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+                    self.assertEqual("", result.stdout)
+                    self.assertTrue(result.stderr.startswith("ERROR: "), result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+
+    def test_replay_save_and_record_argument_conflicts_exit_two(self) -> None:
+        cases = (
+            ("--replay", "replay.json", "--headless-ticks", "0"),
+            ("--replay", "replay.json", "--load-save", "save.json"),
+            ("--replay", "replay.json", "--save", "quick.json"),
+            ("--replay", "replay.json", "--save-on-exit", "save.json"),
+            ("--replay", "replay.json", "--record-replay", "record.json"),
+            ("--record-replay", "record.json", "--load-save", "save.json"),
+        )
+        for arguments in cases:
+            with self.subTest(arguments=arguments):
+                result = _run_runtime_cli(*arguments)
+                self.assertEqual(2, result.returncode, result.stdout + result.stderr)
+                self.assertEqual("", result.stdout)
+                self.assertIn("cannot be combined", result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
 
 
 class M4WorldLifecycleCliTests(unittest.TestCase):
