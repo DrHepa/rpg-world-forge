@@ -438,6 +438,106 @@ class GameScaffoldTests(unittest.TestCase):
                 )
             self.assertFalse(invalid.exists())
 
+    def test_boundary_policy_is_vendored_and_enforced_with_forge_parity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            game = root / "game"
+            create_game_project(game, game_id="policy_game", title="Policy Game")
+            verifier = str(game / "scripts/verify_game.py")
+
+            canonical_policy = ROOT / "src/worldforge/game_boundary_policy.py"
+            vendored_policy = game / "scripts/game_boundary_policy.py"
+            self.assertEqual(canonical_policy.read_bytes(), vendored_policy.read_bytes())
+
+            story = game / "src/game/story.py"
+            story.write_text(
+                'DIALOGUE = "The server mentions socket, subprocess, and HTTP."\n',
+                encoding="utf-8",
+            )
+            self.assertEqual([], audit_game_repository(game))
+            narrative_result = _run_game_script(game, verifier, cwd=root)
+            self.assertEqual(
+                0,
+                narrative_result.returncode,
+                narrative_result.stdout + narrative_result.stderr,
+            )
+
+            unsafe = game / "src/game/unsafe.py"
+            unsafe.write_text("import socket\nsocket.socket()\n", encoding="utf-8")
+            forge_issues = audit_game_repository(game)
+            self.assertTrue(
+                any(issue.rule == "forbidden_game_capability" for issue in forge_issues),
+                forge_issues,
+            )
+            unsafe_result = _run_game_script(game, verifier, cwd=root)
+            self.assertNotEqual(0, unsafe_result.returncode)
+            self.assertIn("PY_FORBIDDEN", unsafe_result.stderr)
+            unsafe.unlink()
+
+            game_main = game / "src/game/__main__.py"
+            game_main_bytes = game_main.read_bytes()
+            game_main.write_text(
+                game_main_bytes.decode("utf-8") + "\nimport socket\nsocket.socket()\n",
+                encoding="utf-8",
+            )
+            offline_result = _run_game_script(
+                game,
+                "-S",
+                str(game / "scripts/offline_smoke.py"),
+                cwd=root,
+            )
+            self.assertNotEqual(0, offline_result.returncode)
+            self.assertIn("offline smoke blocked capability", offline_result.stderr)
+            game_main.write_bytes(game_main_bytes)
+
+            malformed = game / "game_data/invalid.json"
+            malformed.write_bytes(b'{"value": 1, "value": 2}')
+            forge_issues = audit_game_repository(game)
+            self.assertTrue(
+                any(issue.rule == "malformed_game_json" for issue in forge_issues),
+                forge_issues,
+            )
+            malformed_result = _run_game_script(game, verifier, cwd=root)
+            self.assertNotEqual(0, malformed_result.returncode)
+            self.assertIn("JSON_DUPLICATE_KEY", malformed_result.stderr)
+            malformed.unlink()
+
+            requirements = game / "requirements.lock"
+            requirements_bytes = requirements.read_bytes()
+            requirements.write_text(
+                requirements_bytes.decode("utf-8").replace(
+                    "cffi==1.17.1",
+                    "cffi==1.17.0",
+                ),
+                encoding="utf-8",
+            )
+            forge_issues = audit_game_repository(game)
+            self.assertTrue(
+                any("dependency" in issue.rule for issue in forge_issues),
+                forge_issues,
+            )
+            dependency_result = _run_game_script(game, verifier, cwd=root)
+            self.assertNotEqual(0, dependency_result.returncode)
+            self.assertIn("DEPENDENCY_", dependency_result.stderr)
+            requirements.write_bytes(requirements_bytes)
+
+            target = game / "src/game/target.py"
+            target.write_text("VALUE = 1\n", encoding="utf-8")
+            link = game / "src/game/linked.py"
+            try:
+                link.symlink_to(target.name)
+            except OSError:
+                pass
+            else:
+                forge_issues = audit_game_repository(game)
+                self.assertTrue(
+                    any(issue.rule == "unsafe_game_path" for issue in forge_issues),
+                    forge_issues,
+                )
+                link_result = _run_game_script(game, verifier, cwd=root)
+                self.assertNotEqual(0, link_result.returncode)
+                self.assertIn("FS_SYMLINK", link_result.stderr)
+
     def test_generated_verifier_and_packager_fail_closed_on_boundary_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -105,14 +105,33 @@ class GameShellTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(expected, result.stdout)
 
+    def test_offline_smoke_runs_with_an_audit_hook_and_clean_environment(self) -> None:
+        environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+        with tempfile.TemporaryDirectory() as temporary:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-S",
+                    str(PROJECT_ROOT / "scripts/offline_smoke.py"),
+                ],
+                cwd=temporary,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(
+            "status=empty_catalog shell=ready" in result.stdout or "tick=0" in result.stdout,
+            result.stdout,
+        )
+
     def test_replay_slots_round_trip_outside_the_game_tree(self) -> None:
         releases = load_catalog(PROJECT_ROOT)
         if not releases:
             self.skipTest("an installed release is required for replay execution")
         release = releases[0]
-        clean_environment = {
-            key: value for key, value in os.environ.items() if key != "PYTHONPATH"
-        }
+        clean_environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
         with tempfile.TemporaryDirectory() as temporary:
             user_data = Path(temporary) / "user-data"
             base = [
@@ -135,13 +154,7 @@ class GameShellTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
-            replay = (
-                user_data
-                / "replays"
-                / release.world_id
-                / release.release_id
-                / "smoke.json"
-            )
+            replay = user_data / "replays" / release.world_id / release.release_id / "smoke.json"
             self.assertTrue(replay.is_file())
             played = subprocess.run(
                 [*base, "--replay-slot", "smoke"],
@@ -375,11 +388,7 @@ class GameShellTests(unittest.TestCase):
                 )
                 self.assertEqual(recorded.returncode, 0, recorded.stdout + recorded.stderr)
                 replay = (
-                    user_data
-                    / "replays"
-                    / release.world_id
-                    / release.release_id
-                    / "package.json"
+                    user_data / "replays" / release.world_id / release.release_id / "package.json"
                 )
                 self.assertTrue(replay.is_file())
                 played = subprocess.run(

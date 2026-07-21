@@ -7,6 +7,15 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from worldforge.game_boundary_policy import (
+    DEFAULT_IGNORED_TOP_LEVEL,
+    JSONPolicyError,
+    load_strict_json_object,
+    scan_python_capabilities,
+    validate_dependency_provenance,
+    validate_json_objects,
+    validate_regular_tree,
+)
 from worldforge.runtime_audit import BANNED_IMPORT_ROOTS, imported_modules
 
 FORBIDDEN_GAME_CONTROL_DIRECTORIES = frozenset(
@@ -570,6 +579,84 @@ def _authoring_format_findings(base: Path, blocked_roots: set[Path]) -> list[Gam
     return findings
 
 
+def _selected_policy_json(base: Path) -> tuple[Path, ...]:
+    selected = set(base.glob("*.json"))
+    game_data = base / "game_data"
+    if game_data.is_dir():
+        selected.update(game_data.rglob("*.json"))
+    return tuple(sorted(path for path in selected if path.is_file() or path.is_symlink()))
+
+
+def _canonical_dependency_issues(base: Path) -> tuple[str, ...]:
+    requirements = base / "requirements.lock"
+    platform_path = base / "platform.lock.json"
+    if not requirements.is_file() or not platform_path.is_file():
+        return ()
+    try:
+        platform = load_strict_json_object(platform_path)
+        requirement_bytes = requirements.read_bytes()
+    except (JSONPolicyError, OSError):
+        return ()
+    locked = platform.get("locked_requirements")
+    if not isinstance(locked, list) or not all(isinstance(item, str) for item in locked):
+        return ()
+    lock_bytes = ("\n".join(locked) + "\n").encode("utf-8")
+    return validate_dependency_provenance(
+        requirement_bytes,
+        lock_bytes,
+        exact=True,
+    )
+
+
+def _policy_finding(issue: str) -> GameBoundaryFinding:
+    code, _, detail = issue.partition(":")
+    if code.startswith("FS_"):
+        relative = detail.split(":", 1)[0]
+        return GameBoundaryFinding(Path(relative), "unsafe_game_path", issue)
+    if code.startswith("JSON_"):
+        return GameBoundaryFinding(Path(detail), "malformed_game_json", code)
+    if code.startswith("DEPENDENCY_"):
+        return GameBoundaryFinding(
+            Path("requirements.lock"),
+            "invalid_game_dependency_provenance",
+            issue,
+        )
+    if code.startswith("PY_"):
+        parts = issue.split(":", 4)
+        relative = Path(parts[1]) if len(parts) > 1 else Path("src/game")
+        line = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+        rule = (
+            "forbidden_game_capability"
+            if code in {"PY_FORBIDDEN_IMPORT", "PY_FORBIDDEN_CALL", "PY_DYNAMIC_ESCAPE"}
+            else "invalid_game_source"
+        )
+        return GameBoundaryFinding(relative, rule, issue, line)
+    return GameBoundaryFinding(Path("."), "invalid_game_boundary", issue)
+
+
+def _canonical_policy_findings(
+    base: Path,
+    *,
+    suppress_dependency_issues: bool,
+) -> list[GameBoundaryFinding]:
+    issues = list(
+        validate_regular_tree(
+            base,
+            ignored_top_level=DEFAULT_IGNORED_TOP_LEVEL,
+        )
+    )
+    selected_json = _selected_policy_json(base)
+    if selected_json:
+        issues.extend(validate_json_objects(selected_json, base=base))
+    dependency_issues = _canonical_dependency_issues(base)
+    if not suppress_dependency_issues:
+        issues.extend(dependency_issues)
+    editable = base / "src/game"
+    if editable.is_dir() or editable.is_symlink():
+        issues.extend(scan_python_capabilities(editable, base=base))
+    return [_policy_finding(issue) for issue in issues]
+
+
 def audit_game_repository(root: str | Path) -> list[GameBoundaryFinding]:
     """Report authoring-control and AI dependencies that leaked into a game repository."""
 
@@ -579,6 +666,19 @@ def audit_game_repository(root: str | Path) -> list[GameBoundaryFinding]:
 
     findings, blocked_roots = _structure_findings(base)
     findings.extend(_python_import_findings(base, blocked_roots))
-    findings.extend(_dependency_findings(base))
+    dependency_findings = _dependency_findings(base)
+    findings.extend(dependency_findings)
     findings.extend(_authoring_format_findings(base, blocked_roots))
-    return sorted(findings, key=lambda finding: (str(finding.path), finding.line, finding.rule))
+    findings.extend(
+        _canonical_policy_findings(
+            base,
+            suppress_dependency_issues=bool(dependency_findings),
+        )
+    )
+    unique = {
+        (finding.path, finding.rule, finding.detail, finding.line): finding for finding in findings
+    }
+    return sorted(
+        unique.values(),
+        key=lambda finding: (str(finding.path), finding.line, finding.rule, finding.detail),
+    )

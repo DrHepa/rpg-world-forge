@@ -1,0 +1,47 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = PROJECT_ROOT / "src"
+
+_BLOCKED_EXACT_EVENTS = frozenset(
+    {
+        "os.exec",
+        "os.fork",
+        "os.forkpty",
+        "os.posix_spawn",
+        "os.posix_spawnp",
+        "os.spawn",
+        "os.startfile",
+        "os.system",
+        "subprocess.Popen",
+    }
+)
+_BLOCKED_EVENT_PREFIXES = ("socket.",)
+
+
+def _offline_audit_hook(event: str, arguments: tuple[object, ...]) -> None:
+    del arguments
+    if event in _BLOCKED_EXACT_EVENTS or event.startswith(_BLOCKED_EVENT_PREFIXES):
+        raise RuntimeError(f"offline smoke blocked capability: {event}")
+
+
+def main() -> int:
+    sys.addaudithook(_offline_audit_hook)
+    sys.path.insert(0, str(SOURCE_ROOT))
+
+    from game.__main__ import main as run_game
+    from game.catalog import load_catalog
+
+    arguments = ["--headless-ticks", "0"]
+    releases = load_catalog(PROJECT_ROOT)
+    if releases:
+        release = releases[0]
+        arguments.extend(["--world", release.world_id, "--release", release.release_id])
+    return run_game(arguments)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

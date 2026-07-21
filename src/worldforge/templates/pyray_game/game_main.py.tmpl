@@ -163,8 +163,8 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def main() -> int:
-    args = _parse_args()
+def main(arguments: Sequence[str] | None = None) -> int:
+    args = _parse_args(arguments)
     try:
         releases = load_catalog()
         if args.list_worlds:

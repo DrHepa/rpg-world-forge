@@ -42,6 +42,7 @@ _TEMPLATE_OUTPUTS = {
     "game_main.py.tmpl": "src/game/__main__.py",
     "run_game.py.tmpl": "run_game.py",
     "verify_game.py.tmpl": "scripts/verify_game.py",
+    "offline_smoke.py.tmpl": "scripts/offline_smoke.py",
     "native_smoke.py.tmpl": "scripts/native_smoke.py",
     "benchmark_scene.py.tmpl": "scripts/benchmark_scene.py",
     "package_game.py.tmpl": "scripts/package_game.py",
@@ -310,6 +311,17 @@ def _render_templates(root: Path, *, game_id: str, title: str) -> None:
         output.write_text(content, encoding="utf-8")
 
 
+def _materialize_boundary_policy(root: Path) -> None:
+    source = files("worldforge").joinpath("game_boundary_policy.py")
+    try:
+        data = source.read_bytes()
+    except (FileNotFoundError, OSError) as exc:
+        raise GameScaffoldError(f"Missing canonical game boundary policy: {exc}") from exc
+    output = root / "scripts/game_boundary_policy.py"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(data)
+
+
 def create_game_project(
     target: str | Path,
     *,
@@ -334,6 +346,7 @@ def create_game_project(
     staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}.tmp-", dir=destination.parent))
     try:
         _render_templates(staging, game_id=game_id, title=normalized_title)
+        _materialize_boundary_policy(staging)
         _materialize_runtime(staging, source_revision=source_revision)
         verify_game_runtime_snapshot(staging)
         findings = audit_game_repository(staging)

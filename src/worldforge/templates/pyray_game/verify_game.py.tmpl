@@ -13,8 +13,20 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_ROOT = PROJECT_ROOT / "scripts"
 SOURCE_ROOT = PROJECT_ROOT / "src"
+sys.path.insert(0, str(SCRIPT_ROOT))
 sys.path.insert(0, str(SOURCE_ROOT))
+
+from game_boundary_policy import (  # noqa: E402
+    DEFAULT_IGNORED_TOP_LEVEL,
+    JSONPolicyError,
+    load_strict_json_object,
+    scan_python_capabilities,
+    validate_dependency_provenance,
+    validate_json_objects,
+    validate_regular_tree,
+)
 
 MAX_LOCK_BYTES = 16 * 1024 * 1024
 FORBIDDEN_NAMES = {
@@ -58,18 +70,7 @@ FORBIDDEN_IMPORTS = {
     "vertexai",
     "worldforge",
 }
-IGNORED_TOP_LEVEL = {
-    ".git",
-    ".mypy_cache",
-    ".pytest_cache",
-    ".ruff_cache",
-    ".venv",
-    "build",
-    "dist",
-    "package_output",
-    "saves",
-    "screenshots",
-}
+IGNORED_TOP_LEVEL = DEFAULT_IGNORED_TOP_LEVEL
 
 
 class VerificationError(ValueError):
@@ -341,7 +342,65 @@ def _import_roots(tree: ast.AST) -> set[str]:
     return roots
 
 
+def _selected_policy_json() -> tuple[Path, ...]:
+    selected = set(PROJECT_ROOT.glob("*.json"))
+    game_data = PROJECT_ROOT / "game_data"
+    if game_data.is_dir():
+        selected.update(game_data.rglob("*.json"))
+    return tuple(sorted(path for path in selected if path.is_file() or path.is_symlink()))
+
+
+def _canonical_dependency_issues() -> tuple[str, ...]:
+    requirements = PROJECT_ROOT / "requirements.lock"
+    platform_path = PROJECT_ROOT / "platform.lock.json"
+    if not requirements.is_file() or not platform_path.is_file():
+        return ()
+    try:
+        platform = load_strict_json_object(platform_path)
+        requirement_bytes = requirements.read_bytes()
+    except (JSONPolicyError, OSError):
+        return ()
+    locked = platform.get("locked_requirements")
+    if not isinstance(locked, list) or not all(isinstance(item, str) for item in locked):
+        return ()
+    lock_bytes = ("\n".join(locked) + "\n").encode("utf-8")
+    return validate_dependency_provenance(
+        requirement_bytes,
+        lock_bytes,
+        exact=True,
+    )
+
+
+def _canonical_policy_issues() -> tuple[str, ...]:
+    issues = list(
+        validate_regular_tree(
+            PROJECT_ROOT,
+            ignored_top_level=IGNORED_TOP_LEVEL,
+        )
+    )
+    selected_json = _selected_policy_json()
+    if selected_json:
+        issues.extend(validate_json_objects(selected_json, base=PROJECT_ROOT))
+    issues.extend(_canonical_dependency_issues())
+    editable = PROJECT_ROOT / "src/game"
+    if editable.is_dir() or editable.is_symlink():
+        issues.extend(scan_python_capabilities(editable, base=PROJECT_ROOT))
+    return tuple(sorted(set(issues)))
+
+
 def verify_source_boundary() -> None:
+    policy_issues = _canonical_policy_issues()
+    if policy_issues:
+        issue = policy_issues[0]
+        if issue.startswith("DEPENDENCY_"):
+            context = "platform lock "
+        elif issue.startswith(
+            ("PY_FORBIDDEN_IMPORT", "PY_FORBIDDEN_CALL", "PY_DYNAMIC_ESCAPE")
+        ):
+            context = "forbidden runtime import "
+        else:
+            context = ""
+        raise VerificationError(f"boundary policy violation: {context}{issue}")
     for path in sorted(PROJECT_ROOT.rglob("*")):
         relative = path.relative_to(PROJECT_ROOT)
         if relative.parts and relative.parts[0] in IGNORED_TOP_LEVEL:
