@@ -1,0 +1,20 @@
+include LICENSE
+include README.md
+include THIRD_PARTY_NOTICES.md
+include requirements-m5.lock
+include pyproject.toml
+include MANIFEST.in
+graft agents
+graft authoring/prompts
+graft contracts
+graft docs
+graft examples
+graft schemas
+graft tests
+graft .agents/skills
+graft scripts
+recursive-exclude * __pycache__ *.py[cod] .pytest_cache .ruff_cache
+recursive-exclude .git *
+recursive-exclude .agents/tmp *
+recursive-exclude .agents/private *
+recursive-exclude content *

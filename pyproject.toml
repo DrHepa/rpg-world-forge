@@ -40,6 +40,10 @@ where = ["src"]
 [tool.setuptools.package-data]
 worldforge = ["templates/pyray_game/*.tmpl"]
 
+[tool.setuptools.data-files]
+"share/rpg-world-forge/contracts" = ["contracts/*"]
+"share/rpg-world-forge/schemas" = ["schemas/*.json"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
