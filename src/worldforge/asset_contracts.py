@@ -72,6 +72,94 @@ OUTPUT_ROLE_MEDIA = {
     "texture": {"image/jpeg", "image/png", "image/webp"},
     "vertex_shader": {"text/x-glsl"},
 }
+
+GLB_OUTPUT_ROLES = frozenset({"animation", "collision", "model", "skeleton"})
+
+
+@dataclass(frozen=True, slots=True)
+class AssetRuntimeOutputContract:
+    representations: frozenset[str]
+    required_roles: frozenset[str]
+    allowed_roles: frozenset[str]
+    min_outputs: int
+    max_outputs: int
+
+
+def _runtime_contract(
+    kind: str,
+    required_roles: set[str],
+    allowed_roles: set[str] | None = None,
+    *,
+    min_outputs: int | None = None,
+) -> AssetRuntimeOutputContract:
+    allowed = frozenset(allowed_roles or required_roles)
+    required = frozenset(required_roles)
+    return AssetRuntimeOutputContract(
+        representations=frozenset(KIND_REPRESENTATIONS[kind]),
+        required_roles=required,
+        allowed_roles=allowed,
+        min_outputs=len(required) if min_outputs is None else min_outputs,
+        max_outputs=len(allowed),
+    )
+
+
+ASSET_RUNTIME_OUTPUT_CONTRACTS = {
+    **{kind: _runtime_contract(kind, {"audio"}) for kind in AUDIO_ASSET_KINDS},
+    "font": _runtime_contract("font", {"font"}),
+    "shader": _runtime_contract(
+        "shader",
+        set(),
+        {"fragment_shader", "vertex_shader"},
+        min_outputs=1,
+    ),
+    **{kind: _runtime_contract(kind, {"texture"}) for kind in {"portrait", "sprite", "ui", "vfx"}},
+    **{
+        kind: _runtime_contract(kind, {"clipset", "texture"}) for kind in {"spritesheet", "tileset"}
+    },
+    **{
+        kind: _runtime_contract(
+            kind,
+            {
+                {
+                    "animation_3d": "animation",
+                    "collision_3d": "collision",
+                    "rig": "skeleton",
+                }.get(kind, "model")
+            },
+            set(GLB_OUTPUT_ROLES),
+        )
+        for kind in THREE_D_ASSET_KINDS
+    },
+}
+
+
+def runtime_output_contract_issue(
+    kind: object,
+    representation: object,
+    roles: list[str],
+) -> str | None:
+    if not isinstance(kind, str) or kind not in ASSET_RUNTIME_OUTPUT_CONTRACTS:
+        return "asset kind has no runtime output contract"
+    contract = ASSET_RUNTIME_OUTPUT_CONTRACTS[kind]
+    if not isinstance(representation, str) or representation not in contract.representations:
+        allowed = ", ".join(sorted(contract.representations))
+        return f"{kind} requires representation in: {allowed}"
+    if not contract.min_outputs <= len(roles) <= contract.max_outputs:
+        return (
+            f"{kind} requires between {contract.min_outputs} and "
+            f"{contract.max_outputs} runtime outputs"
+        )
+    if len(roles) != len(set(roles)):
+        return f"{kind} runtime output roles must be unique"
+    unknown = set(roles) - contract.allowed_roles
+    if unknown:
+        return f"{kind} has forbidden runtime output roles: {', '.join(sorted(unknown))}"
+    missing = contract.required_roles - set(roles)
+    if missing:
+        return f"{kind} is missing runtime output roles: {', '.join(sorted(missing))}"
+    return None
+
+
 PRODUCTION_OPERATIONS = {
     "image_generate",
     "image_edit",
@@ -899,18 +987,20 @@ def validate_asset_spec(
                 and isinstance(output.get("role"), str)
                 and isinstance(output.get("media_type"), str)
             }
+            role_issue = runtime_output_contract_issue(kind, representation, roles)
+            if role_issue is not None:
+                issues.append(_issue("expected_outputs", role_issue))
             if kind in {"portrait", "sprite", "ui", "vfx"}:
-                if roles != ["texture"] or media_by_role.get("texture") != "image/png":
+                if media_by_role.get("texture") != "image/png":
                     issues.append(
                         _issue(
                             "expected_outputs",
-                            f"{kind} requires exactly texture=image/png",
+                            f"{kind} requires texture=image/png",
                         )
                     )
             elif kind in {"spritesheet", "tileset"}:
                 if (
-                    set(roles) != {"clipset", "texture"}
-                    or len(roles) != 2
+                    media_by_role.get("clipset") != "application/json"
                     or media_by_role.get("texture") != "image/png"
                 ):
                     issues.append(
@@ -920,49 +1010,18 @@ def validate_asset_spec(
                         )
                     )
             elif kind in AUDIO_ASSET_KINDS:
-                if roles != ["audio"] or media_by_role.get("audio") != "audio/wav":
-                    issues.append(
-                        _issue("expected_outputs", f"{kind} requires exactly audio=audio/wav")
-                    )
+                if media_by_role.get("audio") != "audio/wav":
+                    issues.append(_issue("expected_outputs", f"{kind} requires audio=audio/wav"))
             elif kind == "font":
                 runtime_format = technical.get("runtime_format")
                 expected_media = (
                     f"font/{runtime_format}" if runtime_format in {"otf", "ttf"} else None
                 )
-                if roles != ["font"] or media_by_role.get("font") != expected_media:
+                if media_by_role.get("font") != expected_media:
                     issues.append(
                         _issue(
                             "expected_outputs",
-                            "font requires exactly one output matching its runtime format",
-                        )
-                    )
-            elif kind == "shader":
-                if (
-                    not roles
-                    or len(roles) != len(set(roles))
-                    or not set(roles) <= {"fragment_shader", "vertex_shader"}
-                ):
-                    issues.append(
-                        _issue(
-                            "expected_outputs",
-                            "shader requires vertex_shader and/or fragment_shader outputs only",
-                        )
-                    )
-            elif kind in THREE_D_ASSET_KINDS:
-                allowed_3d_roles = {"animation", "collision", "model", "skeleton"}
-                primary_role = {
-                    "animation_3d": "animation",
-                    "collision_3d": "collision",
-                    "rig": "skeleton",
-                }.get(kind, "model")
-                if (
-                    any(role not in allowed_3d_roles for role in roles)
-                    or roles.count(primary_role) != 1
-                ):
-                    issues.append(
-                        _issue(
-                            "expected_outputs",
-                            f"3d {kind} requires exactly one {primary_role} GLB primary output",
+                            "font output must match its runtime format",
                         )
                     )
     issues.extend(_scan_sensitive(raw))

@@ -10,12 +10,24 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.media import media_signature_matches
+from isoworld.content.models import WorldPack
+from isoworld.content.portability import portable_path_key
+from worldforge.asset_contracts import (
+    ASSET_KINDS,
+    GLB_OUTPUT_ROLES,
+    KIND_REPRESENTATIONS,
+    OUTPUT_ROLE_MEDIA,
+    REPRESENTATIONS,
+    runtime_output_contract_issue,
+)
 from worldforge.asset_formats.gltf import METRIC_NAMES, GLBError, inspect_glb
 from worldforge.asset_io import (
     AssetContractError,
     bind_content_hash,
     encoded_json,
+    normalized_relative_path,
     read_json_object,
     require_content_hash,
     resolve_artifact,
@@ -54,43 +66,10 @@ _MANIFEST_BINDING_KEYS = frozenset({"slot", "asset_id", "representation", "prese
 _PACK_BINDING_KEYS = frozenset({"slot", "asset_id", "representation", "entrypoint"})
 _ENTRYPOINT_KEYS = frozenset({"node", "default_animation", "moving_animation", "scale", "layer"})
 
-_KINDS = frozenset(
-    {
-        "animation_3d",
-        "character_3d",
-        "collision_3d",
-        "environment_3d",
-        "font",
-        "material_set",
-        "model_3d",
-        "music",
-        "portrait",
-        "rig",
-        "sfx",
-        "shader",
-        "sprite",
-        "spritesheet",
-        "tileset",
-        "ui",
-        "vfx",
-        "vfx_3d",
-    }
-)
-_REPRESENTATIONS = frozenset({"2d", "2_5d", "3d", "audio"})
+_KINDS = frozenset(ASSET_KINDS)
+_REPRESENTATIONS = frozenset(REPRESENTATIONS)
 _ROLE_MEDIA_TYPES = {
-    "animation": frozenset({"model/gltf-binary"}),
-    "audio": frozenset({"audio/mpeg", "audio/ogg", "audio/wav"}),
-    "clipset": frozenset({"application/json"}),
-    "collision": frozenset({"model/gltf-binary"}),
-    "font": frozenset({"font/otf", "font/ttf"}),
-    "fragment_shader": frozenset({"text/x-glsl"}),
-    "material_metadata": frozenset({"application/json"}),
-    "model": frozenset({"model/gltf-binary"}),
-    "model_metadata": frozenset({"application/json"}),
-    "preview": frozenset({"image/jpeg", "image/png", "image/webp"}),
-    "skeleton": frozenset({"model/gltf-binary"}),
-    "texture": frozenset({"image/jpeg", "image/png", "image/webp"}),
-    "vertex_shader": frozenset({"text/x-glsl"}),
+    role: frozenset(media_types) for role, media_types in OUTPUT_ROLE_MEDIA.items()
 }
 _MEDIA_EXTENSIONS = {
     "application/json": frozenset({".json"}),
@@ -105,7 +84,7 @@ _MEDIA_EXTENSIONS = {
     "model/gltf-binary": frozenset({".glb"}),
     "text/x-glsl": frozenset({".frag", ".glsl", ".vert"}),
 }
-_GLB_ROLES = frozenset({"animation", "collision", "model", "skeleton"})
+_GLB_ROLES = GLB_OUTPUT_ROLES
 _GLB_REQUIRED_METRICS = {
     "animation": "animations",
     "collision": "meshes",
@@ -113,19 +92,6 @@ _GLB_REQUIRED_METRICS = {
     "skeleton": "skins",
 }
 _MISSING_ANIMATION_NAMES = "GLB is missing required animations names:"
-_AUDIO_KINDS = frozenset({"music", "sfx"})
-_THREE_D_KINDS = frozenset(
-    {
-        "animation_3d",
-        "character_3d",
-        "collision_3d",
-        "environment_3d",
-        "material_set",
-        "model_3d",
-        "rig",
-        "vfx_3d",
-    }
-)
 _FORBIDDEN_SOURCE_PARTS = frozenset(
     {
         ".agents",
@@ -143,24 +109,6 @@ _FORBIDDEN_SOURCE_PARTS = frozenset(
 
 class AssetPackError(ValueError):
     """Raised when a 3D release cannot become a neutral runtime assetpack."""
-
-
-def _primary_roles(kind: str, representation: str) -> frozenset[str]:
-    if representation == "3d":
-        if kind == "animation_3d":
-            return frozenset({"animation"})
-        if kind == "collision_3d":
-            return frozenset({"collision"})
-        if kind == "rig":
-            return frozenset({"skeleton"})
-        return frozenset({"model"})
-    if representation == "audio":
-        return frozenset({"audio"})
-    if kind == "font":
-        return frozenset({"font"})
-    if kind == "shader":
-        return frozenset({"fragment_shader", "vertex_shader"})
-    return frozenset({"texture"})
 
 
 def _expect_exact_keys(value: dict[str, Any], expected: frozenset[str], context: str) -> None:
@@ -185,10 +133,28 @@ def _valid_sha256(value: Any, *, context: str) -> str:
 
 
 def _validate_kind_representation(kind: str, representation: str, *, context: str) -> None:
-    if kind in _AUDIO_KINDS and representation != "audio":
-        raise AssetPackError(f"{context} kind {kind} requires audio representation")
-    if kind in _THREE_D_KINDS and representation != "3d":
-        raise AssetPackError(f"{context} kind {kind} requires 3d representation")
+    allowed = KIND_REPRESENTATIONS[kind]
+    if representation in allowed:
+        return
+    if allowed == {"audio"}:
+        expected = "audio"
+    elif allowed == {"3d"}:
+        expected = "3d"
+    else:
+        expected = "2d or 2_5d"
+    raise AssetPackError(f"{context} kind {kind} requires {expected} representation")
+
+
+def _validate_output_roles(
+    kind: str,
+    representation: str,
+    roles: list[str],
+    *,
+    context: str,
+) -> None:
+    issue = runtime_output_contract_issue(kind, representation, roles)
+    if issue is not None:
+        raise AssetPackError(f"{context}: {issue}")
 
 
 def _lstat(path: Path, *, context: str) -> os.stat_result | None:
@@ -433,25 +399,11 @@ def _publish_json_exclusive(
         return identity
 
 
-def _load_worldpack(path: Path) -> dict[str, Any]:
+def _load_worldpack(path: Path) -> WorldPack:
     try:
-        worldpack = read_json_object(path)
-        require_content_hash(worldpack, context="worldpack")
-    except AssetContractError as exc:
+        return load_worldpack(path)
+    except WorldPackError as exc:
         raise AssetPackError(str(exc)) from exc
-    version = worldpack.get("format_version")
-    if (
-        worldpack.get("format") != "isoworld.worldpack"
-        or isinstance(version, bool)
-        or not isinstance(version, int)
-        or version not in {1, 2, 3, 4, 5}
-    ):
-        raise AssetPackError("The input file is not a compatible worldpack")
-    world = worldpack.get("world")
-    if not isinstance(world, dict):
-        raise AssetPackError("worldpack.world must be an object")
-    _valid_id(world.get("id"), context="worldpack.world.id")
-    return worldpack
 
 
 def _coordinate_system(value: Any, *, context: str) -> dict[str, Any]:
@@ -882,6 +834,7 @@ def _build_assets(
     skipped_asset_ids: set[str] = set()
     glb_files: dict[str, list[tuple[str, Path]]] = {}
     seen_ids: set[str] = set()
+    seen_runtime_sources: set[tuple[str, ...]] = set()
     for asset in sorted(
         assets,
         key=lambda item: item.get("id", "") if isinstance(item, dict) else "",
@@ -919,6 +872,17 @@ def _build_assets(
         total_bytes = 0
         role_counts: dict[str, int] = {}
         for output in outputs:
+            if not isinstance(output, dict):
+                raise AssetPackError(f"asset {asset_id} outputs must contain objects")
+            runtime_source = normalized_relative_path(output.get("runtime_file"))
+            if runtime_source is None:
+                raise AssetPackError(f"asset {asset_id} runtime_file is not portable")
+            source_key = portable_path_key(runtime_source)
+            if source_key in seen_runtime_sources:
+                raise AssetPackError(
+                    f"asset {asset_id} runtime source path collides under NFC/casefold"
+                )
+            seen_runtime_sources.add(source_key)
             item = _inspect_output(
                 manifest_root,
                 asset,
@@ -932,10 +896,12 @@ def _build_assets(
             role_counts[item[2]] = role_counts.get(item[2], 0) + 1
         if total_bytes > max_bytes:
             raise AssetPackError(f"asset {asset_id} outputs exceed their memory budget")
-        if not any(role_counts.get(role) == 1 for role in _primary_roles(kind, representation)):
-            raise AssetPackError(
-                f"asset {asset_id} does not have exactly one primary runtime output"
-            )
+        _validate_output_roles(
+            kind,
+            representation,
+            [role for role, count in role_counts.items() for _ in range(count)],
+            context=f"asset {asset_id}",
+        )
 
         inspected.sort(key=lambda item: (item[2], item[0].name))
         runtime_files: list[dict[str, Any]] = []
@@ -1021,8 +987,8 @@ def build_assetpack(
         raise AssetPackError("Building an assetpack requires a validated production plan")
 
     worldpack = _load_worldpack(Path(worldpack_path))
-    world_id = worldpack["world"]["id"]
-    world_hash = worldpack["content_hash"]
+    world_id = worldpack.world_id
+    world_hash = worldpack.content_hash
     if manifest.get("world_id") != world_id or manifest.get("world_content_hash") != world_hash:
         raise AssetPackError("asset manifest does not match the verified worldpack")
     manifest_root = manifest_file.parent.resolve()
@@ -1191,7 +1157,7 @@ def verify_assetpack(
     )
     if worldpack_path is not None:
         worldpack = _load_worldpack(Path(worldpack_path))
-        if worldpack["world"]["id"] != world_id or worldpack["content_hash"] != world_hash:
+        if worldpack.world_id != world_id or worldpack.content_hash != world_hash:
             raise AssetPackError("assetpack does not match the verified worldpack")
     _valid_id(payload.get("target_id"), context="assetpack.target_id")
     _valid_sha256(payload.get("target_hash"), context="assetpack.target_hash")
@@ -1205,7 +1171,7 @@ def verify_assetpack(
     root = assetpack_path.parent.resolve()
     representations: dict[str, str] = {}
     model_found = False
-    seen_paths: set[str] = set()
+    seen_path_keys: set[tuple[str, ...]] = set()
     glb_files: dict[str, list[tuple[str, Path]]] = {}
     canonical_assets: list[dict[str, Any]] = []
     for asset_index, asset in enumerate(assets):
@@ -1227,7 +1193,7 @@ def verify_assetpack(
         if not isinstance(files, list) or not files:
             raise AssetPackError(f"{context}.files must be a non-empty list")
         inspections: list[dict[str, int]] = []
-        roles: dict[str, int] = {}
+        role_values: list[str] = []
         for file_index, file in enumerate(files):
             entry, metrics, source = _verify_runtime_file(
                 root,
@@ -1235,10 +1201,13 @@ def verify_assetpack(
                 file,
                 context=f"{context}.files[{file_index}]",
             )
-            if entry["path"] in seen_paths:
-                raise AssetPackError(f"duplicate assetpack path: {entry['path']}")
-            seen_paths.add(entry["path"])
-            roles[entry["role"]] = roles.get(entry["role"], 0) + 1
+            normalized_path = normalized_relative_path(entry["path"])
+            assert normalized_path is not None
+            path_key = portable_path_key(normalized_path)
+            if path_key in seen_path_keys:
+                raise AssetPackError(f"assetpack path collides under NFC/casefold: {entry['path']}")
+            seen_path_keys.add(path_key)
+            role_values.append(entry["role"])
             model_found = model_found or (
                 entry["role"] == "model" and entry["media_type"] == "model/gltf-binary"
             )
@@ -1247,8 +1216,12 @@ def verify_assetpack(
                 glb_files.setdefault(asset_id, []).append((entry["role"], source))
         if files != sorted(files, key=lambda item: (item["role"], item["path"])):
             raise AssetPackError(f"{context}.files are not in canonical role/path order")
-        if not any(roles.get(role) == 1 for role in _primary_roles(asset["kind"], representation)):
-            raise AssetPackError(f"{context} does not have exactly one primary runtime output")
+        _validate_output_roles(
+            asset["kind"],
+            representation,
+            role_values,
+            context=context,
+        )
         declared_metrics = _verified_metrics(asset.get("metrics"), context=f"{context}.metrics")
         if declared_metrics != _sum_metrics(inspections):
             raise AssetPackError(f"{context}.metrics do not match its packaged files")

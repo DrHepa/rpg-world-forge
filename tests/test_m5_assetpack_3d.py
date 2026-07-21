@@ -11,6 +11,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import worldforge.assetpack as assetpack_module
+from worldforge.asset_contracts import (
+    ASSET_RUNTIME_OUTPUT_CONTRACTS,
+    runtime_output_contract_issue,
+)
 from worldforge.asset_formats.gltf import (
     BIN_CHUNK_TYPE,
     JSON_CHUNK_TYPE,
@@ -29,6 +33,8 @@ from worldforge.assetpack import (
 )
 from worldforge.assets import validate_asset_manifest
 from worldforge.integrity import canonical_payload_hash
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _sha256(path: Path) -> str:
@@ -132,15 +138,13 @@ def _fixture(
     authoring = root / "authoring"
     authoring.mkdir(parents=True)
     worldpack_path = root / "neutral.worldpack.json"
-    worldpack = _write_hashed_json(
-        worldpack_path,
-        {
-            "format": "isoworld.worldpack",
-            "format_version": 5,
-            "world": {"id": "neutral_world", "title": "Neutral"},
-            "collections": {},
-        },
+    worldpack_source = json.loads(
+        (ROOT / "content/compiled/foundation.worldpack.json").read_text(encoding="utf-8")
     )
+    worldpack_source.pop("content_hash", None)
+    worldpack_source["world"]["id"] = "neutral_world"
+    worldpack_source["world"]["title"] = "Neutral"
+    worldpack = _write_hashed_json(worldpack_path, worldpack_source)
     coordinates = {
         "handedness": "right",
         "up_axis": "Y",
@@ -281,7 +285,14 @@ def _fixture(
     )
     reference_candidate_path = authoring / "generated/neutral_actor_reference.png"
     reference_candidate_path.parent.mkdir(parents=True)
-    reference_candidate_path.write_bytes(b"\x89PNG\r\n\x1a\nreference")
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise unittest.SkipTest("Pillow is not installed") from exc
+    Image.new("RGBA", (2, 2), (20, 40, 60, 255)).save(
+        reference_candidate_path,
+        format="PNG",
+    )
     reference_receipt_path = authoring / "receipts/neutral_actor_reference.json"
     reference_receipt = _write_hashed_json(
         reference_receipt_path,
@@ -1043,7 +1054,7 @@ class AssetPackTests(unittest.TestCase):
             )
 
             self.assertTrue(
-                any("exactly one model output" in str(issue) for issue in issues),
+                any("runtime output roles must be unique" in str(issue) for issue in issues),
                 issues,
             )
 
@@ -1346,13 +1357,12 @@ class AssetPackTests(unittest.TestCase):
             output = root / "handoff/assetpack.json"
             payload = build_assetpack(fixture["manifest"], fixture["worldpack"], output)
 
+            other_world_source = json.loads(fixture["worldpack"].read_text(encoding="utf-8"))
+            other_world_source.pop("content_hash", None)
+            other_world_source["world"]["id"] = "other_world"
             other_world = _write_hashed_json(
                 root / "other.worldpack.json",
-                {
-                    "format": "isoworld.worldpack",
-                    "format_version": 5,
-                    "world": {"id": "other_world"},
-                },
+                other_world_source,
             )
             self.assertIsInstance(other_world, dict)
             with self.assertRaisesRegex(AssetPackError, "does not match"):
@@ -1364,6 +1374,148 @@ class AssetPackTests(unittest.TestCase):
             output.write_text(json.dumps(duplicate), encoding="utf-8")
             with self.assertRaisesRegex(AssetPackError, "duplicate runtime binding slot"):
                 verify_assetpack(output)
+
+    def test_shared_runtime_output_matrix_is_complete_and_closed(self) -> None:
+        expected = {
+            "animation_3d": ("3d", ["animation"]),
+            "character_3d": ("3d", ["model"]),
+            "collision_3d": ("3d", ["collision"]),
+            "environment_3d": ("3d", ["model"]),
+            "font": ("2d", ["font"]),
+            "material_set": ("3d", ["model"]),
+            "model_3d": ("3d", ["model"]),
+            "music": ("audio", ["audio"]),
+            "portrait": ("2d", ["texture"]),
+            "rig": ("3d", ["skeleton"]),
+            "sfx": ("audio", ["audio"]),
+            "shader": ("2_5d", ["fragment_shader"]),
+            "sprite": ("2d", ["texture"]),
+            "spritesheet": ("2_5d", ["clipset", "texture"]),
+            "tileset": ("2d", ["clipset", "texture"]),
+            "ui": ("2d", ["texture"]),
+            "vfx": ("2_5d", ["texture"]),
+            "vfx_3d": ("3d", ["model"]),
+        }
+        self.assertEqual(set(expected), set(ASSET_RUNTIME_OUTPUT_CONTRACTS))
+        for kind, (representation, roles) in expected.items():
+            with self.subTest(kind=kind):
+                self.assertIsNone(runtime_output_contract_issue(kind, representation, roles))
+                self.assertIsNotNone(
+                    runtime_output_contract_issue(kind, representation, roles + [roles[0]])
+                )
+        self.assertIsNone(
+            runtime_output_contract_issue(
+                "character_3d",
+                "3d",
+                ["animation", "collision", "model", "skeleton"],
+            )
+        )
+        self.assertIsNone(
+            runtime_output_contract_issue(
+                "shader",
+                "2d",
+                ["fragment_shader", "vertex_shader"],
+            )
+        )
+        self.assertIsNotNone(runtime_output_contract_issue("shader", "2d", []))
+
+    def test_verify_rejects_role_matrix_and_casefold_path_collisions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = _fixture(root)
+            output = root / "handoff/assetpack.json"
+            original = build_assetpack(fixture["manifest"], fixture["worldpack"], output)
+
+            wrong_roles = copy.deepcopy(original)
+            wrong_roles["assets"][0]["kind"] = "sprite"
+            wrong_roles["assets"][0]["representation"] = "2d"
+            wrong_roles["content_hash"] = canonical_payload_hash(wrong_roles)
+            output.write_text(json.dumps(wrong_roles), encoding="utf-8")
+            with self.assertRaisesRegex(AssetPackError, "runtime output"):
+                verify_assetpack(output)
+
+            collision = copy.deepcopy(original)
+            asset = collision["assets"][0]
+            model = asset["files"][0]
+            animation = {
+                **model,
+                "role": "animation",
+                "path": model["path"].upper(),
+            }
+            asset["files"] = sorted(
+                [animation, model],
+                key=lambda item: (item["role"], item["path"]),
+            )
+            collision["content_hash"] = canonical_payload_hash(collision)
+            output.write_text(json.dumps(collision), encoding="utf-8")
+            zero_metrics = dict.fromkeys(original["assets"][0]["metrics"], 0)
+            model_metrics = original["assets"][0]["metrics"]
+            model_source = output.parent / model["path"]
+
+            def inspected(
+                _root: Path,
+                _asset_id: str,
+                entry: dict[str, object],
+                *,
+                context: str,
+            ) -> tuple[dict[str, object], dict[str, int], Path]:
+                del context
+                metrics = model_metrics if entry["role"] == "model" else zero_metrics
+                return entry, metrics, model_source
+
+            with (
+                patch.object(
+                    assetpack_module,
+                    "_verify_runtime_file",
+                    side_effect=inspected,
+                ),
+                self.assertRaisesRegex(AssetPackError, "NFC/casefold"),
+            ):
+                verify_assetpack(output)
+
+    def test_build_rejects_casefold_colliding_runtime_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = _fixture(root)
+            manifest = json.loads(fixture["manifest"].read_text(encoding="utf-8"))
+            original = manifest["assets"][0]["outputs"][0]
+            manifest["assets"][0]["outputs"].append(
+                {
+                    **original,
+                    "role": "animation",
+                    "runtime_file": original["runtime_file"].upper(),
+                }
+            )
+            _rewrite_hashed(fixture["manifest"], manifest)
+            output = root / "handoff/assetpack.json"
+            with (
+                patch(
+                    "worldforge.assets.validate_asset_manifest",
+                    return_value=[],
+                ),
+                self.assertRaisesRegex(AssetPackError, "NFC/casefold"),
+            ):
+                build_assetpack(fixture["manifest"], fixture["worldpack"], output)
+            self.assertFalse(output.exists())
+
+    def test_integral_worldpack_loader_rejects_shallow_hash_only_anchor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = _fixture(root)
+            malformed_path = root / "malformed.worldpack.json"
+            _write_hashed_json(
+                malformed_path,
+                {
+                    "format": "isoworld.worldpack",
+                    "format_version": 5,
+                    "world": {"id": "neutral_world", "title": "Neutral"},
+                    "collections": {},
+                },
+            )
+            output = root / "handoff/assetpack.json"
+            with self.assertRaises(AssetPackError):
+                build_assetpack(fixture["manifest"], malformed_path, output)
+            self.assertFalse(output.exists())
 
     def test_verify_rejects_incompatible_kind_representations(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

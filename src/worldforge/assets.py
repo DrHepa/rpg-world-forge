@@ -11,21 +11,17 @@ from typing import Any
 
 from isoworld.content.media import media_signature_matches
 from isoworld.content.renderpack import RenderPackError, load_clipset
+from worldforge.asset_contracts import (
+    ASSET_KINDS as ALL_ASSET_KINDS,
+)
+from worldforge.asset_contracts import (
+    OUTPUT_ROLE_MEDIA,
+    THREE_D_ASSET_KINDS,
+)
 from worldforge.integrity import declared_hash_matches
 from worldforge.validation import ID_PATTERN, PLACEHOLDER_PATTERN
 
-ASSET_KINDS = {
-    "font",
-    "music",
-    "portrait",
-    "shader",
-    "sfx",
-    "sprite",
-    "spritesheet",
-    "tileset",
-    "ui",
-    "vfx",
-}
+ASSET_KINDS = ALL_ASSET_KINDS - THREE_D_ASSET_KINDS
 ASSET_STATUSES = {"planned", "generated", "approved", "processed"}
 ASSET_ORIGINS = {
     "codex_assisted",
@@ -39,32 +35,21 @@ AI_ORIGINS = {"codex_assisted", "gpt_image", "local_model"}
 GENERATION_ROUTES = {"openai", "modly"}
 ASSET_PHASES = {"art_direction", "production", "release"}
 OUTPUT_ROLES = {
-    "audio",
-    "clipset",
-    "font",
-    "fragment_shader",
-    "texture",
-    "vertex_shader",
+    role
+    for role in OUTPUT_ROLE_MEDIA
+    if role
+    in {
+        "audio",
+        "clipset",
+        "font",
+        "fragment_shader",
+        "texture",
+        "vertex_shader",
+    }
 }
+ROLE_MEDIA_TYPES = {role: OUTPUT_ROLE_MEDIA[role] for role in OUTPUT_ROLES}
 MEDIA_TYPES = {
-    "application/json",
-    "audio/mpeg",
-    "audio/ogg",
-    "audio/wav",
-    "font/otf",
-    "font/ttf",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "text/x-glsl",
-}
-ROLE_MEDIA_TYPES = {
-    "audio": {"audio/mpeg", "audio/ogg", "audio/wav"},
-    "clipset": {"application/json"},
-    "font": {"font/otf", "font/ttf"},
-    "fragment_shader": {"text/x-glsl"},
-    "texture": {"image/jpeg", "image/png", "image/webp"},
-    "vertex_shader": {"text/x-glsl"},
+    media_type for media_types in ROLE_MEDIA_TYPES.values() for media_type in media_types
 }
 VISUAL_KINDS = {"portrait", "sprite", "spritesheet", "tileset", "ui", "vfx"}
 MEDIA_FORMATS = {

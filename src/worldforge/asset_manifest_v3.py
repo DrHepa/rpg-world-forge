@@ -7,11 +7,15 @@ from typing import Any
 
 from isoworld.content.media import media_signature_matches
 from worldforge.asset_contracts import (
+    ASSET_KINDS,
     EXECUTORS,
     KIND_REPRESENTATIONS,
+    OUTPUT_ROLE_MEDIA,
     ROUTES,
+    THREE_D_ASSET_KINDS,
     ContractIssue,
     _issue,
+    runtime_output_contract_issue,
     validate_asset_bibles,
     validate_asset_license_record,
     validate_asset_qa_report,
@@ -39,59 +43,9 @@ from worldforge.validation import ID_PATTERN, PLACEHOLDER_PATTERN
 
 ASSET_PHASES = {"art_direction", "production", "release"}
 ASSET_STATUSES = {"planned", "generated", "approved", "processed"}
-THREE_D_KINDS = {
-    "animation_3d",
-    "character_3d",
-    "collision_3d",
-    "environment_3d",
-    "material_set",
-    "model_3d",
-    "rig",
-    "vfx_3d",
-}
-LEGACY_KINDS = {
-    "font",
-    "music",
-    "portrait",
-    "shader",
-    "sfx",
-    "sprite",
-    "spritesheet",
-    "tileset",
-    "ui",
-    "vfx",
-}
-ASSET_KINDS = LEGACY_KINDS | THREE_D_KINDS
-OUTPUT_ROLES = {
-    "animation",
-    "audio",
-    "clipset",
-    "collision",
-    "font",
-    "fragment_shader",
-    "material_metadata",
-    "model",
-    "model_metadata",
-    "preview",
-    "skeleton",
-    "texture",
-    "vertex_shader",
-}
-ROLE_MEDIA_TYPES = {
-    "animation": {"model/gltf-binary"},
-    "audio": {"audio/mpeg", "audio/ogg", "audio/wav"},
-    "clipset": {"application/json"},
-    "collision": {"model/gltf-binary"},
-    "font": {"font/otf", "font/ttf"},
-    "fragment_shader": {"text/x-glsl"},
-    "material_metadata": {"application/json"},
-    "model": {"model/gltf-binary"},
-    "model_metadata": {"application/json"},
-    "preview": {"image/jpeg", "image/png", "image/webp"},
-    "skeleton": {"model/gltf-binary"},
-    "texture": {"image/jpeg", "image/png", "image/webp"},
-    "vertex_shader": {"text/x-glsl"},
-}
+THREE_D_KINDS = THREE_D_ASSET_KINDS
+OUTPUT_ROLES = set(OUTPUT_ROLE_MEDIA)
+ROLE_MEDIA_TYPES = OUTPUT_ROLE_MEDIA
 
 
 def _walk_strings(value: Any, path: str):
@@ -1049,7 +1003,7 @@ def validate_asset_manifest_v3(
             outputs = []
         if status == "processed" and not outputs:
             issues.append(_issue(f"{context}/outputs", "processed assets require outputs"))
-        roles: set[str] = set()
+        roles: list[str] = []
         for output_index, output in enumerate(outputs):
             output_issues = _validate_output(
                 root,
@@ -1060,7 +1014,7 @@ def validate_asset_manifest_v3(
             )
             issues.extend(_issue(f"{context}/{item.path}", item.message) for item in output_issues)
             if isinstance(output, dict) and isinstance(output.get("role"), str):
-                roles.add(output["role"])
+                roles.append(output["role"])
         if status == "processed":
             total_output_bytes = 0
             for output_index, output in enumerate(outputs):
@@ -1110,6 +1064,9 @@ def validate_asset_manifest_v3(
             )
             if actual_pairs != expected_pairs:
                 issues.append(_issue(f"{context}/outputs", "do not match specification outputs"))
+            role_issue = runtime_output_contract_issue(kind, representation, roles)
+            if role_issue is not None:
+                issues.append(_issue(f"{context}/outputs", role_issue))
             selected_candidate_keys = {
                 (selected["file"], selected["sha256"])
                 for selected in asset.get("selected_candidates", [])
@@ -1143,49 +1100,6 @@ def validate_asset_manifest_v3(
                         "processed output hashes do not match the manifest",
                     )
                 )
-            if (
-                isinstance(representation, str)
-                and representation in {"2d", "2_5d"}
-                and isinstance(kind, str)
-                and kind
-                in {
-                    "portrait",
-                    "sprite",
-                    "spritesheet",
-                    "tileset",
-                    "ui",
-                    "vfx",
-                }
-                and "texture" not in roles
-            ):
-                issues.append(_issue(f"{context}/outputs", "2d visuals require a texture"))
-            if (
-                isinstance(kind, str)
-                and kind in {"spritesheet", "tileset"}
-                and "clipset" not in roles
-            ):
-                issues.append(_issue(f"{context}/outputs", "sprite atlases require a clipset"))
-            if representation == "3d" and isinstance(kind, str):
-                primary_role = {
-                    "animation_3d": "animation",
-                    "collision_3d": "collision",
-                    "rig": "skeleton",
-                }.get(kind, "model")
-                if (
-                    sum(
-                        isinstance(output, dict) and output.get("role") == primary_role
-                        for output in outputs
-                    )
-                    != 1
-                ):
-                    issues.append(
-                        _issue(
-                            f"{context}/outputs",
-                            f"3d {kind} assets require exactly one {primary_role} output",
-                        )
-                    )
-            if isinstance(kind, str) and kind in {"music", "sfx"} and "audio" not in roles:
-                issues.append(_issue(f"{context}/outputs", "audio assets require audio output"))
         for value_path, value in _walk_strings(asset, context):
             if PLACEHOLDER_PATTERN.search(value):
                 issues.append(_issue(value_path, "unresolved placeholder"))
