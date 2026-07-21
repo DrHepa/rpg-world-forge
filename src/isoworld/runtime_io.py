@@ -40,6 +40,23 @@ def _parse_finite_json_float(value: str) -> float:
     return parsed
 
 
+def decode_json_object(payload: bytes, *, source: str | Path) -> dict[str, Any]:
+    """Decode strict UTF-8 JSON bytes while requiring an object root."""
+
+    try:
+        value = json.loads(
+            payload.decode("utf-8"),
+            object_pairs_hook=_reject_duplicate_keys,
+            parse_constant=_reject_non_finite_json_constant,
+            parse_float=_parse_finite_json_float,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise RuntimeIOError(f"Could not read {source}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise RuntimeIOError(f"{source} must contain a JSON object")
+    return value
+
+
 def read_json_object(
     path: str | Path,
     *,
@@ -64,20 +81,12 @@ def read_json_object(
             payload = stream.read(limit + 1)
         if len(payload) > limit:
             raise OSError(f"exceeds the {limit}-byte limit")
-        value = json.loads(
-            payload.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_keys,
-            parse_constant=_reject_non_finite_json_constant,
-            parse_float=_parse_finite_json_float,
-        )
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    except OSError as exc:
         raise RuntimeIOError(f"Could not read {source}: {exc}") from exc
     finally:
         if descriptor is not None:
             os.close(descriptor)
-    if not isinstance(value, dict):
-        raise RuntimeIOError(f"{source} must contain a JSON object")
-    return value
+    return decode_json_object(payload, source=source)
 
 
 def _encode_json(value: object) -> bytes:

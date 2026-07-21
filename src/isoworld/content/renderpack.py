@@ -3,13 +3,20 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from isoworld.content.media import (
+    MediaValidationError,
+    read_validated_media,
+    read_validated_resource,
+)
 from isoworld.content.models import WorldPack
-from isoworld.runtime_io import RuntimeIOError, read_json_object
+from isoworld.content.portability import portable_path_key, portable_relative_path
+from isoworld.runtime_io import RuntimeIOError, decode_json_object, read_json_object
 
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 SLOT_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$")
@@ -154,31 +161,13 @@ def _canonical_hash(raw: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _safe_file(root: Path, relative: Any) -> Path:
-    if not isinstance(relative, str) or not relative:
-        raise RenderPackError("Asset path must be a non-empty string")
-    path = (root / relative).resolve()
-    if path != root and root not in path.parents:
-        raise RenderPackError(f"Asset path escapes the renderpack root: {relative}")
-    if not path.is_file():
-        raise RenderPackError(f"Processed asset is missing: {relative}")
-    if path.stat().st_size > MAX_ASSET_BYTES:
-        raise RenderPackError(f"Processed asset exceeds the file limit: {relative}")
-    return path
-
-
 def _number(value: Any, context: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise RenderPackError(f"{context} must be numeric")
-    result = float(value)
+    try:
+        result = float(value)
+    except OverflowError as exc:
+        raise RenderPackError(f"{context} must be finite") from exc
     if not math.isfinite(result):
         raise RenderPackError(f"{context} must be finite")
     return result
@@ -209,9 +198,7 @@ def _binding_kind_is_compatible(slot: str, kind: Any) -> bool:
     return False
 
 
-def load_clipset(path: str | Path) -> tuple[AnimationClip, ...]:
-    path = Path(path)
-    raw = _read_json(path, limit=MAX_RENDERPACK_BYTES)
+def _load_clipset_object(raw: dict[str, Any], path: Path) -> tuple[AnimationClip, ...]:
     if raw.get("format") != "isoworld.clipset" or raw.get("format_version") != 1:
         raise RenderPackError(f"Unknown clipset format: {path}")
     raw_clips = raw.get("clips")
@@ -263,6 +250,22 @@ def load_clipset(path: str | Path) -> tuple[AnimationClip, ...]:
     return tuple(clips)
 
 
+def load_clipset(path: str | Path) -> tuple[AnimationClip, ...]:
+    source = Path(path)
+    try:
+        resource = read_validated_media(
+            source,
+            "application/json",
+            limit=MAX_RENDERPACK_BYTES,
+        )
+        if resource.payload is None:
+            raise RenderPackError(f"Could not retain bounded JSON resource {resource.path}")
+        raw = decode_json_object(resource.payload, source=resource.path)
+    except (MediaValidationError, RuntimeIOError) as exc:
+        raise RenderPackError(f"Could not read {source}: {exc}") from exc
+    return _load_clipset_object(raw, resource.path)
+
+
 def load_renderpack(path: str | Path, worldpack: WorldPack) -> RenderPack:
     renderpack_path = Path(path)
     raw = _read_json(renderpack_path, limit=MAX_RENDERPACK_BYTES)
@@ -278,12 +281,13 @@ def load_renderpack(path: str | Path, worldpack: WorldPack) -> RenderPack:
     if raw.get("world_content_hash") != worldpack.content_hash:
         raise RenderPackError("The renderpack was built for different world content")
 
-    root = renderpack_path.parent.resolve()
+    root = Path(os.path.abspath(renderpack_path.parent))
     raw_assets = raw.get("assets")
     if not isinstance(raw_assets, list) or not raw_assets:
         raise RenderPackError("The renderpack must contain assets")
     assets: list[RenderAsset] = []
     assets_by_id: dict[str, RenderAsset] = {}
+    portable_paths: dict[tuple[str, ...], tuple[str, str]] = {}
     for asset_index, raw_asset in enumerate(raw_assets):
         context = f"assets/{asset_index}"
         if not isinstance(raw_asset, dict):
@@ -310,23 +314,60 @@ def load_renderpack(path: str | Path, worldpack: WorldPack) -> RenderPack:
             if not isinstance(role, str) or role not in OUTPUT_ROLES:
                 raise RenderPackError(f"{file_context}/role is invalid")
             relative = raw_file.get("path")
-            resolved = _safe_file(root, relative)
+            normalized = portable_relative_path(relative)
+            if normalized is None:
+                raise RenderPackError(f"{file_context}/path is not portable and canonical")
+            assert isinstance(relative, str)
             if relative in seen_paths:
                 raise RenderPackError(f"{file_context}/path is duplicated")
             seen_paths.add(relative)
+            collision_key = portable_path_key(normalized)
+            prior = portable_paths.get(collision_key)
+            if prior is not None:
+                prior_path, prior_asset = prior
+                if prior_path == relative:
+                    raise RenderPackError(
+                        f"{file_context}/path duplicates canonical ownership by {prior_asset!r}"
+                    )
+                raise RenderPackError(
+                    f"{file_context}/path collides with {prior_path!r} under NFC/casefold"
+                )
+            portable_paths[collision_key] = relative, asset_id
             sha256 = raw_file.get("sha256")
             if not isinstance(sha256, str) or not SHA256_PATTERN.fullmatch(sha256):
                 raise RenderPackError(f"{file_context}/sha256 is invalid")
-            if _sha256_file(resolved) != sha256:
-                raise RenderPackError(f"{file_context}/sha256 does not match the file")
             media_type = raw_file.get("media_type")
             if not isinstance(media_type, str) or media_type not in ROLE_MEDIA_TYPES[role]:
                 raise RenderPackError(f"{file_context}/media_type is invalid")
+            try:
+                resource = read_validated_resource(
+                    root,
+                    normalized,
+                    media_type,
+                    limit=MAX_ASSET_BYTES,
+                )
+            except MediaValidationError as exc:
+                raise RenderPackError(
+                    f"{file_context}: contents do not match declared media type {media_type}: {exc}"
+                ) from exc
+            if resource.sha256 != sha256:
+                raise RenderPackError(f"{file_context}/sha256 does not match the file")
             files.append(AssetFile(role, relative, sha256, media_type))
             if role == "clipset":
                 if clips:
                     raise RenderPackError(f"{context} contains multiple clipsets")
-                clips = load_clipset(resolved)
+                try:
+                    if resource.payload is None:
+                        raise RuntimeIOError(
+                            f"Could not retain bounded JSON resource {resource.path}"
+                        )
+                    clipset_raw = decode_json_object(resource.payload, source=resource.path)
+                except RuntimeIOError as exc:
+                    raise RenderPackError(
+                        f"{file_context}: contents do not match declared "
+                        f"media type {media_type}: {exc}"
+                    ) from exc
+                clips = _load_clipset_object(clipset_raw, resource.path)
         asset = RenderAsset(asset_id, kind, tuple(files), clips)
         roles = {item.role for item in files}
         for role in roles:
