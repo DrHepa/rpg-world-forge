@@ -102,6 +102,17 @@ The current pyray reference runtime and M4 immutable game bundle remain
 a later game implementation/runtime-adapter phase, not a claim that the
 reference game already loads 3D assets.
 
+M5 closure is recorded in the
+[versioned readiness evidence](AUDIT_M5_2026-07-21.md) and
+[ADR-0010](decisions/0010-m5-asset-production-and-m6-3d-runtime-boundary.md).
+The committed [`examples/m5-neutral`](../examples/m5-neutral/) tree is
+narrative-neutral, local, procedural, and offline production evidence. Its
+authoring manifests remain in `production`; disposable gates build and
+independently validate runtime packs outside the repository, then finalize
+copied manifests and validate their release profiles. The schema-required
+`openai` route value is a contract namespace, not evidence that a provider,
+model, or network call executed.
+
 ## M6 - 3D game implementation and runtime adapters (planned)
 
 M6 starts from a sealed M5 `assetpack_v1`; it does not reopen asset production.
@@ -122,7 +133,9 @@ The milestone will:
 - Define the immutable 3D bundle/import boundary only after the adapter proves
   end-to-end load, animation, collision, save/replay, and release verification.
 
-Entry gate: M5 release validation is green and the exact assetpack hash is
-recorded. Exit gate: a separate game repository imports a verified 3D bundle,
-runs without Forge or network access, and passes boundary, native-smoke,
+Entry gate for a selected game: its M5 release validation is green and the
+exact sealed assetpack hash is recorded. The repository's temporary readiness
+assetpack proves that gate can be enforced; it is not a committed game asset or
+an engine choice. Exit gate: a separate game repository imports a verified 3D
+bundle, runs without Forge or network access, and passes boundary, native-smoke,
 determinism, performance, and packaging checks.

@@ -20,7 +20,7 @@ knowledge boundaries. Its output is never accepted directly: a human or the
 authorized lead agent reviews it, `worldforge` validates it, and the build step
 compiles it into a static worldpack consumed by the runtime.
 
-## Current systemic slice (M5)
+## Current systemic slice (M5 complete)
 
 - Canon-locked asset targets for 2D, 2.5D, or 3D, with approved visual/audio
   bibles, deterministic inventory derivation, and per-asset specifications.
@@ -36,6 +36,15 @@ compiles it into a static worldpack consumed by the runtime.
 - Thirteen bounded M5 skills covering OpenAI/Codex 2D/2.5D production,
   reference-led Blender modeling/rigging/animation/export, independent 3D QA,
   and fail-closed Modly operation/refinement.
+
+The committed [`examples/m5-neutral`](examples/m5-neutral/) fixture is
+**narrative-neutral**, local, procedural, and offline. Its schema-required
+`openai` route value is a contract namespace; no provider, model, or network
+call executes. The committed manifests are authoring-side `production`
+evidence, not runtime packs. Readiness gates regenerate the fixture externally
+and build/verify temporary renderpack and assetpack outputs, finalize copied
+manifests, and validate their release profiles without committing those runtime
+packs.
 
 - Atomic v2 creation, inspection, cloning, explicit legacy upgrade, and
   optimistic-lock SemVer versioning for independent world repositories.
@@ -95,10 +104,11 @@ compiles it into a static worldpack consumed by the runtime.
 - Runtime audit that rejects AI SDK imports.
 - Headless tests that do not open a window.
 
-The included pack is a **neutral technical vertical slice**. Real worlds live
-in independent world-authoring repositories and can define different actors,
-genres, rules, maps, languages, and campaigns without changing the Forge.
-Independent game repositories import only immutable, hash-locked releases.
+The included foundation pack is a **neutral technical vertical slice**. Real
+worlds live in independent world-authoring repositories and can define
+different actors, genres, rules, maps, languages, and campaigns without
+changing the Forge. Independent game repositories import only immutable,
+hash-locked releases.
 
 ## Quick start
 
@@ -244,7 +254,12 @@ For a 3D target, replace `build-renderpack` with `build-assetpack` and write
 release-validation steps. The assetpack is an engine-neutral implementation
 handoff. The current `isoworld` reference runtime, `export-bundle`, and generated
 standalone game consume only the 2D/2.5D renderpack path; a 3D game must add and
-validate its own runtime adapter before importing the assetpack.
+validate its own runtime adapter before importing the assetpack. This milestone
+boundary is defined by
+[ADR-0010](docs/decisions/0010-m5-asset-production-and-m6-3d-runtime-boundary.md).
+The closed assetpack contains no license or authoring metadata. Required runtime
+licenses and notices travel beside it as separately verified immutable-handoff
+material.
 
 The current 2D/2.5D production handoff becomes an immutable runtime bundle.
 Forge-side tooling verifies and copies that bundle into a separate game
@@ -305,9 +320,20 @@ data and must pass `worldforge validate`; manual overrides take precedence.
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
+PYTHONPATH=src python -m worldforge audit-contracts --source-root .
 PYTHONPATH=src python -m worldforge audit-runtime src/isoworld
 PYTHONPATH=src python -m worldforge audit-game /path/to/materialized-game
+PYTHONPATH=src python -m scripts.verify_m5_release
 ```
+
+The complete M5 release-readiness command requires a clean source tree and uses
+only disposable directories outside the repository. It regenerates and closes
+the narrative-neutral renderpack/assetpack paths, exercises offline standalone
+bundle/replay/package behavior, builds reproducible wheel and sdist artifacts,
+and audits clean isolated installs. Exact dependency versions are pinned, but
+the requirement files do not provide hashes for every dependency and are not
+described as fully hash-locked. GitHub Actions are pinned by full commit SHA;
+hosted Ubuntu/Windows results exist only after the corresponding push.
 
 ## Repository layout
 
@@ -316,7 +342,7 @@ src/isoworld/              reference runtime; never imports worldforge or AI SDK
 src/worldforge/            offline authoring, build, workflow, and QA tools
 src/worldforge/templates/  clean standalone pyray/raylib game materialization
 .agents/skills/            Forge-only, phase-scoped construction workflows
-examples/                  neutral vertical slice
+examples/                  foundation slice and narrative-neutral M5 evidence
 content/compiled/          generated worldpacks used by the example runtime
 authoring/prompts/         provider-agnostic authoring prompts
 agents/                    orchestration, phases, roles, and quality gates
@@ -348,8 +374,11 @@ the supported game-runtime conventions are documented in
 [PYRAY_RUNTIME_GUIDE.md](docs/PYRAY_RUNTIME_GUIDE.md).
 Visual and audio production is described in
 [ASSET_PIPELINE.md](docs/ASSET_PIPELINE.md), including the 3D/Blender and
-capability-gated Modly routes. The GPT and multi-agent protocol is
-documented in [agents/README.md](agents/README.md).
+capability-gated Modly routes. The M5/M6 boundary is fixed by
+[ADR-0010](docs/decisions/0010-m5-asset-production-and-m6-3d-runtime-boundary.md),
+and the local pre-push implementation/readiness evidence is recorded in
+[AUDIT_M5_2026-07-21.md](docs/AUDIT_M5_2026-07-21.md). The GPT and multi-agent
+protocol is documented in [agents/README.md](agents/README.md).
 
 ## Public project
 

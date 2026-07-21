@@ -18,8 +18,21 @@ body:
     validations:
       required: true
   - type: textarea
+    id: milestone_boundary
+    attributes:
+      label: Milestone ownership and non-goals
+      description: >-
+        Name one owning milestone and its exclusions. M5 may produce, verify,
+        finalize, and hash-seal an engine-neutral 3D assetpack; selecting or
+        integrating a 3D engine, adapter, or runtime belongs to M6.
+    validations:
+      required: true
+  - type: textarea
     id: boundaries
     attributes:
-      label: Runtime, licensing and migration impact
+      label: Runtime, security, licensing and migration impact
+      description: >-
+        Identify changed trust boundaries, runtime inputs, supply-chain
+        assumptions, compatibility, migration, and rollback requirements.
     validations:
       required: true

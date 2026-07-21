@@ -23,3 +23,11 @@ inference clients.
 - Repository, model, weight, dataset, and final-file licenses are tracked
   separately.
 - Art direction precedes mass generation to avoid incompatible style and scale.
+
+## Later refinement
+
+M5's engine-neutral 3D assetpack handoff and the separate M6 runtime boundary
+extend this decision in
+[ADR-0010](0010-m5-asset-production-and-m6-3d-runtime-boundary.md). This
+historical decision remains unchanged for its original offline-production
+scope.

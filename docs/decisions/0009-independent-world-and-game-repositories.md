@@ -255,3 +255,10 @@ reviewed, provenance-tracked responsibility of M5.
 Rejected by ADR-0001. Missing or incompatible release data fails validation or
 uses a declared presentation fallback; it never triggers inference during
 play.
+
+## Later refinement
+
+[ADR-0010](0010-m5-asset-production-and-m6-3d-runtime-boundary.md) extends this
+historical M4 milestone forecast to engine-neutral 3D production and
+`assetpack_v1`, while reserving engine/adapter/runtime selection and integration
+for M6. It does not change the M4 renderpack-only bundle described above.

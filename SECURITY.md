@@ -10,10 +10,11 @@ Do not open a public issue for credential exposure, path traversal, unsafe asset
 processing or arbitrary code execution. Report the problem privately to the
 repository owner through GitHub's security reporting channel when enabled.
 
-World projects, worldpacks, renderpacks, asset manifests, runtime bundles, and
-game catalogs are untrusted inputs. Validators must reject paths outside their
-declared root. Generated projects must never commit API keys, model-service
-credentials, private reference material, or local-model weights.
+World projects, worldpacks, renderpacks, assetpacks, asset manifests, production
+requests/receipts, runtime bundles, and game catalogs are untrusted inputs.
+Validators must reject paths outside their declared root. Generated projects
+must never commit API keys, model-service credentials, private reference
+material, or local-model weights.
 
 Worldpack loaders verify structural runtime invariants and the canonical content
 hash and reject packs over 64 MiB. Narrative conditions and effects are strict
@@ -23,12 +24,43 @@ replays are limited in size, versioned, content-hash-bound, and
 digest-checked. Tiled/LDtk import accepts only the documented finite JSON
 subsets; it never evaluates scripts or external object payloads.
 
+## Asset production and assetpack boundary
+
+Asset validation must bind the exact world, target, approved bibles, inventory,
+specification, request, selected inputs, production receipt, processing receipt,
+license evidence, QA report, and processed outputs. JSON records reject duplicate
+keys, unknown fields, noncanonical paths, traversal, oversized values, and
+content that does not match its declared media type, signature, size, and
+SHA-256. File consumers accept bounded regular files and must not follow
+symlinks or substitute a later filesystem object for bytes already inspected.
+
+Three-dimensional output must be a structurally valid GLB that matches declared
+coordinates, units, nodes, materials, rigs, animations, colliders, LODs, and
+resource budgets. External URIs and undeclared payloads are forbidden. The
+engine-neutral `assetpack_v1` itself may contain only its closed runtime schema:
+identity and coordinate fields, approved runtime file records, hashes, metrics,
+and semantic bindings. It explicitly excludes license/notices fields or files
+and all authoring metadata, including `.blend` files, authoring manifests,
+bibles, inventories, specifications, requests, receipts, recipes, candidates,
+prompts, provider/model records, MCP configuration, credentials, and weights.
+Required runtime licenses and notices travel beside the hash-sealed assetpack as
+separately verified material in the immutable handoff or a later M6 bundle.
+
+The committed narrative-neutral M5 fixture is local, procedural, and offline.
+Its `openai` field is a schema-required route namespace and is not evidence of a
+provider, model, or network execution. Its committed manifests are authoring-side
+`production` records, not runtime packs. Readiness gates build, verify, finalize,
+and release-validate copied manifests and runtime outputs only in disposable
+external directories.
+
 ## Runtime bundle and catalog boundary
 
-Bundle export and import must use canonical manifests and verify every file's
-relative path, size, media type, file signature, and SHA-256 before publication
-or catalog mutation. Export destinations and import sources must be standalone
-and external to Forge/world/bundle/game repositories. Reject missing or extra entries, empty unmanaged directories,
+The current runtime bundle is the 2D/2.5D worldpack/renderpack handoff; it does
+not accept a 3D assetpack. Bundle export and import must use canonical manifests
+and verify every file's relative path, size, media type, file signature, and
+SHA-256 before publication or catalog mutation. Export destinations and import
+sources must be standalone and external to Forge/world/bundle/game
+repositories. Reject missing or extra entries, empty unmanaged directories,
 duplicate JSON keys, noncanonical JSON, path traversal, absolute paths,
 non-NFC/case-colliding/Windows-reserved paths, and declared payloads that exceed
 the documented limits.
@@ -58,6 +90,9 @@ Changing one byte requires a new release and catalog entry.
 A generated game contains no Forge or authoring control plane: no `worldforge`
 dependency/import, `AGENTS.md`, `.agents/`, `.worldforge/`, editable canon,
 provider SDK, model client, prompt execution, or runtime network requirement.
+The current generated pyray game consumes only `isoworld.renderpack` v1 and must
+not be described as accepting or executing a 3D assetpack; that adapter and its
+trust policy belong to M6.
 Its vendored `src/isoworld/` snapshot is verified against `runtime.lock.json`;
 game-owned code lives under `src/game/`. Snapshot updates replace the complete
 tree with an expected-current-hash check and precheck every installed bundle.
@@ -79,3 +114,23 @@ evidence, and undeclared files. Packaging operates on one private snapshot,
 verifies that copy independently, derives its identity from the copy, then
 reopens the completed archive and checks its exact inventory, metadata, sizes,
 and hashes before publishing it.
+
+## Build and CI supply chain
+
+The root and generated-game requirement files pin exact supported versions, but
+they do not include hashes for every requirement and are not a complete
+hash-locked supply-chain contract. Package metadata, requirement files, build
+requirements, platform locks, and notices must remain synchronized. Clean
+isolated wheel and sdist installations must pass `pip check`, installed contract
+auditing, and vulnerability auditing of the exact direct requirements.
+
+Third-party GitHub Actions are pinned by full commit SHA with checkout
+credentials disabled. Downloaded security executables must be matched against a
+verified upstream checksum file before execution. Secret scanning covers the
+complete Git history; exceptions must be narrow, reviewed fingerprints for
+intentional test fixtures rather than path-wide exclusions.
+
+Local success does not prove unpublished hosted jobs. Ubuntu 24.04 and Windows
+Server 2022 release-readiness/native-smoke results, the dependency audit, and the
+full-history secret scan remain pending until a push executes those jobs. A
+missing, skipped, or failed required row blocks publication.

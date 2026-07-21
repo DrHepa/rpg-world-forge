@@ -66,6 +66,10 @@ and verify an engine-neutral assetpack whose GLBs match coordinates, budgets,
 nodes, rigs, animations, colliders, embedded-resource policy, and the
 zero-external-URI rule.
 
+The closed assetpack schema excludes license/notices fields or files and all
+authoring metadata. Required runtime licenses and notices travel beside the
+hash-sealed assetpack as separately verified immutable-handoff material.
+
 The release manifest must reference non-null bibles and inventory, include a
 deliverable, contain at least one asset, and mark every required asset
 `processed`. Optional unproduced assets are excluded from the deliverable.
@@ -80,3 +84,37 @@ input supported by the current pyray bundle or game. The implementation agent
 must not need authoring chat history, provider/MCP configuration, receipts,
 source files, or Forge skills to understand data, assets, rules, or acceptance
 tests.
+
+## M5 repository-readiness gate
+
+Closing M5 requires repository-level evidence in addition to an individual
+P13/P14 report:
+
+- The complete headless suite, Ruff lint/format checks, and Python compilation
+  pass under the supported toolchain.
+- Foundation release validation, zero-warning narrative analysis, the runtime
+  AI-boundary audit, and source plus installed-artifact contract audits pass.
+- The exact dependency versions in `requirements-m5.lock`, package metadata,
+  generated-game requirements, and notices remain synchronized; `pip check` and
+  dependency auditing report no known conflicts or vulnerabilities. Exact
+  versions without per-requirement hashes must not be called hash-locked.
+- `examples/m5-neutral/` remains narrative-neutral, local, procedural, and
+  offline. Its exact lock and same-toolchain regeneration pass without executing
+  a provider, model, or network call. A schema-required route namespace is not
+  execution evidence.
+- Disposable external gates build the 2D/2.5D renderpack, build and independently
+  verify the 3D assetpack, finalize copied manifests, validate both release
+  profiles, and remove the outputs. Committed authoring manifests are not runtime
+  packs.
+- The standalone 2D/2.5D path passes bundle export/import, independent game
+  audit, offline execution, deterministic replay, reproducible packaging,
+  extraction, and replay from the extracted package.
+- Wheel and sdist builds are reproducible for the tested tree, install cleanly
+  in isolated environments, and pass installed contract audits.
+- GitHub Actions are pinned by full commit SHA. Downloaded security tooling is
+  verified against its release checksum chain, and the complete Git history is
+  secret-scanned with narrowly reviewed exclusions.
+- The Ubuntu 24.04/Windows Server 2022 and Python 3.11/3.12 hosted rows, native
+  smoke, dependency audit, and secret scan are required publication evidence.
+  Before the first push that can execute them, they must be recorded as
+  **pending**, never inferred as passes from local results.

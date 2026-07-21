@@ -31,3 +31,10 @@ renderpack or runtime.
 - Clip timing uses integer simulation ticks and is deterministic across frame
   rates.
 - Pyray owns only resource loading, presentation, audio playback, and cleanup.
+
+## Later refinement
+
+M5 manifest v3 and the engine-neutral 3D assetpack handoff extend this
+renderpack decision in
+[ADR-0010](0010-m5-asset-production-and-m6-3d-runtime-boundary.md). The current
+pyray runtime and immutable game bundle remain renderpack-only.
