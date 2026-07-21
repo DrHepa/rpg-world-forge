@@ -1,0 +1,45 @@
+{
+  "content_hash": "4cd1594395c23b24228e840b25541b2f31955a4c591f427ed661650074ec4e21",
+  "format": "rpg-world-forge.asset_processing_recipe",
+  "format_version": 1,
+  "inputs": [
+    {
+      "artifact": {
+        "file": "generated/neutral_sheet_idle.png",
+        "sha256": "17db74e8dd2985f89fbb249d0a70f0aa8a3dc628973d33a8123ced8049113ae3"
+      },
+      "clip_id": "idle",
+      "duration_ticks": 6,
+      "id": "idle",
+      "loop": true,
+      "pivot": [
+        8,
+        14
+      ]
+    },
+    {
+      "artifact": {
+        "file": "generated/neutral_sheet_walk.png",
+        "sha256": "ff7084b7998386d8569ddad2c060b71a0d8a27c15c732c3b3a73caa7446cab69"
+      },
+      "clip_id": "walk",
+      "duration_ticks": 6,
+      "id": "walk",
+      "loop": true,
+      "pivot": [
+        8,
+        14
+      ]
+    }
+  ],
+  "operation": "atlas",
+  "options": {
+    "cell_height": 16,
+    "cell_width": 16,
+    "columns": 2
+  },
+  "output": {
+    "clipset_file": "neutral_sheet.clipset.json",
+    "texture_file": "neutral_sheet.png"
+  }
+}

@@ -247,6 +247,38 @@ def _validate_entries(entries: list[dict[str, Any]]) -> None:
         raise ContractCatalogError(_issue("contracts", "catalog schema source is missing"))
 
 
+def _validate_fixture_identity(
+    path: Path,
+    *,
+    context: str,
+    schema_format: object | None,
+    schema_version_field: str | None,
+    schema_version: object | None,
+) -> None:
+    try:
+        fixture = read_json_object(path)
+    except AssetContractError as exc:
+        raise ContractCatalogError(
+            _issue(context, f"could not strict-read JSON fixture: {exc}")
+        ) from exc
+    if schema_format is not None and fixture.get("format") != schema_format:
+        raise ContractCatalogError(
+            _issue(
+                f"{context}/format",
+                f"fixture value {fixture.get('format')!r} does not match "
+                f"schema/catalog {schema_format!r}",
+            )
+        )
+    if schema_version_field is not None and fixture.get(schema_version_field) != schema_version:
+        raise ContractCatalogError(
+            _issue(
+                f"{context}/{schema_version_field}",
+                f"fixture value {fixture.get(schema_version_field)!r} does not match "
+                f"schema/catalog {schema_version!r}",
+            )
+        )
+
+
 def _validate_schema_formats(
     entries: list[dict[str, Any]], root: Path, *, full_source: bool
 ) -> None:
@@ -277,6 +309,7 @@ def _validate_schema_formats(
             raise ContractCatalogError(_issue(context, "schema properties must be an object"))
         schema_format = None
         schema_version = None
+        schema_version_field = None
         if isinstance(props.get("format"), dict):
             schema_format = props["format"].get("const")
         for version_field in ("format_version", "schema_version", "version"):
@@ -285,10 +318,12 @@ def _validate_schema_formats(
                 continue
             if version_schema.get("const") is not None:
                 schema_version = version_schema["const"]
+                schema_version_field = version_field
                 break
             enum = version_schema.get("enum")
             if isinstance(enum, list) and enum and all(isinstance(item, int) for item in enum):
                 schema_version = max(enum)
+                schema_version_field = version_field
                 break
         if schema_format is not None and schema_format != entry["format"]:
             raise ContractCatalogError(_issue(context, "format does not match schema const"))
@@ -297,7 +332,20 @@ def _validate_schema_formats(
         if full_source:
             for field in _PATH_LIST_FIELDS:
                 for value_index, relative in enumerate(entry[field]):
-                    _safe_regular_file(root, relative, context=f"{context}/{field}/{value_index}")
+                    path_context = f"{context}/{field}/{value_index}"
+                    path = _safe_regular_file(root, relative, context=path_context)
+                    if (
+                        field == "fixtures"
+                        and PurePosixPath(relative).suffix.casefold() == ".json"
+                        and (schema_format is not None or schema_version_field is not None)
+                    ):
+                        _validate_fixture_identity(
+                            path,
+                            context=path_context,
+                            schema_format=schema_format,
+                            schema_version_field=schema_version_field,
+                            schema_version=schema_version,
+                        )
 
 
 def _validate_python_symbols(entries: list[dict[str, Any]]) -> None:

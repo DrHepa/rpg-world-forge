@@ -1,0 +1,37 @@
+{
+  "content_hash": "9b269d14df1b4f3e14b304487034b827b6f4801e945e09c0a7688e2e0da4964c",
+  "format": "rpg-world-forge.asset_processing_receipt",
+  "format_version": 1,
+  "inputs": [
+    {
+      "artifact": {
+        "file": "generated/neutral_font.ttf",
+        "sha256": "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398"
+      },
+      "id": "source"
+    }
+  ],
+  "operation": "file_validate",
+  "outputs": [
+    {
+      "artifact": {
+        "file": "neutral_font.ttf",
+        "sha256": "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398"
+      },
+      "details": {
+        "byte_length": 684
+      },
+      "media_type": "font/ttf",
+      "role": "font"
+    }
+  ],
+  "recipe": {
+    "content_hash": "a9f9357411e839a55ac28969b704db3d223e755c032cc53ba8e0021d851259e8",
+    "sha256": "98c40e870f35f919c6876a8cc4f3057e6704bc8a5b60a2a2064f0363f4e3d8b7"
+  },
+  "toolchain": {
+    "processor": "worldforge.asset_processing",
+    "python_version": "3.12.3",
+    "validator": "strict_builtin_v1"
+  }
+}

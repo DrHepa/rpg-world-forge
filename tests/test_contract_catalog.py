@@ -29,6 +29,75 @@ class ContractCatalogTests(unittest.TestCase):
         self.assertEqual({entry["schema"] for entry in catalog["contracts"]}, schemas)
         self.assertIn("contract-catalog", {entry["id"] for entry in catalog["contracts"]})
 
+    def test_runtime_pack_entries_do_not_claim_authoring_manifest_fixtures(self) -> None:
+        catalog = load_contract_catalog(ROOT)
+        entries = {entry["id"]: entry for entry in catalog["contracts"]}
+
+        self.assertEqual([], entries["assetpack"]["fixtures"])
+        self.assertEqual([], entries["renderpack"]["fixtures"])
+        self.assertTrue(entries["asset-manifest"]["fixtures"])
+        self.assertTrue(entries["asset-processing-recipe"]["fixtures"])
+
+    def test_json_fixture_identity_is_strict_and_schema_bound(self) -> None:
+        catalog = load_contract_catalog(ROOT)
+        entry_index, entry = next(
+            (index, item)
+            for index, item in enumerate(catalog["contracts"])
+            if item["id"] == "asset-manifest"
+        )
+        fixture_relative = entry["fixtures"][0]
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "source"
+            shutil.copytree(
+                ROOT,
+                root,
+                ignore=shutil.ignore_patterns(".git", ".ruff_cache", "__pycache__", "*.pyc"),
+            )
+            fixture_path = root / fixture_relative
+            original_bytes = fixture_path.read_bytes()
+            original = json.loads(original_bytes)
+
+            with self.subTest("format mismatch"):
+                mutated = {**original, "format": "rpg-world-forge.assetpack"}
+                fixture_path.write_bytes(
+                    (
+                        json.dumps(mutated, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+                    ).encode("utf-8")
+                )
+                with self.assertRaisesRegex(
+                    ContractCatalogError,
+                    rf"contracts/{entry_index}/fixtures/0/format: fixture value",
+                ):
+                    audit_contracts(root)
+
+            with self.subTest("version mismatch"):
+                mutated = {**original, "format_version": 999}
+                fixture_path.write_bytes(
+                    (
+                        json.dumps(mutated, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+                    ).encode("utf-8")
+                )
+                with self.assertRaisesRegex(
+                    ContractCatalogError,
+                    rf"contracts/{entry_index}/fixtures/0/format_version: fixture value",
+                ):
+                    audit_contracts(root)
+
+            with self.subTest("duplicate JSON key"):
+                fixture_path.write_bytes(
+                    b'{"format":"rpg-world-forge.asset_manifest",'
+                    b'"format":"rpg-world-forge.asset_manifest","format_version":3}\n'
+                )
+                with self.assertRaisesRegex(
+                    ContractCatalogError,
+                    rf"contracts/{entry_index}/fixtures/0: could not strict-read JSON fixture",
+                ):
+                    audit_contracts(root)
+
+            fixture_path.write_bytes(original_bytes)
+            self.assertEqual("source", audit_contracts(root).mode)
+
     def test_cli_contract_errors_use_stderr_and_exit_one(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

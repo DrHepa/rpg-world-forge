@@ -1,0 +1,41 @@
+{
+  "acceptance_criteria": [
+    "loads"
+  ],
+  "audio_bible_hash": "5c6c953b88f81b22e571315a99f0e3ecaee36fd650158127b3824c333c8a864d",
+  "canonical_sources": [
+    "world:foundation_slice"
+  ],
+  "content_hash": "3db333dc8c27809ae39e18f51ae2e34b404dcb39d9d9310b338bcd95cd935b3e",
+  "expected_outputs": [
+    {
+      "media_type": "font/ttf",
+      "role": "font"
+    }
+  ],
+  "format": "rpg-world-forge.asset_spec",
+  "format_version": 2,
+  "id": "neutral_font",
+  "inventory_hash": "f90294e3aabfd12773a0a3d2d079359fb49787aaf0e642fac37da9c3569d8dde",
+  "kind": "font",
+  "production": {
+    "allowed_executors": [
+      "procedural"
+    ],
+    "allowed_routes": [
+      "openai"
+    ]
+  },
+  "purpose": "Bounded runtime font fixture",
+  "representation": "2_5d",
+  "semantic_slots": [
+    "ui:font"
+  ],
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d",
+  "technical": {
+    "memory_budget_bytes": 65536,
+    "runtime_format": "ttf"
+  },
+  "visual_bible_hash": "6ba951c83cefbd9e1459da9657f9d23b8f7e047ee4aa202c082e60595e48f878"
+}

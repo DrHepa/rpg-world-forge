@@ -1,0 +1,304 @@
+{
+  "assets": [
+    {
+      "id": "neutral_font",
+      "kind": "font",
+      "license": {
+        "file": "licenses/neutral_font.json",
+        "sha256": "8bf1c76ffebc5c9427f41eb192145e3eed119f560700398ffe46aedc7eb4cbc0"
+      },
+      "outputs": [
+        {
+          "media_type": "font/ttf",
+          "role": "font",
+          "runtime_file": "processed/neutral_font/neutral_font.ttf",
+          "sha256": "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398",
+          "size": 684
+        }
+      ],
+      "processing_receipt": {
+        "file": "processed/neutral_font/processing.receipt.json",
+        "sha256": "b41e8b0677e9f044b922a155afccb93780d8d13d828cc40b25298cc5016ff52c"
+      },
+      "production_receipts": [
+        {
+          "file": "receipts/neutral_font.json",
+          "sha256": "a39c82d898f47eeea5708c0cef3b500774595c83ae5b4e7b35170fd599f9f7fa"
+        }
+      ],
+      "qa": {
+        "file": "qa/neutral_font.json",
+        "sha256": "146901900608145dddc93936c280c8b393b930a6c31cad43156015e52a8a1684"
+      },
+      "representation": "2_5d",
+      "required": false,
+      "selected_candidates": [
+        {
+          "approved_by": "fixture",
+          "file": "generated/neutral_font.ttf",
+          "sha256": "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398"
+        }
+      ],
+      "specification": {
+        "file": "specs/neutral_font.json",
+        "sha256": "e9f1b55324afb97362426703433eed08f01894670d51bf20e06625c51a861c27"
+      },
+      "status": "processed"
+    },
+    {
+      "id": "neutral_fragment_shader",
+      "kind": "shader",
+      "license": {
+        "file": "licenses/neutral_fragment_shader.json",
+        "sha256": "3222bd585fa020ebfb16ec4234c7d9fe13b73dfddb8d72c323dba9c331a11976"
+      },
+      "outputs": [
+        {
+          "media_type": "text/x-glsl",
+          "role": "fragment_shader",
+          "runtime_file": "processed/neutral_fragment_shader/neutral.frag",
+          "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3",
+          "size": 16
+        }
+      ],
+      "processing_receipt": {
+        "file": "processed/neutral_fragment_shader/processing.receipt.json",
+        "sha256": "4fdf61f8b79382a12a36db35c49fadfc609760971c03e86b7c4474e0f9b54ef0"
+      },
+      "production_receipts": [
+        {
+          "file": "receipts/neutral_fragment_shader.json",
+          "sha256": "ed00aa53ccdb55cae7f58cc62ad4d085693c259d5365a1575413a1be2d584a14"
+        }
+      ],
+      "qa": {
+        "file": "qa/neutral_fragment_shader.json",
+        "sha256": "f59109882513468d1d8de1ce8478190ac9ee0a54cc0adfee3b65941491b7d86f"
+      },
+      "representation": "2_5d",
+      "required": false,
+      "selected_candidates": [
+        {
+          "approved_by": "fixture",
+          "file": "generated/neutral.frag",
+          "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+        }
+      ],
+      "specification": {
+        "file": "specs/neutral_fragment_shader.json",
+        "sha256": "6cc832af020d71024bf0e76c5d4a55e1228e70219465f485171af5eebf178447"
+      },
+      "status": "processed"
+    },
+    {
+      "id": "neutral_sfx",
+      "kind": "sfx",
+      "license": {
+        "file": "licenses/neutral_sfx.json",
+        "sha256": "8d9b3a0f9780696bf2277b03872f48ac195e16eed0a1e2ea287c3bc51af7e585"
+      },
+      "outputs": [
+        {
+          "media_type": "audio/wav",
+          "role": "audio",
+          "runtime_file": "processed/neutral_sfx/neutral_sfx.wav",
+          "sha256": "154b6f3cfe339656b8d0e87e17e37906e1e3f6f47675f571c464972f9216e2ca",
+          "size": 1642
+        }
+      ],
+      "processing_receipt": {
+        "file": "processed/neutral_sfx/processing.receipt.json",
+        "sha256": "226f1251d35bfaf091b0898d449dc1a28489a95d9017b53e4f9b5cadc0209cf7"
+      },
+      "production_receipts": [
+        {
+          "file": "receipts/neutral_sfx.json",
+          "sha256": "f9454d9fcaa392e80d56825dd9a00b16ab6138be90da736f922f35f9726f4f9b"
+        }
+      ],
+      "qa": {
+        "file": "qa/neutral_sfx.json",
+        "sha256": "3421e1c8cbff2815ac5d2e8dbd718caf86716ccd3b5056cb44daf10e31ff4a4a"
+      },
+      "representation": "audio",
+      "required": false,
+      "selected_candidates": [
+        {
+          "approved_by": "fixture",
+          "file": "generated/neutral_sfx.wav",
+          "sha256": "ba0d2d36fa331ad75c2544a45b8d5017107f711d387ab901a3b0586ca5561683"
+        }
+      ],
+      "specification": {
+        "file": "specs/neutral_sfx.json",
+        "sha256": "be65c7d9ca76ce0a6e7a1f034d249f016ec82d8eb9c0ccd9b645f52f98ff4a3f"
+      },
+      "status": "processed"
+    },
+    {
+      "id": "neutral_sheet",
+      "kind": "spritesheet",
+      "license": {
+        "file": "licenses/neutral_sheet.json",
+        "sha256": "1e322147e801bef72ecb564563262bcfd400ea4353a6982db8ed793a6d102ff5"
+      },
+      "outputs": [
+        {
+          "media_type": "image/png",
+          "role": "texture",
+          "runtime_file": "processed/neutral_sheet/neutral_sheet.png",
+          "sha256": "e09f98766ab00397ea0bbd0192fca0fd5f6d116d24cb7ec32991d0929d6aa62f",
+          "size": 128
+        },
+        {
+          "media_type": "application/json",
+          "role": "clipset",
+          "runtime_file": "processed/neutral_sheet/neutral_sheet.clipset.json",
+          "sha256": "5159dcedea8dfdc0bbd382516de9a29eb86947d1f72a58b3a8db449a732f5258",
+          "size": 596
+        }
+      ],
+      "processing_receipt": {
+        "file": "processed/neutral_sheet/processing.receipt.json",
+        "sha256": "a058871d794e4a94538f2295ff07cbd2719c1d66db3597c75064e91748a21d46"
+      },
+      "production_receipts": [
+        {
+          "file": "receipts/neutral_sheet_idle.json",
+          "sha256": "9f8dfbd4be6ff5aad6b1c44fa9d03cfbd912bc9eefebc72fe2b6f847a0e0bd0b"
+        },
+        {
+          "file": "receipts/neutral_sheet_walk.json",
+          "sha256": "9016778b7340b2ba3768f0f4d4205bcc2b48fc84958d2b1da9f6e9253db6acf6"
+        }
+      ],
+      "qa": {
+        "file": "qa/neutral_sheet.json",
+        "sha256": "c61c27965ee5a117624ede1c8edc0a51fc60113a9270ea8e289008bc074122e0"
+      },
+      "representation": "2_5d",
+      "required": true,
+      "selected_candidates": [
+        {
+          "approved_by": "fixture",
+          "file": "generated/neutral_sheet_idle.png",
+          "sha256": "17db74e8dd2985f89fbb249d0a70f0aa8a3dc628973d33a8123ced8049113ae3"
+        },
+        {
+          "approved_by": "fixture",
+          "file": "generated/neutral_sheet_walk.png",
+          "sha256": "ff7084b7998386d8569ddad2c060b71a0d8a27c15c732c3b3a73caa7446cab69"
+        }
+      ],
+      "specification": {
+        "file": "specs/neutral_sheet.json",
+        "sha256": "a54d7e530d5051e20e050821adb413538fd79005f02c8151fcaced3e19ce917a"
+      },
+      "status": "processed"
+    },
+    {
+      "id": "neutral_vertex_shader",
+      "kind": "shader",
+      "license": {
+        "file": "licenses/neutral_vertex_shader.json",
+        "sha256": "f0c1e8485a3e91780445664dc85fac528a3f6ef5565d8ab6e471f3d022ff6454"
+      },
+      "outputs": [
+        {
+          "media_type": "text/x-glsl",
+          "role": "vertex_shader",
+          "runtime_file": "processed/neutral_vertex_shader/neutral.vert",
+          "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3",
+          "size": 16
+        }
+      ],
+      "processing_receipt": {
+        "file": "processed/neutral_vertex_shader/processing.receipt.json",
+        "sha256": "d5b716f68ba922f571ef046440840d8eb9b9fea0c4ab8788da7ac57fcda8b5d4"
+      },
+      "production_receipts": [
+        {
+          "file": "receipts/neutral_vertex_shader.json",
+          "sha256": "89e8a9089b6a2b18831731381bb325054659f982baf7a79c365d50602279b2e0"
+        }
+      ],
+      "qa": {
+        "file": "qa/neutral_vertex_shader.json",
+        "sha256": "f4cb78c9a5d4d7fffdce262c369600957406022e6c7dd3169137d1038f52cdce"
+      },
+      "representation": "2_5d",
+      "required": false,
+      "selected_candidates": [
+        {
+          "approved_by": "fixture",
+          "file": "generated/neutral.vert",
+          "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+        }
+      ],
+      "specification": {
+        "file": "specs/neutral_vertex_shader.json",
+        "sha256": "c055a84bf3d09878766e93792fd6d9a49045c226f56d9b40d8d8c8638e89e973"
+      },
+      "status": "processed"
+    }
+  ],
+  "bibles": {
+    "audio": {
+      "file": "bibles/audio.json",
+      "sha256": "91d86d4c65ab60cde184d44cba43371b7e4282623f758dcc2f20269d2ac442ff"
+    },
+    "visual": {
+      "file": "bibles/visual.json",
+      "sha256": "a8e98b4569c22a3185a0856b9db06b93888c4c2ee1c0d7b7ccf85448c2d394d1"
+    }
+  },
+  "bindings": [
+    {
+      "asset_id": "neutral_sheet",
+      "clip": "idle",
+      "layer": 0,
+      "moving_clip": "walk",
+      "representation": "2_5d",
+      "scale": 1,
+      "slot": "actor:neutral"
+    },
+    {
+      "asset_id": "neutral_sfx",
+      "layer": 0,
+      "representation": "audio",
+      "scale": 1,
+      "slot": "event:neutral"
+    },
+    {
+      "asset_id": "neutral_font",
+      "layer": 0,
+      "representation": "2_5d",
+      "scale": 1,
+      "slot": "ui:font"
+    }
+  ],
+  "content_hash": "b4c2812bc19e58775fea702f8ba3f58662001e34c7c681ef3263bc028b1861fe",
+  "format": "rpg-world-forge.asset_manifest",
+  "format_version": 3,
+  "generation_policy": {
+    "enabled_routes": [
+      "openai"
+    ],
+    "executors": [
+      "procedural"
+    ],
+    "local_model_route": "modly",
+    "orchestrator": "gpt"
+  },
+  "inventory": {
+    "file": "inventory/assets.json",
+    "sha256": "3ff62abec918d2ce71374fe8bdb525f17c29c6669809bdabccaeee41332fe388"
+  },
+  "phase": "production",
+  "target": {
+    "file": "target.json",
+    "sha256": "245753ea43f53deaa5b4eefae5ea9a5fc41e55ab61ed2106bffdc27c73a39fc1"
+  },
+  "world_content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70",
+  "world_id": "foundation_slice"
+}

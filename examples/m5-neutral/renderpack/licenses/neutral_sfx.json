@@ -1,0 +1,70 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_sfx",
+  "components": [
+    {
+      "evidence": {
+        "file": "evidence/neutral_sfx.txt",
+        "sha256": "cca5b02a2691e54aefba83a2424cac4ab572e2d50d011046daf3fc3822a42c6d"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "asset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sfx.txt",
+        "sha256": "cca5b02a2691e54aefba83a2424cac4ab572e2d50d011046daf3fc3822a42c6d"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "dataset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sfx.txt",
+        "sha256": "cca5b02a2691e54aefba83a2424cac4ab572e2d50d011046daf3fc3822a42c6d"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "model"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sfx.txt",
+        "sha256": "cca5b02a2691e54aefba83a2424cac4ab572e2d50d011046daf3fc3822a42c6d"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "output"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sfx.txt",
+        "sha256": "cca5b02a2691e54aefba83a2424cac4ab572e2d50d011046daf3fc3822a42c6d"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "source"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sfx.txt",
+        "sha256": "cca5b02a2691e54aefba83a2424cac4ab572e2d50d011046daf3fc3822a42c6d"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "weights"
+    }
+  ],
+  "content_hash": "3c0b1377682b1be93ae60182b222386b299d6c83b94d9ae5948eca246129d44c",
+  "format": "rpg-world-forge.asset_license_record",
+  "format_version": 1,
+  "notices": {
+    "file": "evidence/neutral_sfx_NOTICE.txt",
+    "sha256": "7e753f6a003f1b300d8c45b03785c54bf44b0345e73ad93b9a91874cb2365656"
+  },
+  "output_hashes": [
+    "154b6f3cfe339656b8d0e87e17e37906e1e3f6f47675f571c464972f9216e2ca"
+  ]
+}

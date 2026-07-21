@@ -1,0 +1,16 @@
+{
+  "content_hash": "001c3963a4817e94b3f40fa8d78d9eec4ec3ec94d8a8a8aa2b2c0efcd7778efd",
+  "format": "rpg-world-forge.asset_processing_recipe",
+  "format_version": 1,
+  "input": {
+    "file": "generated/neutral.vert",
+    "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+  },
+  "operation": "file_validate",
+  "options": {},
+  "output": {
+    "file": "neutral.vert",
+    "media_type": "text/x-glsl",
+    "role": "vertex_shader"
+  }
+}

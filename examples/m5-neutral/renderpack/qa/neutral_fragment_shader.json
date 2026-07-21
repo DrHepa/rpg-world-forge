@@ -1,0 +1,24 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_fragment_shader",
+  "blockers": [],
+  "checks": [
+    {
+      "evidence": [
+        {
+          "file": "evidence/neutral_fragment_shader.txt",
+          "sha256": "0ebe94d115d1e5769fab4125826a7ef353de1bae992641c60ad84276b1d5d70b"
+        }
+      ],
+      "id": "loads",
+      "passed": true
+    }
+  ],
+  "content_hash": "778331b18574373f0b5607485f69da2a17e4d4ab5090558a44be45a1122800b3",
+  "format": "rpg-world-forge.asset_qa_report",
+  "format_version": 1,
+  "output_hashes": [
+    "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+  ],
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb"
+}

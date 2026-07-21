@@ -1,0 +1,29 @@
+{
+  "asset_id": "neutral_sfx",
+  "content_hash": "8b0c1c0b4241529cc7462c71e9d3ffdb8d276f8fa30fdd653fc6b38eed2e70ed",
+  "executor": "procedural",
+  "expected_outputs": [
+    {
+      "media_type": "audio/wav",
+      "role": "audio"
+    }
+  ],
+  "format": "rpg-world-forge.asset_production_request",
+  "format_version": 1,
+  "id": "neutral_sfx",
+  "inputs": [],
+  "operation": "process_run",
+  "orchestrator": "gpt",
+  "parameters": {
+    "deterministic": true,
+    "fixture": "m5-neutral"
+  },
+  "parent_receipt_hashes": [],
+  "route": "openai",
+  "specification": {
+    "file": "specs/neutral_sfx.json",
+    "sha256": "be65c7d9ca76ce0a6e7a1f034d249f016ec82d8eb9c0ccd9b645f52f98ff4a3f"
+  },
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d"
+}

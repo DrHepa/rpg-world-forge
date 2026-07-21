@@ -1,0 +1,37 @@
+{
+  "content_hash": "082c48e968639092628573089cbb252850d734fdf3856f08669317e20dd5c757",
+  "format": "rpg-world-forge.asset_processing_receipt",
+  "format_version": 1,
+  "inputs": [
+    {
+      "artifact": {
+        "file": "generated/neutral.vert",
+        "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+      },
+      "id": "source"
+    }
+  ],
+  "operation": "file_validate",
+  "outputs": [
+    {
+      "artifact": {
+        "file": "neutral.vert",
+        "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+      },
+      "details": {
+        "byte_length": 16
+      },
+      "media_type": "text/x-glsl",
+      "role": "vertex_shader"
+    }
+  ],
+  "recipe": {
+    "content_hash": "001c3963a4817e94b3f40fa8d78d9eec4ec3ec94d8a8a8aa2b2c0efcd7778efd",
+    "sha256": "795016970fee04a4e533e70a45b90a109a1b259ecadd45fb278f19b123fbc280"
+  },
+  "toolchain": {
+    "processor": "worldforge.asset_processing",
+    "python_version": "3.12.3",
+    "validator": "strict_builtin_v1"
+  }
+}

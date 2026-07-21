@@ -1,0 +1,76 @@
+{
+  "audio_bible_hash": "5c6c953b88f81b22e571315a99f0e3ecaee36fd650158127b3824c333c8a864d",
+  "content_hash": "f90294e3aabfd12773a0a3d2d079359fb49787aaf0e642fac37da9c3569d8dde",
+  "format": "rpg-world-forge.asset_inventory",
+  "format_version": 1,
+  "manual_additions": [
+    {
+      "canonical_sources": [
+        "world:foundation_slice"
+      ],
+      "id": "neutral_font",
+      "kind": "font",
+      "purpose": "Bounded runtime font fixture",
+      "representation": "2_5d",
+      "required": false,
+      "semantic_slots": [
+        "ui:font"
+      ]
+    },
+    {
+      "canonical_sources": [
+        "world:foundation_slice"
+      ],
+      "id": "neutral_fragment_shader",
+      "kind": "shader",
+      "purpose": "Runtime fragment GLSL fixture",
+      "representation": "2_5d",
+      "required": false,
+      "semantic_slots": []
+    },
+    {
+      "canonical_sources": [
+        "world:foundation_slice"
+      ],
+      "id": "neutral_sfx",
+      "kind": "sfx",
+      "purpose": "Short neutral WAV fixture",
+      "representation": "audio",
+      "required": false,
+      "semantic_slots": [
+        "event:neutral"
+      ]
+    },
+    {
+      "canonical_sources": [
+        "world:foundation_slice"
+      ],
+      "id": "neutral_vertex_shader",
+      "kind": "shader",
+      "purpose": "Runtime vertex GLSL fixture",
+      "representation": "2_5d",
+      "required": false,
+      "semantic_slots": []
+    }
+  ],
+  "requirements": [
+    {
+      "canonical_sources": [
+        "world:foundation_slice"
+      ],
+      "id": "neutral_sheet",
+      "kind": "spritesheet",
+      "purpose": "Neutral actor spritesheet fixture",
+      "representation": "2_5d",
+      "required": true,
+      "semantic_slots": [
+        "actor:neutral"
+      ]
+    }
+  ],
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d",
+  "visual_bible_hash": "6ba951c83cefbd9e1459da9657f9d23b8f7e047ee4aa202c082e60595e48f878",
+  "world_content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70",
+  "world_id": "foundation_slice"
+}

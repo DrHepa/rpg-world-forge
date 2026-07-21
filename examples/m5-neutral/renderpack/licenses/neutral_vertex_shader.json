@@ -1,0 +1,70 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_vertex_shader",
+  "components": [
+    {
+      "evidence": {
+        "file": "evidence/neutral_vertex_shader.txt",
+        "sha256": "f98e24df468f1415dfe083287a29681348831a9faf90fdd071934a3abf15f3d2"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "asset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_vertex_shader.txt",
+        "sha256": "f98e24df468f1415dfe083287a29681348831a9faf90fdd071934a3abf15f3d2"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "dataset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_vertex_shader.txt",
+        "sha256": "f98e24df468f1415dfe083287a29681348831a9faf90fdd071934a3abf15f3d2"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "model"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_vertex_shader.txt",
+        "sha256": "f98e24df468f1415dfe083287a29681348831a9faf90fdd071934a3abf15f3d2"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "output"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_vertex_shader.txt",
+        "sha256": "f98e24df468f1415dfe083287a29681348831a9faf90fdd071934a3abf15f3d2"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "source"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_vertex_shader.txt",
+        "sha256": "f98e24df468f1415dfe083287a29681348831a9faf90fdd071934a3abf15f3d2"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "weights"
+    }
+  ],
+  "content_hash": "30fa5167d13537c143e05b993a8c13fb5c0ff54129deb007e7e95f7a92f23b33",
+  "format": "rpg-world-forge.asset_license_record",
+  "format_version": 1,
+  "notices": {
+    "file": "evidence/neutral_vertex_shader_NOTICE.txt",
+    "sha256": "f247c6c308776415063aec6ec3b5300616ec7ad53a722d9292963c647342e0bb"
+  },
+  "output_hashes": [
+    "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_sheet",
+  "components": [
+    {
+      "evidence": {
+        "file": "evidence/neutral_sheet.txt",
+        "sha256": "0d78bb581e00981d8dbfbc7d95bda9b5999f62674928ecd28bd9766cd1cc3ed6"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "asset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sheet.txt",
+        "sha256": "0d78bb581e00981d8dbfbc7d95bda9b5999f62674928ecd28bd9766cd1cc3ed6"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "dataset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sheet.txt",
+        "sha256": "0d78bb581e00981d8dbfbc7d95bda9b5999f62674928ecd28bd9766cd1cc3ed6"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "model"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sheet.txt",
+        "sha256": "0d78bb581e00981d8dbfbc7d95bda9b5999f62674928ecd28bd9766cd1cc3ed6"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "output"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sheet.txt",
+        "sha256": "0d78bb581e00981d8dbfbc7d95bda9b5999f62674928ecd28bd9766cd1cc3ed6"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "source"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_sheet.txt",
+        "sha256": "0d78bb581e00981d8dbfbc7d95bda9b5999f62674928ecd28bd9766cd1cc3ed6"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "weights"
+    }
+  ],
+  "content_hash": "91de7e4f50fdda3a4a8cc9b710f496f177b4320ca48824522fab784680b66dd1",
+  "format": "rpg-world-forge.asset_license_record",
+  "format_version": 1,
+  "notices": {
+    "file": "evidence/neutral_sheet_NOTICE.txt",
+    "sha256": "c6d53473895af244aada2763661d0d5392714796cd9cff7479f84b20e95b2306"
+  },
+  "output_hashes": [
+    "5159dcedea8dfdc0bbd382516de9a29eb86947d1f72a58b3a8db449a732f5258",
+    "e09f98766ab00397ea0bbd0192fca0fd5f6d116d24cb7ec32991d0929d6aa62f"
+  ]
+}

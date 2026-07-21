@@ -1,0 +1,24 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_actor_3d",
+  "blockers": [],
+  "checks": [
+    {
+      "evidence": [
+        {
+          "file": "evidence/neutral_actor_3d.txt",
+          "sha256": "f3277eaabe265829f6558de8e76c535bfcd405918d041aa76d045dfdcb249ec7"
+        }
+      ],
+      "id": "loads",
+      "passed": true
+    }
+  ],
+  "content_hash": "379f64b7fae7507a002856ad7b4b0aceb4a615b5ae45e76873b668029f02112b",
+  "format": "rpg-world-forge.asset_qa_report",
+  "format_version": 1,
+  "output_hashes": [
+    "56d8e24a40d891855cf0470d880cc1c0d26333a9433422add334dddefed2e1db"
+  ],
+  "target_hash": "907702e4a434b0b3e4bd9f04237d19cbef3b0e84630ad65d2c88b02e2e95ca88"
+}

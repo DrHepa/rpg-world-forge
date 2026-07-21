@@ -1,0 +1,16 @@
+{
+  "content_hash": "a9f9357411e839a55ac28969b704db3d223e755c032cc53ba8e0021d851259e8",
+  "format": "rpg-world-forge.asset_processing_recipe",
+  "format_version": 1,
+  "input": {
+    "file": "generated/neutral_font.ttf",
+    "sha256": "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398"
+  },
+  "operation": "file_validate",
+  "options": {},
+  "output": {
+    "file": "neutral_font.ttf",
+    "media_type": "font/ttf",
+    "role": "font"
+  }
+}

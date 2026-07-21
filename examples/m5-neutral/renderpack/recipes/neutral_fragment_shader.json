@@ -1,0 +1,16 @@
+{
+  "content_hash": "b25ab3db6a12fb11f6664732612b722d2c5346dfec0752dbaf94bfb58a78cfab",
+  "format": "rpg-world-forge.asset_processing_recipe",
+  "format_version": 1,
+  "input": {
+    "file": "generated/neutral.frag",
+    "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+  },
+  "operation": "file_validate",
+  "options": {},
+  "output": {
+    "file": "neutral.frag",
+    "media_type": "text/x-glsl",
+    "role": "fragment_shader"
+  }
+}

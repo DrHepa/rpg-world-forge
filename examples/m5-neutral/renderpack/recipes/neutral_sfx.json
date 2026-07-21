@@ -1,0 +1,19 @@
+{
+  "content_hash": "7a7d8f1518e07f186ba2e6187e6bc825143a218c78594c72e2719eebe488dde7",
+  "format": "rpg-world-forge.asset_processing_recipe",
+  "format_version": 1,
+  "input": {
+    "file": "generated/neutral_sfx.wav",
+    "sha256": "ba0d2d36fa331ad75c2544a45b8d5017107f711d387ab901a3b0586ca5561683"
+  },
+  "operation": "wav_pcm",
+  "options": {
+    "channel_mode": "mono",
+    "peak": 12000,
+    "sample_rate": 8000,
+    "trim_threshold": 0
+  },
+  "output": {
+    "file": "neutral_sfx.wav"
+  }
+}

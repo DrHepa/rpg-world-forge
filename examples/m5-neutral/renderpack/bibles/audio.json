@@ -1,0 +1,32 @@
+{
+  "acceptance_tests": [
+    "loads"
+  ],
+  "ambience": {
+    "layers": 1
+  },
+  "approved_by": "fixture",
+  "content_hash": "5c6c953b88f81b22e571315a99f0e3ecaee36fd650158127b3824c333c8a864d",
+  "format": "rpg-world-forge.audio_bible",
+  "format_policy": {
+    "runtime": "wav",
+    "sample_rate": 8000
+  },
+  "format_version": 1,
+  "mix": {
+    "peak_dbfs": -6
+  },
+  "music": {
+    "loop": false
+  },
+  "sfx": {
+    "variations": 1
+  },
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d",
+  "timbral_families": [
+    "neutral"
+  ],
+  "world_content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70",
+  "world_id": "foundation_slice"
+}

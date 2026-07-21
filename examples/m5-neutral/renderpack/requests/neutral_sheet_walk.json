@@ -1,0 +1,29 @@
+{
+  "asset_id": "neutral_sheet",
+  "content_hash": "e8aa7b2bad5ae34bd14302a657297f2302fd4d81c6e18ec0dd2bcdbb684342c7",
+  "executor": "procedural",
+  "expected_outputs": [
+    {
+      "media_type": "image/png",
+      "role": "preview"
+    }
+  ],
+  "format": "rpg-world-forge.asset_production_request",
+  "format_version": 1,
+  "id": "neutral_sheet_walk",
+  "inputs": [],
+  "operation": "image_generate",
+  "orchestrator": "gpt",
+  "parameters": {
+    "deterministic": true,
+    "fixture": "m5-neutral"
+  },
+  "parent_receipt_hashes": [],
+  "route": "openai",
+  "specification": {
+    "file": "specs/neutral_sheet.json",
+    "sha256": "a54d7e530d5051e20e050821adb413538fd79005f02c8151fcaced3e19ce917a"
+  },
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d"
+}

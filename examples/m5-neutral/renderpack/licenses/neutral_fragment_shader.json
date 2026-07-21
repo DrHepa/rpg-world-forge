@@ -1,0 +1,70 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_fragment_shader",
+  "components": [
+    {
+      "evidence": {
+        "file": "evidence/neutral_fragment_shader.txt",
+        "sha256": "0ebe94d115d1e5769fab4125826a7ef353de1bae992641c60ad84276b1d5d70b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "asset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_fragment_shader.txt",
+        "sha256": "0ebe94d115d1e5769fab4125826a7ef353de1bae992641c60ad84276b1d5d70b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "dataset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_fragment_shader.txt",
+        "sha256": "0ebe94d115d1e5769fab4125826a7ef353de1bae992641c60ad84276b1d5d70b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "model"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_fragment_shader.txt",
+        "sha256": "0ebe94d115d1e5769fab4125826a7ef353de1bae992641c60ad84276b1d5d70b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "output"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_fragment_shader.txt",
+        "sha256": "0ebe94d115d1e5769fab4125826a7ef353de1bae992641c60ad84276b1d5d70b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "source"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_fragment_shader.txt",
+        "sha256": "0ebe94d115d1e5769fab4125826a7ef353de1bae992641c60ad84276b1d5d70b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "weights"
+    }
+  ],
+  "content_hash": "c3c8714fc9c4e06f2e85f7125c12b889e140a295e2691435f257acd11aad3f5f",
+  "format": "rpg-world-forge.asset_license_record",
+  "format_version": 1,
+  "notices": {
+    "file": "evidence/neutral_fragment_shader_NOTICE.txt",
+    "sha256": "de858cf26f4361f3d23c7bf6b3d72801aad8a2e98591230a439d12339abd6ba9"
+  },
+  "output_hashes": [
+    "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+  ]
+}

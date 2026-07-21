@@ -1,0 +1,55 @@
+{
+  "acceptance_criteria": [
+    "loads"
+  ],
+  "audio_bible_hash": "a0d7ae37d5db6b81efcff91ddf9da79b438faea4f42c55c91a5abea25c0aeb89",
+  "canonical_sources": [
+    "world:foundation_slice"
+  ],
+  "content_hash": "04a85dd8924936600d637d5d74e23605e42cc82b8de524bbc2c8c25df1191504",
+  "expected_outputs": [
+    {
+      "media_type": "model/gltf-binary",
+      "role": "model"
+    }
+  ],
+  "format": "rpg-world-forge.asset_spec",
+  "format_version": 2,
+  "id": "neutral_actor_3d",
+  "inventory_hash": "28839b7bd02963cf2dc2599334a8082e5bcdf8a499856874663ad8a95441b33c",
+  "kind": "character_3d",
+  "production": {
+    "allowed_executors": [
+      "procedural"
+    ],
+    "allowed_routes": [
+      "openai"
+    ]
+  },
+  "purpose": "Neutral embedded GLB actor fixture",
+  "representation": "3d",
+  "semantic_slots": [
+    "actor:neutral"
+  ],
+  "target_hash": "907702e4a434b0b3e4bd9f04237d19cbef3b0e84630ad65d2c88b02e2e95ca88",
+  "target_id": "neutral_3d",
+  "technical": {
+    "budgets": {
+      "max_materials": 2,
+      "max_texture_size": 2048,
+      "max_triangles": 10,
+      "max_vertices": 10
+    },
+    "memory_budget_bytes": 1048576,
+    "physical_dimensions_m": [
+      1,
+      1,
+      1
+    ],
+    "required_animations": [
+      "idle"
+    ],
+    "runtime_format": "glb"
+  },
+  "visual_bible_hash": "fc7ae98d5a75c75c4d31fcebb041709d86eda04902b7367cf99bbc9593665af9"
+}

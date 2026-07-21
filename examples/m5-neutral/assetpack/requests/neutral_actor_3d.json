@@ -1,0 +1,29 @@
+{
+  "asset_id": "neutral_actor_3d",
+  "content_hash": "82d0756f260f594c3ec86a36b6f7a0b66de35e0ecb05884482c444478385ce13",
+  "executor": "procedural",
+  "expected_outputs": [
+    {
+      "media_type": "model/gltf-binary",
+      "role": "model"
+    }
+  ],
+  "format": "rpg-world-forge.asset_production_request",
+  "format_version": 1,
+  "id": "neutral_actor_3d",
+  "inputs": [],
+  "operation": "model_from_reference",
+  "orchestrator": "gpt",
+  "parameters": {
+    "deterministic": true,
+    "fixture": "m5-neutral"
+  },
+  "parent_receipt_hashes": [],
+  "route": "openai",
+  "specification": {
+    "file": "specs/neutral_actor_3d.json",
+    "sha256": "0a31a50bad0bcc1bc54e51961e8924bf42c119ebb8967f8d7154c0818cf9a64c"
+  },
+  "target_hash": "907702e4a434b0b3e4bd9f04237d19cbef3b0e84630ad65d2c88b02e2e95ca88",
+  "target_id": "neutral_3d"
+}

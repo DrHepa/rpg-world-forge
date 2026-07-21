@@ -1,0 +1,1 @@
+neutral_actor_3d: CC0-1.0 self-generated fixture output.

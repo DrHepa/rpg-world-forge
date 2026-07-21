@@ -1,0 +1,33 @@
+{
+  "asset_id": "neutral_fragment_shader",
+  "completed_at": "2026-07-21T00:00:01Z",
+  "content_hash": "00f64a69d36305b392139afe8c1515da53c8206125356023c1295f317d2fde19",
+  "executor": "procedural",
+  "format": "rpg-world-forge.asset_production_receipt",
+  "format_version": 1,
+  "id": "receipt_neutral_fragment_shader",
+  "operation": "process_run",
+  "outputs": [
+    {
+      "file": "generated/neutral.frag",
+      "media_type": "text/x-glsl",
+      "role": "fragment_shader",
+      "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+    }
+  ],
+  "parent_receipt_hashes": [],
+  "replayability": "deterministic_seeded",
+  "request": {
+    "file": "requests/neutral_fragment_shader.json",
+    "sha256": "869266a66a2c26a164eade963c05e16aa57bcd15121b4ba0a9ffcd5986c0f0b7"
+  },
+  "route": "openai",
+  "started_at": "2026-07-21T00:00:00Z",
+  "status": "succeeded",
+  "toolchain": {
+    "generator": "scripts/generate_m5_neutral.py",
+    "network": "none",
+    "processor": "procedural_fixture_v1",
+    "python_version": "3.12.3"
+  }
+}

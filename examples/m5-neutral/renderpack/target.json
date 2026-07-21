@@ -1,0 +1,19 @@
+{
+  "content_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "coordinate_system": {
+    "origin": "tile_anchor",
+    "tile_height_pixels": 32,
+    "tile_width_pixels": 64,
+    "up_axis": "screen_up",
+    "x_axis": "east",
+    "y_axis": "south"
+  },
+  "delivery_profile": "renderpack_v1",
+  "dimension": "2_5d",
+  "format": "rpg-world-forge.asset_target",
+  "format_version": 1,
+  "id": "neutral_2_5d",
+  "runtime_adapter": "isoworld_raylib_2_5d",
+  "world_content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70",
+  "world_id": "foundation_slice"
+}

@@ -1,0 +1,29 @@
+{
+  "asset_id": "neutral_fragment_shader",
+  "content_hash": "d4574c4cecc293af12a60e975981eb191227b8dce5928c48858cb9a235bd19aa",
+  "executor": "procedural",
+  "expected_outputs": [
+    {
+      "media_type": "text/x-glsl",
+      "role": "fragment_shader"
+    }
+  ],
+  "format": "rpg-world-forge.asset_production_request",
+  "format_version": 1,
+  "id": "neutral_fragment_shader",
+  "inputs": [],
+  "operation": "process_run",
+  "orchestrator": "gpt",
+  "parameters": {
+    "deterministic": true,
+    "fixture": "m5-neutral"
+  },
+  "parent_receipt_hashes": [],
+  "route": "openai",
+  "specification": {
+    "file": "specs/neutral_fragment_shader.json",
+    "sha256": "6cc832af020d71024bf0e76c5d4a55e1228e70219465f485171af5eebf178447"
+  },
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d"
+}

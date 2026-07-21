@@ -1,0 +1,43 @@
+{
+  "acceptance_criteria": [
+    "loads"
+  ],
+  "audio_bible_hash": "5c6c953b88f81b22e571315a99f0e3ecaee36fd650158127b3824c333c8a864d",
+  "canonical_sources": [
+    "world:foundation_slice"
+  ],
+  "content_hash": "578ac087bb51bdfa52f653f1352ec231ba57af0a0d87eb57a454c0b958367e8f",
+  "expected_outputs": [
+    {
+      "media_type": "audio/wav",
+      "role": "audio"
+    }
+  ],
+  "format": "rpg-world-forge.asset_spec",
+  "format_version": 2,
+  "id": "neutral_sfx",
+  "inventory_hash": "f90294e3aabfd12773a0a3d2d079359fb49787aaf0e642fac37da9c3569d8dde",
+  "kind": "sfx",
+  "production": {
+    "allowed_executors": [
+      "procedural"
+    ],
+    "allowed_routes": [
+      "openai"
+    ]
+  },
+  "purpose": "Short neutral WAV fixture",
+  "representation": "audio",
+  "semantic_slots": [
+    "event:neutral"
+  ],
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d",
+  "technical": {
+    "channels": 1,
+    "memory_budget_bytes": 65536,
+    "runtime_format": "wav",
+    "sample_rate": 8000
+  },
+  "visual_bible_hash": "6ba951c83cefbd9e1459da9657f9d23b8f7e047ee4aa202c082e60595e48f878"
+}

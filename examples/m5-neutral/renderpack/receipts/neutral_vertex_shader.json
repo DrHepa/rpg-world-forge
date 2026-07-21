@@ -1,0 +1,33 @@
+{
+  "asset_id": "neutral_vertex_shader",
+  "completed_at": "2026-07-21T00:00:01Z",
+  "content_hash": "7393cde90b1527400c7d4229ff655fed45419c3d18f6a189278398f7fef4044b",
+  "executor": "procedural",
+  "format": "rpg-world-forge.asset_production_receipt",
+  "format_version": 1,
+  "id": "receipt_neutral_vertex_shader",
+  "operation": "process_run",
+  "outputs": [
+    {
+      "file": "generated/neutral.vert",
+      "media_type": "text/x-glsl",
+      "role": "vertex_shader",
+      "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+    }
+  ],
+  "parent_receipt_hashes": [],
+  "replayability": "deterministic_seeded",
+  "request": {
+    "file": "requests/neutral_vertex_shader.json",
+    "sha256": "160d9f715bf3e379471ab2e4abde81bd58a7e181f764707fe0366f28934d041c"
+  },
+  "route": "openai",
+  "started_at": "2026-07-21T00:00:00Z",
+  "status": "succeeded",
+  "toolchain": {
+    "generator": "scripts/generate_m5_neutral.py",
+    "network": "none",
+    "processor": "procedural_fixture_v1",
+    "python_version": "3.12.3"
+  }
+}

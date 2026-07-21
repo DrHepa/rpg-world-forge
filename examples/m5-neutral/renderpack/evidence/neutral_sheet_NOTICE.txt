@@ -1,0 +1,1 @@
+neutral_sheet: CC0-1.0 self-generated fixture output.

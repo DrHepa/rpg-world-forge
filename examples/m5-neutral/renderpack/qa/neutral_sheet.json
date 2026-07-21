@@ -1,0 +1,25 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_sheet",
+  "blockers": [],
+  "checks": [
+    {
+      "evidence": [
+        {
+          "file": "evidence/neutral_sheet.txt",
+          "sha256": "0d78bb581e00981d8dbfbc7d95bda9b5999f62674928ecd28bd9766cd1cc3ed6"
+        }
+      ],
+      "id": "loads",
+      "passed": true
+    }
+  ],
+  "content_hash": "0362c2740ef1dd22b7528dd4a2240c16892f65275fa8bfa6462e2f0ac26b6148",
+  "format": "rpg-world-forge.asset_qa_report",
+  "format_version": 1,
+  "output_hashes": [
+    "5159dcedea8dfdc0bbd382516de9a29eb86947d1f72a58b3a8db449a732f5258",
+    "e09f98766ab00397ea0bbd0192fca0fd5f6d116d24cb7ec32991d0929d6aa62f"
+  ],
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb"
+}

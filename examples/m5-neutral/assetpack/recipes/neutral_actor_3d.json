@@ -1,0 +1,23 @@
+{
+  "content_hash": "f718340d867890909f33c78fbc06e0ebb436be8c6c3792cdbf9663d29c73066b",
+  "format": "rpg-world-forge.asset_processing_recipe",
+  "format_version": 1,
+  "input": {
+    "file": "generated/neutral_actor_3d.glb",
+    "sha256": "56d8e24a40d891855cf0470d880cc1c0d26333a9433422add334dddefed2e1db"
+  },
+  "operation": "glb_validate",
+  "options": {
+    "budgets": {
+      "max_materials": 2,
+      "max_texture_size": 2048,
+      "max_triangles": 10,
+      "max_vertices": 10
+    },
+    "max_bytes": 1048576
+  },
+  "output": {
+    "file": "neutral_actor_3d.glb",
+    "role": "model"
+  }
+}

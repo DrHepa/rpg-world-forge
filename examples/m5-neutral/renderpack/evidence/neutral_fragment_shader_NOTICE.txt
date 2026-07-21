@@ -1,0 +1,1 @@
+neutral_fragment_shader: CC0-1.0 self-generated fixture output.

@@ -1,0 +1,29 @@
+{
+  "asset_id": "neutral_vertex_shader",
+  "content_hash": "651b7135bb9c5ac4e580c6a612d9153e8b75ec7291b61a8274482f1013296cb8",
+  "executor": "procedural",
+  "expected_outputs": [
+    {
+      "media_type": "text/x-glsl",
+      "role": "vertex_shader"
+    }
+  ],
+  "format": "rpg-world-forge.asset_production_request",
+  "format_version": 1,
+  "id": "neutral_vertex_shader",
+  "inputs": [],
+  "operation": "process_run",
+  "orchestrator": "gpt",
+  "parameters": {
+    "deterministic": true,
+    "fixture": "m5-neutral"
+  },
+  "parent_receipt_hashes": [],
+  "route": "openai",
+  "specification": {
+    "file": "specs/neutral_vertex_shader.json",
+    "sha256": "c055a84bf3d09878766e93792fd6d9a49045c226f56d9b40d8d8c8638e89e973"
+  },
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d"
+}

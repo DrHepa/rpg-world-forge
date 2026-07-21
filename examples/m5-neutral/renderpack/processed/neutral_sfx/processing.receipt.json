@@ -1,0 +1,41 @@
+{
+  "content_hash": "e586d8a1094b55db6d5c5697669afa58baab5ec366ff1118b5827096d78066f9",
+  "format": "rpg-world-forge.asset_processing_receipt",
+  "format_version": 1,
+  "inputs": [
+    {
+      "artifact": {
+        "file": "generated/neutral_sfx.wav",
+        "sha256": "ba0d2d36fa331ad75c2544a45b8d5017107f711d387ab901a3b0586ca5561683"
+      },
+      "id": "source"
+    }
+  ],
+  "operation": "wav_pcm",
+  "outputs": [
+    {
+      "artifact": {
+        "file": "neutral_sfx.wav",
+        "sha256": "154b6f3cfe339656b8d0e87e17e37906e1e3f6f47675f571c464972f9216e2ca"
+      },
+      "details": {
+        "channels": 1,
+        "frames": 799,
+        "peak": 12000,
+        "sample_rate": 8000,
+        "sample_width": 2
+      },
+      "media_type": "audio/wav",
+      "role": "audio"
+    }
+  ],
+  "recipe": {
+    "content_hash": "7a7d8f1518e07f186ba2e6187e6bc825143a218c78594c72e2719eebe488dde7",
+    "sha256": "4a30969b32cf39af80c9ca631df0f2671995512fb231adc01487978a912257c7"
+  },
+  "toolchain": {
+    "processor": "worldforge.asset_processing",
+    "python_version": "3.12.3",
+    "wave_module": "stdlib"
+  }
+}

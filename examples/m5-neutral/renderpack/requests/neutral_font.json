@@ -1,0 +1,29 @@
+{
+  "asset_id": "neutral_font",
+  "content_hash": "a545c3a96e2a76645969e8e735899f8d9ab0c319f14a894f808301e7e75b1bb6",
+  "executor": "procedural",
+  "expected_outputs": [
+    {
+      "media_type": "font/ttf",
+      "role": "font"
+    }
+  ],
+  "format": "rpg-world-forge.asset_production_request",
+  "format_version": 1,
+  "id": "neutral_font",
+  "inputs": [],
+  "operation": "process_run",
+  "orchestrator": "gpt",
+  "parameters": {
+    "deterministic": true,
+    "fixture": "m5-neutral"
+  },
+  "parent_receipt_hashes": [],
+  "route": "openai",
+  "specification": {
+    "file": "specs/neutral_font.json",
+    "sha256": "e9f1b55324afb97362426703433eed08f01894670d51bf20e06625c51a861c27"
+  },
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d"
+}

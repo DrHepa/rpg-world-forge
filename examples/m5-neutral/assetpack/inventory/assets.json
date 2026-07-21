@@ -1,0 +1,27 @@
+{
+  "audio_bible_hash": "a0d7ae37d5db6b81efcff91ddf9da79b438faea4f42c55c91a5abea25c0aeb89",
+  "content_hash": "28839b7bd02963cf2dc2599334a8082e5bcdf8a499856874663ad8a95441b33c",
+  "format": "rpg-world-forge.asset_inventory",
+  "format_version": 1,
+  "manual_additions": [],
+  "requirements": [
+    {
+      "canonical_sources": [
+        "world:foundation_slice"
+      ],
+      "id": "neutral_actor_3d",
+      "kind": "character_3d",
+      "purpose": "Neutral embedded GLB actor fixture",
+      "representation": "3d",
+      "required": true,
+      "semantic_slots": [
+        "actor:neutral"
+      ]
+    }
+  ],
+  "target_hash": "907702e4a434b0b3e4bd9f04237d19cbef3b0e84630ad65d2c88b02e2e95ca88",
+  "target_id": "neutral_3d",
+  "visual_bible_hash": "fc7ae98d5a75c75c4d31fcebb041709d86eda04902b7367cf99bbc9593665af9",
+  "world_content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70",
+  "world_id": "foundation_slice"
+}

@@ -1,0 +1,35 @@
+{
+  "asset_id": "neutral_sheet",
+  "completed_at": "2026-07-21T00:00:01Z",
+  "content_hash": "058dfe59d7acf544784483684cc2b7732856faaebe0ef05c9ae4c817ec37a161",
+  "executor": "procedural",
+  "format": "rpg-world-forge.asset_production_receipt",
+  "format_version": 1,
+  "id": "receipt_neutral_sheet_idle",
+  "operation": "image_generate",
+  "outputs": [
+    {
+      "file": "generated/neutral_sheet_idle.png",
+      "height": 16,
+      "media_type": "image/png",
+      "role": "preview",
+      "sha256": "17db74e8dd2985f89fbb249d0a70f0aa8a3dc628973d33a8123ced8049113ae3",
+      "width": 16
+    }
+  ],
+  "parent_receipt_hashes": [],
+  "replayability": "deterministic_seeded",
+  "request": {
+    "file": "requests/neutral_sheet_idle.json",
+    "sha256": "159530a2a2cf0b9462a768fdc20f13438a496dc51be9bb7fde19c20035627e71"
+  },
+  "route": "openai",
+  "started_at": "2026-07-21T00:00:00Z",
+  "status": "succeeded",
+  "toolchain": {
+    "generator": "scripts/generate_m5_neutral.py",
+    "network": "none",
+    "processor": "procedural_fixture_v1",
+    "python_version": "3.12.3"
+  }
+}

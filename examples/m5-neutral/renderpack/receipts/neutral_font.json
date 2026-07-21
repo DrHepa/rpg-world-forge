@@ -1,0 +1,33 @@
+{
+  "asset_id": "neutral_font",
+  "completed_at": "2026-07-21T00:00:01Z",
+  "content_hash": "84cbcc0e8704a31968c14173f01ceb2cbc1701afb98ecb267a7c8c1a1abae2f8",
+  "executor": "procedural",
+  "format": "rpg-world-forge.asset_production_receipt",
+  "format_version": 1,
+  "id": "receipt_neutral_font",
+  "operation": "process_run",
+  "outputs": [
+    {
+      "file": "generated/neutral_font.ttf",
+      "media_type": "font/ttf",
+      "role": "font",
+      "sha256": "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398"
+    }
+  ],
+  "parent_receipt_hashes": [],
+  "replayability": "deterministic_seeded",
+  "request": {
+    "file": "requests/neutral_font.json",
+    "sha256": "de16819ceca5e6cfad584c6343b0004d35217e0c063a29f25c092fba722eddad"
+  },
+  "route": "openai",
+  "started_at": "2026-07-21T00:00:00Z",
+  "status": "succeeded",
+  "toolchain": {
+    "generator": "scripts/generate_m5_neutral.py",
+    "network": "none",
+    "processor": "procedural_fixture_v1",
+    "python_version": "3.12.3"
+  }
+}

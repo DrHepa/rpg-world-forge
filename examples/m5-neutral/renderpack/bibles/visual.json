@@ -1,0 +1,40 @@
+{
+  "acceptance_tests": [
+    "loads"
+  ],
+  "animation": {
+    "clock": "integer_ticks"
+  },
+  "approved_by": "fixture",
+  "camera": {
+    "projection": "orthographic"
+  },
+  "content_hash": "6ba951c83cefbd9e1459da9657f9d23b8f7e047ee4aa202c082e60595e48f878",
+  "format": "rpg-world-forge.visual_bible",
+  "format_version": 1,
+  "resolution": {
+    "base": [
+      16,
+      16
+    ]
+  },
+  "silhouettes": {
+    "minimum_separation": "one_pixel"
+  },
+  "style": {
+    "palette": [
+      "#203040",
+      "#6080a0"
+    ]
+  },
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d",
+  "ui": {
+    "minimum_text_px": 12
+  },
+  "vfx": {
+    "photosensitivity": "safe"
+  },
+  "world_content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70",
+  "world_id": "foundation_slice"
+}

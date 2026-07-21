@@ -1,0 +1,70 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_actor_3d",
+  "components": [
+    {
+      "evidence": {
+        "file": "evidence/neutral_actor_3d.txt",
+        "sha256": "f3277eaabe265829f6558de8e76c535bfcd405918d041aa76d045dfdcb249ec7"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "asset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_actor_3d.txt",
+        "sha256": "f3277eaabe265829f6558de8e76c535bfcd405918d041aa76d045dfdcb249ec7"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "dataset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_actor_3d.txt",
+        "sha256": "f3277eaabe265829f6558de8e76c535bfcd405918d041aa76d045dfdcb249ec7"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "model"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_actor_3d.txt",
+        "sha256": "f3277eaabe265829f6558de8e76c535bfcd405918d041aa76d045dfdcb249ec7"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "output"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_actor_3d.txt",
+        "sha256": "f3277eaabe265829f6558de8e76c535bfcd405918d041aa76d045dfdcb249ec7"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "source"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_actor_3d.txt",
+        "sha256": "f3277eaabe265829f6558de8e76c535bfcd405918d041aa76d045dfdcb249ec7"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "weights"
+    }
+  ],
+  "content_hash": "c3ec97012fa8626e79e0f6f2bf7a5e0a8cd9e8bcec0a2803d97989fec797f876",
+  "format": "rpg-world-forge.asset_license_record",
+  "format_version": 1,
+  "notices": {
+    "file": "evidence/neutral_actor_3d_NOTICE.txt",
+    "sha256": "eeb1c0abaf091855360807133d8fd70d22d06e8a8e662acb3d891ba56a81b6c7"
+  },
+  "output_hashes": [
+    "56d8e24a40d891855cf0470d880cc1c0d26333a9433422add334dddefed2e1db"
+  ]
+}

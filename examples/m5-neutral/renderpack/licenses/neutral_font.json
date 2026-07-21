@@ -1,0 +1,70 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_font",
+  "components": [
+    {
+      "evidence": {
+        "file": "evidence/neutral_font.txt",
+        "sha256": "92de48af54ab1c056f1465886b11a0944399de805f625c12eb30a815ed40ad7b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "asset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_font.txt",
+        "sha256": "92de48af54ab1c056f1465886b11a0944399de805f625c12eb30a815ed40ad7b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "dataset"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_font.txt",
+        "sha256": "92de48af54ab1c056f1465886b11a0944399de805f625c12eb30a815ed40ad7b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "model"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_font.txt",
+        "sha256": "92de48af54ab1c056f1465886b11a0944399de805f625c12eb30a815ed40ad7b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "output"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_font.txt",
+        "sha256": "92de48af54ab1c056f1465886b11a0944399de805f625c12eb30a815ed40ad7b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "source"
+    },
+    {
+      "evidence": {
+        "file": "evidence/neutral_font.txt",
+        "sha256": "92de48af54ab1c056f1465886b11a0944399de805f625c12eb30a815ed40ad7b"
+      },
+      "license_expression": "CC0-1.0",
+      "redistribution": "permitted",
+      "scope": "weights"
+    }
+  ],
+  "content_hash": "17d14ed14c013e98778e31dc45de04988289d9f3d206c85ab0ec28ffd3720ed8",
+  "format": "rpg-world-forge.asset_license_record",
+  "format_version": 1,
+  "notices": {
+    "file": "evidence/neutral_font_NOTICE.txt",
+    "sha256": "095cf691b8b32651389ce4cbb671a1751d042bc2108872f339e4b66b4001a61c"
+  },
+  "output_hashes": [
+    "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398"
+  ]
+}

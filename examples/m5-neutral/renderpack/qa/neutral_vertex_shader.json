@@ -1,0 +1,24 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_vertex_shader",
+  "blockers": [],
+  "checks": [
+    {
+      "evidence": [
+        {
+          "file": "evidence/neutral_vertex_shader.txt",
+          "sha256": "f98e24df468f1415dfe083287a29681348831a9faf90fdd071934a3abf15f3d2"
+        }
+      ],
+      "id": "loads",
+      "passed": true
+    }
+  ],
+  "content_hash": "2b0a8be75717b5cab3a9d34367086799828d24f860aa787c531c6e7ace777c7c",
+  "format": "rpg-world-forge.asset_qa_report",
+  "format_version": 1,
+  "output_hashes": [
+    "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3"
+  ],
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb"
+}

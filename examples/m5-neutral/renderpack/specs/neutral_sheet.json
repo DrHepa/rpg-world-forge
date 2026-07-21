@@ -1,0 +1,48 @@
+{
+  "acceptance_criteria": [
+    "loads"
+  ],
+  "audio_bible_hash": "5c6c953b88f81b22e571315a99f0e3ecaee36fd650158127b3824c333c8a864d",
+  "canonical_sources": [
+    "world:foundation_slice"
+  ],
+  "content_hash": "8c825feaa1239531948b6169c646003a0f88727ec1cc866370e0823ac9ddb3d7",
+  "expected_outputs": [
+    {
+      "media_type": "image/png",
+      "role": "texture"
+    },
+    {
+      "media_type": "application/json",
+      "role": "clipset"
+    }
+  ],
+  "format": "rpg-world-forge.asset_spec",
+  "format_version": 2,
+  "id": "neutral_sheet",
+  "inventory_hash": "f90294e3aabfd12773a0a3d2d079359fb49787aaf0e642fac37da9c3569d8dde",
+  "kind": "spritesheet",
+  "production": {
+    "allowed_executors": [
+      "procedural"
+    ],
+    "allowed_routes": [
+      "openai"
+    ]
+  },
+  "purpose": "Neutral actor spritesheet fixture",
+  "representation": "2_5d",
+  "semantic_slots": [
+    "actor:neutral"
+  ],
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb",
+  "target_id": "neutral_2_5d",
+  "technical": {
+    "alpha_mode": "blend",
+    "height": 16,
+    "memory_budget_bytes": 1048576,
+    "runtime_format": "png",
+    "width": 32
+  },
+  "visual_bible_hash": "6ba951c83cefbd9e1459da9657f9d23b8f7e047ee4aa202c082e60595e48f878"
+}

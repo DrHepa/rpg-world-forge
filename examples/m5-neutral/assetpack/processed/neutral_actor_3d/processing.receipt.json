@@ -1,0 +1,68 @@
+{
+  "content_hash": "e63944da327930372c34203ecc98cdaa3ad6e38189746ae14b2195f91c13a973",
+  "format": "rpg-world-forge.asset_processing_receipt",
+  "format_version": 1,
+  "inputs": [
+    {
+      "artifact": {
+        "file": "generated/neutral_actor_3d.glb",
+        "sha256": "56d8e24a40d891855cf0470d880cc1c0d26333a9433422add334dddefed2e1db"
+      },
+      "id": "source"
+    }
+  ],
+  "operation": "glb_validate",
+  "outputs": [
+    {
+      "artifact": {
+        "file": "neutral_actor_3d.glb",
+        "sha256": "56d8e24a40d891855cf0470d880cc1c0d26333a9433422add334dddefed2e1db"
+      },
+      "details": {
+        "bin_chunk_bytes": 60,
+        "byte_length": 1204,
+        "embedded_uris": 0,
+        "extensions_required": [
+          "KHR_materials_unlit"
+        ],
+        "extensions_used": [
+          "KHR_materials_unlit"
+        ],
+        "external_uris": [],
+        "json_chunk_bytes": 1116,
+        "max_texture_dimension": 0,
+        "metrics": {
+          "animations": 1,
+          "bones": 0,
+          "external_uris": 0,
+          "influences": 0,
+          "materials": 1,
+          "meshes": 1,
+          "nodes": 1,
+          "skins": 0,
+          "textures": 0,
+          "triangles": 1,
+          "vertices": 3
+        }
+      },
+      "media_type": "model/gltf-binary",
+      "role": "model"
+    }
+  ],
+  "recipe": {
+    "content_hash": "f718340d867890909f33c78fbc06e0ebb436be8c6c3792cdbf9663d29c73066b",
+    "sha256": "9270a75c4430f50861ab905299430e35db935b35d9cc3205e665d6c5f673600b"
+  },
+  "toolchain": {
+    "allowed_extensions": [
+      "KHR_lights_punctual",
+      "KHR_materials_unlit",
+      "KHR_mesh_quantization",
+      "KHR_texture_transform"
+    ],
+    "external_uris_allowed": false,
+    "inspector": "worldforge.asset_formats.gltf",
+    "processor": "worldforge.asset_processing",
+    "python_version": "3.12.3"
+  }
+}

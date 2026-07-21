@@ -1,0 +1,24 @@
+{
+  "approved_by": "fixture",
+  "asset_id": "neutral_font",
+  "blockers": [],
+  "checks": [
+    {
+      "evidence": [
+        {
+          "file": "evidence/neutral_font.txt",
+          "sha256": "92de48af54ab1c056f1465886b11a0944399de805f625c12eb30a815ed40ad7b"
+        }
+      ],
+      "id": "loads",
+      "passed": true
+    }
+  ],
+  "content_hash": "5136408852a48f500c067d237ab22099f00f9f92b747dbb7dfa21bb8c48b67b5",
+  "format": "rpg-world-forge.asset_qa_report",
+  "format_version": 1,
+  "output_hashes": [
+    "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398"
+  ],
+  "target_hash": "d68a2f07e30ebeb6263864dd04f76fdff0b37f17f225e43614ef965e892222eb"
+}

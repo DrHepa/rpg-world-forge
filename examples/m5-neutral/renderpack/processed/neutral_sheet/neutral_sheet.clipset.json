@@ -1,0 +1,40 @@
+{
+  "clips": [
+    {
+      "frames": [
+        {
+          "duration_ticks": 6,
+          "height": 16,
+          "width": 16,
+          "x": 0,
+          "y": 0
+        }
+      ],
+      "id": "idle",
+      "loop": true,
+      "pivot": [
+        8,
+        14
+      ]
+    },
+    {
+      "frames": [
+        {
+          "duration_ticks": 6,
+          "height": 16,
+          "width": 16,
+          "x": 16,
+          "y": 0
+        }
+      ],
+      "id": "walk",
+      "loop": true,
+      "pivot": [
+        8,
+        14
+      ]
+    }
+  ],
+  "format": "isoworld.clipset",
+  "format_version": 1
+}

@@ -10,7 +10,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/inventory/assets.json",
+        "examples/m5-neutral/renderpack/inventory/assets.json"
+      ],
       "format": "rpg-world-forge.asset_inventory",
       "id": "asset-inventory",
       "kind": "json-schema",
@@ -35,7 +38,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/licenses/neutral_actor_3d.json",
+        "examples/m5-neutral/renderpack/licenses/neutral_sheet.json"
+      ],
       "format": "rpg-world-forge.asset_license_record",
       "id": "asset-license-record",
       "kind": "json-schema",
@@ -64,7 +70,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/manifest.json",
+        "examples/m5-neutral/renderpack/manifest.json"
+      ],
       "format": "rpg-world-forge.asset_manifest",
       "id": "asset-manifest",
       "kind": "json-schema",
@@ -93,7 +102,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/processed/neutral_actor_3d/processing.receipt.json",
+        "examples/m5-neutral/renderpack/processed/neutral_sheet/processing.receipt.json"
+      ],
       "format": "rpg-world-forge.asset_processing_receipt",
       "id": "asset-processing-receipt",
       "kind": "json-schema",
@@ -120,7 +132,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/recipes/neutral_actor_3d.json",
+        "examples/m5-neutral/renderpack/recipes/neutral_sheet_atlas.json"
+      ],
       "format": "asset-processing-recipe",
       "id": "asset-processing-recipe",
       "kind": "json-schema",
@@ -147,7 +162,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/receipts/neutral_actor_3d.json",
+        "examples/m5-neutral/renderpack/receipts/neutral_sheet_idle.json"
+      ],
       "format": "rpg-world-forge.asset_production_receipt",
       "id": "asset-production-receipt",
       "kind": "json-schema",
@@ -174,7 +192,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/requests/neutral_actor_3d.json",
+        "examples/m5-neutral/renderpack/requests/neutral_sheet_idle.json"
+      ],
       "format": "rpg-world-forge.asset_production_request",
       "id": "asset-production-request",
       "kind": "json-schema",
@@ -199,7 +220,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/qa/neutral_actor_3d.json",
+        "examples/m5-neutral/renderpack/qa/neutral_sheet.json"
+      ],
       "format": "rpg-world-forge.asset_qa_report",
       "id": "asset-qa-report",
       "kind": "json-schema",
@@ -227,7 +251,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/specs/neutral_actor_3d.json",
+        "examples/m5-neutral/renderpack/specs/neutral_sheet.json"
+      ],
       "format": "rpg-world-forge.asset_spec",
       "id": "asset-spec",
       "kind": "json-schema",
@@ -254,7 +281,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/target.json",
+        "examples/m5-neutral/renderpack/target.json"
+      ],
       "format": "rpg-world-forge.asset_target",
       "id": "asset-target",
       "kind": "json-schema",
@@ -312,7 +342,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/bibles/audio.json",
+        "examples/m5-neutral/renderpack/bibles/audio.json"
+      ],
       "format": "rpg-world-forge.audio_bible",
       "id": "audio-bible",
       "kind": "json-schema",
@@ -688,7 +721,10 @@
         "docs/ROADMAP.md",
         "docs/decisions/0007-renderpack-and-generation-routes.md"
       ],
-      "fixtures": [],
+      "fixtures": [
+        "examples/m5-neutral/assetpack/bibles/visual.json",
+        "examples/m5-neutral/renderpack/bibles/visual.json"
+      ],
       "format": "rpg-world-forge.visual_bible",
       "id": "visual-bible",
       "kind": "json-schema",

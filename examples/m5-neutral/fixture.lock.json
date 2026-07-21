@@ -1,0 +1,415 @@
+{
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "0d6f99763b86bf074876067afd53ed027c45133070617cd653b030b926913273",
+      "size": 596
+    },
+    {
+      "path": "assetpack/bibles/audio.json",
+      "sha256": "5630cba5ac70a64fce9dc40a34cdab311a26845f0943763dc8169b7e9d04da57",
+      "size": 724
+    },
+    {
+      "path": "assetpack/bibles/visual.json",
+      "sha256": "ed6ddbecdf0302e652cd9fb80c23f095be7ed44f85b317fa8023bae9dbd6869f",
+      "size": 854
+    },
+    {
+      "path": "assetpack/evidence/neutral_actor_3d.txt",
+      "sha256": "f3277eaabe265829f6558de8e76c535bfcd405918d041aa76d045dfdcb249ec7",
+      "size": 58
+    },
+    {
+      "path": "assetpack/evidence/neutral_actor_3d_NOTICE.txt",
+      "sha256": "eeb1c0abaf091855360807133d8fd70d22d06e8a8e662acb3d891ba56a81b6c7",
+      "size": 57
+    },
+    {
+      "path": "assetpack/generated/neutral_actor_3d.glb",
+      "sha256": "56d8e24a40d891855cf0470d880cc1c0d26333a9433422add334dddefed2e1db",
+      "size": 1204
+    },
+    {
+      "path": "assetpack/inventory/assets.json",
+      "sha256": "a4002bd4409b061ce3f24c2ebadf76333541b4869da2f6f23e183a33a796b131",
+      "size": 943
+    },
+    {
+      "path": "assetpack/licenses/neutral_actor_3d.json",
+      "sha256": "926153631ddaef8170be9b593c9186cf08283ec3ddbd15945fb2aeae1e5406d5",
+      "size": 2154
+    },
+    {
+      "path": "assetpack/manifest.json",
+      "sha256": "31679b9789fc818a22bcaa5c31dd90c93889d7f43f69685de63d928cb5e050bf",
+      "size": 2913
+    },
+    {
+      "path": "assetpack/processed/neutral_actor_3d/neutral_actor_3d.glb",
+      "sha256": "56d8e24a40d891855cf0470d880cc1c0d26333a9433422add334dddefed2e1db",
+      "size": 1204
+    },
+    {
+      "path": "assetpack/processed/neutral_actor_3d/processing.receipt.json",
+      "sha256": "b04b541c5c8933583d13286c038782c0add2495f60e794282ef1d5d4ca57e8e4",
+      "size": 1861
+    },
+    {
+      "path": "assetpack/qa/neutral_actor_3d.json",
+      "sha256": "8af9a924b25a0cfb92767981d8a888bcea446b2026a0ac1e761570f6f286cc36",
+      "size": 681
+    },
+    {
+      "path": "assetpack/receipts/neutral_actor_3d.json",
+      "sha256": "514eb9a62cf89087638370c0aae2eedd745ed5bb077d5b5bfe0701c3cce9eb13",
+      "size": 1050
+    },
+    {
+      "path": "assetpack/recipes/neutral_actor_3d.json",
+      "sha256": "9270a75c4430f50861ab905299430e35db935b35d9cc3205e665d6c5f673600b",
+      "size": 597
+    },
+    {
+      "path": "assetpack/requests/neutral_actor_3d.json",
+      "sha256": "a48cb75d90417e9d7eead909465b42c4cd254ab0f1df826a8bbddecdf509ce3f",
+      "size": 836
+    },
+    {
+      "path": "assetpack/specs/neutral_actor_3d.json",
+      "sha256": "0a31a50bad0bcc1bc54e51961e8924bf42c119ebb8967f8d7154c0818cf9a64c",
+      "size": 1376
+    },
+    {
+      "path": "assetpack/target.json",
+      "sha256": "026803a9cc2ce8d99141f7d674558e17efe5b27dfac16cdf380da670548707d3",
+      "size": 520
+    },
+    {
+      "path": "renderpack/bibles/audio.json",
+      "sha256": "91d86d4c65ab60cde184d44cba43371b7e4282623f758dcc2f20269d2ac442ff",
+      "size": 726
+    },
+    {
+      "path": "renderpack/bibles/visual.json",
+      "sha256": "a8e98b4569c22a3185a0856b9db06b93888c4c2ee1c0d7b7ccf85448c2d394d1",
+      "size": 856
+    },
+    {
+      "path": "renderpack/evidence/neutral_font.txt",
+      "sha256": "92de48af54ab1c056f1465886b11a0944399de805f625c12eb30a815ed40ad7b",
+      "size": 54
+    },
+    {
+      "path": "renderpack/evidence/neutral_font_NOTICE.txt",
+      "sha256": "095cf691b8b32651389ce4cbb671a1751d042bc2108872f339e4b66b4001a61c",
+      "size": 53
+    },
+    {
+      "path": "renderpack/evidence/neutral_fragment_shader.txt",
+      "sha256": "0ebe94d115d1e5769fab4125826a7ef353de1bae992641c60ad84276b1d5d70b",
+      "size": 65
+    },
+    {
+      "path": "renderpack/evidence/neutral_fragment_shader_NOTICE.txt",
+      "sha256": "de858cf26f4361f3d23c7bf6b3d72801aad8a2e98591230a439d12339abd6ba9",
+      "size": 64
+    },
+    {
+      "path": "renderpack/evidence/neutral_sfx.txt",
+      "sha256": "cca5b02a2691e54aefba83a2424cac4ab572e2d50d011046daf3fc3822a42c6d",
+      "size": 53
+    },
+    {
+      "path": "renderpack/evidence/neutral_sfx_NOTICE.txt",
+      "sha256": "7e753f6a003f1b300d8c45b03785c54bf44b0345e73ad93b9a91874cb2365656",
+      "size": 52
+    },
+    {
+      "path": "renderpack/evidence/neutral_sheet.txt",
+      "sha256": "0d78bb581e00981d8dbfbc7d95bda9b5999f62674928ecd28bd9766cd1cc3ed6",
+      "size": 55
+    },
+    {
+      "path": "renderpack/evidence/neutral_sheet_NOTICE.txt",
+      "sha256": "c6d53473895af244aada2763661d0d5392714796cd9cff7479f84b20e95b2306",
+      "size": 54
+    },
+    {
+      "path": "renderpack/evidence/neutral_vertex_shader.txt",
+      "sha256": "f98e24df468f1415dfe083287a29681348831a9faf90fdd071934a3abf15f3d2",
+      "size": 63
+    },
+    {
+      "path": "renderpack/evidence/neutral_vertex_shader_NOTICE.txt",
+      "sha256": "f247c6c308776415063aec6ec3b5300616ec7ad53a722d9292963c647342e0bb",
+      "size": 62
+    },
+    {
+      "path": "renderpack/generated/neutral.frag",
+      "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3",
+      "size": 16
+    },
+    {
+      "path": "renderpack/generated/neutral.vert",
+      "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3",
+      "size": 16
+    },
+    {
+      "path": "renderpack/generated/neutral_font.ttf",
+      "sha256": "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398",
+      "size": 684
+    },
+    {
+      "path": "renderpack/generated/neutral_sfx.wav",
+      "sha256": "ba0d2d36fa331ad75c2544a45b8d5017107f711d387ab901a3b0586ca5561683",
+      "size": 1644
+    },
+    {
+      "path": "renderpack/generated/neutral_sheet_idle.png",
+      "sha256": "17db74e8dd2985f89fbb249d0a70f0aa8a3dc628973d33a8123ced8049113ae3",
+      "size": 92
+    },
+    {
+      "path": "renderpack/generated/neutral_sheet_walk.png",
+      "sha256": "ff7084b7998386d8569ddad2c060b71a0d8a27c15c732c3b3a73caa7446cab69",
+      "size": 92
+    },
+    {
+      "path": "renderpack/inventory/assets.json",
+      "sha256": "3ff62abec918d2ce71374fe8bdb525f17c29c6669809bdabccaeee41332fe388",
+      "size": 2088
+    },
+    {
+      "path": "renderpack/licenses/neutral_font.json",
+      "sha256": "8bf1c76ffebc5c9427f41eb192145e3eed119f560700398ffe46aedc7eb4cbc0",
+      "size": 2122
+    },
+    {
+      "path": "renderpack/licenses/neutral_fragment_shader.json",
+      "sha256": "3222bd585fa020ebfb16ec4234c7d9fe13b73dfddb8d72c323dba9c331a11976",
+      "size": 2210
+    },
+    {
+      "path": "renderpack/licenses/neutral_sfx.json",
+      "sha256": "8d9b3a0f9780696bf2277b03872f48ac195e16eed0a1e2ea287c3bc51af7e585",
+      "size": 2114
+    },
+    {
+      "path": "renderpack/licenses/neutral_sheet.json",
+      "sha256": "1e322147e801bef72ecb564563262bcfd400ea4353a6982db8ed793a6d102ff5",
+      "size": 2202
+    },
+    {
+      "path": "renderpack/licenses/neutral_vertex_shader.json",
+      "sha256": "f0c1e8485a3e91780445664dc85fac528a3f6ef5565d8ab6e471f3d022ff6454",
+      "size": 2194
+    },
+    {
+      "path": "renderpack/manifest.json",
+      "sha256": "1e646372983e49834da01af39f6c726d9a9acaecb86539f98ce8aa8d802cc9f2",
+      "size": 10005
+    },
+    {
+      "path": "renderpack/processed/neutral_font/neutral_font.ttf",
+      "sha256": "42fbe37a1ab4d931d454be872196843422b6de0bd123c641733ce78df4dcb398",
+      "size": 684
+    },
+    {
+      "path": "renderpack/processed/neutral_font/processing.receipt.json",
+      "sha256": "b41e8b0677e9f044b922a155afccb93780d8d13d828cc40b25298cc5016ff52c",
+      "size": 1029
+    },
+    {
+      "path": "renderpack/processed/neutral_fragment_shader/neutral.frag",
+      "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3",
+      "size": 16
+    },
+    {
+      "path": "renderpack/processed/neutral_fragment_shader/processing.receipt.json",
+      "sha256": "4fdf61f8b79382a12a36db35c49fadfc609760971c03e86b7c4474e0f9b54ef0",
+      "size": 1034
+    },
+    {
+      "path": "renderpack/processed/neutral_sfx/neutral_sfx.wav",
+      "sha256": "154b6f3cfe339656b8d0e87e17e37906e1e3f6f47675f571c464972f9216e2ca",
+      "size": 1642
+    },
+    {
+      "path": "renderpack/processed/neutral_sfx/processing.receipt.json",
+      "sha256": "226f1251d35bfaf091b0898d449dc1a28489a95d9017b53e4f9b5cadc0209cf7",
+      "size": 1111
+    },
+    {
+      "path": "renderpack/processed/neutral_sheet/neutral_sheet.clipset.json",
+      "sha256": "5159dcedea8dfdc0bbd382516de9a29eb86947d1f72a58b3a8db449a732f5258",
+      "size": 596
+    },
+    {
+      "path": "renderpack/processed/neutral_sheet/neutral_sheet.png",
+      "sha256": "e09f98766ab00397ea0bbd0192fca0fd5f6d116d24cb7ec32991d0929d6aa62f",
+      "size": 128
+    },
+    {
+      "path": "renderpack/processed/neutral_sheet/processing.receipt.json",
+      "sha256": "a058871d794e4a94538f2295ff07cbd2719c1d66db3597c75064e91748a21d46",
+      "size": 1601
+    },
+    {
+      "path": "renderpack/processed/neutral_vertex_shader/neutral.vert",
+      "sha256": "e09925e3698ecaf81210ec28fb261a44dd517cb744907d060253af1edb93dfd3",
+      "size": 16
+    },
+    {
+      "path": "renderpack/processed/neutral_vertex_shader/processing.receipt.json",
+      "sha256": "d5b716f68ba922f571ef046440840d8eb9b9fea0c4ab8788da7ac57fcda8b5d4",
+      "size": 1032
+    },
+    {
+      "path": "renderpack/qa/neutral_font.json",
+      "sha256": "146901900608145dddc93936c280c8b393b930a6c31cad43156015e52a8a1684",
+      "size": 673
+    },
+    {
+      "path": "renderpack/qa/neutral_fragment_shader.json",
+      "sha256": "f59109882513468d1d8de1ce8478190ac9ee0a54cc0adfee3b65941491b7d86f",
+      "size": 695
+    },
+    {
+      "path": "renderpack/qa/neutral_sfx.json",
+      "sha256": "3421e1c8cbff2815ac5d2e8dbd718caf86716ccd3b5056cb44daf10e31ff4a4a",
+      "size": 671
+    },
+    {
+      "path": "renderpack/qa/neutral_sheet.json",
+      "sha256": "c61c27965ee5a117624ede1c8edc0a51fc60113a9270ea8e289008bc074122e0",
+      "size": 747
+    },
+    {
+      "path": "renderpack/qa/neutral_vertex_shader.json",
+      "sha256": "f4cb78c9a5d4d7fffdce262c369600957406022e6c7dd3169137d1038f52cdce",
+      "size": 691
+    },
+    {
+      "path": "renderpack/receipts/neutral_font.json",
+      "sha256": "a39c82d898f47eeea5708c0cef3b500774595c83ae5b4e7b35170fd599f9f7fa",
+      "size": 1015
+    },
+    {
+      "path": "renderpack/receipts/neutral_fragment_shader.json",
+      "sha256": "ed00aa53ccdb55cae7f58cc62ad4d085693c259d5365a1575413a1be2d584a14",
+      "size": 1058
+    },
+    {
+      "path": "renderpack/receipts/neutral_sfx.json",
+      "sha256": "f9454d9fcaa392e80d56825dd9a00b16ab6138be90da736f922f35f9726f4f9b",
+      "size": 1013
+    },
+    {
+      "path": "renderpack/receipts/neutral_sheet_idle.json",
+      "sha256": "9f8dfbd4be6ff5aad6b1c44fa9d03cfbd912bc9eefebc72fe2b6f847a0e0bd0b",
+      "size": 1080
+    },
+    {
+      "path": "renderpack/receipts/neutral_sheet_walk.json",
+      "sha256": "9016778b7340b2ba3768f0f4d4205bcc2b48fc84958d2b1da9f6e9253db6acf6",
+      "size": 1080
+    },
+    {
+      "path": "renderpack/receipts/neutral_vertex_shader.json",
+      "sha256": "89e8a9089b6a2b18831731381bb325054659f982baf7a79c365d50602279b2e0",
+      "size": 1050
+    },
+    {
+      "path": "renderpack/recipes/neutral_font.json",
+      "sha256": "98c40e870f35f919c6876a8cc4f3057e6704bc8a5b60a2a2064f0363f4e3d8b7",
+      "size": 457
+    },
+    {
+      "path": "renderpack/recipes/neutral_fragment_shader.json",
+      "sha256": "2eb7c5f29e68b12dec09ed2e3ee58fbbaa7d3f3fa6f1f93145994fcf15f5b639",
+      "size": 463
+    },
+    {
+      "path": "renderpack/recipes/neutral_sfx.json",
+      "sha256": "4a30969b32cf39af80c9ca631df0f2671995512fb231adc01487978a912257c7",
+      "size": 498
+    },
+    {
+      "path": "renderpack/recipes/neutral_sheet_atlas.json",
+      "sha256": "e76ca29193f0df462c7cc49e00243c8d27aa972abffddcafaf32f1b879fbec9b",
+      "size": 1036
+    },
+    {
+      "path": "renderpack/recipes/neutral_vertex_shader.json",
+      "sha256": "795016970fee04a4e533e70a45b90a109a1b259ecadd45fb278f19b123fbc280",
+      "size": 461
+    },
+    {
+      "path": "renderpack/requests/neutral_font.json",
+      "sha256": "de16819ceca5e6cfad584c6343b0004d35217e0c063a29f25c092fba722eddad",
+      "size": 807
+    },
+    {
+      "path": "renderpack/requests/neutral_fragment_shader.json",
+      "sha256": "869266a66a2c26a164eade963c05e16aa57bcd15121b4ba0a9ffcd5986c0f0b7",
+      "size": 854
+    },
+    {
+      "path": "renderpack/requests/neutral_sfx.json",
+      "sha256": "dda3691d4eb85b4c3195d0cce034d70600a5ce3051a86d4626a455c2006d20b3",
+      "size": 806
+    },
+    {
+      "path": "renderpack/requests/neutral_sheet_idle.json",
+      "sha256": "159530a2a2cf0b9462a768fdc20f13438a496dc51be9bb7fde19c20035627e71",
+      "size": 822
+    },
+    {
+      "path": "renderpack/requests/neutral_sheet_walk.json",
+      "sha256": "31432555cfe006b658daa2d421becba695ffb1bed3ee89a83eee8efecc3fc213",
+      "size": 822
+    },
+    {
+      "path": "renderpack/requests/neutral_vertex_shader.json",
+      "sha256": "160d9f715bf3e379471ab2e4abde81bd58a7e181f764707fe0366f28934d041c",
+      "size": 846
+    },
+    {
+      "path": "renderpack/specs/neutral_font.json",
+      "sha256": "e9f1b55324afb97362426703433eed08f01894670d51bf20e06625c51a861c27",
+      "size": 1097
+    },
+    {
+      "path": "renderpack/specs/neutral_fragment_shader.json",
+      "sha256": "6cc832af020d71024bf0e76c5d4a55e1228e70219465f485171af5eebf178447",
+      "size": 1109
+    },
+    {
+      "path": "renderpack/specs/neutral_sfx.json",
+      "sha256": "be65c7d9ca76ce0a6e7a1f034d249f016ec82d8eb9c0ccd9b645f52f98ff4a3f",
+      "size": 1145
+    },
+    {
+      "path": "renderpack/specs/neutral_sheet.json",
+      "sha256": "a54d7e530d5051e20e050821adb413538fd79005f02c8151fcaced3e19ce917a",
+      "size": 1261
+    },
+    {
+      "path": "renderpack/specs/neutral_vertex_shader.json",
+      "sha256": "c055a84bf3d09878766e93792fd6d9a49045c226f56d9b40d8d8c8638e89e973",
+      "size": 1103
+    },
+    {
+      "path": "renderpack/target.json",
+      "sha256": "245753ea43f53deaa5b4eefae5ea9a5fc41e55ab61ed2106bffdc27c73a39fc1",
+      "size": 603
+    }
+  ],
+  "format": "rpg-world-forge.m5_neutral_fixture_lock",
+  "format_version": 1,
+  "worldpack_anchor": {
+    "path": "content/compiled/foundation.worldpack.json",
+    "sha256": "e2abd58967aac07591130a315f7d31c408bd43821a45ace296afd724564bc8ef"
+  }
+}
