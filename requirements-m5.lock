@@ -1,0 +1,8 @@
+# Audited direct M5 toolchain. Generated games keep their complete platform
+# closure in requirements.lock and platform.lock.json.
+build==1.5.0
+Pillow==12.3.0
+raylib==6.0.1.0
+ruff==0.15.22
+setuptools==83.0.0
+wheel==0.47.0

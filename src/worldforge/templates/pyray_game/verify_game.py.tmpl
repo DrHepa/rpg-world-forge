@@ -394,9 +394,7 @@ def verify_source_boundary() -> None:
         issue = policy_issues[0]
         if issue.startswith("DEPENDENCY_"):
             context = "platform lock "
-        elif issue.startswith(
-            ("PY_FORBIDDEN_IMPORT", "PY_FORBIDDEN_CALL", "PY_DYNAMIC_ESCAPE")
-        ):
+        elif issue.startswith(("PY_FORBIDDEN_IMPORT", "PY_FORBIDDEN_CALL", "PY_DYNAMIC_ESCAPE")):
             context = "forbidden runtime import "
         else:
             context = ""
@@ -585,6 +583,7 @@ def verify_dependencies(identity: dict[str, str] | None = None) -> dict[str, Any
         "readme",
         "requires-python",
         "license",
+        "license-files",
         "dependencies",
         "classifiers",
         "scripts",
@@ -608,12 +607,12 @@ def verify_dependencies(identity: dict[str, str] | None = None) -> dict[str, Any
     if (
         project.get("description") != "Standalone deterministic 2D/2.5D isometric RPG"
         or project.get("readme") != "README.md"
-        or project.get("license") != {"file": "LICENSE"}
+        or project.get("license") != "MIT"
+        or project.get("license-files") != ["LICENSE"]
         or project.get("scripts") != {identity["game_id"].replace("_", "-"): "game.__main__:main"}
         or project.get("classifiers")
         != [
             "Development Status :: 3 - Alpha",
-            "License :: OSI Approved :: MIT License",
             "Programming Language :: Python :: 3",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
