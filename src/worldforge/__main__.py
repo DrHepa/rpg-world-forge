@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from isoworld.content.loader import WorldPackError, load_worldpack
@@ -22,6 +23,7 @@ from worldforge.bundle import (
 )
 from worldforge.claims import validate_claims
 from worldforge.compiler import CompilationError, compile_project
+from worldforge.contract_catalog import ContractCatalogError, audit_contracts
 from worldforge.game_boundary import GameBoundaryError, audit_game_repository
 from worldforge.game_scaffold import (
     GameScaffoldError,
@@ -289,6 +291,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     audit = commands.add_parser("audit-runtime", help="reject AI SDK imports in runtime")
     audit.add_argument("runtime_root", type=Path)
+    audit_contracts_cmd = commands.add_parser(
+        "audit-contracts",
+        help="audit the machine-readable public contract catalog",
+    )
+    audit_contracts_cmd.add_argument("--source-root", type=Path)
     audit_game = commands.add_parser(
         "audit-game",
         help="reject Forge, world-authoring, and AI leakage in a game repository",
@@ -686,6 +693,17 @@ def main() -> int:
                     print(f"ERROR {finding}")
                 return 1
             print(f"OK runtime={args.runtime_root} ai_imports=0")
+            return 0
+
+        if args.command == "audit-contracts":
+            try:
+                result = audit_contracts(args.source_root)
+            except ContractCatalogError as exc:
+                print(f"ERROR {exc}", file=sys.stderr)
+                return 1
+            print(
+                f"OK contracts={result.contracts} mode={result.mode} catalog={result.catalog_path}"
+            )
             return 0
 
         if args.command == "export-bundle":

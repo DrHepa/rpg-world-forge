@@ -1,0 +1,824 @@
+{
+  "contracts": [
+    {
+      "cli_commands": [
+        "derive-asset-inventory"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.asset_inventory",
+      "id": "asset-inventory",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_inventory:derive_asset_inventory"
+      ],
+      "schema": "schemas/asset-inventory.schema.json",
+      "tests": [
+        "tests/test_m5_inventory.py"
+      ],
+      "title": "Deterministic target-scoped asset inventory v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.asset_license_record",
+      "id": "asset-license-record",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_contracts:validate_asset_license_record"
+      ],
+      "schema": "schemas/asset-license-record.schema.json",
+      "tests": [
+        "tests/test_m5_assetpack_3d.py"
+      ],
+      "title": "Executable release asset-license record v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate-assets",
+        "bind-asset-plan",
+        "finalize-asset-release"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.asset_manifest",
+      "id": "asset-manifest",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.assets:validate_asset_manifest",
+        "worldforge.asset_manifest_v3:bind_asset_plan"
+      ],
+      "schema": "schemas/asset-manifest.schema.json",
+      "tests": [
+        "tests/test_m5_production.py",
+        "tests/test_m5_release_builder.py"
+      ],
+      "title": "Executable target-scoped asset-production manifest v3",
+      "version": 3
+    },
+    {
+      "cli_commands": [
+        "verify-processing"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.asset_processing_receipt",
+      "id": "asset-processing-receipt",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_processing:verify_processing_receipt"
+      ],
+      "schema": "schemas/asset-processing-receipt.schema.json",
+      "tests": [
+        "tests/test_m5_processing.py"
+      ],
+      "title": "Executable deterministic asset-processing receipt v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "process-asset"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "asset-processing-recipe",
+      "id": "asset-processing-recipe",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_processing:process_asset_recipe"
+      ],
+      "schema": "schemas/asset-processing-recipe.schema.json",
+      "tests": [
+        "tests/test_m5_processing.py"
+      ],
+      "title": "Executable deterministic asset-processing recipe v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate-production-receipt"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.asset_production_receipt",
+      "id": "asset-production-receipt",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_production:validate_production_receipt"
+      ],
+      "schema": "schemas/asset-production-receipt.schema.json",
+      "tests": [
+        "tests/test_m5_production.py"
+      ],
+      "title": "Executable sanitized asset-production receipt v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "create-production-request"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.asset_production_request",
+      "id": "asset-production-request",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_production:create_production_request"
+      ],
+      "schema": "schemas/asset-production-request.schema.json",
+      "tests": [
+        "tests/test_m5_production.py"
+      ],
+      "title": "Executable GPT-orchestrated asset-production request v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.asset_qa_report",
+      "id": "asset-qa-report",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_contracts:validate_asset_qa_report"
+      ],
+      "schema": "schemas/asset-qa-report.schema.json",
+      "tests": [
+        "tests/test_m5_assetpack_3d.py"
+      ],
+      "title": "Executable release asset-QA report v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "create-production-request",
+        "bind-asset-plan"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.asset_spec",
+      "id": "asset-spec",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_contracts:validate_asset_spec"
+      ],
+      "schema": "schemas/asset-spec.schema.json",
+      "tests": [
+        "tests/test_m5_production.py"
+      ],
+      "title": "Executable provider-neutral asset specification v2",
+      "version": 2
+    },
+    {
+      "cli_commands": [
+        "init-assets"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.asset_target",
+      "id": "asset-target",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.assets:init_asset_manifest",
+        "worldforge.asset_contracts:validate_asset_target"
+      ],
+      "schema": "schemas/asset-target.schema.json",
+      "tests": [
+        "tests/test_m5_inventory.py"
+      ],
+      "title": "Executable target-scoped asset-production target v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "build-assetpack",
+        "verify-assetpack",
+        "finalize-asset-release"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.assetpack",
+      "id": "assetpack",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.assetpack:build_assetpack",
+        "worldforge.assetpack:verify_assetpack"
+      ],
+      "schema": "schemas/assetpack.schema.json",
+      "tests": [
+        "tests/test_m5_assetpack_3d.py"
+      ],
+      "title": "Engine-neutral runtime-only assetpack v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate-asset-bibles"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.audio_bible",
+      "id": "audio-bible",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_contracts:validate_asset_bibles"
+      ],
+      "schema": "schemas/audio-bible.schema.json",
+      "tests": [
+        "tests/test_m5_inventory.py"
+      ],
+      "title": "Executable target-scoped audio bible v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "process-asset"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "isoworld.clipset",
+      "id": "clipset",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_processing:process_asset_recipe"
+      ],
+      "schema": "schemas/clipset.schema.json",
+      "tests": [
+        "tests/test_m5_processing.py"
+      ],
+      "title": "Deterministic texture clipset",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate",
+        "compile"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "living-world",
+      "id": "living-world",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.validation:validate_project"
+      ],
+      "schema": "schemas/living-world.schema.json",
+      "tests": [
+        "tests/test_m3_living_world.py"
+      ],
+      "title": "IsoWorld M3 living-world content",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "import-map"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "map-source",
+      "id": "map-source",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.map_import:import_map_file"
+      ],
+      "schema": "schemas/map-source.schema.json",
+      "tests": [
+        "tests/test_map_import.py"
+      ],
+      "title": "Internal isometric map source",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.modly_capability_discovery",
+      "id": "modly-capability-discovery",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_contracts:validate_asset_spec"
+      ],
+      "schema": "schemas/modly-capability-discovery.schema.json",
+      "tests": [
+        "tests/test_m5_toolchain.py"
+      ],
+      "title": "Sanitized pre-execution Modly capability-discovery snapshot v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "analyze-narrative"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.narrative_analysis",
+      "id": "narrative-analysis",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.narrative_analysis:analyze_project"
+      ],
+      "schema": "schemas/narrative-analysis.schema.json",
+      "tests": [
+        "tests/test_m2_narrative.py"
+      ],
+      "title": "RPG World Forge narrative analysis report",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate",
+        "compile"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "narrative-content",
+      "id": "narrative-content",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.validation:validate_project"
+      ],
+      "schema": "schemas/narrative-content.schema.json",
+      "tests": [
+        "tests/test_m2_narrative.py"
+      ],
+      "title": "IsoWorld M2-M4 narrative content",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "complete-phase",
+        "reopen-phase",
+        "phase-status"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.phase_report",
+      "id": "phase-report",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.workflow:complete_phase"
+      ],
+      "schema": "schemas/phase-report.schema.json",
+      "tests": [
+        "tests/test_m5_plan.py"
+      ],
+      "title": "RPG World Forge phase report",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "build-renderpack",
+        "export-bundle"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "isoworld.renderpack",
+      "id": "renderpack",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.renderpack:build_renderpack"
+      ],
+      "schema": "schemas/renderpack.schema.json",
+      "tests": [
+        "tests/test_m5_renderpack_release.py",
+        "tests/test_renderpack_resources.py"
+      ],
+      "title": "Compiled runtime-only renderpack",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "isoworld.replay",
+      "id": "replay",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "isoworld.persistence:load_replay"
+      ],
+      "schema": "schemas/replay.schema.json",
+      "tests": [
+        "tests/test_runtime_io.py"
+      ],
+      "title": "IsoWorld deterministic action replay",
+      "version": 3
+    },
+    {
+      "cli_commands": [
+        "export-bundle",
+        "verify-bundle",
+        "import-bundle"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/M4_MULTIPLE_WORLD_PRODUCTION.md",
+        "docs/decisions/0009-independent-world-and-game-repositories.md"
+      ],
+      "fixtures": [],
+      "format": "isoworld.runtime_bundle",
+      "id": "runtime-bundle",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M4",
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.bundle:export_runtime_bundle",
+        "worldforge.bundle:verify_runtime_bundle"
+      ],
+      "schema": "schemas/runtime-bundle.schema.json",
+      "tests": [
+        "tests/test_m4_bundle.py"
+      ],
+      "title": "Immutable IsoWorld runtime bundle manifest",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "isoworld.save",
+      "id": "save",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "isoworld.persistence:save_game"
+      ],
+      "schema": "schemas/save.schema.json",
+      "tests": [
+        "tests/test_runtime_io.py"
+      ],
+      "title": "IsoWorld versioned save",
+      "version": 3
+    },
+    {
+      "cli_commands": [
+        "new-game"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/M4_MULTIPLE_WORLD_PRODUCTION.md",
+        "docs/decisions/0009-independent-world-and-game-repositories.md"
+      ],
+      "fixtures": [],
+      "format": "isoworld.shared_assets",
+      "id": "shared-assets",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M4",
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.game_scaffold:create_game_project"
+      ],
+      "schema": "schemas/shared-assets.schema.json",
+      "tests": [
+        "tests/test_m4_game_scaffold.py"
+      ],
+      "title": "Hash-locked game-owned shared runtime assets",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate",
+        "compile"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "isoworld.source_manifest",
+      "id": "source-manifest",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.project:load_source_project",
+        "worldforge.validation:validate_project"
+      ],
+      "schema": "schemas/source-manifest.schema.json",
+      "tests": [
+        "tests/test_content_pipeline.py"
+      ],
+      "title": "RPG World Forge source manifest",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate-claims"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.task_claim",
+      "id": "task-claim",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.claims:validate_claims"
+      ],
+      "schema": "schemas/task-claim.schema.json",
+      "tests": [
+        "tests/test_m5_plan.py"
+      ],
+      "title": "RPG World Forge delegated task claim",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate-asset-bibles"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0007-renderpack-and-generation-routes.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.visual_bible",
+      "id": "visual-bible",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.asset_contracts:validate_asset_bibles"
+      ],
+      "schema": "schemas/visual-bible.schema.json",
+      "tests": [
+        "tests/test_m5_inventory.py"
+      ],
+      "title": "Executable target-scoped visual bible v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "import-bundle"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/M4_MULTIPLE_WORLD_PRODUCTION.md",
+        "docs/decisions/0009-independent-world-and-game-repositories.md"
+      ],
+      "fixtures": [],
+      "format": "isoworld.world_catalog",
+      "id": "world-catalog",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M4",
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.bundle:import_runtime_bundle"
+      ],
+      "schema": "schemas/world-catalog.schema.json",
+      "tests": [
+        "tests/test_m4_bundle.py"
+      ],
+      "title": "Deterministic catalog of imported IsoWorld releases",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "new-world",
+        "world-status",
+        "upgrade-world",
+        "clone-world",
+        "bump-world-version"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/M4_MULTIPLE_WORLD_PRODUCTION.md",
+        "docs/decisions/0009-independent-world-and-game-repositories.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.project",
+      "id": "world-project",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M4",
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.scaffold:create_world_project",
+        "worldforge.world_lifecycle:inspect_world_project"
+      ],
+      "schema": "schemas/world-project.schema.json",
+      "tests": [
+        "tests/test_m4_world_lifecycle.py"
+      ],
+      "title": "RPG World Forge world-authoring project",
+      "version": 2
+    },
+    {
+      "cli_commands": [
+        "compile",
+        "check-compatibility"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "isoworld.worldpack",
+      "id": "worldpack",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.compiler:compile_project",
+        "isoworld.content.loader:load_worldpack"
+      ],
+      "schema": "schemas/worldpack.schema.json",
+      "tests": [
+        "tests/test_content_pipeline.py",
+        "tests/test_m4_content.py"
+      ],
+      "title": "Compiled IsoWorld worldpack",
+      "version": 5
+    },
+    {
+      "cli_commands": [
+        "audit-contracts"
+      ],
+      "docs": [
+        "contracts/README.md",
+        "README.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.contract_catalog",
+      "id": "contract-catalog",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.contract_catalog:audit_contracts",
+        "worldforge.contract_catalog:load_contract_catalog"
+      ],
+      "schema": "schemas/contract-catalog.schema.json",
+      "tests": [
+        "tests/test_contract_catalog.py"
+      ],
+      "title": "RPG World Forge machine-readable contract catalog v1",
+      "version": 1
+    }
+  ],
+  "format": "rpg-world-forge.contract_catalog",
+  "format_version": 1
+}

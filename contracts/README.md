@@ -1,5 +1,6 @@
 # Installed contract material
 
 This directory is the public, installed location for RPG World Forge contract material.
-Machine-readable catalog entries are added by the contract-auditing phase; schemas remain under
-`schemas/`.
+`catalog.json` is the machine-readable index of public contracts. It traces each
+schema to its format/version, owning Python and CLI surfaces, tests, docs, and
+milestone provenance. Schemas remain under `schemas/`.

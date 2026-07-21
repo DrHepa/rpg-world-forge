@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RPG World Forge machine-readable contract catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "contracts"],
+  "properties": {
+    "format": {"const": "rpg-world-forge.contract_catalog"},
+    "format_version": {"const": 1},
+    "contracts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/contract"}
+    }
+  },
+  "$defs": {
+    "portablePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "symbol": {
+      "type": "string",
+      "pattern": "^(?:worldforge|isoworld)(?:\\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "cliCommand": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "kind",
+        "schema",
+        "format",
+        "version",
+        "python_symbols",
+        "cli_commands",
+        "fixtures",
+        "tests",
+        "docs",
+        "m5_phases"
+      ],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "title": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["json-schema"]},
+        "schema": {"$ref": "#/$defs/portablePath"},
+        "format": {"type": "string", "minLength": 1},
+        "version": {"type": ["integer", "string"], "minimum": 1, "minLength": 1},
+        "python_symbols": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/symbol"},
+          "uniqueItems": true
+        },
+        "cli_commands": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/cliCommand"},
+          "uniqueItems": true
+        },
+        "fixtures": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/portablePath"},
+          "uniqueItems": true
+        },
+        "tests": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/portablePath"},
+          "uniqueItems": true
+        },
+        "docs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/portablePath"},
+          "uniqueItems": true
+        },
+        "m5_phases": {
+          "type": "array",
+          "items": {"enum": ["M1", "M2", "M2.5", "M3", "M4", "M5"]},
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}
