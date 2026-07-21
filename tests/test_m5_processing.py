@@ -688,6 +688,95 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                 self.assertEqual((0, 0, 0, 0), output.getpixel((1, 1)))
                 self.assertEqual((200, 10, 20, 255), output.getpixel((3, 1)))
 
+    def test_image_processing_binds_supported_decoded_formats_and_png_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            image_module, _ = _pillow()
+            root = Path(name)
+            for image_format, suffix in (("JPEG", "jpg"), ("WEBP", "webp")):
+                with self.subTest(image_format=image_format):
+                    source = root / f"source.{suffix}"
+                    mode = "RGB" if image_format == "JPEG" else "RGBA"
+                    color = (20, 40, 60) if mode == "RGB" else (20, 40, 60, 255)
+                    image_module.new(mode, (2, 2), color).save(source, format=image_format)
+                    recipe = _write_recipe(
+                        root / f"{suffix}.json",
+                        {
+                            "operation": "png_canonical",
+                            "input": artifact_reference(root, source.name),
+                            "output": {"file": "result.png"},
+                            "options": {},
+                        },
+                    )
+                    destination = root / f"output-{suffix}"
+                    process_asset_recipe(recipe, destination, asset_root=root)
+                    verify_processing_receipt(destination / RECEIPT_NAME)
+
+            first_frame = image_module.new("RGBA", (2, 2), (20, 40, 60, 255))
+            second_frame = image_module.new("RGBA", (2, 2), (60, 40, 20, 255))
+            first_frame.save(
+                root / "animated.webp",
+                format="WEBP",
+                save_all=True,
+                append_images=[second_frame],
+                duration=10,
+                loop=0,
+                lossless=True,
+            )
+            animated_recipe = _write_recipe(
+                root / "animated.json",
+                {
+                    "operation": "png_canonical",
+                    "input": artifact_reference(root, "animated.webp"),
+                    "output": {"file": "result.png"},
+                    "options": {},
+                },
+            )
+            with self.assertRaisesRegex(AssetContractError, "exactly one image frame"):
+                process_asset_recipe(
+                    animated_recipe,
+                    root / "animated-output",
+                    asset_root=root,
+                )
+
+            image_module.new("RGB", (2, 2), (20, 40, 60)).save(
+                root / "unsupported.png",
+                format="BMP",
+            )
+            recipe = _write_recipe(
+                root / "unsupported.json",
+                {
+                    "operation": "png_canonical",
+                    "input": artifact_reference(root, "unsupported.png"),
+                    "output": {"file": "result.png"},
+                    "options": {},
+                },
+            )
+            with self.assertRaisesRegex(AssetContractError, "unsupported decoded image format"):
+                process_asset_recipe(recipe, root / "unsupported-output", asset_root=root)
+
+            source = root / "canonical-source.png"
+            _write_color_png(source, (20, 40, 60, 255), (2, 2))
+            recipe = _write_recipe(
+                root / "canonical.json",
+                {
+                    "operation": "png_canonical",
+                    "input": artifact_reference(root, source.name),
+                    "output": {"file": "result.png"},
+                    "options": {},
+                },
+            )
+            destination = root / "canonical-output"
+            process_asset_recipe(recipe, destination, asset_root=root)
+            output = destination / "result.png"
+            image_module.new("RGB", (2, 2), (20, 40, 60)).save(output, format="JPEG")
+            receipt_path = destination / RECEIPT_NAME
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["outputs"][0]["artifact"] = artifact_reference(destination, "result.png")
+            receipt["content_hash"] = canonical_payload_hash(receipt)
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            with self.assertRaisesRegex(AssetContractError, "not a decoded PNG"):
+                verify_processing_receipt(receipt_path)
+
     def test_png_dimensions_are_rejected_before_full_decode(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             _pillow()
@@ -907,6 +996,104 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                 samples = struct.unpack("<4h", result.readframes(4))
             self.assertEqual((6000, 9000, 12000, 12000), samples)
             self.assertEqual(12000, first["outputs"][0]["details"]["peak"])
+
+    def test_receipt_toolchains_are_closed_per_operation(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+
+            def reject_tamper(
+                receipt_path: Path,
+                mutate: object,
+                message: str,
+            ) -> None:
+                original = json.loads(receipt_path.read_text(encoding="utf-8"))
+                changed = json.loads(json.dumps(original))
+                mutate(changed)
+                changed["content_hash"] = canonical_payload_hash(changed)
+                receipt_path.write_text(json.dumps(changed), encoding="utf-8")
+                try:
+                    with self.assertRaisesRegex(AssetContractError, message):
+                        verify_processing_receipt(receipt_path)
+                finally:
+                    receipt_path.write_text(json.dumps(original), encoding="utf-8")
+
+            _write_color_png(root / "source.png", (20, 40, 60, 255), (2, 2))
+            png_recipe = _write_recipe(
+                root / "png.json",
+                {
+                    "operation": "png_canonical",
+                    "input": artifact_reference(root, "source.png"),
+                    "output": {"file": "result.png"},
+                    "options": {},
+                },
+            )
+            process_asset_recipe(png_recipe, root / "png-output", asset_root=root)
+            png_receipt = root / f"png-output/{RECEIPT_NAME}"
+            reject_tamper(
+                png_receipt,
+                lambda value: value["toolchain"].__setitem__("extra", "forbidden"),
+                "unknown extra",
+            )
+            reject_tamper(
+                png_receipt,
+                lambda value: value["toolchain"].pop("pillow_version"),
+                "missing pillow_version",
+            )
+            reject_tamper(
+                png_receipt,
+                lambda value: value["toolchain"].__setitem__("processor", "other"),
+                "image processing toolchain is invalid",
+            )
+
+            _write_pcm16(root / "source.wav", [(0,), (1000,)], channels=1, sample_rate=8000)
+            wav_recipe = _write_recipe(
+                root / "wav-toolchain.json",
+                {
+                    "operation": "wav_pcm",
+                    "input": artifact_reference(root, "source.wav"),
+                    "output": {"file": "result.wav"},
+                    "options": {
+                        "channel_mode": "mono",
+                        "sample_rate": 8000,
+                        "trim_threshold": 0,
+                        "peak": 30000,
+                    },
+                },
+            )
+            process_asset_recipe(wav_recipe, root / "wav-output", asset_root=root)
+            reject_tamper(
+                root / f"wav-output/{RECEIPT_NAME}",
+                lambda value: value["toolchain"].__setitem__("wave_module", "third_party"),
+                "wav_pcm toolchain is invalid",
+            )
+
+            _write_model_glb(root / "source.glb")
+            glb_recipe = _write_recipe(
+                root / "glb-toolchain.json",
+                {
+                    "operation": "glb_validate",
+                    "input": artifact_reference(root, "source.glb"),
+                    "output": {"file": "result.glb", "role": "model"},
+                    "options": {"budgets": {}, "max_bytes": 1_048_576},
+                },
+            )
+            process_asset_recipe(glb_recipe, root / "glb-output", asset_root=root)
+            reject_tamper(
+                root / f"glb-output/{RECEIPT_NAME}",
+                lambda value: value["toolchain"].__setitem__(
+                    "allowed_extensions",
+                    ["KHR_materials_unlit"],
+                ),
+                "glb_validate toolchain is invalid",
+            )
+            reject_tamper(
+                root / f"glb-output/{RECEIPT_NAME}",
+                lambda value: value["toolchain"].__setitem__(
+                    "external_uris_allowed",
+                    True,
+                ),
+                "glb_validate toolchain is invalid",
+            )
 
     def test_wav_rejects_non_pcm16_input(self) -> None:
         with tempfile.TemporaryDirectory() as name:

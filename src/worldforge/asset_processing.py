@@ -11,6 +11,7 @@ import stat
 import struct
 import sys
 import tempfile
+import warnings
 import wave
 import zlib
 from array import array
@@ -23,6 +24,7 @@ from worldforge.asset_formats.gltf import (
     GLBError,
     inspect_glb,
 )
+from worldforge.asset_image_inspection import IMAGE_FORMAT_MEDIA_TYPES
 from worldforge.asset_io import (
     AssetContractError,
     artifact_reference,
@@ -194,16 +196,33 @@ def _rgba_without_metadata(image_module: Any, source: Any, context: str) -> Any:
     return clean
 
 
-def _open_rgba(path: Path, context: str) -> tuple[Any, str]:
+def _open_rgba(path: Path, context: str) -> tuple[Any, str, str]:
     image_module, unidentified_error, version = _load_pillow()
     try:
-        with image_module.open(path) as source:
-            _image_size(source.width, source.height, context)
-            source.load()
-            result = _rgba_without_metadata(image_module, source, context)
-    except (OSError, ValueError, unidentified_error, image_module.DecompressionBombError) as exc:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", image_module.DecompressionBombWarning)
+            with image_module.open(path) as source:
+                image_format = source.format
+                if image_format not in IMAGE_FORMAT_MEDIA_TYPES:
+                    raise AssetContractError(
+                        f"{context} uses unsupported decoded image format {image_format!r}"
+                    )
+                if getattr(source, "n_frames", 1) != 1:
+                    raise AssetContractError(f"{context} must contain exactly one image frame")
+                _image_size(source.width, source.height, context)
+                source.load()
+                result = _rgba_without_metadata(image_module, source, context)
+    except AssetContractError:
+        raise
+    except (
+        OSError,
+        ValueError,
+        unidentified_error,
+        image_module.DecompressionBombError,
+        image_module.DecompressionBombWarning,
+    ) as exc:
         raise AssetContractError(f"Could not decode {context}: {exc}") from exc
-    return result, version
+    return result, version, image_format
 
 
 def _save_png(image: Any, destination: Path) -> None:
@@ -272,7 +291,7 @@ def _process_png(
         raise AssetContractError(f"options contains unknown fields: {', '.join(sorted(unknown))}")
 
     image_module, _, pillow_version = _load_pillow()
-    image, _ = _open_rgba(source_path, "input PNG")
+    image, _, _ = _open_rgba(source_path, "input PNG")
     if "matte_alpha_key" in options:
         image = _apply_matte_key(image_module, image, options["matte_alpha_key"])
     if "crop" in options:
@@ -436,7 +455,7 @@ def _process_atlas(
     clip_contracts: dict[str, tuple[tuple[int, int], bool]] = {}
     receipt_inputs: list[dict[str, Any]] = []
     for position, (item, source_path) in enumerate(parsed):
-        image, _ = _open_rgba(source_path, f"atlas input {item['id']}")
+        image, _, _ = _open_rgba(source_path, f"atlas input {item['id']}")
         if image.size != (cell_width, cell_height):
             raise AssetContractError(
                 f"atlas input {item['id']} is {image.width}x{image.height}; "
@@ -1207,7 +1226,9 @@ def _verify_output_entry(root: Path, value: object, index: int) -> tuple[str, st
 
 def _verify_png_details(path: Path, details: dict[str, Any], context: str) -> None:
     _exact_keys(details, frozenset({"height", "mode", "width"}), context)
-    image, _ = _open_rgba(path, context)
+    image, _, image_format = _open_rgba(path, context)
+    if image_format != "PNG":
+        raise AssetContractError(f"{context} is not a decoded PNG")
     if details != {"height": image.height, "mode": "RGBA", "width": image.width}:
         raise AssetContractError(f"{context} does not match the PNG")
 
@@ -1348,9 +1369,58 @@ def verify_processing_receipt(receipt_path: str | Path) -> dict[str, Any]:
     _digest(recipe["sha256"], "recipe/sha256")
     if not isinstance(receipt["toolchain"], dict) or not receipt["toolchain"]:
         raise AssetContractError("toolchain must be a non-empty object")
-    if receipt["operation"] == "file_validate":
+    operation = receipt["operation"]
+    toolchain = receipt["toolchain"]
+    if operation in {"atlas", "png_canonical"}:
+        image_toolchain = _exact_keys(
+            toolchain,
+            frozenset({"pillow_version", "processor", "python_version", "zlib_runtime_version"}),
+            "toolchain",
+        )
+        if image_toolchain["processor"] != "worldforge.asset_processing" or any(
+            not isinstance(image_toolchain[field], str) or not image_toolchain[field]
+            for field in ("pillow_version", "python_version", "zlib_runtime_version")
+        ):
+            raise AssetContractError("image processing toolchain is invalid")
+    elif operation == "wav_pcm":
+        wav_toolchain = _exact_keys(
+            toolchain,
+            frozenset({"processor", "python_version", "wave_module"}),
+            "toolchain",
+        )
+        if (
+            wav_toolchain["processor"] != "worldforge.asset_processing"
+            or wav_toolchain["wave_module"] != "stdlib"
+            or not isinstance(wav_toolchain["python_version"], str)
+            or not wav_toolchain["python_version"]
+        ):
+            raise AssetContractError("wav_pcm toolchain is invalid")
+    elif operation == "glb_validate":
+        glb_toolchain = _exact_keys(
+            toolchain,
+            frozenset(
+                {
+                    "allowed_extensions",
+                    "external_uris_allowed",
+                    "inspector",
+                    "processor",
+                    "python_version",
+                }
+            ),
+            "toolchain",
+        )
+        if (
+            glb_toolchain["allowed_extensions"] != sorted(DEFAULT_ALLOWED_EXTENSIONS)
+            or glb_toolchain["external_uris_allowed"] is not False
+            or glb_toolchain["inspector"] != "worldforge.asset_formats.gltf"
+            or glb_toolchain["processor"] != "worldforge.asset_processing"
+            or not isinstance(glb_toolchain["python_version"], str)
+            or not glb_toolchain["python_version"]
+        ):
+            raise AssetContractError("glb_validate toolchain is invalid")
+    elif operation == "file_validate":
         file_toolchain = _exact_keys(
-            receipt["toolchain"],
+            toolchain,
             frozenset({"processor", "python_version", "validator"}),
             "toolchain",
         )

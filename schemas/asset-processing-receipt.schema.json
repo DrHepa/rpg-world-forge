@@ -304,7 +304,7 @@
       "additionalProperties": false,
       "required": ["allowed_extensions", "external_uris_allowed", "inspector", "processor", "python_version"],
       "properties": {
-        "allowed_extensions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "allowed_extensions": {"const": ["KHR_lights_punctual", "KHR_materials_unlit", "KHR_mesh_quantization", "KHR_texture_transform"]},
         "external_uris_allowed": {"const": false},
         "inspector": {"const": "worldforge.asset_formats.gltf"},
         "processor": {"const": "worldforge.asset_processing"},

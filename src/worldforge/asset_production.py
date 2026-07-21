@@ -18,6 +18,7 @@ from worldforge.asset_contracts import (
     validate_asset_spec,
 )
 from worldforge.asset_formats.gltf import GLBError, inspect_glb
+from worldforge.asset_image_inspection import inspect_image_file
 from worldforge.asset_io import (
     AssetContractError,
     artifact_reference,
@@ -1277,10 +1278,56 @@ def validate_production_receipt(
                                     f"outputs/{index}/media_type", "does not match Blender bytes"
                                 )
                             )
+                elif media_type in _IMAGE_CANDIDATE_MEDIA:
+                    try:
+                        inspection = inspect_image_file(
+                            output_path,
+                            f"outputs/{index}",
+                        )
+                    except AssetContractError as exc:
+                        issues.append(_issue(f"outputs/{index}/media_type", str(exc)))
+                    else:
+                        if inspection.media_type != media_type:
+                            issues.append(
+                                _issue(
+                                    f"outputs/{index}/media_type",
+                                    "does not match the decoded image format",
+                                )
+                            )
+                        if (
+                            "width" in output
+                            and "height" in output
+                            and (
+                                output["width"] != inspection.width
+                                or output["height"] != inspection.height
+                            )
+                        ):
+                            issues.append(
+                                _issue(
+                                    f"outputs/{index}",
+                                    "declared dimensions do not match decoded image bytes",
+                                )
+                            )
                 elif not media_signature_matches(output_path, media_type):
                     issues.append(
                         _issue(f"outputs/{index}/media_type", "does not match candidate bytes")
                     )
+            if ("width" in output) != ("height" in output):
+                issues.append(
+                    _issue(
+                        f"outputs/{index}",
+                        "width and height must be declared together",
+                    )
+                )
+            if (
+                "width" in output or "height" in output
+            ) and media_type not in _IMAGE_CANDIDATE_MEDIA:
+                issues.append(
+                    _issue(
+                        f"outputs/{index}",
+                        "dimensions are only valid for decoded image outputs",
+                    )
+                )
             for dimension in ("width", "height"):
                 if dimension in output and (
                     isinstance(output[dimension], bool)
@@ -1297,22 +1344,24 @@ def validate_production_receipt(
                 seen_paths.add(file_value)
         expected_outputs = request.get("expected_outputs")
         if isinstance(expected_outputs, list):
-            expected_pairs = {
+            expected_pairs = sorted(
                 (item["role"], item["media_type"])
                 for item in expected_outputs
                 if isinstance(item, dict)
                 and isinstance(item.get("role"), str)
                 and isinstance(item.get("media_type"), str)
-            }
-            actual_pairs = {
+            )
+            actual_pairs = sorted(
                 (item["role"], item["media_type"])
                 for item in outputs
                 if isinstance(item, dict)
                 and isinstance(item.get("role"), str)
                 and isinstance(item.get("media_type"), str)
-            }
-            if not expected_pairs <= actual_pairs:
-                issues.append(_issue("outputs", "do not satisfy the request expected outputs"))
+            )
+            if expected_pairs != actual_pairs:
+                issues.append(
+                    _issue("outputs", "do not exactly match the request expected outputs")
+                )
     if request:
         issues.extend(_executor_receipt_issues(raw, request, root=root))
     issues.extend(_scan_sensitive(raw))

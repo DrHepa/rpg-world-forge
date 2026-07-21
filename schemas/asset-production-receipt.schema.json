@@ -109,6 +109,7 @@
     "output": {
       "type": "object", "additionalProperties": false,
       "required": ["role", "file", "sha256", "media_type"],
+      "dependentRequired": {"width": ["height"], "height": ["width"]},
       "properties": {
         "role": {"$ref": "#/$defs/candidate_role"},
         "file": {"$ref": "#/$defs/project_path"},
@@ -125,7 +126,8 @@
         {"if": {"properties": {"role": {"const": "audio"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["audio/mpeg", "audio/ogg", "audio/wav"]}}}},
         {"if": {"properties": {"role": {"const": "font"}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["font/otf", "font/ttf"]}}}},
         {"if": {"properties": {"role": {"enum": ["fragment_shader", "vertex_shader"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"const": "text/x-glsl"}}}},
-        {"if": {"properties": {"role": {"enum": ["preview", "texture"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}}
+        {"if": {"properties": {"role": {"enum": ["preview", "texture"]}}, "required": ["role"]}, "then": {"properties": {"media_type": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}},
+        {"if": {"properties": {"media_type": {"not": {"enum": ["image/jpeg", "image/png", "image/webp"]}}}, "required": ["media_type"]}, "then": {"properties": {"width": false, "height": false}}}
       ]
     },
     "openai_toolchain": {

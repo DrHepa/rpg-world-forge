@@ -21,6 +21,22 @@ from worldforge.asset_production import (
 )
 
 
+def _write_image(
+    path: Path,
+    *,
+    image_format: str = "PNG",
+    size: tuple[int, int] = (2, 2),
+) -> None:
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise unittest.SkipTest("Pillow is not installed") from exc
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mode = "RGB" if image_format == "JPEG" else "RGBA"
+    color = (20, 40, 60) if mode == "RGB" else (20, 40, 60, 255)
+    Image.new(mode, size, color).save(path, format=image_format)
+
+
 def _spec(root: Path, *, representation: str = "2d") -> Path:
     technical: dict[str, object] = {
         "runtime_format": "png" if representation == "2d" else "glb",
@@ -206,7 +222,7 @@ def _receipt(root: Path, request_path: Path, *, executor: str) -> Path:
             + document
         )
     else:
-        candidate.write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+        _write_image(candidate)
     if executor == "openai_image":
         toolchain = {
             "surface": "images_api",
@@ -626,7 +642,12 @@ class M5ProductionTests(unittest.TestCase):
             )
             candidate = root / "generated/font.ttf"
             candidate.parent.mkdir(parents=True)
-            candidate.write_bytes(b"\x00\x01\x00\x00fixture")
+            candidate.write_bytes(
+                b"\x00\x01\x00\x00"
+                + struct.pack(">HHHH", 1, 16, 0, 0)
+                + struct.pack(">4sIII", b"head", 0, 28, 4)
+                + b"\0\0\0\0"
+            )
             request = json.loads(request_path.read_text(encoding="utf-8"))
             receipt = bind_content_hash(
                 {
@@ -1194,6 +1215,90 @@ class M5ProductionTests(unittest.TestCase):
                 side_effect=AssertionError("full-file read is forbidden for Blender validation"),
             ):
                 self.assertEqual([], validate_production_receipt(receipt, asset_root=root))
+
+    def test_receipt_outputs_are_exact_and_image_dimensions_are_byte_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            request = _request(root)
+            receipt_path = _receipt(root, request, executor="openai_image")
+            original = json.loads(receipt_path.read_text(encoding="utf-8"))
+            output = original["outputs"][0]
+
+            output["width"] = 2
+            output["height"] = 2
+            receipt_path.write_text(
+                json.dumps(bind_content_hash(original)),
+                encoding="utf-8",
+            )
+            self.assertEqual([], validate_production_receipt(receipt_path, asset_root=root))
+
+            baseline = json.loads(receipt_path.read_text(encoding="utf-8"))
+            for name, mutate in (
+                ("missing", lambda value: value.__setitem__("outputs", [])),
+                (
+                    "duplicate",
+                    lambda value: value["outputs"].append(dict(value["outputs"][0])),
+                ),
+                (
+                    "width-only",
+                    lambda value: value["outputs"][0].pop("height"),
+                ),
+                (
+                    "wrong-dimensions",
+                    lambda value: value["outputs"][0].__setitem__("width", 3),
+                ),
+            ):
+                with self.subTest(case=name):
+                    changed = json.loads(json.dumps(baseline))
+                    mutate(changed)
+                    receipt_path.write_text(
+                        json.dumps(bind_content_hash(changed)),
+                        encoding="utf-8",
+                    )
+                    messages = [
+                        issue.message
+                        for issue in validate_production_receipt(receipt_path, asset_root=root)
+                    ]
+                    self.assertTrue(messages)
+
+            try:
+                from PIL import Image
+            except ImportError as exc:
+                raise unittest.SkipTest("Pillow is not installed") from exc
+            first_frame = Image.new("RGBA", (2, 2), (20, 40, 60, 255))
+            second_frame = Image.new("RGBA", (2, 2), (60, 40, 20, 255))
+            first_frame.save(
+                root / "generated/hero.png",
+                format="PNG",
+                save_all=True,
+                append_images=[second_frame],
+                duration=10,
+                loop=0,
+            )
+            animated = json.loads(json.dumps(baseline))
+            animated["outputs"][0].update(artifact_reference(root, "generated/hero.png"))
+            receipt_path.write_text(
+                json.dumps(bind_content_hash(animated)),
+                encoding="utf-8",
+            )
+            messages = [
+                issue.message
+                for issue in validate_production_receipt(receipt_path, asset_root=root)
+            ]
+            self.assertTrue(any("exactly one image frame" in message for message in messages))
+
+            changed = json.loads(json.dumps(baseline))
+            _write_image(root / "generated/hero.png", image_format="JPEG")
+            changed["outputs"][0].update(artifact_reference(root, "generated/hero.png"))
+            receipt_path.write_text(
+                json.dumps(bind_content_hash(changed)),
+                encoding="utf-8",
+            )
+            messages = [
+                issue.message
+                for issue in validate_production_receipt(receipt_path, asset_root=root)
+            ]
+            self.assertTrue(any("decoded image format" in message for message in messages))
 
     def test_modly_receipt_fails_closed_without_live_supported_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
