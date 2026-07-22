@@ -33,6 +33,11 @@
         "workspace.register",
         "workspace.list",
         "workspace.get",
+        "workspace.overview",
+        "source.list",
+        "source.read",
+        "world.validate",
+        "world.analyze",
         "events.list",
         "changeset.create",
         "changeset.get",
@@ -47,39 +52,379 @@
         "job.cancel"
       ]
     },
-    "request": {
-      "allOf": [
-        {"$ref": "#/$defs/base"},
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
-          "properties": {
-            "protocol": {"const": "rpg-world-forge.studio_protocol"},
-            "protocol_version": {"const": 1},
-            "kind": {"const": "request"},
-            "request_id": {"type": "string", "minLength": 1},
-            "method": {"$ref": "#/$defs/method"},
-            "params": {"type": "object"}
-          }
-        }
+    "legacyMethod": {
+      "enum": [
+        "service.initialize",
+        "workspace.register",
+        "workspace.list",
+        "workspace.get",
+        "events.list",
+        "changeset.create",
+        "changeset.get",
+        "changeset.list",
+        "changeset.approve",
+        "changeset.reject",
+        "changeset.apply",
+        "job.create",
+        "job.get",
+        "job.list",
+        "job.transition",
+        "job.cancel"
       ]
     },
-    "response": {
-      "allOf": [
-        {"$ref": "#/$defs/base"},
-        {
+    "workspaceScopedAuthoringMethod": {
+      "enum": ["workspace.overview", "source.list", "world.validate", "world.analyze"]
+    },
+    "workspaceId": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "portableSourcePath": {
+      "type": "string",
+      "format": "rpg-world-forge-portable-source-path",
+      "x-worldforge-path-policy": {
+        "root": "source/",
+        "separator": "/",
+        "normalization": "NFC",
+        "reject_traversal_segments": true,
+        "reject_windows_reserved_names": true,
+        "reject_trailing_dot_or_space": true,
+        "max_component_utf8_bytes": 255,
+        "max_depth": 8,
+        "collision_key": "NFC-casefold"
+      },
+      "pattern": "^source/[^/\\\\\\u0000-\\u001f<>:\\u0022|?*]+(?:/[^/\\\\\\u0000-\\u001f<>:\\u0022|?*]+)*$"
+    },
+    "workspaceScopedParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_id"],
+      "properties": {"workspace_id": {"$ref": "#/$defs/workspaceId"}}
+    },
+    "sourceReadParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_id", "path"],
+      "properties": {
+        "workspace_id": {"$ref": "#/$defs/workspaceId"},
+        "path": {"$ref": "#/$defs/portableSourcePath"}
+      }
+    },
+    "sourceDocumentSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind", "size", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/portableSourcePath"},
+        "kind": {"type": "string", "minLength": 1, "maxLength": 128},
+        "size": {"type": "integer", "minimum": 0, "maximum": 262144},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "sourceDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind", "size", "sha256", "encoding", "content", "json"],
+      "properties": {
+        "path": {"$ref": "#/$defs/portableSourcePath"},
+        "kind": {"type": "string", "minLength": 1, "maxLength": 128},
+        "size": {"type": "integer", "minimum": 0, "maximum": 262144},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "encoding": {"const": "utf-8"},
+        "content": {"type": "string"},
+        "json": {"type": "object"}
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "path", "message"],
+      "properties": {
+        "severity": {"const": "error"},
+        "code": {"enum": ["source_error", "validation_error"]},
+        "path": {"type": "string"},
+        "message": {"type": "string", "maxLength": 512}
+      }
+    },
+    "worldValidation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "valid",
+        "profile",
+        "world_id",
+        "object_count",
+        "diagnostics",
+        "diagnostics_truncated"
+      ],
+      "properties": {
+        "valid": {"type": "boolean"},
+        "profile": {"const": "release"},
+        "world_id": {"type": ["string", "null"]},
+        "object_count": {"type": "integer", "minimum": 0},
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 512,
+          "items": {"$ref": "#/$defs/diagnostic"}
+        },
+        "diagnostics_truncated": {"type": "boolean"}
+      }
+    },
+    "workspaceOverview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_id", "project", "status", "repositories", "capabilities"],
+      "properties": {
+        "workspace_id": {"$ref": "#/$defs/workspaceId"},
+        "project": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["protocol", "protocol_version", "kind", "request_id", "result"],
+          "required": ["world_id", "title", "world_version"],
           "properties": {
-            "protocol": {"const": "rpg-world-forge.studio_protocol"},
-            "protocol_version": {"const": 1},
-            "kind": {"const": "response"},
-            "request_id": {"type": "string", "minLength": 1},
-            "result": {"type": "object"}
+            "world_id": {"type": "string", "minLength": 1},
+            "title": {"type": "string", "minLength": 1},
+            "world_version": {"type": ["string", "null"]}
+          }
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["current_phase", "revision", "canon_locked", "worldpack_hash"],
+          "properties": {
+            "current_phase": {"type": ["string", "null"]},
+            "revision": {"type": "integer", "minimum": 0},
+            "canon_locked": {"type": "boolean"},
+            "worldpack_hash": {
+              "oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]
+            }
+          }
+        },
+        "repositories": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["game_registered", "bundle_registered"],
+          "properties": {
+            "game_registered": {"type": "boolean"},
+            "bundle_registered": {"type": "boolean"}
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "providers",
+            "source_inspection",
+            "world_validation",
+            "narrative_analysis",
+            "staged_changesets"
+          ],
+          "properties": {
+            "providers": {"const": false},
+            "source_inspection": {"const": true},
+            "world_validation": {"const": true},
+            "narrative_analysis": {"const": true},
+            "staged_changesets": {"const": true}
           }
         }
+      }
+    },
+    "workspaceOverviewResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overview"],
+      "properties": {"overview": {"$ref": "#/$defs/workspaceOverview"}}
+    },
+    "sourceListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["documents"],
+      "properties": {
+        "documents": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {"$ref": "#/$defs/sourceDocumentSummary"}
+        }
+      }
+    },
+    "sourceReadResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document"],
+      "properties": {"document": {"$ref": "#/$defs/sourceDocument"}}
+    },
+    "worldValidateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validation"],
+      "properties": {"validation": {"$ref": "#/$defs/worldValidation"}}
+    },
+    "worldAnalyzeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["validation", "analysis"],
+      "properties": {
+        "validation": {"$ref": "#/$defs/worldValidation"},
+        "analysis": {
+          "oneOf": [{"$ref": "#/$defs/narrativeAnalysis"}, {"type": "null"}]
+        }
+      }
+    },
+    "narrativeFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "path", "message"],
+      "properties": {
+        "severity": {"enum": ["error", "warning", "info"]},
+        "code": {"type": "string"},
+        "path": {"type": "string"},
+        "message": {"type": "string"}
+      }
+    },
+    "narrativeAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "world_id", "summary", "findings"],
+      "properties": {
+        "format": {"const": "rpg-world-forge.narrative_analysis"},
+        "format_version": {"const": 1},
+        "world_id": {"type": "string"},
+        "summary": {"type": "object"},
+        "findings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/narrativeFinding"}
+        }
+      }
+    },
+    "legacyRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"$ref": "#/$defs/legacyMethod"},
+        "params": {"type": "object"}
+      }
+    },
+    "workspaceScopedAuthoringRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"$ref": "#/$defs/workspaceScopedAuthoringMethod"},
+        "params": {"$ref": "#/$defs/workspaceScopedParams"}
+      }
+    },
+    "sourceReadRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "source.read"},
+        "params": {"$ref": "#/$defs/sourceReadParams"}
+      }
+    },
+    "request": {
+      "oneOf": [
+        {"$ref": "#/$defs/legacyRequest"},
+        {"$ref": "#/$defs/workspaceScopedAuthoringRequest"},
+        {"$ref": "#/$defs/sourceReadRequest"}
+      ]
+    },
+    "legacyResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"$ref": "#/$defs/legacyMethod"},
+        "result": {"type": "object"}
+      }
+    },
+    "workspaceOverviewResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "workspace.overview"},
+        "result": {"$ref": "#/$defs/workspaceOverviewResult"}
+      }
+    },
+    "sourceListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "source.list"},
+        "result": {"$ref": "#/$defs/sourceListResult"}
+      }
+    },
+    "sourceReadResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "source.read"},
+        "result": {"$ref": "#/$defs/sourceReadResult"}
+      }
+    },
+    "worldValidateResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "world.validate"},
+        "result": {"$ref": "#/$defs/worldValidateResult"}
+      }
+    },
+    "worldAnalyzeResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "world.analyze"},
+        "result": {"$ref": "#/$defs/worldAnalyzeResult"}
+      }
+    },
+    "response": {
+      "oneOf": [
+        {"$ref": "#/$defs/legacyResponse"},
+        {"$ref": "#/$defs/workspaceOverviewResponse"},
+        {"$ref": "#/$defs/sourceListResponse"},
+        {"$ref": "#/$defs/sourceReadResponse"},
+        {"$ref": "#/$defs/worldValidateResponse"},
+        {"$ref": "#/$defs/worldAnalyzeResponse"}
       ]
     },
     "errorCode": {

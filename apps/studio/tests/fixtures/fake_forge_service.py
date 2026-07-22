@@ -42,6 +42,7 @@ for raw_line in sys.stdin.buffer:
                 "protocol_version": 1,
                 "kind": "response",
                 "request_id": request["request_id"],
+                "method": ("workspace.list" if MODE == "mismatched-method" else request["method"]),
                 "result": {
                     "service": "rpg-world-forge.studio",
                     "service_version": 1,

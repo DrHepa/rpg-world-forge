@@ -4,8 +4,10 @@ This app-local Electron/React project owns two separate local stdio boundaries:
 the provider-free Python Studio service and an optional, workspace-bound Codex
 app-server 0.144.6. Codex can reach the Forge only through an argv-bound MCP
 process exposing three changeset staging/read tools. It cannot approve or apply
-changesets. Lore editors, asset tools, Modly, Blender, file watching, and native
-playtests remain later batches.
+changesets. The Python service already provides bounded workspace overview,
+manifest-authorized source inspection, release validation, and in-memory
+narrative analysis methods. Visual lore editors, asset tools, Modly, Blender,
+file watching, and native playtests remain later batches.
 
 ## Development
 

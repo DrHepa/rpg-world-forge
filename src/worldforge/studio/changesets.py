@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from isoworld.content.file_stat import FileStat, descriptor_file_stat, path_file_stat
+from isoworld.content.portability import portable_relative_path
 from worldforge.asset_io import AssetContractError, encoded_json, read_json_object
 from worldforge.studio.contracts import studio_source_path, validate_studio_changeset
 from worldforge.studio.errors import (
@@ -45,8 +46,32 @@ _DIRECTORY_OPEN_FLAGS = (
 )
 
 
+def _platform_name() -> str:
+    return os.name
+
+
 def _identity(info: FileStat) -> tuple[int, int]:
     return info.st_dev, info.st_ino
+
+
+def _same_file_state(left: FileStat, right: FileStat) -> bool:
+    return (
+        left.st_dev,
+        left.st_ino,
+        left.st_mode,
+        left.st_nlink,
+        left.st_size,
+        left.st_mtime_ns,
+        left.st_ctime_ns,
+    ) == (
+        right.st_dev,
+        right.st_ino,
+        right.st_mode,
+        right.st_nlink,
+        right.st_size,
+        right.st_mtime_ns,
+        right.st_ctime_ns,
+    )
 
 
 def _is_link_or_reparse(info: FileStat) -> bool:
@@ -145,6 +170,7 @@ def _safe_file_snapshot(
     context: str,
     require_standalone: bool,
     require_utf8: bool = True,
+    limit: int = MAX_CHANGE_FILE_BYTES,
 ) -> tuple[bytes, tuple[int, int]]:
     descriptor: int | None = None
     try:
@@ -157,21 +183,23 @@ def _safe_file_snapshot(
             raise OSError("not a regular file")
         if require_standalone and before.st_nlink != 1:
             raise OSError("is a hard link")
-        if before.st_size > MAX_CHANGE_FILE_BYTES:
-            raise OSError(f"exceeds {MAX_CHANGE_FILE_BYTES} bytes")
+        if before.st_size > limit:
+            raise OSError(f"exceeds {limit} bytes")
         with os.fdopen(descriptor, "rb") as source:
             descriptor = None
-            payload = source.read(MAX_CHANGE_FILE_BYTES + 1)
+            payload = source.read(limit + 1)
+            source.seek(0)
+            repeated = source.read(limit + 1)
             after = descriptor_file_stat(source.fileno())
-        if len(payload) > MAX_CHANGE_FILE_BYTES:
-            raise OSError(f"exceeds {MAX_CHANGE_FILE_BYTES} bytes")
-        if _identity(before) != _identity(after) or before.st_size != after.st_size:
-            raise OSError("identity changed while reading")
+        if len(payload) > limit:
+            raise OSError(f"exceeds {limit} bytes")
+        if payload != repeated or not _same_file_state(before, after):
+            raise OSError("file changed while reading")
         path_after = path_file_stat(path)
         if (
             _is_link_or_reparse(path_after)
-            or _identity(path_before) != _identity(before)
-            or _identity(path_after) != _identity(before)
+            or not _same_file_state(path_before, before)
+            or not _same_file_state(path_after, before)
         ):
             raise OSError("path identity changed while reading")
         if require_utf8:
@@ -358,7 +386,8 @@ def _open_pinned_parent(
     world_identity: tuple[int, int],
     parent_identity: tuple[int, int],
 ) -> Iterator[_PinnedParent]:
-    if os.name == "posix":
+    platform = _platform_name()
+    if platform == "posix":
         if not _POSIX_PINNED_DIRECTORY_IO:
             raise StudioError(
                 "internal_error", "Secure POSIX changeset directory I/O is unavailable"
@@ -420,7 +449,7 @@ def _open_pinned_parent(
             for descriptor in reversed(descriptors):
                 os.close(descriptor)
         return
-    if os.name != "nt":
+    if platform != "nt":
         raise StudioError("internal_error", "Secure changeset directory I/O is unsupported")
 
     handles: list[int] = []
@@ -488,6 +517,7 @@ def _safe_entry_snapshot(
     context: str,
     require_standalone: bool,
     require_utf8: bool = True,
+    limit: int = MAX_CHANGE_FILE_BYTES,
 ) -> tuple[bytes, tuple[int, int]]:
     descriptor: int | None = None
     try:
@@ -507,22 +537,24 @@ def _safe_entry_snapshot(
             raise OSError("not a regular file")
         if require_standalone and before.st_nlink != 1:
             raise OSError("is a hard link")
-        if before.st_size > MAX_CHANGE_FILE_BYTES:
-            raise OSError(f"exceeds {MAX_CHANGE_FILE_BYTES} bytes")
+        if before.st_size > limit:
+            raise OSError(f"exceeds {limit} bytes")
         with os.fdopen(descriptor, "rb") as source:
             descriptor = None
-            payload = source.read(MAX_CHANGE_FILE_BYTES + 1)
+            payload = source.read(limit + 1)
+            source.seek(0)
+            repeated = source.read(limit + 1)
             after = descriptor_file_stat(source.fileno())
-        if len(payload) > MAX_CHANGE_FILE_BYTES:
-            raise OSError(f"exceeds {MAX_CHANGE_FILE_BYTES} bytes")
-        if _identity(before) != _identity(after) or before.st_size != after.st_size:
-            raise OSError("identity changed while reading")
+        if len(payload) > limit:
+            raise OSError(f"exceeds {limit} bytes")
+        if payload != repeated or not _same_file_state(before, after):
+            raise OSError("file changed while reading")
         after_path = parent.entry_info(name)
         if (
             after_path is None
             or _is_link_or_reparse(after_path)
-            or _identity(before_path) != _identity(before)
-            or _identity(after_path) != _identity(before)
+            or not _same_file_state(before_path, before)
+            or not _same_file_state(after_path, before)
         ):
             raise OSError("entry identity changed while reading")
         if require_utf8:
@@ -538,6 +570,63 @@ def _safe_entry_snapshot(
     finally:
         if descriptor is not None:
             os.close(descriptor)
+
+
+def read_source_file_snapshot(
+    world_root: Path,
+    relative: PurePosixPath,
+    *,
+    world_identity: tuple[int, int],
+    context: str,
+    limit: int,
+) -> bytes:
+    """Read one source file through the same pinned boundary used by changesets."""
+
+    if studio_source_path(relative.as_posix()) != relative:
+        raise invalid_request("Source paths are limited to portable files under source/")
+    return read_workspace_file_snapshot(
+        world_root,
+        relative,
+        world_identity=world_identity,
+        context=context,
+        limit=limit,
+    )
+
+
+def read_workspace_file_snapshot(
+    world_root: Path,
+    relative: PurePosixPath,
+    *,
+    world_identity: tuple[int, int],
+    context: str,
+    limit: int,
+) -> bytes:
+    """Read one portable workspace file through a pinned standalone-file boundary."""
+
+    if portable_relative_path(relative.as_posix()) != relative:
+        raise invalid_request("Workspace snapshot paths must be portable relative paths")
+    if (
+        isinstance(limit, bool)
+        or not isinstance(limit, int)
+        or not 1 <= limit <= MAX_CHANGE_FILE_BYTES
+    ):
+        raise ValueError("limit must be a positive Studio workspace-file bound")
+    parent_path = world_root.joinpath(*relative.parts[:-1])
+    parent_info = _safe_directory_info(parent_path, context=f"workspace parent {relative.parent}")
+    with _open_pinned_parent(
+        world_root,
+        relative,
+        world_identity=world_identity,
+        parent_identity=_identity(parent_info),
+    ) as parent:
+        payload, _ = _safe_entry_snapshot(
+            parent,
+            relative.name,
+            context=context,
+            require_standalone=True,
+            limit=limit,
+        )
+    return payload
 
 
 def _journal_identity(value: object, *, context: str) -> tuple[int, int]:
@@ -630,16 +719,11 @@ def _reject_sibling_collisions(directory: Path, requested: str, *, context: str)
 def _verified_world(
     store: StudioStore, workspace_id: object
 ) -> tuple[dict[str, Any], Path, tuple[int, int]]:
-    workspace = WorkspaceManager(store).get(workspace_id)
-    world_root = Path(workspace["world_root"])
-    expected = WorkspaceManager(store).root_identity(workspace["workspace_id"], "world_root")
-    assert expected is not None
-    try:
-        info = path_file_stat(world_root)
-    except OSError as exc:
-        raise conflict(f"World root is unavailable: {exc}") from exc
-    if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode) or _identity(info) != expected:
-        raise conflict("World root identity changed after workspace registration")
+    manager = WorkspaceManager(store)
+    workspace = manager.get(workspace_id)
+    verified = manager.verified_root(workspace["workspace_id"], "world_root")
+    assert verified is not None
+    world_root, expected = verified
     try:
         inspect_world_project(world_root)
     except ValueError as exc:

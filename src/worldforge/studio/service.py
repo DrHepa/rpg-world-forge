@@ -4,6 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from worldforge.studio.authoring import AuthoringManager
 from worldforge.studio.changesets import ChangesetManager
 from worldforge.studio.contracts import (
     METHODS,
@@ -39,6 +40,7 @@ class StudioService:
     def __init__(self, store: StudioStore) -> None:
         self.store = store
         self.workspaces = WorkspaceManager(store)
+        self.authoring = AuthoringManager(self.workspaces)
         self.changesets = ChangesetManager(store)
         self.jobs = JobManager(store)
         self._methods: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
@@ -46,6 +48,11 @@ class StudioService:
             "workspace.register": self._workspace_register,
             "workspace.list": self._workspace_list,
             "workspace.get": self._workspace_get,
+            "workspace.overview": self._workspace_overview,
+            "source.list": self._source_list,
+            "source.read": self._source_read,
+            "world.validate": self._world_validate,
+            "world.analyze": self._world_analyze,
             "events.list": self._events_list,
             "changeset.create": self._changeset_create,
             "changeset.get": self._changeset_get,
@@ -73,6 +80,7 @@ class StudioService:
             "protocol_version": STUDIO_VERSION,
             "kind": "response",
             "request_id": request["request_id"],
+            "method": request["method"],
             "result": result,
         }
         try:
@@ -94,6 +102,9 @@ class StudioService:
             "capabilities": {
                 "providers": False,
                 "watcher": False,
+                "source_inspection": True,
+                "world_validation": True,
+                "narrative_analysis": True,
                 "staged_changesets": True,
                 "durable_jobs": True,
             },
@@ -109,6 +120,26 @@ class StudioService:
     def _workspace_get(self, params: dict[str, Any]) -> dict[str, Any]:
         _closed_params(params, allowed={"workspace_id"}, required={"workspace_id"})
         return {"workspace": self.workspaces.get(params["workspace_id"])}
+
+    def _workspace_overview(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(params, allowed={"workspace_id"}, required={"workspace_id"})
+        return self.authoring.overview(params["workspace_id"])
+
+    def _source_list(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(params, allowed={"workspace_id"}, required={"workspace_id"})
+        return self.authoring.list_sources(params["workspace_id"])
+
+    def _source_read(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(params, allowed={"workspace_id", "path"}, required={"workspace_id", "path"})
+        return self.authoring.read_source(params["workspace_id"], params["path"])
+
+    def _world_validate(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(params, allowed={"workspace_id"}, required={"workspace_id"})
+        return self.authoring.validate_world(params["workspace_id"])
+
+    def _world_analyze(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(params, allowed={"workspace_id"}, required={"workspace_id"})
+        return self.authoring.analyze_world(params["workspace_id"])
 
     def _events_list(self, params: dict[str, Any]) -> dict[str, Any]:
         _closed_params(params, allowed={"workspace_id", "after_id", "limit"})

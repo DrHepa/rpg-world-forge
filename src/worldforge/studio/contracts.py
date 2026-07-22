@@ -46,6 +46,11 @@ METHODS = frozenset(
         "workspace.register",
         "workspace.list",
         "workspace.get",
+        "workspace.overview",
+        "source.list",
+        "source.read",
+        "world.validate",
+        "world.analyze",
         "events.list",
         "changeset.create",
         "changeset.get",
@@ -60,6 +65,15 @@ METHODS = frozenset(
         "job.cancel",
     }
 )
+WORKSPACE_AUTHORING_METHODS = frozenset(
+    {"workspace.overview", "source.list", "world.validate", "world.analyze"}
+)
+AUTHORING_METHODS = WORKSPACE_AUTHORING_METHODS | {"source.read"}
+LEGACY_METHODS = METHODS - AUTHORING_METHODS
+MAX_STUDIO_SOURCE_DEPTH = 8
+MAX_STUDIO_SOURCE_BYTES = 256 * 1024
+MAX_STUDIO_SOURCE_DOCUMENTS = 1024
+MAX_STUDIO_DIAGNOSTICS = 512
 
 
 def _object(value: object, context: str) -> dict[str, Any]:
@@ -131,6 +145,26 @@ def _strict_json_value(value: object, context: str) -> None:
     raise StudioContractError(f"{context} contains a non-JSON value")
 
 
+def _plain_string(value: object, context: str, *, max_length: int | None = None) -> str:
+    if not isinstance(value, str):
+        raise StudioContractError(f"{context} must be a string")
+    if max_length is not None and len(value) > max_length:
+        raise StudioContractError(f"{context} must contain at most {max_length} characters")
+    return value
+
+
+def _boolean(value: object, context: str) -> bool:
+    if not isinstance(value, bool):
+        raise StudioContractError(f"{context} must be a boolean")
+    return value
+
+
+def _integer(value: object, context: str, *, minimum: int = 0) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise StudioContractError(f"{context} must be an integer of at least {minimum}")
+    return value
+
+
 def studio_source_path(value: object) -> PurePosixPath | None:
     """Return a canonical portable path rooted below ``source/``."""
 
@@ -141,6 +175,207 @@ def studio_source_path(value: object) -> PurePosixPath | None:
     if relative is None or len(relative.parts) < 2 or relative.parts[0] != "source":
         return None
     return relative
+
+
+def _studio_source_contract_path(value: object, context: str) -> PurePosixPath:
+    relative = studio_source_path(value)
+    if relative is None or len(relative.parts) > MAX_STUDIO_SOURCE_DEPTH:
+        raise StudioContractError(
+            f"{context} must be a portable source path of at most "
+            f"{MAX_STUDIO_SOURCE_DEPTH} components"
+        )
+    return relative
+
+
+def _validate_workspace_params(value: object, context: str) -> None:
+    params = _object(value, context)
+    _closed(params, {"workspace_id"}, context)
+    _identifier(params["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
+
+
+def _validate_source_read_params(value: object, context: str) -> None:
+    params = _object(value, context)
+    _closed(params, {"workspace_id", "path"}, context)
+    _identifier(params["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
+    _studio_source_contract_path(params["path"], f"{context}/path")
+
+
+def _validate_source_document_summary(value: object, context: str) -> None:
+    document = _object(value, context)
+    _closed(document, {"path", "kind", "size", "sha256"}, context)
+    _studio_source_contract_path(document["path"], f"{context}/path")
+    kind = _string(document["kind"], f"{context}/kind")
+    assert kind is not None
+    if len(kind) > 128:
+        raise StudioContractError(f"{context}/kind must contain at most 128 characters")
+    size = _integer(document["size"], f"{context}/size")
+    if size > MAX_STUDIO_SOURCE_BYTES:
+        raise StudioContractError(f"{context}/size must be at most {MAX_STUDIO_SOURCE_BYTES}")
+    _sha256(document["sha256"], f"{context}/sha256")
+
+
+def _validate_source_document(value: object, context: str) -> None:
+    document = _object(value, context)
+    _closed(
+        document,
+        {"path", "kind", "size", "sha256", "encoding", "content", "json"},
+        context,
+    )
+    _validate_source_document_summary(
+        {field: document[field] for field in ("path", "kind", "size", "sha256")},
+        context,
+    )
+    if document["encoding"] != "utf-8":
+        raise StudioContractError(f"{context}/encoding must be utf-8")
+    _plain_string(document["content"], f"{context}/content")
+    parsed = _object(document["json"], f"{context}/json")
+    _strict_json_value(parsed, f"{context}/json")
+
+
+def _validate_diagnostic(value: object, context: str) -> None:
+    diagnostic = _object(value, context)
+    _closed(diagnostic, {"severity", "code", "path", "message"}, context)
+    if diagnostic["severity"] != "error":
+        raise StudioContractError(f"{context}/severity must be error")
+    if diagnostic["code"] not in {"source_error", "validation_error"}:
+        raise StudioContractError(f"{context}/code is unknown")
+    _plain_string(diagnostic["path"], f"{context}/path")
+    _plain_string(diagnostic["message"], f"{context}/message", max_length=512)
+
+
+def _validate_world_validation(value: object, context: str) -> None:
+    validation = _object(value, context)
+    _closed(
+        validation,
+        {
+            "valid",
+            "profile",
+            "world_id",
+            "object_count",
+            "diagnostics",
+            "diagnostics_truncated",
+        },
+        context,
+    )
+    _boolean(validation["valid"], f"{context}/valid")
+    if validation["profile"] != "release":
+        raise StudioContractError(f"{context}/profile must be release")
+    world_id = validation["world_id"]
+    if world_id is not None:
+        _plain_string(world_id, f"{context}/world_id")
+    _integer(validation["object_count"], f"{context}/object_count")
+    diagnostics = validation["diagnostics"]
+    if not isinstance(diagnostics, list) or len(diagnostics) > MAX_STUDIO_DIAGNOSTICS:
+        raise StudioContractError(
+            f"{context}/diagnostics must contain at most {MAX_STUDIO_DIAGNOSTICS} entries"
+        )
+    for index, diagnostic in enumerate(diagnostics):
+        _validate_diagnostic(diagnostic, f"{context}/diagnostics/{index}")
+    _boolean(validation["diagnostics_truncated"], f"{context}/diagnostics_truncated")
+
+
+def _validate_narrative_analysis(value: object, context: str) -> None:
+    analysis = _object(value, context)
+    _closed(
+        analysis,
+        {"format", "format_version", "world_id", "summary", "findings"},
+        context,
+    )
+    if analysis["format"] != "rpg-world-forge.narrative_analysis":
+        raise StudioContractError(f"{context}/format is unsupported")
+    if isinstance(analysis["format_version"], bool) or analysis["format_version"] != 1:
+        raise StudioContractError(f"{context}/format_version must be 1")
+    _plain_string(analysis["world_id"], f"{context}/world_id")
+    summary = _object(analysis["summary"], f"{context}/summary")
+    _strict_json_value(summary, f"{context}/summary")
+    findings = analysis["findings"]
+    if not isinstance(findings, list):
+        raise StudioContractError(f"{context}/findings must be an array")
+    for index, value in enumerate(findings):
+        finding = _object(value, f"{context}/findings/{index}")
+        _closed(
+            finding,
+            {"severity", "code", "path", "message"},
+            f"{context}/findings/{index}",
+        )
+        if finding["severity"] not in {"error", "warning", "info"}:
+            raise StudioContractError(f"{context}/findings/{index}/severity is unknown")
+        for field in ("code", "path", "message"):
+            _plain_string(finding[field], f"{context}/findings/{index}/{field}")
+
+
+def _validate_workspace_overview(value: object, context: str) -> None:
+    overview = _object(value, context)
+    _closed(
+        overview,
+        {"workspace_id", "project", "status", "repositories", "capabilities"},
+        context,
+    )
+    _identifier(overview["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
+    project = _object(overview["project"], f"{context}/project")
+    _closed(project, {"world_id", "title", "world_version"}, f"{context}/project")
+    _string(project["world_id"], f"{context}/project/world_id")
+    _string(project["title"], f"{context}/project/title")
+    _string(project["world_version"], f"{context}/project/world_version", nullable=True)
+    status = _object(overview["status"], f"{context}/status")
+    _closed(
+        status,
+        {"current_phase", "revision", "canon_locked", "worldpack_hash"},
+        f"{context}/status",
+    )
+    _string(status["current_phase"], f"{context}/status/current_phase", nullable=True)
+    _integer(status["revision"], f"{context}/status/revision")
+    _boolean(status["canon_locked"], f"{context}/status/canon_locked")
+    _sha256(status["worldpack_hash"], f"{context}/status/worldpack_hash", nullable=True)
+    repositories = _object(overview["repositories"], f"{context}/repositories")
+    _closed(
+        repositories,
+        {"game_registered", "bundle_registered"},
+        f"{context}/repositories",
+    )
+    _boolean(repositories["game_registered"], f"{context}/repositories/game_registered")
+    _boolean(repositories["bundle_registered"], f"{context}/repositories/bundle_registered")
+    capabilities = _object(overview["capabilities"], f"{context}/capabilities")
+    expected_capabilities = {
+        "providers": False,
+        "source_inspection": True,
+        "world_validation": True,
+        "narrative_analysis": True,
+        "staged_changesets": True,
+    }
+    _closed(capabilities, set(expected_capabilities), f"{context}/capabilities")
+    for field, expected in expected_capabilities.items():
+        if capabilities[field] is not expected:
+            raise StudioContractError(f"{context}/capabilities/{field} is invalid")
+
+
+def _validate_authoring_result(method: str, value: object, context: str) -> None:
+    result = _object(value, context)
+    if method == "workspace.overview":
+        _closed(result, {"overview"}, context)
+        _validate_workspace_overview(result["overview"], f"{context}/overview")
+    elif method == "source.list":
+        _closed(result, {"documents"}, context)
+        documents = result["documents"]
+        if not isinstance(documents, list) or len(documents) > MAX_STUDIO_SOURCE_DOCUMENTS:
+            raise StudioContractError(
+                f"{context}/documents must contain at most {MAX_STUDIO_SOURCE_DOCUMENTS} entries"
+            )
+        for index, document in enumerate(documents):
+            _validate_source_document_summary(document, f"{context}/documents/{index}")
+    elif method == "source.read":
+        _closed(result, {"document"}, context)
+        _validate_source_document(result["document"], f"{context}/document")
+    elif method == "world.validate":
+        _closed(result, {"validation"}, context)
+        _validate_world_validation(result["validation"], f"{context}/validation")
+    elif method == "world.analyze":
+        _closed(result, {"validation", "analysis"}, context)
+        _validate_world_validation(result["validation"], f"{context}/validation")
+        if result["analysis"] is not None:
+            _validate_narrative_analysis(result["analysis"], f"{context}/analysis")
+    else:  # pragma: no cover - callers discriminate the method first
+        raise StudioContractError("envelope/method is unknown")
 
 
 def validate_forge_workspace(value: object) -> dict[str, Any]:
@@ -295,7 +530,7 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
     kind = envelope.get("kind")
     additions = {
         "request": {"method", "params"},
-        "response": {"result"},
+        "response": {"method", "result"},
         "error": {"error"},
         "event": {"event"},
     }
@@ -315,13 +550,27 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
     else:
         _string(request_id, "envelope/request_id")
     if kind == "request":
-        if not isinstance(envelope["method"], str) or envelope["method"] not in METHODS:
+        method = envelope["method"]
+        if not isinstance(method, str) or method not in METHODS:
             raise StudioContractError("envelope/method is unknown")
-        _object(envelope["params"], "envelope/params")
-        _strict_json_value(envelope["params"], "envelope/params")
+        if method in WORKSPACE_AUTHORING_METHODS:
+            _validate_workspace_params(envelope["params"], "envelope/params")
+        elif method == "source.read":
+            _validate_source_read_params(envelope["params"], "envelope/params")
+        else:
+            params = _object(envelope["params"], "envelope/params")
+            _strict_json_value(params, "envelope/params")
     elif kind == "response":
-        _object(envelope["result"], "envelope/result")
-        _strict_json_value(envelope["result"], "envelope/result")
+        method = envelope["method"]
+        if not isinstance(method, str) or method not in METHODS:
+            raise StudioContractError("envelope/method is unknown")
+        if method in AUTHORING_METHODS:
+            _validate_authoring_result(method, envelope["result"], "envelope/result")
+        elif method in LEGACY_METHODS:
+            result = _object(envelope["result"], "envelope/result")
+            _strict_json_value(result, "envelope/result")
+        else:  # pragma: no cover - METHODS is partitioned above
+            raise StudioContractError("envelope/method is unknown")
     elif kind == "error":
         error = _object(envelope["error"], "envelope/error")
         _closed(error, {"code", "message", "details"}, "envelope/error")

@@ -102,6 +102,16 @@ describe("NdjsonSupervisor", () => {
     ).rejects.toBeInstanceOf(StudioProtocolError);
   });
 
+  it("fails closed when a valid response names a different pending method", async () => {
+    const supervisor = create("mismatched-method");
+    await supervisor.start();
+
+    await expect(
+      supervisor.request("mismatch-1", "service.initialize", {}, 2_000),
+    ).rejects.toThrow(/expected service\.initialize/u);
+    await expect.poll(() => supervisor.state).toBe("crashed");
+  });
+
   it("fails closed on oversized service output", async () => {
     const supervisor = create("oversized", { maxLineBytes: 128 });
     await supervisor.start();

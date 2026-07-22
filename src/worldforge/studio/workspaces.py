@@ -271,3 +271,30 @@ class WorkspaceManager:
             raise not_found(f"Workspace {workspace_id} was not found")
         dev, ino = row[0], row[1]
         return None if dev is None or ino is None else (int(dev), int(ino))
+
+    def verified_root(
+        self, workspace_id: object, field: str
+    ) -> tuple[Path, tuple[int, int]] | None:
+        """Return a registered root only while its non-followed identity remains intact."""
+
+        if field not in _ROOT_FIELDS:
+            raise ValueError(field)
+        workspace = self.get(workspace_id)
+        value = workspace[field]
+        expected = self.root_identity(workspace["workspace_id"], field)
+        if value is None:
+            if expected is not None:
+                raise StudioError("internal_error", "Stored workspace root identity is invalid")
+            return None
+        if expected is None:
+            raise StudioError("internal_error", "Stored workspace root identity is missing")
+        try:
+            info = path_file_stat(Path(value))
+        except OSError as exc:
+            raise conflict(f"Registered {field.replace('_', ' ')} is unavailable") from exc
+        is_link = stat.S_ISLNK(info.st_mode) or bool(
+            getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        )
+        if is_link or not stat.S_ISDIR(info.st_mode) or (info.st_dev, info.st_ino) != expected:
+            raise conflict(f"Registered {field.replace('_', ' ')} identity changed")
+        return Path(value), expected

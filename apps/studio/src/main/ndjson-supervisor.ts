@@ -4,9 +4,17 @@ import path from "node:path";
 import type {
   Error as StudioErrorEnvelope,
   Event as StudioEventEnvelope,
+  LegacyResponse as StudioLegacyResponse,
   Method as StudioMethod,
-  Request as StudioRequestEnvelope,
   Response as StudioResponseEnvelope,
+  SourceListResponse as StudioSourceListResponse,
+  SourceReadParams as StudioSourceReadParams,
+  SourceReadResponse as StudioSourceReadResponse,
+  WorkspaceOverviewResponse as StudioWorkspaceOverviewResponse,
+  WorkspaceScopedAuthoringMethod as StudioWorkspaceScopedAuthoringMethod,
+  WorkspaceScopedParams as StudioWorkspaceScopedParams,
+  WorldAnalyzeResponse as StudioWorldAnalyzeResponse,
+  WorldValidateResponse as StudioWorldValidateResponse,
 } from "../generated/studio-protocol";
 import { describeProtocolErrors, validateStudioEnvelope } from "./protocol-validator";
 
@@ -151,6 +159,7 @@ class BoundedTextTail {
 }
 
 interface PendingRequest {
+  method: StudioMethod;
   resolve: (envelope: StudioResponseEnvelope | StudioErrorEnvelope) => void;
   reject: (error: Error) => void;
   timer: NodeJS.Timeout;
@@ -158,6 +167,28 @@ interface PendingRequest {
   payloadBytes: number;
   writeState: "queued" | "writing" | "sent";
 }
+
+export type StudioRequestParams<M extends StudioMethod> = M extends "source.read"
+  ? StudioSourceReadParams
+  : M extends StudioWorkspaceScopedAuthoringMethod
+    ? StudioWorkspaceScopedParams
+    : Record<string, unknown>;
+
+export type StudioSuccessForMethod<M extends StudioMethod> = M extends "workspace.overview"
+  ? StudioWorkspaceOverviewResponse
+  : M extends "source.list"
+    ? StudioSourceListResponse
+    : M extends "source.read"
+      ? StudioSourceReadResponse
+      : M extends "world.validate"
+        ? StudioWorldValidateResponse
+        : M extends "world.analyze"
+          ? StudioWorldAnalyzeResponse
+          : StudioLegacyResponse;
+
+export type StudioReplyForMethod<M extends StudioMethod> =
+  | StudioSuccessForMethod<M>
+  | StudioErrorEnvelope;
 
 export interface NdjsonSupervisorOptions {
   maxLineBytes?: number;
@@ -305,12 +336,12 @@ export class NdjsonSupervisor {
     });
   }
 
-  public async request(
+  public async request<M extends StudioMethod>(
     requestId: string,
-    method: StudioMethod,
-    params: Record<string, unknown>,
+    method: M,
+    params: StudioRequestParams<M>,
     timeoutMs = this.#defaultTimeoutMs,
-  ): Promise<StudioResponseEnvelope | StudioErrorEnvelope> {
+  ): Promise<StudioReplyForMethod<M>> {
     if (this.#state !== "running" || !this.#child) {
       throw new StudioTransportError("Forge Studio service is not running");
     }
@@ -321,7 +352,7 @@ export class NdjsonSupervisor {
       throw new TypeError("timeoutMs must be an integer from 100 to 60000");
     }
 
-    const envelope: StudioRequestEnvelope = {
+    const envelope = {
       protocol: PROTOCOL,
       protocol_version: PROTOCOL_VERSION,
       kind: "request",
@@ -352,12 +383,13 @@ export class NdjsonSupervisor {
       );
     }
 
-    return await new Promise<StudioResponseEnvelope | StudioErrorEnvelope>((resolve, reject) => {
+    return (await new Promise<StudioResponseEnvelope | StudioErrorEnvelope>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#abandonRequest(requestId, new StudioRequestTimeoutError(requestId));
       }, timeoutMs);
       timer.unref();
       this.#pending.set(requestId, {
+        method,
         resolve,
         reject,
         timer,
@@ -368,7 +400,7 @@ export class NdjsonSupervisor {
       this.#outstandingRequestBytes += payload.length;
       this.#writeQueue.push(requestId);
       this.#pumpWrites();
-    });
+    })) as StudioReplyForMethod<M>;
   }
 
   public cancelRequest(requestId: string): boolean {
@@ -597,6 +629,11 @@ export class NdjsonSupervisor {
     if (!pending) {
       throw new StudioProtocolError(
         `Forge Studio service emitted an unexpected reply for ${requestId}`,
+      );
+    }
+    if (value.kind === "response" && value.method !== pending.method) {
+      throw new StudioProtocolError(
+        `Forge Studio service replied to ${requestId} with method ${value.method}; expected ${pending.method}`,
       );
     }
     this.#takePending(requestId);

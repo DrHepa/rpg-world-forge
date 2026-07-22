@@ -12,6 +12,7 @@ const initialization = {
   protocol_version: 1 as const,
   kind: "response" as const,
   request_id: "initial",
+  method: "service.initialize" as const,
   result: { service: "rpg-world-forge.studio" },
 };
 

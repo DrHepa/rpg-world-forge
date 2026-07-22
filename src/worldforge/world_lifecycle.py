@@ -354,32 +354,18 @@ def _validate_status(
         raise WorkflowError("Project, world, and workflow status versions do not match")
 
 
-def _inspect_files(
+def inspect_world_project_snapshot(
     project_root: str | Path,
+    project: dict[str, Any],
+    world: dict[str, Any],
+    status: dict[str, Any],
     *,
-    allow_legacy: bool,
-    error_type: type[ValueError],
-    _status: dict[str, Any] | None = None,
-) -> _ProjectFiles:
-    root_input = Path(project_root)
-    if root_input.is_symlink():
-        raise error_type("The world project root cannot be a symbolic link")
-    root = root_input.resolve()
-    if not root.is_dir():
-        raise error_type(f"The world project does not exist: {root}")
-    project = _read_object(root / ".worldforge/project.json", error_type=error_type)
-    manifest = _read_object(root / "source/manifest.json", error_type=error_type)
-    try:
-        _validate_source_manifest(root / "source", manifest)
-    except WorkflowError as exc:
-        raise error_type(str(exc)) from exc
-    world = _read_object(root / "source/world.json", error_type=error_type)
-    status = (
-        _read_object(root / ".worldforge/status.json", error_type=error_type)
-        if _status is None
-        else _status
-    )
+    allow_legacy: bool = False,
+    error_type: type[ValueError] = WorkflowError,
+) -> WorldProjectInspection:
+    """Validate already captured project controls without reading or locking the filesystem."""
 
+    root = Path(project_root)
     if project.get("format") != PROJECT_FORMAT:
         raise error_type("Unknown world-project format")
     raw_version = project.get("format_version")
@@ -448,7 +434,7 @@ def _inspect_files(
         )
     except WorkflowError as exc:
         raise error_type(str(exc)) from exc
-    inspection = WorldProjectInspection(
+    return WorldProjectInspection(
         root=root,
         world_id=world_id,
         title=title,
@@ -458,6 +444,42 @@ def _inspect_files(
         revision=status["revision"],
         canon_locked=status["canon_locked"],
         worldpack_hash=status.get("worldpack_hash"),
+    )
+
+
+def _inspect_files(
+    project_root: str | Path,
+    *,
+    allow_legacy: bool,
+    error_type: type[ValueError],
+    _status: dict[str, Any] | None = None,
+) -> _ProjectFiles:
+    root_input = Path(project_root)
+    if root_input.is_symlink():
+        raise error_type("The world project root cannot be a symbolic link")
+    root = root_input.resolve()
+    if not root.is_dir():
+        raise error_type(f"The world project does not exist: {root}")
+    project = _read_object(root / ".worldforge/project.json", error_type=error_type)
+    manifest = _read_object(root / "source/manifest.json", error_type=error_type)
+    try:
+        _validate_source_manifest(root / "source", manifest)
+    except WorkflowError as exc:
+        raise error_type(str(exc)) from exc
+    world = _read_object(root / "source/world.json", error_type=error_type)
+    status = (
+        _read_object(root / ".worldforge/status.json", error_type=error_type)
+        if _status is None
+        else _status
+    )
+
+    inspection = inspect_world_project_snapshot(
+        root,
+        project,
+        world,
+        status,
+        allow_legacy=allow_legacy,
+        error_type=error_type,
     )
     return _ProjectFiles(inspection, project, world, status)
 

@@ -127,10 +127,16 @@ worldforge-studio-service --data-dir /path/to/user-data/rpg-world-forge-studio
 
 The process reads and writes one strict UTF-8 JSON object per line on standard
 input/output. Public v1 request methods are `service.initialize`,
-`workspace.register/list/get`, `events.list`, `changeset.create/get/list`,
+`workspace.register/list/get/overview`, `source.list/read`,
+`world.validate/analyze`, `events.list`, `changeset.create/get/list`,
 `changeset.approve/reject/apply`, and `job.create/get/list/transition/cancel`.
 Contract errors are returned as correlated `error` envelopes; a malformed line
 does not terminate the stream.
+
+The read-only authoring methods expose only manifest-declared world source
+documents. They return portable paths and hashes from bounded, pinned reads;
+never absolute repository paths. Validation and narrative analysis reuse the
+existing Forge domain logic entirely in memory and do not publish reports.
 
 Changesets initially edit only UTF-8 files beneath a registered world's
 `source/` directory. Proposed bytes are content-addressed under the external

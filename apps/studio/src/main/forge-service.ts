@@ -222,10 +222,10 @@ export class UnavailableForgeService implements ForgeServiceClient {
 }
 
 function parseWorkspaceBinding(
-  result: Record<string, unknown>,
+  result: unknown,
   expectedWorkspaceId: string,
 ): ForgeWorkspaceBinding {
-  if (!hasExactKeys(result, ["workspace"]) || !isRecord(result.workspace)) {
+  if (!isRecord(result) || !hasExactKeys(result, ["workspace"]) || !isRecord(result.workspace)) {
     throw new Error("Forge workspace lookup returned an invalid result");
   }
   const workspace = result.workspace;

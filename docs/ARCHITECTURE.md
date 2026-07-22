@@ -63,6 +63,17 @@ The database uses foreign keys, WAL, FULL synchronous writes, and a bounded busy
 timeout. A service restart marks interrupted `running` jobs as `orphaned` and
 records that transition as an event.
 
+The service's read-only authoring boundary is manifest-authorized rather than a
+general filesystem browser. `source.list` and `source.read` expose only the
+manifest, world document, and collection documents named by the loaded source
+manifest. Paths are portable, depth/count/byte bounded, collision checked, and
+read through the same pinned no-link/no-hardlink boundary as changesets. The
+reported hash, UTF-8 content, and strict JSON value derive from one stable byte
+snapshot. `world.validate` and `world.analyze` construct the existing
+`SourceProject` in memory and reuse the established release validator and
+narrative analyzer; they never call report writers. `workspace.overview`
+projects identity and lifecycle status without returning absolute roots.
+
 A workspace requires the active Forge repository and one canonical v2 world
 repository. Optional game and bundle roots must pass their existing standalone
 boundary inspectors. Symlinked roots, repeated filesystem identities,

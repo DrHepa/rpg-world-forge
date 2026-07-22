@@ -223,6 +223,47 @@ class StudioContractTests(unittest.TestCase):
         with self.assertRaisesRegex(StudioContractError, "method"):
             validate_studio_protocol_envelope({**request, "method": "provider.execute"})
 
+    def test_protocol_discriminates_source_read_requests_and_responses(self) -> None:
+        request = {
+            "protocol": "rpg-world-forge.studio_protocol",
+            "protocol_version": 1,
+            "kind": "request",
+            "request_id": "read-1",
+            "method": "source.read",
+            "params": {"workspace_id": "workspace_01", "path": "source/world.json"},
+        }
+        self.assertEqual(request, validate_studio_protocol_envelope(request))
+        with self.assertRaisesRegex(StudioContractError, "missing fields"):
+            validate_studio_protocol_envelope({**request, "params": {}})
+
+        response = {
+            "protocol": "rpg-world-forge.studio_protocol",
+            "protocol_version": 1,
+            "kind": "response",
+            "request_id": "read-1",
+            "method": "source.read",
+            "result": {
+                "document": {
+                    "path": "source/world.json",
+                    "kind": "world",
+                    "size": 3,
+                    "sha256": "0" * 64,
+                    "encoding": "utf-8",
+                    "content": "{}\n",
+                    "json": {},
+                }
+            },
+        }
+        self.assertEqual(response, validate_studio_protocol_envelope(response))
+        missing_method = dict(response)
+        missing_method.pop("method")
+        with self.assertRaisesRegex(StudioContractError, "missing fields"):
+            validate_studio_protocol_envelope(missing_method)
+        with self.assertRaises(StudioContractError):
+            validate_studio_protocol_envelope({**response, "method": "source.list"})
+        with self.assertRaises(StudioContractError):
+            validate_studio_protocol_envelope({**response, "result": {"documents": []}})
+
 
 if __name__ == "__main__":
     unittest.main()

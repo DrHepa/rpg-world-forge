@@ -36,6 +36,7 @@ class StudioServiceTests(unittest.TestCase):
         self.assertEqual(0, exit_code)
         self.assertEqual("response", responses[0]["kind"])
         self.assertEqual("request-1", responses[0]["request_id"])
+        self.assertEqual("service.initialize", responses[0]["method"])
         self.assertEqual(1, responses[0]["result"]["protocol_version"])
 
         bad_method = {**request, "request_id": "request-2", "method": "provider.execute"}
