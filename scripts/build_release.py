@@ -431,7 +431,7 @@ def _same_bytes(left: Path, right: Path) -> bool:
 
 def _entry_identity(path: Path) -> tuple[int, int] | None:
     try:
-        info = path.lstat()
+        info = path_file_stat(path)
     except FileNotFoundError:
         return None
     except OSError as exc:

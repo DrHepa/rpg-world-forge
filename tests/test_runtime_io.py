@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import tempfile
 import threading
 import unittest
@@ -10,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import isoworld.runtime_io as runtime_io_module
+from isoworld.content.file_stat import WindowsFileStat
 from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.renderpack import RenderPackError, load_clipset, load_renderpack
 from isoworld.persistence import (
@@ -331,6 +333,59 @@ class AtomicRuntimeWriterTests(unittest.TestCase):
 
         self.assertEqual('{"safe": true}\n', referent.read_text(encoding="utf-8"))
         self.assertTrue(destination.is_symlink())
+
+    def test_windows_reparse_attribute_rejects_targets_and_lock_sidecars(self) -> None:
+        target_referent = self.root / "target-referent.json"
+        target_referent.write_text('{"safe": true}\n', encoding="utf-8")
+        target = self.root / "target-state.json"
+        lock_destination = self.root / "lock-state.json"
+        lock_destination.write_text('{"safe": true}\n', encoding="utf-8")
+        lock_referent = self.root / "lock-referent"
+        lock_referent.write_bytes(b"\0")
+        lock = self.lock_path(lock_destination)
+        try:
+            target.symlink_to(target_referent.name)
+            lock.symlink_to(lock_referent.name)
+        except OSError as exc:
+            self.skipTest(f"symlinks unavailable: {exc}")
+
+        reparse_paths = {target, lock}
+        real_path_file_stat = runtime_io_module.path_file_stat
+
+        def windows_path_file_stat(candidate: str | Path) -> object:
+            path = Path(candidate)
+            if path not in reparse_paths:
+                return real_path_file_stat(path)
+            info = os.stat(path, follow_symlinks=False)
+            return WindowsFileStat(
+                st_mode=stat.S_IFREG | stat.S_IMODE(info.st_mode),
+                st_dev=info.st_dev,
+                st_ino=info.st_ino,
+                st_nlink=info.st_nlink,
+                st_size=info.st_size,
+                st_mtime_ns=info.st_mtime_ns,
+                st_ctime_ns=info.st_ctime_ns,
+                st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT,
+            )
+
+        with (
+            patch.object(runtime_io_module, "_DIR_FD_PUBLICATION", False),
+            patch.object(
+                runtime_io_module,
+                "path_file_stat",
+                side_effect=windows_path_file_stat,
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeIOError, "symbolic link"):
+                write_json_atomic(target, {"safe": False})
+            with self.assertRaisesRegex(RuntimeIOError, "symbolic link"):
+                write_json_atomic(lock_destination, {"safe": False})
+
+        self.assertEqual({"safe": True}, read_json_object(target_referent))
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(b"\0", lock_referent.read_bytes())
+        self.assertTrue(lock.is_symlink())
+        self.assertEqual({"safe": True}, read_json_object(lock_destination))
 
     def test_refuses_symlink_parent(self) -> None:
         real_parent = self.root / "real"

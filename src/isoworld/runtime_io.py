@@ -195,13 +195,19 @@ def _entry_identity(info: FileStat) -> tuple[int, int]:
     return info.st_dev, info.st_ino
 
 
+def _is_link_or_reparse(info: FileStat) -> bool:
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
 def _validated_target_identity(
     info: FileStat | None,
     destination: Path,
 ) -> tuple[int, int] | None:
     if info is None:
         return None
-    if stat.S_ISLNK(info.st_mode):
+    if _is_link_or_reparse(info):
         raise RuntimeIOError(f"Refusing to replace symbolic link {destination}")
     if not stat.S_ISREG(info.st_mode):
         raise RuntimeIOError(f"Refusing to replace non-regular file {destination}")
@@ -288,6 +294,8 @@ def _verify_lock_entry(
     _verify_parent_identity(parent, parent_identity)
     opened = descriptor_file_stat(descriptor)
     current = _entry_info(parent_fd, parent, name)
+    if current is not None:
+        _validated_target_identity(current, parent / name)
     if (
         not stat.S_ISREG(opened.st_mode)
         or opened.st_nlink != 1
@@ -355,6 +363,8 @@ def _open_lock_entry(
         info = descriptor_file_stat(descriptor)
         identity = _entry_identity(info)
         current = _entry_info(parent_fd, parent, name)
+        if current is not None:
+            _validated_target_identity(current, parent / name)
         if (
             not stat.S_ISREG(info.st_mode)
             or info.st_nlink != 1

@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+import worldforge.game_scaffold as game_scaffold_module
 from isoworld import __version__ as ISOWORLD_VERSION
 from isoworld.content.loader import load_worldpack
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
@@ -106,6 +107,47 @@ def _write_fixture(
 
 
 class GameScaffoldTests(unittest.TestCase):
+    def test_canonical_lock_templates_bypass_windows_newline_translation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game"
+
+            def windows_write_text(
+                path: Path,
+                content: str,
+                *args: object,
+                **kwargs: object,
+            ) -> int:
+                del args, kwargs
+                path.write_bytes(content.replace("\n", "\r\n").encode("utf-8"))
+                return len(content)
+
+            with patch.object(
+                Path,
+                "write_text",
+                autospec=True,
+                side_effect=windows_write_text,
+            ) as write_text:
+                game_scaffold_module._render_templates(
+                    game,
+                    game_id="newline_game",
+                    title="Newline Game",
+                )
+
+            template_root = ROOT / "src/worldforge/templates/pyray_game"
+            canonical_outputs = {
+                "worlds.lock.json.tmpl": "game_data/worlds.lock.json",
+                "shared.lock.json.tmpl": "game_data/shared.lock.json",
+                "platform.lock.json.tmpl": "platform.lock.json",
+                "requirements.lock.tmpl": "requirements.lock",
+            }
+            self.assertGreater(write_text.call_count, 0)
+            self.assertIn(b"\r\n", (game / "README.md").read_bytes())
+            for template_name, relative_output in canonical_outputs.items():
+                with self.subTest(template=template_name):
+                    emitted = (game / relative_output).read_bytes()
+                    self.assertEqual((template_root / template_name).read_bytes(), emitted)
+                    self.assertNotIn(b"\r\n", emitted)
+
     def test_materialized_game_is_clean_locked_and_cwd_independent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

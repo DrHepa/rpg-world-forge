@@ -318,7 +318,10 @@ class RuntimeBundleTests(unittest.TestCase):
 
                 self.assertEqual((root / "published-bundle").resolve(), verified.root.resolve())
                 self.assertTrue(snapshot_root.is_dir())
-                self.assertEqual([snapshot_root], list(snapshot_parent.iterdir()))
+                self.assertEqual(
+                    [snapshot_root.resolve()],
+                    [candidate.resolve() for candidate in snapshot_parent.iterdir()],
+                )
                 for asset in returned_renderpack.assets:
                     for item in asset.files:
                         resolved = returned_renderpack.resolve_file(item)

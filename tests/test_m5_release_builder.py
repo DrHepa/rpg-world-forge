@@ -14,6 +14,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import scripts.build_release as release_builder
@@ -292,6 +293,49 @@ class M5ReleaseBuilderTests(unittest.TestCase):
             self.assertFalse((output / first[0].name).exists())
             self.assertEqual(b"foreign", existing.read_bytes())
             self.assertEqual([existing.name], [path.name for path in output.iterdir()])
+
+    def test_publication_routes_path_identity_through_the_native_helper(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="rwf-publish-native-stat-") as temporary:
+            root = Path(temporary)
+            first = _artifact_pair(root, "package.tar.gz", b"sdist")
+            second = _artifact_pair(root, "package.whl", b"wheel")
+            output = root / "output"
+            artifact_names = {first[0].name, second[0].name}
+            real_lstat = Path.lstat
+            real_path_file_stat = release_builder.path_file_stat
+
+            def divergent_lstat(path: Path) -> object:
+                info = real_lstat(path)
+                if path.parent == output and path.name in artifact_names:
+                    return SimpleNamespace(st_dev=info.st_dev + 1, st_ino=info.st_ino + 1)
+                return info
+
+            with (
+                patch.object(Path, "lstat", autospec=True, side_effect=divergent_lstat),
+                patch.object(
+                    release_builder,
+                    "path_file_stat",
+                    wraps=real_path_file_stat,
+                ) as native_path_stat,
+            ):
+                published = release_builder._publish_verified(
+                    (first[0], second[0]), (first[1], second[1]), output
+                )
+                with self.assertRaisesRegex(
+                    release_builder.ReleaseBuildError,
+                    "refusing to replace existing artifact",
+                ):
+                    release_builder._publish_verified(
+                        (first[0], second[0]), (first[1], second[1]), output
+                    )
+
+            self.assertEqual(
+                [output / first[0].name, output / second[0].name],
+                published,
+            )
+            self.assertEqual(b"sdist", published[0].read_bytes())
+            self.assertEqual(b"wheel", published[1].read_bytes())
+            self.assertGreater(native_path_stat.call_count, 0)
 
     def test_publication_rolls_back_only_its_owned_links_after_partial_failure(self) -> None:
         with tempfile.TemporaryDirectory(prefix="rwf-publish-rollback-") as temporary:

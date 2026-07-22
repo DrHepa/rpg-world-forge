@@ -293,16 +293,24 @@ def _render_templates(root: Path, *, game_id: str, title: str) -> None:
     }
     for template_name, relative_output in _TEMPLATE_OUTPUTS.items():
         template = template_root.joinpath(template_name)
+        byte_exact = template_name.endswith((".json.tmpl", ".lock.tmpl"))
         try:
-            content = template.read_text(encoding="utf-8")
+            template_bytes = template.read_bytes() if byte_exact else None
+            content = None if byte_exact else template.read_text(encoding="utf-8")
         except (FileNotFoundError, OSError) as exc:
             raise GameScaffoldError(f"Missing game template {template_name}: {exc}") from exc
+        output = root / relative_output
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if template_bytes is not None:
+            if b"__GAME_" in template_bytes:
+                raise GameScaffoldError(f"Unresolved game template token in {template_name}")
+            output.write_bytes(template_bytes)
+            continue
+        assert content is not None
         for token, value in replacements.items():
             content = content.replace(token, value)
         if "__GAME_" in content:
             raise GameScaffoldError(f"Unresolved game template token in {template_name}")
-        output = root / relative_output
-        output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(content, encoding="utf-8")
 
 

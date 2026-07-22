@@ -411,6 +411,7 @@ class DirectMediaValidationTests(unittest.TestCase):
     def test_handle_stat_contract_ignores_divergent_windows_path_stat(self) -> None:
         path = self.root / "unchanged.png"
         path.write_bytes(_png())
+        canonical_path = path.resolve(strict=True)
         real_path_stat = os.stat
         real_descriptor_stat = os.fstat
         target_path_states: list[WindowsFileStat] = []
@@ -456,7 +457,7 @@ class DirectMediaValidationTests(unittest.TestCase):
 
         def path_handle_stat(candidate: object) -> WindowsFileStat:
             state = handle_state(real_path_stat(candidate, follow_symlinks=False))
-            if Path(candidate) == path:
+            if Path(candidate) == canonical_path:
                 target_path_states.append(state)
             return state
 
@@ -683,6 +684,21 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
         source = source_root / "tone.wav"
         source.write_bytes(_wav())
         owner = ResourceSnapshotOwner()
+        real_path_stat = os.stat
+        real_descriptor_stat = os.fstat
+
+        def windows_state(info: os.stat_result) -> WindowsFileStat:
+            return WindowsFileStat(
+                st_mode=info.st_mode,
+                st_dev=0x1234,
+                st_ino=0x5678,
+                st_nlink=info.st_nlink,
+                st_size=info.st_size,
+                st_mtime_ns=info.st_mtime_ns,
+                st_ctime_ns=info.st_ctime_ns,
+                st_file_attributes=getattr(info, "st_file_attributes", 0),
+            )
+
         raw_path_stat = patch.object(
             snapshot_module,
             "_entry_stat",
@@ -694,26 +710,28 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
                 patch.object(
                     snapshot_module,
                     "path_file_stat",
-                    side_effect=lambda candidate: os.stat(candidate, follow_symlinks=False),
+                    side_effect=lambda candidate: windows_state(
+                        real_path_stat(candidate, follow_symlinks=False)
+                    ),
                 ) as path_stat,
                 patch.object(
                     snapshot_module,
                     "descriptor_file_stat",
-                    side_effect=os.fstat,
+                    side_effect=lambda descriptor: windows_state(real_descriptor_stat(descriptor)),
                 ) as fd_stat,
-                raw_path_stat as incompatible_stat,
             ):
-                captured = owner.materialize(
-                    source_root,
-                    PurePosixPath("tone.wav"),
-                    "audio/wav",
-                    limit=len(_wav()),
-                )
-
-            self.assertEqual(hashlib.sha256(_wav()).hexdigest(), captured.sha256)
-            incompatible_stat.assert_not_called()
-            self.assertGreater(path_stat.call_count, 0)
-            self.assertGreater(fd_stat.call_count, 0)
+                with raw_path_stat as incompatible_stat:
+                    captured = owner.materialize(
+                        source_root,
+                        PurePosixPath("tone.wav"),
+                        "audio/wav",
+                        limit=len(_wav()),
+                    )
+                self.assertEqual(hashlib.sha256(_wav()).hexdigest(), captured.sha256)
+                incompatible_stat.assert_not_called()
+                self.assertGreater(path_stat.call_count, 0)
+                self.assertGreater(fd_stat.call_count, 0)
+                owner.close()
         finally:
             owner.close()
 
