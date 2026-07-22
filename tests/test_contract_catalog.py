@@ -38,6 +38,17 @@ class ContractCatalogTests(unittest.TestCase):
         self.assertTrue(entries["asset-manifest"]["fixtures"])
         self.assertTrue(entries["asset-processing-recipe"]["fixtures"])
 
+    def test_modly_discovery_entry_points_to_its_operational_validator(self) -> None:
+        catalog = load_contract_catalog(ROOT)
+        entries = {entry["id"]: entry for entry in catalog["contracts"]}
+        discovery = entries["modly-capability-discovery"]
+
+        self.assertEqual(
+            ["worldforge.asset_production:validate_modly_capability_discovery"],
+            discovery["python_symbols"],
+        )
+        self.assertEqual(["tests/test_m5_production.py"], discovery["tests"])
+
     def test_json_fixture_identity_is_strict_and_schema_bound(self) -> None:
         catalog = load_contract_catalog(ROOT)
         entry_index, entry = next(

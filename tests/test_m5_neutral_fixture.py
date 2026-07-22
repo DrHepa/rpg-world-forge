@@ -180,6 +180,30 @@ class M5NeutralFixtureTests(unittest.TestCase):
         self.assertEqual(3, details["metrics"]["vertices"])
         self.assertEqual(1, details["metrics"]["triangles"])
 
+    def test_committed_procedural_glb_uses_direct_export_lineage(self) -> None:
+        request = json.loads(
+            (FIXTURE / "assetpack/requests/neutral_actor_3d.json").read_text(encoding="utf-8")
+        )
+        receipt = json.loads(
+            (FIXTURE / "assetpack/receipts/neutral_actor_3d.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual("procedural", request["executor"])
+        self.assertEqual("export_glb", request["operation"])
+        self.assertEqual([], request["inputs"])
+        self.assertEqual([], request["parent_receipt_hashes"])
+        self.assertEqual(
+            {
+                "deterministic": True,
+                "fixture": "m5-neutral",
+                "source": "direct_procedural_triangle_geometry",
+            },
+            request["parameters"],
+        )
+        self.assertEqual("export_glb", receipt["operation"])
+        self.assertEqual([], receipt["parent_receipt_hashes"])
+        self.assertNotEqual("model_from_reference", request["operation"])
+
     def test_generator_refuses_repository_targets_by_default(self) -> None:
         blocked = subprocess.run(
             [sys.executable, str(SCRIPT), "--target", str(ROOT / "examples/blocked-neutral")],

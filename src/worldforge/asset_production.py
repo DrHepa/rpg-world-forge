@@ -274,6 +274,91 @@ def _exact_key_issues(
     return issues
 
 
+def _bounded_text_issue(value: object, *, path: str, maximum: int) -> ContractIssue | None:
+    if not isinstance(value, str) or not value:
+        return _issue(path, "must be a non-empty string")
+    if len(value) > maximum:
+        return _issue(path, f"must contain at most {maximum} characters")
+    return None
+
+
+def _modly_capability_discovery_issues(raw: dict[str, Any]) -> list[ContractIssue]:
+    issues = _base_contract_issues(
+        raw,
+        expected_format="rpg-world-forge.modly_capability_discovery",
+    )
+    issues.extend(_exact_key_issues(raw, _MODLY_DISCOVERY_KEYS, "discovery"))
+    for field, maximum in (
+        ("modly_cli_mcp_version", 128),
+        ("modly_version", 128),
+        ("capability_id", 512),
+    ):
+        issue = _bounded_text_issue(raw.get(field), path=field, maximum=maximum)
+        if issue is not None:
+            issues.append(issue)
+    if raw.get("canonical_surface") not in {"process_run", "workflow_run"}:
+        issues.append(_issue("canonical_surface", "must be process_run or workflow_run"))
+    if raw.get("support_state") != "supported":
+        issues.append(_issue("support_state", "must report supported before execution"))
+
+    extension = raw.get("extension")
+    if not isinstance(extension, dict):
+        issues.append(_issue("extension", "must be a versioned extension identity"))
+    else:
+        issues.extend(
+            _exact_key_issues(
+                extension,
+                frozenset({"id", "version", "revision", "manifest_hash", "workflow_hash"}),
+                "extension",
+            )
+        )
+        for field, maximum in (("id", 256), ("version", 128), ("revision", 256)):
+            issue = _bounded_text_issue(
+                extension.get(field),
+                path=f"extension/{field}",
+                maximum=maximum,
+            )
+            if issue is not None:
+                issues.append(issue)
+        for field in ("manifest_hash", "workflow_hash"):
+            if not _valid_hash(extension.get(field)):
+                issues.append(_issue(f"extension/{field}", "invalid SHA-256"))
+
+    model = raw.get("model")
+    if not isinstance(model, dict):
+        issues.append(_issue("model", "must be a versioned model and weights identity"))
+    else:
+        issues.extend(
+            _exact_key_issues(
+                model,
+                frozenset({"id", "version", "weights_hash"}),
+                "model",
+            )
+        )
+        for field, maximum in (("id", 256), ("version", 128)):
+            issue = _bounded_text_issue(
+                model.get(field),
+                path=f"model/{field}",
+                maximum=maximum,
+            )
+            if issue is not None:
+                issues.append(issue)
+        if not _valid_hash(model.get("weights_hash")):
+            issues.append(_issue("model/weights_hash", "invalid SHA-256"))
+    issues.extend(_scan_sensitive(raw))
+    return issues
+
+
+def validate_modly_capability_discovery(path: str | Path) -> list[ContractIssue]:
+    """Validate one sanitized, hash-bound pre-execution Modly discovery snapshot."""
+
+    try:
+        raw = read_json_object(path)
+    except AssetContractError as exc:
+        return [_issue("discovery", str(exc))]
+    return _modly_capability_discovery_issues(raw)
+
+
 def _modly_parameter_issues(
     value: object,
     *,
@@ -346,17 +431,7 @@ def _modly_parameter_issues(
             except AssetContractError as exc:
                 issues.append(_issue("parameters/capability_discovery", str(exc)))
             else:
-                snapshot_issues = _base_contract_issues(
-                    snapshot,
-                    expected_format="rpg-world-forge.modly_capability_discovery",
-                )
-                snapshot_issues.extend(
-                    _exact_key_issues(
-                        snapshot,
-                        _MODLY_DISCOVERY_KEYS,
-                        "discovery",
-                    )
-                )
+                snapshot_issues = _modly_capability_discovery_issues(snapshot)
                 for item in snapshot_issues:
                     issues.append(
                         _issue(
@@ -380,10 +455,6 @@ def _modly_parameter_issues(
                                 "does not match the approved Modly request",
                             )
                         )
-                issues.extend(
-                    _issue(f"parameters/capability_discovery/{item.path}", item.message)
-                    for item in _scan_sensitive(snapshot)
-                )
     extension = value.get("extension")
     if not isinstance(extension, dict):
         issues.append(_issue("parameters/extension", "versioned extension identity is required"))

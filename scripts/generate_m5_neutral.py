@@ -545,6 +545,8 @@ def production(
     operation: str,
     outputs: list[dict[str, Any]],
     expected: list[dict[str, str]],
+    *,
+    parameters: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     sp = json.loads(spec_path.read_text())
     request = write_json(
@@ -562,7 +564,9 @@ def production(
             "executor": "procedural",
             "operation": operation,
             "inputs": [],
-            "parameters": {"deterministic": True, "fixture": FIXTURE_NAME},
+            "parameters": parameters
+            if parameters is not None
+            else {"deterministic": True, "fixture": FIXTURE_NAME},
             "expected_outputs": expected,
             "parent_receipt_hashes": [],
         },
@@ -1109,7 +1113,7 @@ def build_asset_fixture(base: Path, world: dict[str, Any]) -> None:
         item["id"],
         root / f"specs/{item['id']}.json",
         item["id"],
-        "model_from_reference",
+        "export_glb",
         [
             {
                 "role": "model",
@@ -1118,6 +1122,11 @@ def build_asset_fixture(base: Path, world: dict[str, Any]) -> None:
             }
         ],
         [{"role": "model", "media_type": "model/gltf-binary"}],
+        parameters={
+            "deterministic": True,
+            "fixture": FIXTURE_NAME,
+            "source": "direct_procedural_triangle_geometry",
+        },
     )
     proc_dir = root / "processed/neutral_actor_3d"
     recipe(

@@ -1,12 +1,12 @@
 {
   "asset_id": "neutral_actor_3d",
   "completed_at": "2026-07-21T00:00:01Z",
-  "content_hash": "f853e909ca95eaefd41ef980ed8e113239611555cd772baa58adb340dffe3c11",
+  "content_hash": "24164a691d9011f8b3a834f43d94be17052a28fed17294bf47c3a92a591e80f4",
   "executor": "procedural",
   "format": "rpg-world-forge.asset_production_receipt",
   "format_version": 1,
   "id": "receipt_neutral_actor_3d",
-  "operation": "model_from_reference",
+  "operation": "export_glb",
   "outputs": [
     {
       "file": "generated/neutral_actor_3d.glb",
@@ -19,7 +19,7 @@
   "replayability": "deterministic_seeded",
   "request": {
     "file": "requests/neutral_actor_3d.json",
-    "sha256": "a48cb75d90417e9d7eead909465b42c4cd254ab0f1df826a8bbddecdf509ce3f"
+    "sha256": "8b10cb3b05612c09daaaaa745ece62fd335423108649d3fe174617a291033828"
   },
   "route": "openai",
   "started_at": "2026-07-21T00:00:00Z",

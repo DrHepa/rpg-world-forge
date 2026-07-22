@@ -16,6 +16,7 @@ from worldforge.asset_io import (
 )
 from worldforge.asset_production import (
     create_production_request,
+    validate_modly_capability_discovery,
     validate_production_receipt,
     validate_production_request,
 )
@@ -345,6 +346,72 @@ def _blender_receipt(
 
 
 class M5ProductionTests(unittest.TestCase):
+    def test_modly_capability_discovery_has_a_strict_public_validator(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _request(root, executor="modly_cli_mcp", route="modly")
+            discovery = root / "evidence/modly-discovery.json"
+            valid = discovery.read_bytes()
+
+            self.assertEqual([], validate_modly_capability_discovery(discovery))
+
+            with self.subTest("duplicate key"):
+                discovery.write_bytes(
+                    b'{"format":"rpg-world-forge.modly_capability_discovery",'
+                    b'"format":"rpg-world-forge.modly_capability_discovery"}\n'
+                )
+                issues = validate_modly_capability_discovery(discovery)
+                self.assertTrue(
+                    any("duplicate JSON object key" in issue.message for issue in issues)
+                )
+
+            with self.subTest("schema and semantic mismatch"):
+                discovery.write_bytes(valid)
+                raw = json.loads(valid)
+                raw["support_state"] = "unsupported"
+                raw["extension"]["unexpected"] = True
+                discovery.write_text(
+                    json.dumps(bind_content_hash(raw)),
+                    encoding="utf-8",
+                )
+                issues = validate_modly_capability_discovery(discovery)
+                self.assertTrue(
+                    any(
+                        issue.path == "support_state" and "supported" in issue.message
+                        for issue in issues
+                    ),
+                    issues,
+                )
+                self.assertTrue(
+                    any(
+                        issue.path == "extension" and "unknown fields" in issue.message
+                        for issue in issues
+                    ),
+                    issues,
+                )
+
+            with self.subTest("sensitive value"):
+                discovery.write_bytes(valid)
+                raw = json.loads(valid)
+                raw["model"]["id"] = "https://example.invalid/private-model"
+                discovery.write_text(
+                    json.dumps(bind_content_hash(raw)),
+                    encoding="utf-8",
+                )
+                issues = validate_modly_capability_discovery(discovery)
+                self.assertTrue(
+                    any(
+                        issue.path == "model/id" and "URLs are forbidden" in issue.message
+                        for issue in issues
+                    ),
+                    issues,
+                )
+
+            with self.subTest("asset spec is not a discovery"):
+                self.assertTrue(
+                    validate_modly_capability_discovery(root / "specs/hero_visual.json")
+                )
+
     def test_3d_reference_request_uses_operation_specific_image_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

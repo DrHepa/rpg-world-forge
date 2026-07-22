@@ -42,7 +42,7 @@
     },
     {
       "path": "assetpack/manifest.json",
-      "sha256": "31679b9789fc818a22bcaa5c31dd90c93889d7f43f69685de63d928cb5e050bf",
+      "sha256": "18aba24cf3419108729f13181aad3437e55317dd88f1f3cc47d96c485874df0d",
       "size": 2913
     },
     {
@@ -62,8 +62,8 @@
     },
     {
       "path": "assetpack/receipts/neutral_actor_3d.json",
-      "sha256": "514eb9a62cf89087638370c0aae2eedd745ed5bb077d5b5bfe0701c3cce9eb13",
-      "size": 1050
+      "sha256": "3e0f663b4dda6f1a960d86ab25ceaf72f639ae775162d79d1c0e2d496e44e9c1",
+      "size": 1040
     },
     {
       "path": "assetpack/recipes/neutral_actor_3d.json",
@@ -72,8 +72,8 @@
     },
     {
       "path": "assetpack/requests/neutral_actor_3d.json",
-      "sha256": "a48cb75d90417e9d7eead909465b42c4cd254ab0f1df826a8bbddecdf509ce3f",
-      "size": 836
+      "sha256": "8b10cb3b05612c09daaaaa745ece62fd335423108649d3fe174617a291033828",
+      "size": 879
     },
     {
       "path": "assetpack/specs/neutral_actor_3d.json",

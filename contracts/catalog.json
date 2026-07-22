@@ -452,11 +452,11 @@
         "M5"
       ],
       "python_symbols": [
-        "worldforge.asset_contracts:validate_asset_spec"
+        "worldforge.asset_production:validate_modly_capability_discovery"
       ],
       "schema": "schemas/modly-capability-discovery.schema.json",
       "tests": [
-        "tests/test_m5_toolchain.py"
+        "tests/test_m5_production.py"
       ],
       "title": "Sanitized pre-execution Modly capability-discovery snapshot v1",
       "version": 1

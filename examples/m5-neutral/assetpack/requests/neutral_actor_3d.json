@@ -1,6 +1,6 @@
 {
   "asset_id": "neutral_actor_3d",
-  "content_hash": "82d0756f260f594c3ec86a36b6f7a0b66de35e0ecb05884482c444478385ce13",
+  "content_hash": "027e05044028067c6104bf63696f196b69ac7cdcb58304a29ab183dc528be179",
   "executor": "procedural",
   "expected_outputs": [
     {
@@ -12,11 +12,12 @@
   "format_version": 1,
   "id": "neutral_actor_3d",
   "inputs": [],
-  "operation": "model_from_reference",
+  "operation": "export_glb",
   "orchestrator": "gpt",
   "parameters": {
     "deterministic": true,
-    "fixture": "m5-neutral"
+    "fixture": "m5-neutral",
+    "source": "direct_procedural_triangle_geometry"
   },
   "parent_receipt_hashes": [],
   "route": "openai",
