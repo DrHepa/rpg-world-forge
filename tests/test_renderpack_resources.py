@@ -686,18 +686,30 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
         owner = ResourceSnapshotOwner()
         real_path_stat = os.stat
         real_descriptor_stat = os.fstat
+        path_states: list[WindowsFileStat] = []
+        descriptor_states: list[WindowsFileStat] = []
 
         def windows_state(info: os.stat_result) -> WindowsFileStat:
             return WindowsFileStat(
-                st_mode=info.st_mode,
+                st_mode=stat.S_IFREG | stat.S_IREAD,
                 st_dev=0x1234,
                 st_ino=0x5678,
-                st_nlink=info.st_nlink,
+                st_nlink=1,
                 st_size=info.st_size,
-                st_mtime_ns=info.st_mtime_ns,
-                st_ctime_ns=info.st_ctime_ns,
-                st_file_attributes=getattr(info, "st_file_attributes", 0),
+                st_mtime_ns=0x12345678,
+                st_ctime_ns=0x87654321,
+                st_file_attributes=stat.FILE_ATTRIBUTE_READONLY,
             )
+
+        def path_state(candidate: object) -> WindowsFileStat:
+            state = windows_state(real_path_stat(candidate, follow_symlinks=False))
+            path_states.append(state)
+            return state
+
+        def descriptor_state(descriptor: int) -> WindowsFileStat:
+            state = windows_state(real_descriptor_stat(descriptor))
+            descriptor_states.append(state)
+            return state
 
         raw_path_stat = patch.object(
             snapshot_module,
@@ -710,14 +722,12 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
                 patch.object(
                     snapshot_module,
                     "path_file_stat",
-                    side_effect=lambda candidate: windows_state(
-                        real_path_stat(candidate, follow_symlinks=False)
-                    ),
+                    side_effect=path_state,
                 ) as path_stat,
                 patch.object(
                     snapshot_module,
                     "descriptor_file_stat",
-                    side_effect=lambda descriptor: windows_state(real_descriptor_stat(descriptor)),
+                    side_effect=descriptor_state,
                 ) as fd_stat,
             ):
                 with raw_path_stat as incompatible_stat:
@@ -731,7 +741,14 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
                 incompatible_stat.assert_not_called()
                 self.assertGreater(path_stat.call_count, 0)
                 self.assertGreater(fd_stat.call_count, 0)
+                self.assertTrue(path_states)
+                self.assertTrue(descriptor_states)
+                materialize_path_calls = path_stat.call_count
+                materialize_fd_calls = fd_stat.call_count
                 owner.close()
+                self.assertTrue(owner.closed)
+                self.assertGreater(path_stat.call_count, materialize_path_calls)
+                self.assertGreater(fd_stat.call_count, materialize_fd_calls)
         finally:
             owner.close()
 

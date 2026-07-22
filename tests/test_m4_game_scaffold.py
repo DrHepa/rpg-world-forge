@@ -140,13 +140,25 @@ class GameScaffoldTests(unittest.TestCase):
                 "platform.lock.json.tmpl": "platform.lock.json",
                 "requirements.lock.tmpl": "requirements.lock",
             }
-            self.assertGreater(write_text.call_count, 0)
-            self.assertIn(b"\r\n", (game / "README.md").read_bytes())
+            write_text.assert_not_called()
+            self.assertNotIn(b"\r\n", (game / "README.md").read_bytes())
             for template_name, relative_output in canonical_outputs.items():
                 with self.subTest(template=template_name):
                     emitted = (game / relative_output).read_bytes()
                     self.assertEqual((template_root / template_name).read_bytes(), emitted)
                     self.assertNotIn(b"\r\n", emitted)
+
+            for template_name, relative_output in game_scaffold_module._TEMPLATE_OUTPUTS.items():
+                template_bytes = (template_root / template_name).read_bytes()
+                if b"__GAME_" not in template_bytes:
+                    self.assertEqual(template_bytes, (game / relative_output).read_bytes())
+
+            notices = (game / "THIRD_PARTY_NOTICES.md").read_bytes()
+            shared_lock = json.loads((game / "game_data/shared.lock.json").read_bytes())
+            self.assertEqual(
+                shared_lock["notices_sha256"],
+                hashlib.sha256(notices).hexdigest(),
+            )
 
     def test_materialized_game_is_clean_locked_and_cwd_independent(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -599,12 +611,12 @@ class GameScaffoldTests(unittest.TestCase):
 
             project_path = game / "pyproject.toml"
             project_bytes = project_path.read_bytes()
-            project_path.write_text(
-                project_bytes.decode("utf-8").replace(
+            project_text = project_bytes.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+            project_path.write_bytes(
+                project_text.replace(
                     'requires-python = ">=3.11,<3.13"',
                     'requires-python = ">=3.11"',
-                ),
-                encoding="utf-8",
+                ).encode("utf-8")
             )
             mismatch = _run_game_script(game, verifier, cwd=root)
             self.assertNotEqual(0, mismatch.returncode)
