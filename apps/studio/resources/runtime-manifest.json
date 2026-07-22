@@ -1,0 +1,9 @@
+{
+  "format": "rpg-world-forge.studio_runtime_manifest",
+  "version": 1,
+  "python": {
+    "module": "worldforge.studio",
+    "linux_x64": "runtime/python/bin/python3",
+    "win32_x64": "runtime/python/python.exe"
+  }
+}

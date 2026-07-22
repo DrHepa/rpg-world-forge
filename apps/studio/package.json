@@ -1,0 +1,101 @@
+{
+  "name": "@rpg-world-forge/studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local desktop shell for the RPG World Forge Studio application service",
+  "author": "RPG World Forge contributors",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist-electron/main/index.cjs",
+  "engines": {
+    "node": "24.14.1",
+    "npm": "11.13.0"
+  },
+  "packageManager": "npm@11.13.0",
+  "scripts": {
+    "generate:types": "node scripts/generate-types.mjs",
+    "check:generated": "node scripts/generate-types.mjs --check",
+    "build:renderer": "vite build",
+    "build:processes": "node scripts/build-processes.mjs",
+    "build": "npm run generate:types && npm run build:renderer && npm run build:processes",
+    "start": "npm run build && electron .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package:dir": "npm run build && electron-builder --dir",
+    "verify:fuses": "node scripts/verify-fuses.mjs",
+    "verify": "npm run check:generated && npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@electron/fuses": "2.1.3",
+    "@eslint/js": "10.0.1",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "7.0.0",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.4",
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.1",
+    "eslint": "10.7.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.3",
+    "globals": "17.7.0",
+    "jsdom": "29.1.1",
+    "json-schema-to-typescript": "15.0.4",
+    "typescript": "6.0.2",
+    "typescript-eslint": "8.65.0",
+    "vite": "8.1.5",
+    "vitest": "4.1.10"
+  },
+  "build": {
+    "appId": "org.rpgworldforge.studio",
+    "productName": "RPG World Forge Studio",
+    "asar": true,
+    "npmRebuild": false,
+    "files": [
+      "dist-electron/**/*",
+      "dist-renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/runtime-manifest.json",
+        "to": "runtime-manifest.json"
+      }
+    ],
+    "afterPack": "./scripts/after-pack.cjs",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
+      "category": "Development",
+      "executableName": "rpg-world-forge-studio"
+    },
+    "directories": {
+      "output": "release"
+    }
+  }
+}

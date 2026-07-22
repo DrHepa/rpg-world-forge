@@ -28,9 +28,14 @@ bundle, or generated game. The first service boundary is deliberately
 provider-free:
 
 ```text
-desktop supervisor (later)
+sandboxed React renderer
         |
-        | strict NDJSON request/response/error/event envelopes over stdio
+        | fixed typed preload operations; validated top-frame IPC
+        v
+Electron main supervisor -- serves --> rwf-studio://app static artifacts
+        |
+        | bounded strict NDJSON request/response/error/event envelopes
+        | over stdio; shell=false; fixed executable and arguments
         v
 worldforge.studio application service
         |-- public schema validators
@@ -76,8 +81,17 @@ guarantee or overwriting an unowned path.
 
 Durable jobs describe state only and execute nothing. Their state machine is
 the stable seam for later supervised Forge, Codex, Modly, Ollama, or Blender
-adapters. Those adapters, an Electron client, file watching, and M6 presentation
-work remain outside this foundation.
+adapters. The Electron shell does not execute those jobs: it adds only a
+sandboxed workbench, strict service supervision, typed IPC, runtime-manifest
+loading, and release-hardening fuses. Provider adapters, file watching, and M6
+presentation work remain outside this foundation.
+
+Development selects the Python service through one explicit absolute
+`RWF_STUDIO_DEV_PYTHON` path. A package may select it only through the closed
+runtime manifest in Electron resources; it never searches `PATH`. The initial
+packaging skeleton contains no Python or Codex runtime and therefore reports
+that service as unavailable. Renderer artifacts use the same registered custom
+scheme in development and release, with no localhost or HMR server.
 
 AI is not a game subsystem. It does not decide dialogue, quests, routes, or
 actions during play. It may propose authoring material, but that material must
