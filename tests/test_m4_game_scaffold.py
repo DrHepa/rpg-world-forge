@@ -777,20 +777,66 @@ class GameScaffoldTests(unittest.TestCase):
             first_case.unlink()
             second_case.unlink()
 
-            reserved_source = game / "src/game/CON.py"
-            reserved_source.write_text("VALUE = 1\n", encoding="utf-8")
+            package_script = game / "scripts/package_game.py"
             reserved_package = root / "reserved-path.zip"
             reserved_path_result = _run_game_script(
                 game,
-                str(game / "scripts/package_game.py"),
-                "--output",
+                "-c",
+                "\n".join(
+                    (
+                        "import importlib.util",
+                        "import sys",
+                        "from pathlib import Path",
+                        "script = Path(sys.argv[1])",
+                        "output = Path(sys.argv[2])",
+                        "specification = importlib.util.spec_from_file_location(",
+                        "    'reserved_path_package_script', script",
+                        ")",
+                        "assert specification is not None",
+                        "assert specification.loader is not None",
+                        "package_module = importlib.util.module_from_spec(specification)",
+                        "specification.loader.exec_module(package_module)",
+                        "reserved = package_module.PROJECT_ROOT / 'src/game/CON.py'",
+                        "try:",
+                        "    package_module._validate_archive_paths([reserved])",
+                        "except ValueError as error:",
+                        "    assert str(error) == (",
+                        "        \"package path is not portable: 'src/game/CON.py'\"",
+                        "    ), error",
+                        "else:",
+                        "    raise AssertionError('reserved path was accepted')",
+                        "discovered = []",
+                        "def reject_from_seam(paths):",
+                        "    discovered.append(paths)",
+                        "    raise ValueError('archive path validation seam called')",
+                        "package_module._validate_archive_paths = reject_from_seam",
+                        "try:",
+                        "    package_module.build_package(output)",
+                        "except ValueError as error:",
+                        "    assert str(error) == 'archive path validation seam called', error",
+                        "else:",
+                        "    raise AssertionError(",
+                        "        'build_package bypassed archive path validation'",
+                        "    )",
+                        "assert len(discovered) == 1, discovered",
+                        "assert (",
+                        "    package_module.PROJECT_ROOT / 'src/game/__init__.py'",
+                        ") in discovered[0]",
+                        "assert not output.exists(), output",
+                        "print('reserved-path=rejected seam=called')",
+                    )
+                ),
+                str(package_script),
                 str(reserved_package),
                 cwd=root,
             )
-            self.assertNotEqual(0, reserved_path_result.returncode)
-            self.assertIn("not portable", reserved_path_result.stderr)
+            self.assertEqual(
+                0,
+                reserved_path_result.returncode,
+                reserved_path_result.stdout + reserved_path_result.stderr,
+            )
+            self.assertEqual("reserved-path=rejected seam=called\n", reserved_path_result.stdout)
             self.assertFalse(reserved_package.exists())
-            reserved_source.unlink()
 
             catalog_source = game / "src/game/catalog.py"
             catalog_bytes = catalog_source.read_bytes()
