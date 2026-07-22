@@ -30,13 +30,15 @@ network connection source, Node integration, webview, popup, navigation, or
 permission path. It runs with sandboxing, context isolation, web security, a
 closed CSP, and deny-by-default session handlers.
 
-The preload exposes only initialization, service status, named read-only list
-operations for workspaces, events, changesets, and jobs, and Studio activity
-subscription on fixed IPC channels. Main selects every protocol method,
-creates every request ID, and validates closed scalar filters and bounds.
+The preload exposes only initialization, service status, named list operations,
+the five existing read-only authoring queries, four fixed offline job actions,
+job cancellation, and Studio activity subscription on fixed IPC channels. Main
+selects every protocol method and job operation, creates every request ID, and
+validates closed identifiers, portable paths, scalar filters, and bounds.
 Neither the renderer nor preload receives a generic method/params request,
-`ipcRenderer`, paths, filesystem functions, commands, working directories, or
-arbitrary channel names.
+arbitrary operation name, `ipcRenderer`, root path, filesystem function,
+executable, module, environment, working directory, approval transition,
+process control, or arbitrary channel name.
 
 Electron main owns a bounded NDJSON supervisor. It uses `shell: false`, one
 absolute executable and fixed arguments, strict UTF-8 and schema validation,

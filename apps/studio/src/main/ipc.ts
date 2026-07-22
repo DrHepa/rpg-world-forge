@@ -9,6 +9,7 @@ import {
   type ForgeServiceStatus,
   type JobsListParams,
   type StudioActivityEvent,
+  type StudioCapabilityMethod,
   type StudioClientError,
   type StudioClientResult,
   type StudioReadMethod,
@@ -19,13 +20,26 @@ import { CodexTransportError } from "./codex-supervisor";
 import type { ForgeServiceClient } from "./forge-service";
 import {
   StudioRequestCancelledError,
+  StudioProtocolError,
   StudioRequestTimeoutError,
   StudioTransportError,
 } from "./ndjson-supervisor";
+import {
+  isPortableRelativePath,
+  isPortableSourcePath,
+  validateStudioEnvelope,
+} from "./protocol-validator";
 import { isTrustedStudioSender } from "./security";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const WORKSPACE_ID_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/u;
+const JOB_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,127}$/u;
+const MAX_RUNTIME_TICKS = 1_000_000;
+type NamedJobOperation =
+  | "asset.receipt.validate"
+  | "assetpack.verify"
+  | "runtime.headless"
+  | "runtime.replay";
 const CHANGESET_STATUSES = new Set(["staged", "approved", "rejected", "applied"]);
 const JOB_STATES = new Set([
   "queued",
@@ -90,6 +104,92 @@ export function registerStudioIpc(
     return await captureValidated(
       () => validateJobsListParams(value),
       (params) => requestRead(service, "job.list", { ...params }),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getWorkspaceOverview, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateWorkspaceArgument),
+      ({ workspaceId }) =>
+        requestNamed(service, "workspace.overview", { workspace_id: workspaceId }),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.listSourceDocuments, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateWorkspaceArgument),
+      ({ workspaceId }) => requestNamed(service, "source.list", { workspace_id: workspaceId }),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.readSourceDocument, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateSourceReadArgument),
+      ({ workspaceId, path }) =>
+        requestNamed(service, "source.read", { workspace_id: workspaceId, path }),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.validateWorld, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateWorkspaceArgument),
+      ({ workspaceId }) => requestNamed(service, "world.validate", { workspace_id: workspaceId }),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.analyzeWorld, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateWorkspaceArgument),
+      ({ workspaceId }) => requestNamed(service, "world.analyze", { workspace_id: workspaceId }),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.validateAssetReceipt, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateAssetReceiptArgument),
+      ({ workspaceId, input }) =>
+        requestJobCreate(service, workspaceId, "asset.receipt.validate", input),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.verifyAssetpack, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateAssetpackArgument),
+      ({ workspaceId, input }) =>
+        requestJobCreate(service, workspaceId, "assetpack.verify", input),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.runHeadless, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateHeadlessArgument),
+      ({ workspaceId, input }) =>
+        requestJobCreate(service, workspaceId, "runtime.headless", input),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.runReplay, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateReplayArgument),
+      ({ workspaceId, input }) =>
+        requestJobCreate(service, workspaceId, "runtime.replay", input),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.cancelJob, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateCancelJobArgument),
+      ({ jobId }) => requestNamed(service, "job.cancel", { job_id: jobId }),
     );
   });
 
@@ -166,6 +266,16 @@ export function registerStudioIpc(
     ipcMain.removeHandler(IPC_CHANNELS.listEvents);
     ipcMain.removeHandler(IPC_CHANNELS.listChangesets);
     ipcMain.removeHandler(IPC_CHANNELS.listJobs);
+    ipcMain.removeHandler(IPC_CHANNELS.getWorkspaceOverview);
+    ipcMain.removeHandler(IPC_CHANNELS.listSourceDocuments);
+    ipcMain.removeHandler(IPC_CHANNELS.readSourceDocument);
+    ipcMain.removeHandler(IPC_CHANNELS.validateWorld);
+    ipcMain.removeHandler(IPC_CHANNELS.analyzeWorld);
+    ipcMain.removeHandler(IPC_CHANNELS.validateAssetReceipt);
+    ipcMain.removeHandler(IPC_CHANNELS.verifyAssetpack);
+    ipcMain.removeHandler(IPC_CHANNELS.runHeadless);
+    ipcMain.removeHandler(IPC_CHANNELS.runReplay);
+    ipcMain.removeHandler(IPC_CHANNELS.cancelJob);
     ipcMain.removeHandler(IPC_CHANNELS.codexStatus);
     ipcMain.removeHandler(IPC_CHANNELS.codexBindWorkspace);
     ipcMain.removeHandler(IPC_CHANNELS.codexReadAccount);
@@ -183,6 +293,83 @@ export function registerStudioIpc(
 export function validateWorkspaceArgument(value: unknown): { workspaceId: string } {
   const params = validateClosedParams(value, ["workspaceId"]);
   return { workspaceId: validateWorkspaceId(params.workspaceId) };
+}
+
+export function validateSourceReadArgument(
+  value: unknown,
+): { workspaceId: string; path: string } {
+  const params = validateClosedParams(value, ["workspaceId", "path"]);
+  if (typeof params.path !== "string" || !isPortableSourcePath(params.path)) {
+    throw new TypeError("Studio source path is invalid");
+  }
+  return { workspaceId: validateWorkspaceId(params.workspaceId), path: params.path };
+}
+
+export function validateAssetReceiptArgument(
+  value: unknown,
+): { workspaceId: string; input: { receipt: string } } {
+  const { workspaceId, input } = validateWorkspaceJobArgument(value, ["receipt"]);
+  return {
+    workspaceId,
+    input: { receipt: validateJobPath(input.receipt, "receipt") },
+  };
+}
+
+export function validateAssetpackArgument(
+  value: unknown,
+): { workspaceId: string; input: { assetpack: string; worldpack: string } } {
+  const { workspaceId, input } = validateWorkspaceJobArgument(value, [
+    "assetpack",
+    "worldpack",
+  ]);
+  return {
+    workspaceId,
+    input: {
+      assetpack: validateJobPath(input.assetpack, "assetpack"),
+      worldpack: validateJobPath(input.worldpack, "worldpack"),
+    },
+  };
+}
+
+export function validateHeadlessArgument(
+  value: unknown,
+): { workspaceId: string; input: { worldpack: string; ticks: number } } {
+  const { workspaceId, input } = validateWorkspaceJobArgument(value, ["worldpack", "ticks"]);
+  if (
+    !Number.isSafeInteger(input.ticks) ||
+    (input.ticks as number) < 0 ||
+    (input.ticks as number) > MAX_RUNTIME_TICKS
+  ) {
+    throw new TypeError(`Studio headless ticks must be an integer from 0 to ${MAX_RUNTIME_TICKS}`);
+  }
+  return {
+    workspaceId,
+    input: {
+      worldpack: validateJobPath(input.worldpack, "worldpack"),
+      ticks: input.ticks as number,
+    },
+  };
+}
+
+export function validateReplayArgument(
+  value: unknown,
+): { workspaceId: string; input: { worldpack: string; replay: string } } {
+  const { workspaceId, input } = validateWorkspaceJobArgument(value, ["worldpack", "replay"]);
+  return {
+    workspaceId,
+    input: {
+      worldpack: validateJobPath(input.worldpack, "worldpack"),
+      replay: validateJobPath(input.replay, "replay"),
+    },
+  };
+}
+
+export function validateCancelJobArgument(value: unknown): { jobId: string } {
+  const params = validateClosedParams(value, ["jobId"]);
+  if (typeof params.jobId !== "string" || !JOB_ID_PATTERN.test(params.jobId)) {
+    throw new TypeError("Studio job ID is invalid");
+  }
+  return { jobId: params.jobId };
 }
 
 export function validateLoginArgument(value: unknown): { mode: "browser" | "device-code" } {
@@ -331,9 +518,79 @@ async function requestRead(
   method: StudioReadMethod,
   params: Record<string, unknown>,
 ): Promise<StudioClientResult<StudioReplyEnvelope>> {
+  return await requestNamed(service, method, params);
+}
+
+async function requestNamed(
+  service: ForgeServiceClient,
+  method: StudioCapabilityMethod,
+  params: Record<string, unknown>,
+): Promise<StudioClientResult<StudioReplyEnvelope>> {
+  const requestId = randomUUID();
   return await capture(() =>
-    service.request(randomUUID(), method, params, DEFAULT_REQUEST_TIMEOUT_MS),
+    service
+      .request(requestId, method, params, DEFAULT_REQUEST_TIMEOUT_MS)
+      .then((reply) => validateNamedReply(reply, requestId, method)),
   );
+}
+
+async function requestJobCreate(
+  service: ForgeServiceClient,
+  workspaceId: string,
+  operation: NamedJobOperation,
+  input: Readonly<Record<string, unknown>>,
+): Promise<StudioClientResult<StudioReplyEnvelope>> {
+  const requestId = randomUUID();
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        "job.create",
+        { workspace_id: workspaceId, operation, input },
+        DEFAULT_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) => validateJobCreateReply(reply, requestId, operation, input)),
+  );
+}
+
+function validateNamedReply(
+  value: unknown,
+  requestId: string,
+  method: StudioCapabilityMethod,
+): StudioReplyEnvelope {
+  if (
+    !validateStudioEnvelope(value) ||
+    (value.kind !== "response" && value.kind !== "error") ||
+    value.request_id !== requestId ||
+    (value.kind === "response" && value.method !== method)
+  ) {
+    throw new StudioProtocolError(`Forge Studio returned an invalid ${method} reply`);
+  }
+  return value;
+}
+
+function validateJobCreateReply(
+  value: unknown,
+  requestId: string,
+  operation: NamedJobOperation,
+  input: Readonly<Record<string, unknown>>,
+): StudioReplyEnvelope {
+  const reply = validateNamedReply(value, requestId, "job.create");
+  if (reply.kind === "error") {
+    return reply;
+  }
+  if (reply.method !== "job.create") {
+    throw new StudioProtocolError("Forge Studio returned an invalid job.create reply");
+  }
+  const { job } = reply.result;
+  if (
+    job.format_version !== 2 ||
+    job.operation !== operation ||
+    !hasExactScalarFields(job.input, input)
+  ) {
+    throw new StudioProtocolError("Forge Studio returned a mismatched job.create result");
+  }
+  return reply;
 }
 
 async function captureValidated<T, U>(
@@ -362,12 +619,44 @@ function rejectUntrustedOrUnexpectedArguments(
   return null;
 }
 
+function untrustedFailure(): StudioClientResult<never> {
+  return failure("invalid_request", "Rejected Studio IPC from an untrusted sender");
+}
+
+function validateSingleArgument<T>(
+  args: readonly unknown[],
+  validate: (value: unknown) => T,
+): T {
+  if (args.length !== 1) {
+    throw new TypeError("Studio operation requires exactly one argument object");
+  }
+  return validate(args[0]);
+}
+
+function validateWorkspaceJobArgument(
+  value: unknown,
+  inputFields: readonly string[],
+): { workspaceId: string; input: Record<string, unknown> } {
+  const params = validateClosedParams(value, ["workspaceId", "input"]);
+  return {
+    workspaceId: validateWorkspaceId(params.workspaceId),
+    input: validateClosedParams(params.input, inputFields),
+  };
+}
+
+function validateJobPath(value: unknown, field: string): string {
+  if (typeof value !== "string" || !isPortableRelativePath(value)) {
+    throw new TypeError(`Studio ${field} path is invalid`);
+  }
+  return value;
+}
+
 function validateClosedParams(
   value: unknown,
   allowed: readonly string[],
 ): Record<string, unknown> {
   if (!isRecord(value) || !Object.keys(value).every((key) => allowed.includes(key))) {
-    throw new TypeError("Studio list filters must be a closed object");
+    throw new TypeError("Studio IPC arguments must be a closed object");
   }
   return value;
 }
@@ -423,6 +712,23 @@ function failure(
 
 function describeUnknown(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown Studio error";
+}
+
+function hasExactScalarFields(
+  value: unknown,
+  expected: Readonly<Record<string, unknown>>,
+): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const expectedKeys = Object.keys(expected).sort();
+  const actualKeys = Object.keys(value).sort();
+  return (
+    expectedKeys.length === actualKeys.length &&
+    expectedKeys.every(
+      (key, index) => key === actualKeys[index] && value[key] === expected[key],
+    )
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

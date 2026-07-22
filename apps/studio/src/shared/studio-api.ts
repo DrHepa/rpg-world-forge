@@ -1,4 +1,8 @@
 import type {
+  AssetReceiptValidateOperation as StudioAssetReceiptValidateOperation,
+  AssetReceiptValidateInput as StudioAssetReceiptValidateInput,
+  AssetpackVerifyOperation as StudioAssetpackVerifyOperation,
+  AssetpackVerifyInput as StudioAssetpackVerifyInput,
   Error as StudioErrorEnvelope,
   Event as StudioEventEnvelope,
   ForgeStudioDurableJobRecordV2WithV1ReadCompatibility as StudioJob,
@@ -6,8 +10,13 @@ import type {
   JobCancelResponse as StudioJobCancelResponse,
   JobCreateRequest as StudioJobCreateRequest,
   JobCreateResponse as StudioJobCreateResponse,
+  ManagedStudioJobV2CommonRecord as StudioManagedJobV2CommonRecord,
   Method as StudioMethod,
   Response as StudioResponseEnvelope,
+  RuntimeHeadlessOperation as StudioRuntimeHeadlessOperation,
+  RuntimeHeadlessInput as StudioRuntimeHeadlessInput,
+  RuntimeReplayOperation as StudioRuntimeReplayOperation,
+  RuntimeReplayInput as StudioRuntimeReplayInput,
   SourceListResponse as StudioSourceListResponse,
   SourceListResult as StudioSourceListResult,
   SourceReadParams as StudioSourceReadParams,
@@ -28,6 +37,8 @@ import type {
 export type {
   StudioErrorEnvelope,
   StudioEventEnvelope,
+  StudioAssetReceiptValidateInput,
+  StudioAssetpackVerifyInput,
   StudioJob,
   StudioJobCancelRequest,
   StudioJobCancelResponse,
@@ -35,6 +46,8 @@ export type {
   StudioJobCreateResponse,
   StudioMethod,
   StudioResponseEnvelope,
+  StudioRuntimeHeadlessInput,
+  StudioRuntimeReplayInput,
   StudioSourceListResponse,
   StudioSourceListResult,
   StudioSourceReadParams,
@@ -53,6 +66,46 @@ export type {
 };
 
 export type StudioReplyEnvelope = StudioResponseEnvelope | StudioErrorEnvelope;
+export type StudioWorkspaceOverviewReply =
+  | StudioWorkspaceOverviewResponse
+  | StudioErrorEnvelope;
+export type StudioSourceListReply = StudioSourceListResponse | StudioErrorEnvelope;
+export type StudioSourceReadReply = StudioSourceReadResponse | StudioErrorEnvelope;
+export type StudioWorldValidateReply = StudioWorldValidateResponse | StudioErrorEnvelope;
+export type StudioWorldAnalyzeReply = StudioWorldAnalyzeResponse | StudioErrorEnvelope;
+export type StudioJobCreateReply = StudioJobCreateResponse | StudioErrorEnvelope;
+export type StudioJobCancelReply = StudioJobCancelResponse | StudioErrorEnvelope;
+
+export type StudioAssetReceiptValidateJob = StudioManagedJobV2CommonRecord &
+  StudioAssetReceiptValidateOperation;
+export type StudioAssetpackVerifyJob = StudioManagedJobV2CommonRecord &
+  StudioAssetpackVerifyOperation;
+export type StudioRuntimeHeadlessJob = StudioManagedJobV2CommonRecord &
+  StudioRuntimeHeadlessOperation;
+export type StudioRuntimeReplayJob = StudioManagedJobV2CommonRecord &
+  StudioRuntimeReplayOperation;
+
+type StudioJobCreateResponseWithJob<TJob> = Omit<StudioJobCreateResponse, "result"> & {
+  result: { job: TJob };
+};
+
+export type StudioAssetReceiptValidateResponse = StudioJobCreateResponseWithJob<
+  StudioAssetReceiptValidateJob
+>;
+export type StudioAssetpackVerifyResponse = StudioJobCreateResponseWithJob<
+  StudioAssetpackVerifyJob
+>;
+export type StudioRuntimeHeadlessResponse = StudioJobCreateResponseWithJob<
+  StudioRuntimeHeadlessJob
+>;
+export type StudioRuntimeReplayResponse = StudioJobCreateResponseWithJob<StudioRuntimeReplayJob>;
+
+export type StudioAssetReceiptValidateReply =
+  | StudioAssetReceiptValidateResponse
+  | StudioErrorEnvelope;
+export type StudioAssetpackVerifyReply = StudioAssetpackVerifyResponse | StudioErrorEnvelope;
+export type StudioRuntimeHeadlessReply = StudioRuntimeHeadlessResponse | StudioErrorEnvelope;
+export type StudioRuntimeReplayReply = StudioRuntimeReplayResponse | StudioErrorEnvelope;
 
 export type ForgeServiceState =
   | "stopped"
@@ -72,6 +125,16 @@ export type StudioReadMethod =
   | "events.list"
   | "changeset.list"
   | "job.list";
+
+export type StudioCapabilityMethod =
+  | StudioReadMethod
+  | "workspace.overview"
+  | "source.list"
+  | "source.read"
+  | "world.validate"
+  | "world.analyze"
+  | "job.create"
+  | "job.cancel";
 
 export interface EventsListParams {
   workspace_id?: string;
@@ -185,6 +248,33 @@ export interface ForgeStudioApi {
   listEvents(params?: EventsListParams): Promise<StudioClientResult<StudioReplyEnvelope>>;
   listChangesets(params?: ChangesetsListParams): Promise<StudioClientResult<StudioReplyEnvelope>>;
   listJobs(params?: JobsListParams): Promise<StudioClientResult<StudioReplyEnvelope>>;
+  getWorkspaceOverview(
+    workspaceId: string,
+  ): Promise<StudioClientResult<StudioWorkspaceOverviewReply>>;
+  listSourceDocuments(workspaceId: string): Promise<StudioClientResult<StudioSourceListReply>>;
+  readSourceDocument(
+    workspaceId: string,
+    path: string,
+  ): Promise<StudioClientResult<StudioSourceReadReply>>;
+  validateWorld(workspaceId: string): Promise<StudioClientResult<StudioWorldValidateReply>>;
+  analyzeWorld(workspaceId: string): Promise<StudioClientResult<StudioWorldAnalyzeReply>>;
+  validateAssetReceipt(
+    workspaceId: string,
+    input: StudioAssetReceiptValidateInput,
+  ): Promise<StudioClientResult<StudioAssetReceiptValidateReply>>;
+  verifyAssetpack(
+    workspaceId: string,
+    input: StudioAssetpackVerifyInput,
+  ): Promise<StudioClientResult<StudioAssetpackVerifyReply>>;
+  runHeadless(
+    workspaceId: string,
+    input: StudioRuntimeHeadlessInput,
+  ): Promise<StudioClientResult<StudioRuntimeHeadlessReply>>;
+  runReplay(
+    workspaceId: string,
+    input: StudioRuntimeReplayInput,
+  ): Promise<StudioClientResult<StudioRuntimeReplayReply>>;
+  cancelJob(jobId: string): Promise<StudioClientResult<StudioJobCancelReply>>;
   onEvent(listener: (event: StudioActivityEvent) => void): () => void;
   getCodexStatus(): Promise<StudioClientResult<CodexBridgeStatus>>;
   bindCodexWorkspace(workspaceId: string): Promise<StudioClientResult<CodexBridgeStatus>>;
@@ -241,6 +331,16 @@ export const IPC_CHANNELS = Object.freeze({
   listEvents: "studio:list-events",
   listChangesets: "studio:list-changesets",
   listJobs: "studio:list-jobs",
+  getWorkspaceOverview: "studio:get-workspace-overview",
+  listSourceDocuments: "studio:list-source-documents",
+  readSourceDocument: "studio:read-source-document",
+  validateWorld: "studio:validate-world",
+  analyzeWorld: "studio:analyze-world",
+  validateAssetReceipt: "studio:validate-asset-receipt",
+  verifyAssetpack: "studio:verify-assetpack",
+  runHeadless: "studio:run-headless",
+  runReplay: "studio:run-replay",
+  cancelJob: "studio:cancel-job",
   event: "studio:event",
   codexStatus: "studio:codex-status",
   codexBindWorkspace: "studio:codex-bind-workspace",

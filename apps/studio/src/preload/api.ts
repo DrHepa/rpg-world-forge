@@ -2,9 +2,19 @@ import {
   IPC_CHANNELS,
   type ForgeStudioApi,
   type CodexActivityEvent,
+  type StudioAssetReceiptValidateReply,
+  type StudioAssetpackVerifyReply,
   type StudioActivityEvent,
   type StudioClientResult,
+  type StudioJobCancelReply,
   type StudioReplyEnvelope,
+  type StudioRuntimeHeadlessReply,
+  type StudioRuntimeReplayReply,
+  type StudioSourceListReply,
+  type StudioSourceReadReply,
+  type StudioWorkspaceOverviewReply,
+  type StudioWorldAnalyzeReply,
+  type StudioWorldValidateReply,
 } from "../shared/studio-api";
 
 export interface PreloadTransport {
@@ -41,6 +51,56 @@ export function createStudioApi(transport: PreloadTransport): ForgeStudioApi {
     async listJobs(params = {}) {
       return asClientResult<StudioReplyEnvelope>(
         await transport.invoke(IPC_CHANNELS.listJobs, params),
+      );
+    },
+    async getWorkspaceOverview(workspaceId) {
+      return asClientResult<StudioWorkspaceOverviewReply>(
+        await transport.invoke(IPC_CHANNELS.getWorkspaceOverview, { workspaceId }),
+      );
+    },
+    async listSourceDocuments(workspaceId) {
+      return asClientResult<StudioSourceListReply>(
+        await transport.invoke(IPC_CHANNELS.listSourceDocuments, { workspaceId }),
+      );
+    },
+    async readSourceDocument(workspaceId, path) {
+      return asClientResult<StudioSourceReadReply>(
+        await transport.invoke(IPC_CHANNELS.readSourceDocument, { workspaceId, path }),
+      );
+    },
+    async validateWorld(workspaceId) {
+      return asClientResult<StudioWorldValidateReply>(
+        await transport.invoke(IPC_CHANNELS.validateWorld, { workspaceId }),
+      );
+    },
+    async analyzeWorld(workspaceId) {
+      return asClientResult<StudioWorldAnalyzeReply>(
+        await transport.invoke(IPC_CHANNELS.analyzeWorld, { workspaceId }),
+      );
+    },
+    async validateAssetReceipt(workspaceId, input) {
+      return asClientResult<StudioAssetReceiptValidateReply>(
+        await transport.invoke(IPC_CHANNELS.validateAssetReceipt, { workspaceId, input }),
+      );
+    },
+    async verifyAssetpack(workspaceId, input) {
+      return asClientResult<StudioAssetpackVerifyReply>(
+        await transport.invoke(IPC_CHANNELS.verifyAssetpack, { workspaceId, input }),
+      );
+    },
+    async runHeadless(workspaceId, input) {
+      return asClientResult<StudioRuntimeHeadlessReply>(
+        await transport.invoke(IPC_CHANNELS.runHeadless, { workspaceId, input }),
+      );
+    },
+    async runReplay(workspaceId, input) {
+      return asClientResult<StudioRuntimeReplayReply>(
+        await transport.invoke(IPC_CHANNELS.runReplay, { workspaceId, input }),
+      );
+    },
+    async cancelJob(jobId) {
+      return asClientResult<StudioJobCancelReply>(
+        await transport.invoke(IPC_CHANNELS.cancelJob, { jobId }),
       );
     },
     onEvent(listener: (event: StudioActivityEvent) => void) {

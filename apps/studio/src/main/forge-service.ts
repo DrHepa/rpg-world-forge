@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type {
   ForgeServiceStatus,
   StudioActivityEvent,
-  StudioReadMethod,
+  StudioCapabilityMethod,
   StudioReplyEnvelope,
 } from "../shared/studio-api";
 import { STUDIO_METHODS } from "../shared/studio-api";
@@ -25,7 +25,7 @@ interface InitializationResult {
   capabilities: Record<string, unknown>;
 }
 
-type ForgeServiceMethod = StudioReadMethod | "workspace.get";
+type ForgeServiceMethod = StudioCapabilityMethod | "workspace.get";
 
 export interface ForgeServiceClient {
   readonly status: ForgeServiceStatus;

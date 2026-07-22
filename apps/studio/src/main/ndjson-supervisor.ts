@@ -4,6 +4,10 @@ import path from "node:path";
 import type {
   Error as StudioErrorEnvelope,
   Event as StudioEventEnvelope,
+  JobCancelRequest as StudioJobCancelRequest,
+  JobCancelResponse as StudioJobCancelResponse,
+  JobCreateRequest as StudioJobCreateRequest,
+  JobCreateResponse as StudioJobCreateResponse,
   LegacyResponse as StudioLegacyResponse,
   Method as StudioMethod,
   Response as StudioResponseEnvelope,
@@ -168,11 +172,15 @@ interface PendingRequest {
   writeState: "queued" | "writing" | "sent";
 }
 
-export type StudioRequestParams<M extends StudioMethod> = M extends "source.read"
-  ? StudioSourceReadParams
-  : M extends StudioWorkspaceScopedAuthoringMethod
-    ? StudioWorkspaceScopedParams
-    : Record<string, unknown>;
+export type StudioRequestParams<M extends StudioMethod> = M extends "job.create"
+  ? StudioJobCreateRequest["params"]
+  : M extends "job.cancel"
+    ? StudioJobCancelRequest["params"]
+    : M extends "source.read"
+      ? StudioSourceReadParams
+      : M extends StudioWorkspaceScopedAuthoringMethod
+        ? StudioWorkspaceScopedParams
+        : Record<string, unknown>;
 
 export type StudioSuccessForMethod<M extends StudioMethod> = M extends "workspace.overview"
   ? StudioWorkspaceOverviewResponse
@@ -184,7 +192,11 @@ export type StudioSuccessForMethod<M extends StudioMethod> = M extends "workspac
         ? StudioWorldValidateResponse
         : M extends "world.analyze"
           ? StudioWorldAnalyzeResponse
-          : StudioLegacyResponse;
+          : M extends "job.create"
+            ? StudioJobCreateResponse
+            : M extends "job.cancel"
+              ? StudioJobCancelResponse
+              : StudioLegacyResponse;
 
 export type StudioReplyForMethod<M extends StudioMethod> =
   | StudioSuccessForMethod<M>

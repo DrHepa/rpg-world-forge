@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { createStudioApi, type PreloadTransport } from "../../src/preload/api";
 import { IPC_CHANNELS } from "../../src/shared/studio-api";
@@ -13,26 +13,37 @@ describe("preload API", () => {
     };
     const api = createStudioApi(transport);
 
+    expect(Object.isFrozen(api)).toBe(true);
     expect(Object.keys(api).sort()).toEqual([
+      "analyzeWorld",
       "answerCodexUserInput",
       "bindCodexWorkspace",
+      "cancelJob",
       "forkCodexThread",
       "getCodexStatus",
       "getServiceStatus",
+      "getWorkspaceOverview",
       "initialize",
       "interruptCodexTurn",
       "listChangesets",
       "listEvents",
       "listJobs",
+      "listSourceDocuments",
       "listWorkspaces",
       "onCodexEvent",
       "onEvent",
       "readCodexAccount",
+      "readSourceDocument",
       "resumeCodexThread",
+      "runHeadless",
+      "runReplay",
       "startCodexLogin",
       "startCodexThread",
       "startCodexTurn",
       "steerCodexTurn",
+      "validateAssetReceipt",
+      "validateWorld",
+      "verifyAssetpack",
     ]);
     expect(api).not.toHaveProperty("request");
     expect(api).not.toHaveProperty("cancelRequest");
@@ -45,6 +56,43 @@ describe("preload API", () => {
     await api.listEvents({ workspace_id: "workspace_01", limit: 10 });
     await api.listChangesets({ status: "staged" });
     await api.listJobs({ state: "queued" });
+    await api.getWorkspaceOverview("workspace_01");
+    await api.listSourceDocuments("workspace_01");
+    await api.readSourceDocument("workspace_01", "source/world.json");
+    await api.validateWorld("workspace_01");
+    await api.analyzeWorld("workspace_01");
+    const receiptValidation = await api.validateAssetReceipt("workspace_01", {
+      receipt: "receipts/item.json",
+    });
+    const assetpackVerification = await api.verifyAssetpack("workspace_01", {
+      assetpack: "build/assetpack.json",
+      worldpack: "build/worldpack.json",
+    });
+    const headlessRun = await api.runHeadless("workspace_01", {
+      worldpack: "build/worldpack.json",
+      ticks: 0,
+    });
+    const replayRun = await api.runReplay("workspace_01", {
+      worldpack: "build/worldpack.json",
+      replay: "replays/slot.json",
+    });
+    if (receiptValidation.ok && receiptValidation.value.kind === "response") {
+      expectTypeOf(receiptValidation.value.result.job.operation).toEqualTypeOf<
+        "asset.receipt.validate"
+      >();
+    }
+    if (assetpackVerification.ok && assetpackVerification.value.kind === "response") {
+      expectTypeOf(assetpackVerification.value.result.job.operation).toEqualTypeOf<
+        "assetpack.verify"
+      >();
+    }
+    if (headlessRun.ok && headlessRun.value.kind === "response") {
+      expectTypeOf(headlessRun.value.result.job.operation).toEqualTypeOf<"runtime.headless">();
+    }
+    if (replayRun.ok && replayRun.value.kind === "response") {
+      expectTypeOf(replayRun.value.result.job.operation).toEqualTypeOf<"runtime.replay">();
+    }
+    await api.cancelJob("job_01");
     await api.getCodexStatus();
     await api.bindCodexWorkspace("workspace_01");
     await api.readCodexAccount();
@@ -63,6 +111,31 @@ describe("preload API", () => {
       [IPC_CHANNELS.listEvents, { workspace_id: "workspace_01", limit: 10 }],
       [IPC_CHANNELS.listChangesets, { status: "staged" }],
       [IPC_CHANNELS.listJobs, { state: "queued" }],
+      [IPC_CHANNELS.getWorkspaceOverview, { workspaceId: "workspace_01" }],
+      [IPC_CHANNELS.listSourceDocuments, { workspaceId: "workspace_01" }],
+      [IPC_CHANNELS.readSourceDocument, {
+        workspaceId: "workspace_01",
+        path: "source/world.json",
+      }],
+      [IPC_CHANNELS.validateWorld, { workspaceId: "workspace_01" }],
+      [IPC_CHANNELS.analyzeWorld, { workspaceId: "workspace_01" }],
+      [IPC_CHANNELS.validateAssetReceipt, {
+        workspaceId: "workspace_01",
+        input: { receipt: "receipts/item.json" },
+      }],
+      [IPC_CHANNELS.verifyAssetpack, {
+        workspaceId: "workspace_01",
+        input: { assetpack: "build/assetpack.json", worldpack: "build/worldpack.json" },
+      }],
+      [IPC_CHANNELS.runHeadless, {
+        workspaceId: "workspace_01",
+        input: { worldpack: "build/worldpack.json", ticks: 0 },
+      }],
+      [IPC_CHANNELS.runReplay, {
+        workspaceId: "workspace_01",
+        input: { worldpack: "build/worldpack.json", replay: "replays/slot.json" },
+      }],
+      [IPC_CHANNELS.cancelJob, { jobId: "job_01" }],
       [IPC_CHANNELS.codexStatus],
       [IPC_CHANNELS.codexBindWorkspace, { workspaceId: "workspace_01" }],
       [IPC_CHANNELS.codexReadAccount],

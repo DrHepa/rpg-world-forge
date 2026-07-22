@@ -56,8 +56,11 @@ never expose tracebacks or absolute workspace paths.
   capability.
 - Previously valid v1 rows remain readable, listable, recoverable, and
   cancelable without being promoted into the executor capability boundary.
-- The renderer remains job-list-only, and public `job.transition` cannot forge
-  executor-owned transitions.
+- The renderer has only four fixed named job-creation capabilities plus job
+  list and cancel; Electron main owns each operation literal and rejects a
+  successful reply unless it is the correlated v2 job for that capability.
+  Arbitrary `job.create` dispatch is never exposed, and public `job.transition`
+  cannot forge executor-owned transitions.
 - Job input cannot select commands, modules, roots, arguments, or environments.
 - A future mutating or provider operation requires a separate contract and ADR;
   it cannot enter this allowlist by convention.

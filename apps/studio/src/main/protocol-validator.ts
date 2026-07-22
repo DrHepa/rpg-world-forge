@@ -37,7 +37,7 @@ ajv.addFormat("rpg-world-forge-portable-relative-path", {
 ajv.addSchema(jobSchema);
 const validate: ValidateFunction<StudioEnvelope> = ajv.compile(protocolSchema);
 
-function isPortableSourcePath(value: string): boolean {
+export function isPortableSourcePath(value: string): boolean {
   const parts = value.split("/");
   if (parts.length < 2 || parts.length > 8 || parts[0] !== "source") {
     return false;
@@ -45,7 +45,7 @@ function isPortableSourcePath(value: string): boolean {
   return parts.every((part) => isPortablePathComponent(part));
 }
 
-function isPortableRelativePath(value: string): boolean {
+export function isPortableRelativePath(value: string): boolean {
   const parts = value.split("/");
   return parts.length >= 1 && parts.length <= 16 && parts.every(isPortablePathComponent);
 }

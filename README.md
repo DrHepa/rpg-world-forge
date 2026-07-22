@@ -150,6 +150,10 @@ The read-only authoring methods expose only manifest-declared world source
 documents. They return portable paths and hashes from bounded, pinned reads;
 never absolute repository paths. Validation and narrative analysis reuse the
 existing Forge domain logic entirely in memory and do not publish reports.
+The Electron preload exposes these reads and the four offline jobs only as
+named capabilities. Electron main owns protocol methods, operation names, and
+request IDs; renderer input is limited to closed workspace IDs, portable
+relative paths, bounded ticks, and job IDs.
 
 Changesets initially edit only UTF-8 files beneath a registered world's
 `source/` directory. Proposed bytes are content-addressed under the external

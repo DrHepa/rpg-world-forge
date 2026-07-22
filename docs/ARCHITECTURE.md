@@ -112,10 +112,14 @@ Progress and cancellation intent are durable events. A service shutdown reaps
 its active child before marking the job orphaned; restart recovery never retries
 an orphan automatically. Public transitions cannot impersonate the executor.
 
-The Electron renderer remains list-only for jobs and does not execute them.
-Codex proposals remain staged changesets and cannot approve or apply
-themselves. Provider/model execution, Blender, Modly, Ollama, arbitrary
-commands, file watching, and M6 presentation work remain outside this boundary.
+The Electron renderer can list and cancel jobs and create them only through four
+fixed named capabilities: receipt validation, assetpack verification, headless
+runtime, and replay runtime. Electron main maps those capabilities to the four
+managed operation literals, validates each correlated v2 reply and echoed input,
+and never exposes arbitrary `job.create` or operation dispatch. Codex proposals
+remain staged changesets and cannot approve or apply themselves. Provider/model
+execution, Blender, Modly, Ollama, arbitrary commands, file watching, and M6
+presentation work remain outside this boundary.
 
 Development selects Python and Codex through explicit absolute
 `RWF_STUDIO_DEV_PYTHON` and `RWF_STUDIO_DEV_CODEX` paths. A package may select
