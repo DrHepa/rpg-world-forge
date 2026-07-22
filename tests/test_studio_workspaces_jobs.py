@@ -8,7 +8,7 @@ from worldforge.repository_boundary import FORGE_ROOT
 from worldforge.scaffold import create_world_project
 from worldforge.studio.errors import StudioError
 from worldforge.studio.jobs import JobManager
-from worldforge.studio.storage import StudioStore
+from worldforge.studio.storage import StudioStore, encode_json
 from worldforge.studio.workspaces import WorkspaceManager
 
 
@@ -95,20 +95,114 @@ class StudioWorkspacesAndJobsTests(unittest.TestCase):
                 job = jobs.create(
                     {
                         "workspace_id": workspace["workspace_id"],
-                        "operation": "forge.validate",
-                        "input": {"profile": "draft"},
+                        "operation": "runtime.headless",
+                        "input": {"worldpack": "build/worldpack.json", "ticks": 0},
                     }
                 )
-                running = jobs.transition(job["job_id"], {"state": "running"})
+                self.assertEqual(2, job["format_version"])
+                running = jobs.claim_next()
+                self.assertIsNotNone(running)
+                assert running is not None
                 self.assertEqual("running", running["state"])
-                with self.assertRaisesRegex(StudioError, "transition"):
-                    jobs.transition(job["job_id"], {"state": "queued"})
+                with self.assertRaisesRegex(StudioError, "owned by the Studio executor"):
+                    jobs.transition(job["job_id"], {"state": "succeeded", "result": {}})
 
             with StudioStore(data_dir) as reopened:
                 orphaned = JobManager(reopened).get(job["job_id"])
                 self.assertEqual("orphaned", orphaned["state"])
                 canceled = JobManager(reopened).cancel(job["job_id"])
                 self.assertEqual("canceled", canceled["state"])
+
+    def test_claim_skips_legacy_v1_and_preserves_managed_v2_fifo(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            world = temp / "world"
+            create_world_project(world, world_id="studio_world", title="Studio", language="en")
+            with StudioStore(temp / "data") as store:
+                WorkspaceManager(store).register(
+                    {
+                        "workspace_id": "workspace_01",
+                        "forge_root": str(FORGE_ROOT),
+                        "world_root": str(world),
+                    }
+                )
+                jobs = JobManager(store)
+                timestamp = "2026-07-22T12:00:00Z"
+
+                def insert_legacy(
+                    job_id: str,
+                    operation: str,
+                    job_input: dict[str, object],
+                    *,
+                    state: str = "queued",
+                ) -> None:
+                    record = {
+                        "format": "rpg-world-forge.studio_job",
+                        "format_version": 1,
+                        "job_id": job_id,
+                        "workspace_id": "workspace_01",
+                        "operation": operation,
+                        "state": state,
+                        "input": job_input,
+                        "result": None,
+                        "error": None,
+                        "created_at": timestamp,
+                        "updated_at": timestamp,
+                    }
+                    store.connection.execute(
+                        "INSERT INTO jobs "
+                        "(job_id, workspace_id, state, record_json) VALUES (?, ?, ?, ?)",
+                        (job_id, "workspace_01", state, encode_json(record)),
+                    )
+                    store.connection.commit()
+
+                insert_legacy(
+                    "legacy_running",
+                    "forge.validate",
+                    {"profile": "release"},
+                    state="running",
+                )
+                self.assertEqual("canceled", jobs.cancel("legacy_running")["state"])
+                insert_legacy("legacy_first", "forge.validate", {"profile": "release"})
+                managed_first = jobs.create(
+                    {
+                        "job_id": "managed_first",
+                        "workspace_id": "workspace_01",
+                        "operation": "runtime.headless",
+                        "input": {"worldpack": "build/first.json", "ticks": 0},
+                    }
+                )
+                insert_legacy(
+                    "legacy_managed_name",
+                    "runtime.headless",
+                    {"legacy_command": "headless --old-contract"},
+                )
+                managed_second = jobs.create(
+                    {
+                        "job_id": "managed_second",
+                        "workspace_id": "workspace_01",
+                        "operation": "runtime.headless",
+                        "input": {"worldpack": "build/second.json", "ticks": 0},
+                    }
+                )
+                store.connection.commit()
+
+                first_claim = jobs.claim_next()
+                self.assertIsNotNone(first_claim)
+                assert first_claim is not None
+                self.assertEqual(managed_first["job_id"], first_claim["job_id"])
+                jobs.finish(first_claim["job_id"], "canceled")
+                second_claim = jobs.claim_next()
+                self.assertIsNotNone(second_claim)
+                assert second_claim is not None
+                self.assertEqual(managed_second["job_id"], second_claim["job_id"])
+                jobs.finish(second_claim["job_id"], "canceled")
+                self.assertIsNone(jobs.claim_next())
+
+                self.assertEqual("queued", jobs.get("legacy_first")["state"])
+                self.assertEqual("queued", jobs.get("legacy_managed_name")["state"])
+                self.assertEqual("canceled", jobs.cancel("legacy_first")["state"])
+                self.assertEqual("canceled", jobs.cancel("legacy_managed_name")["state"])
 
 
 if __name__ == "__main__":

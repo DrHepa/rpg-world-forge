@@ -20,8 +20,8 @@ PORTABLE_SOURCE_PATH_FORMAT = "rpg-world-forge-portable-source-path"
 
 WORKSPACE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
 ENTITY_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
-SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 OPERATION_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
+SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 TIMESTAMP_PATTERN = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$"
 )
@@ -69,11 +69,34 @@ WORKSPACE_AUTHORING_METHODS = frozenset(
     {"workspace.overview", "source.list", "world.validate", "world.analyze"}
 )
 AUTHORING_METHODS = WORKSPACE_AUTHORING_METHODS | {"source.read"}
-LEGACY_METHODS = METHODS - AUTHORING_METHODS
+EXACT_JOB_METHODS = frozenset({"job.create", "job.cancel"})
+LEGACY_METHODS = METHODS - AUTHORING_METHODS - EXACT_JOB_METHODS
 MAX_STUDIO_SOURCE_DEPTH = 8
 MAX_STUDIO_SOURCE_BYTES = 256 * 1024
 MAX_STUDIO_SOURCE_DOCUMENTS = 1024
 MAX_STUDIO_DIAGNOSTICS = 512
+MAX_STUDIO_JOB_PATH_DEPTH = 16
+MAX_STUDIO_RECEIPT_ISSUES = 256
+MAX_RUNTIME_TICKS = 1_000_000
+LEGACY_JOB_VERSION = 1
+MANAGED_JOB_VERSION = 2
+MANAGED_JOB_OPERATIONS = frozenset(
+    {
+        "asset.receipt.validate",
+        "assetpack.verify",
+        "runtime.headless",
+        "runtime.replay",
+    }
+)
+JOB_ERROR_CODES = frozenset(
+    {
+        "execution_failed",
+        "invalid_workspace",
+        "timeout",
+        "worker_crashed",
+        "worker_protocol",
+    }
+)
 
 
 def _object(value: object, context: str) -> dict[str, Any]:
@@ -378,6 +401,170 @@ def _validate_authoring_result(method: str, value: object, context: str) -> None
         raise StudioContractError("envelope/method is unknown")
 
 
+def studio_job_path(value: object) -> PurePosixPath | None:
+    """Return one bounded portable path relative to a registered workspace root."""
+
+    try:
+        relative = portable_relative_path(value)
+    except UnicodeError:
+        return None
+    if relative is None or len(relative.parts) > MAX_STUDIO_JOB_PATH_DEPTH:
+        return None
+    return relative
+
+
+def _validate_job_input(operation: str, value: object, context: str) -> None:
+    job_input = _object(value, context)
+    fields = {
+        "asset.receipt.validate": {"receipt"},
+        "assetpack.verify": {"assetpack", "worldpack"},
+        "runtime.headless": {"worldpack", "ticks"},
+        "runtime.replay": {"worldpack", "replay"},
+    }[operation]
+    _closed(job_input, fields, context)
+    for field in fields - {"ticks"}:
+        if studio_job_path(job_input[field]) is None:
+            raise StudioContractError(
+                f"{context}/{field} must be a portable path of at most "
+                f"{MAX_STUDIO_JOB_PATH_DEPTH} components"
+            )
+    if operation == "runtime.headless":
+        ticks = job_input["ticks"]
+        if (
+            isinstance(ticks, bool)
+            or not isinstance(ticks, int)
+            or not 0 <= ticks <= MAX_RUNTIME_TICKS
+        ):
+            raise StudioContractError(
+                f"{context}/ticks must be an integer from 0 to {MAX_RUNTIME_TICKS}"
+            )
+
+
+def _validate_receipt_result(result: dict[str, Any], context: str) -> None:
+    _closed(
+        result,
+        {"operation", "valid", "issue_count", "issues_truncated", "issues"},
+        context,
+    )
+    if result["operation"] != "asset.receipt.validate":
+        raise StudioContractError(f"{context}/operation is invalid")
+    _boolean(result["valid"], f"{context}/valid")
+    issue_count = _integer(result["issue_count"], f"{context}/issue_count")
+    _boolean(result["issues_truncated"], f"{context}/issues_truncated")
+    issues = result["issues"]
+    if not isinstance(issues, list) or len(issues) > MAX_STUDIO_RECEIPT_ISSUES:
+        raise StudioContractError(
+            f"{context}/issues must contain at most {MAX_STUDIO_RECEIPT_ISSUES} entries"
+        )
+    if issue_count < len(issues):
+        raise StudioContractError(f"{context}/issue_count cannot be smaller than issues")
+    for index, value in enumerate(issues):
+        issue = _object(value, f"{context}/issues/{index}")
+        _closed(issue, {"path", "message"}, f"{context}/issues/{index}")
+        _plain_string(issue["path"], f"{context}/issues/{index}/path", max_length=512)
+        _plain_string(issue["message"], f"{context}/issues/{index}/message", max_length=512)
+
+
+def _validate_assetpack_result(result: dict[str, Any], context: str) -> None:
+    _closed(
+        result,
+        {
+            "operation",
+            "valid",
+            "world_id",
+            "world_content_hash",
+            "target_id",
+            "target_hash",
+            "content_hash",
+            "asset_count",
+            "file_count",
+            "binding_count",
+        },
+        context,
+    )
+    if result["operation"] != "assetpack.verify" or result["valid"] is not True:
+        raise StudioContractError(f"{context} is not an assetpack verification result")
+    _string(result["world_id"], f"{context}/world_id")
+    _sha256(result["world_content_hash"], f"{context}/world_content_hash")
+    _string(result["target_id"], f"{context}/target_id")
+    _sha256(result["target_hash"], f"{context}/target_hash")
+    _sha256(result["content_hash"], f"{context}/content_hash")
+    for field in ("asset_count", "file_count", "binding_count"):
+        _integer(result[field], f"{context}/{field}")
+
+
+def _validate_runtime_result(operation: str, result: dict[str, Any], context: str) -> None:
+    count_field = "ticks" if operation == "runtime.headless" else "action_count"
+    _closed(
+        result,
+        {
+            "operation",
+            "world_id",
+            "world_content_hash",
+            count_field,
+            "state_tick",
+            "absolute_minute",
+            "state_digest",
+        },
+        context,
+    )
+    if result["operation"] != operation:
+        raise StudioContractError(f"{context}/operation is invalid")
+    _string(result["world_id"], f"{context}/world_id")
+    _sha256(result["world_content_hash"], f"{context}/world_content_hash")
+    count = _integer(result[count_field], f"{context}/{count_field}")
+    if count > MAX_RUNTIME_TICKS:
+        raise StudioContractError(f"{context}/{count_field} exceeds {MAX_RUNTIME_TICKS}")
+    _integer(result["state_tick"], f"{context}/state_tick")
+    _integer(result["absolute_minute"], f"{context}/absolute_minute")
+    _sha256(result["state_digest"], f"{context}/state_digest")
+
+
+def _validate_job_result(operation: str, value: object, context: str) -> None:
+    result = _object(value, context)
+    if operation == "asset.receipt.validate":
+        _validate_receipt_result(result, context)
+    elif operation == "assetpack.verify":
+        _validate_assetpack_result(result, context)
+    else:
+        _validate_runtime_result(operation, result, context)
+
+
+def _validate_job_error(value: object, context: str) -> None:
+    error = _object(value, context)
+    _closed(error, {"code", "message"}, context)
+    if error["code"] not in JOB_ERROR_CODES:
+        raise StudioContractError(f"{context}/code is unknown")
+    message = _string(error["message"], f"{context}/message")
+    assert message is not None
+    if len(message) > 512:
+        raise StudioContractError(f"{context}/message must contain at most 512 characters")
+
+
+def validate_job_create_params(value: object) -> dict[str, Any]:
+    params = _object(value, "job.create params")
+    allowed = {"job_id", "workspace_id", "operation", "input"}
+    missing = {"workspace_id", "operation", "input"} - set(params)
+    unknown = set(params) - allowed
+    if missing or unknown:
+        fields = missing or unknown
+        raise StudioContractError(
+            f"job.create params have invalid fields: {', '.join(sorted(fields))}"
+        )
+    if "job_id" in params:
+        _identifier(params["job_id"], "job.create params/job_id", ENTITY_ID_PATTERN)
+    _identifier(
+        params["workspace_id"],
+        "job.create params/workspace_id",
+        WORKSPACE_ID_PATTERN,
+    )
+    operation = params["operation"]
+    if not isinstance(operation, str) or operation not in MANAGED_JOB_OPERATIONS:
+        raise StudioContractError("job.create params/operation is not an executable operation")
+    _validate_job_input(operation, params["input"], "job.create params/input")
+    return params
+
+
 def validate_forge_workspace(value: object) -> dict[str, Any]:
     workspace = _object(value, "workspace")
     required = {
@@ -506,19 +693,41 @@ def validate_studio_job(value: object) -> dict[str, Any]:
     _closed(job, required, "job")
     if job["format"] != JOB_FORMAT:
         raise StudioContractError("job format is unsupported")
-    if isinstance(job["format_version"], bool) or job["format_version"] != 1:
-        raise StudioContractError("job format_version must be 1")
+    version = job["format_version"]
+    if (
+        isinstance(version, bool)
+        or not isinstance(version, int)
+        or version not in {LEGACY_JOB_VERSION, MANAGED_JOB_VERSION}
+    ):
+        raise StudioContractError("job format_version must be 1 or 2")
     _identifier(job["job_id"], "job/job_id", ENTITY_ID_PATTERN)
     _identifier(job["workspace_id"], "job/workspace_id", WORKSPACE_ID_PATTERN)
-    _identifier(job["operation"], "job/operation", OPERATION_PATTERN)
+    operation = job["operation"]
     if not isinstance(job["state"], str) or job["state"] not in JOB_STATES:
         raise StudioContractError("job/state is unknown")
-    for field in ("input", "result", "error"):
-        item = job[field]
-        if field != "input" and item is None:
-            continue
-        _object(item, f"job/{field}")
-        _strict_json_value(item, f"job/{field}")
+    if version == LEGACY_JOB_VERSION:
+        _identifier(operation, "job/operation", OPERATION_PATTERN)
+        for field in ("input", "result", "error"):
+            item = job[field]
+            if field != "input" and item is None:
+                continue
+            _object(item, f"job/{field}")
+            _strict_json_value(item, f"job/{field}")
+    else:
+        if not isinstance(operation, str) or operation not in MANAGED_JOB_OPERATIONS:
+            raise StudioContractError("job/operation is not an executable operation")
+        _validate_job_input(operation, job["input"], "job/input")
+        state = job["state"]
+        if state == "succeeded":
+            if job["result"] is None or job["error"] is not None:
+                raise StudioContractError("a succeeded job requires result and forbids error")
+            _validate_job_result(operation, job["result"], "job/result")
+        elif state == "failed":
+            if job["result"] is not None or job["error"] is None:
+                raise StudioContractError("a failed job requires error and forbids result")
+            _validate_job_error(job["error"], "job/error")
+        elif job["result"] is not None or job["error"] is not None:
+            raise StudioContractError("only succeeded/failed jobs may carry result or error")
     _timestamp(job["created_at"], "job/created_at")
     _timestamp(job["updated_at"], "job/updated_at")
     return job
@@ -557,6 +766,12 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
             _validate_workspace_params(envelope["params"], "envelope/params")
         elif method == "source.read":
             _validate_source_read_params(envelope["params"], "envelope/params")
+        elif method == "job.create":
+            validate_job_create_params(envelope["params"])
+        elif method == "job.cancel":
+            params = _object(envelope["params"], "envelope/params")
+            _closed(params, {"job_id"}, "envelope/params")
+            _identifier(params["job_id"], "envelope/params/job_id", ENTITY_ID_PATTERN)
         else:
             params = _object(envelope["params"], "envelope/params")
             _strict_json_value(params, "envelope/params")
@@ -566,6 +781,12 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
             raise StudioContractError("envelope/method is unknown")
         if method in AUTHORING_METHODS:
             _validate_authoring_result(method, envelope["result"], "envelope/result")
+        elif method in EXACT_JOB_METHODS:
+            result = _object(envelope["result"], "envelope/result")
+            _closed(result, {"job"}, "envelope/result")
+            job = validate_studio_job(result["job"])
+            if method == "job.create" and job["format_version"] != MANAGED_JOB_VERSION:
+                raise StudioContractError("job.create responses require a managed v2 job")
         elif method in LEGACY_METHODS:
             result = _object(envelope["result"], "envelope/result")
             _strict_json_value(result, "envelope/result")

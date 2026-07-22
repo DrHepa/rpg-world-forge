@@ -117,7 +117,9 @@ It preserves the separate Forge, world-authoring, bundle, and game repository
 roots while giving a future desktop client one strict interface for durable
 workspace registration, events, job state, and explicitly approved source
 changesets. It does not run models, providers, Blender, Modly, watchers, or the
-game runtime.
+graphical game runtime. Its only executable jobs are offline receipt validation,
+world-anchored assetpack verification, deterministic headless runtime ticks,
+and deterministic replay verification.
 
 Start the service with an explicit user-data directory outside every project:
 
@@ -132,6 +134,17 @@ input/output. Public v1 request methods are `service.initialize`,
 `changeset.approve/reject/apply`, and `job.create/get/list/transition/cancel`.
 Contract errors are returned as correlated `error` envelopes; a malformed line
 does not terminate the stream.
+
+`job.create` is a closed operation-specific contract that writes managed v2 job
+records. Paths are portable and relative to the registered world
+(`asset.receipt.validate` is relative to `world_root/assets`), and
+`runtime.headless` accepts integer ticks from 0 through 1,000,000. Previously
+stored v1 jobs remain readable, recoverable, listable, and cancelable, but are
+never claimed or retried. A single durable FIFO scheduler runs eligible v2 jobs
+in a fixed isolated worker; no job can select an executable, module, working
+directory, root, argument vector, or environment. `job.cancel` records durable
+intent, and a running managed job becomes canceled only after its process tree
+has been terminated and reaped.
 
 The read-only authoring methods expose only manifest-declared world source
 documents. They return portable paths and hashes from bounded, pinned reads;

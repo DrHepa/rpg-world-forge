@@ -13,6 +13,7 @@ from worldforge.studio.contracts import (
     validate_studio_protocol_envelope,
 )
 from worldforge.studio.errors import StudioContractError, StudioError, invalid_request
+from worldforge.studio.executor import JobScheduler
 from worldforge.studio.jobs import JobManager
 from worldforge.studio.jsonio import (
     decode_ndjson_object,
@@ -37,8 +38,9 @@ def _closed_params(
 
 
 class StudioService:
-    def __init__(self, store: StudioStore) -> None:
+    def __init__(self, store: StudioStore, scheduler: JobScheduler | None = None) -> None:
         self.store = store
+        self.scheduler = scheduler
         self.workspaces = WorkspaceManager(store)
         self.authoring = AuthoringManager(self.workspaces)
         self.changesets = ChangesetManager(store)
@@ -185,7 +187,10 @@ class StudioService:
         return {"changeset": self.changesets.apply(params["changeset_id"])}
 
     def _job_create(self, params: dict[str, Any]) -> dict[str, Any]:
-        return {"job": self.jobs.create(params)}
+        job = self.jobs.create(params)
+        if self.scheduler is not None:
+            self.scheduler.notify()
+        return {"job": job}
 
     def _job_get(self, params: dict[str, Any]) -> dict[str, Any]:
         _closed_params(params, allowed={"job_id"}, required={"job_id"})
@@ -212,7 +217,10 @@ class StudioService:
 
     def _job_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
         _closed_params(params, allowed={"job_id"}, required={"job_id"})
-        return {"job": self.jobs.cancel(params["job_id"])}
+        job = self.jobs.cancel(params["job_id"])
+        if self.scheduler is not None:
+            self.scheduler.notify()
+        return {"job": job}
 
 
 def _error_envelope(request_id: str | None, error: StudioError) -> dict[str, Any]:
@@ -231,12 +239,24 @@ def _write(output: BinaryIO, envelope: dict[str, Any]) -> None:
 
 
 def serve(input_stream: BinaryIO, output_stream: BinaryIO, *, data_dir: str | Path) -> int:
+    store: StudioStore | None = None
+    scheduler: JobScheduler | None = None
     try:
         store = StudioStore(data_dir)
-        service = StudioService(store)
+        scheduler = JobScheduler(data_dir)
+        scheduler.start()
+        service = StudioService(store, scheduler)
     except StudioError as exc:
+        if scheduler is not None:
+            try:
+                scheduler.shutdown()
+            except StudioError:
+                pass
+        if store is not None:
+            store.close()
         _write(output_stream, _error_envelope(None, exc))
         return 1
+    shutdown_error: StudioError | None = None
     try:
         while True:
             request_id: str | None = None
@@ -257,5 +277,13 @@ def serve(input_stream: BinaryIO, output_stream: BinaryIO, *, data_dir: str | Pa
                 )
             _write(output_stream, response)
     finally:
-        store.close()
+        try:
+            scheduler.shutdown()
+        except StudioError as exc:
+            shutdown_error = exc
+        finally:
+            store.close()
+    if shutdown_error is not None:
+        _write(output_stream, _error_envelope(None, shutdown_error))
+        return 1
     return 0

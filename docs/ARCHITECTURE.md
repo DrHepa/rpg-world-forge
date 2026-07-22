@@ -100,13 +100,22 @@ affected directory handle. If either platform cannot expose its required
 durability primitive, apply fails closed instead of claiming an equivalent
 guarantee or overwriting an unowned path.
 
-Durable jobs describe state only and execute nothing. Their state machine is
-the stable seam for later supervised Forge, Codex, Modly, Ollama, or Blender
-adapters. The Electron shell does not execute those jobs. Codex proposals
-remain staged changesets and cannot approve or apply themselves. The shell adds
-a sandboxed workbench, strict service supervision, typed IPC, runtime-manifest
-loading, and release-hardening fuses. Other provider adapters, file watching,
-and M6 presentation work remain outside this foundation.
+Managed v2 durable jobs execute only four closed, read-only operations:
+`asset.receipt.validate`, `assetpack.verify`, `runtime.headless`, and
+`runtime.replay`. The original broad v1 records remain valid for read, recovery,
+and cancellation, but are never executable or retried. One FIFO scheduler owns
+a secondary SQLite connection and atomically claims at most one eligible queued
+v2 job. Each claimed job runs in a fixed child worker with bounded strict JSON
+pipes, a sanitized environment, workspace-derived roots, stable standalone-file
+proofs, a timeout, and process-tree termination.
+Progress and cancellation intent are durable events. A service shutdown reaps
+its active child before marking the job orphaned; restart recovery never retries
+an orphan automatically. Public transitions cannot impersonate the executor.
+
+The Electron renderer remains list-only for jobs and does not execute them.
+Codex proposals remain staged changesets and cannot approve or apply
+themselves. Provider/model execution, Blender, Modly, Ollama, arbitrary
+commands, file watching, and M6 presentation work remain outside this boundary.
 
 Development selects Python and Codex through explicit absolute
 `RWF_STUDIO_DEV_PYTHON` and `RWF_STUDIO_DEV_CODEX` paths. A package may select

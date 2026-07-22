@@ -879,7 +879,8 @@
       "docs": [
         "README.md",
         "docs/ARCHITECTURE.md",
-        "docs/decisions/0011-forge-studio-application-service.md"
+        "docs/decisions/0011-forge-studio-application-service.md",
+        "docs/decisions/0014-studio-read-only-job-executor.md"
       ],
       "fixtures": [],
       "format": "rpg-world-forge.studio_job",
@@ -887,23 +888,27 @@
       "kind": "json-schema",
       "m5_phases": [],
       "python_symbols": [
-        "worldforge.studio.contracts:validate_studio_job"
+        "worldforge.studio.contracts:validate_job_create_params",
+        "worldforge.studio.contracts:validate_studio_job",
+        "worldforge.studio.executor:JobScheduler"
       ],
       "schema": "schemas/studio-job.schema.json",
       "tests": [
         "tests/test_studio_contracts.py",
+        "tests/test_studio_executor.py",
         "tests/test_studio_storage.py",
         "tests/test_studio_workspaces_jobs.py"
       ],
-      "title": "Forge Studio durable job record v1",
-      "version": 1
+      "title": "Forge Studio durable job record v2 with v1 read compatibility",
+      "version": 2
     },
     {
       "cli_commands": [],
       "docs": [
         "README.md",
         "docs/ARCHITECTURE.md",
-        "docs/decisions/0011-forge-studio-application-service.md"
+        "docs/decisions/0011-forge-studio-application-service.md",
+        "docs/decisions/0014-studio-read-only-job-executor.md"
       ],
       "fixtures": [],
       "format": "rpg-world-forge.studio_protocol",
@@ -917,6 +922,7 @@
       "schema": "schemas/studio-protocol.schema.json",
       "tests": [
         "tests/test_studio_contracts.py",
+        "tests/test_studio_executor.py",
         "tests/test_studio_service.py"
       ],
       "title": "Forge Studio NDJSON application protocol v1",

@@ -1,5 +1,6 @@
 import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 
+import jobSchema from "../../../../schemas/studio-job.schema.json";
 import protocolSchema from "../../../../schemas/studio-protocol.schema.json";
 import type {
   Event as StudioEventEnvelope,
@@ -29,6 +30,11 @@ ajv.addFormat("rpg-world-forge-portable-source-path", {
   type: "string",
   validate: isPortableSourcePath,
 });
+ajv.addFormat("rpg-world-forge-portable-relative-path", {
+  type: "string",
+  validate: isPortableRelativePath,
+});
+ajv.addSchema(jobSchema);
 const validate: ValidateFunction<StudioEnvelope> = ajv.compile(protocolSchema);
 
 function isPortableSourcePath(value: string): boolean {
@@ -37,6 +43,11 @@ function isPortableSourcePath(value: string): boolean {
     return false;
   }
   return parts.every((part) => isPortablePathComponent(part));
+}
+
+function isPortableRelativePath(value: string): boolean {
+  const parts = value.split("/");
+  return parts.length >= 1 && parts.length <= 16 && parts.every(isPortablePathComponent);
 }
 
 function isPortablePathComponent(value: string): boolean {

@@ -1,6 +1,11 @@
 import type {
   Error as StudioErrorEnvelope,
   Event as StudioEventEnvelope,
+  ForgeStudioDurableJobRecordV2WithV1ReadCompatibility as StudioJob,
+  JobCancelRequest as StudioJobCancelRequest,
+  JobCancelResponse as StudioJobCancelResponse,
+  JobCreateRequest as StudioJobCreateRequest,
+  JobCreateResponse as StudioJobCreateResponse,
   Method as StudioMethod,
   Response as StudioResponseEnvelope,
   SourceListResponse as StudioSourceListResponse,
@@ -23,6 +28,11 @@ import type {
 export type {
   StudioErrorEnvelope,
   StudioEventEnvelope,
+  StudioJob,
+  StudioJobCancelRequest,
+  StudioJobCancelResponse,
+  StudioJobCreateRequest,
+  StudioJobCreateResponse,
   StudioMethod,
   StudioResponseEnvelope,
   StudioSourceListResponse,

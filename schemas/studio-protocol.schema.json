@@ -65,11 +65,9 @@
         "changeset.approve",
         "changeset.reject",
         "changeset.apply",
-        "job.create",
         "job.get",
         "job.list",
-        "job.transition",
-        "job.cancel"
+        "job.transition"
       ]
     },
     "workspaceScopedAuthoringMethod": {
@@ -332,11 +330,39 @@
         "params": {"$ref": "#/$defs/sourceReadParams"}
       }
     },
+    "jobCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "job.create"},
+        "params": {"$ref": "studio-job.schema.json#/$defs/jobCreateParams"}
+      }
+    },
+    "jobCancelRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "job.cancel"},
+        "params": {"$ref": "studio-job.schema.json#/$defs/jobCancelParams"}
+      }
+    },
     "request": {
       "oneOf": [
         {"$ref": "#/$defs/legacyRequest"},
         {"$ref": "#/$defs/workspaceScopedAuthoringRequest"},
-        {"$ref": "#/$defs/sourceReadRequest"}
+        {"$ref": "#/$defs/sourceReadRequest"},
+        {"$ref": "#/$defs/jobCreateRequest"},
+        {"$ref": "#/$defs/jobCancelRequest"}
       ]
     },
     "legacyResponse": {
@@ -417,6 +443,44 @@
         "result": {"$ref": "#/$defs/worldAnalyzeResult"}
       }
     },
+    "jobCreateResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "job.create"},
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["job"],
+          "properties": {
+            "job": {"$ref": "studio-job.schema.json#/$defs/managedJobV2"}
+          }
+        }
+      }
+    },
+    "jobCancelResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "job.cancel"},
+        "result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["job"],
+          "properties": {"job": {"$ref": "studio-job.schema.json"}}
+        }
+      }
+    },
     "response": {
       "oneOf": [
         {"$ref": "#/$defs/legacyResponse"},
@@ -424,7 +488,9 @@
         {"$ref": "#/$defs/sourceListResponse"},
         {"$ref": "#/$defs/sourceReadResponse"},
         {"$ref": "#/$defs/worldValidateResponse"},
-        {"$ref": "#/$defs/worldAnalyzeResponse"}
+        {"$ref": "#/$defs/worldAnalyzeResponse"},
+        {"$ref": "#/$defs/jobCreateResponse"},
+        {"$ref": "#/$defs/jobCancelResponse"}
       ]
     },
     "errorCode": {

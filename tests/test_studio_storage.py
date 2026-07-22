@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from worldforge.studio.errors import StudioError
+from worldforge.studio.jobs import JobManager
 from worldforge.studio.storage import StudioStore, encode_json
 
 
@@ -65,9 +66,9 @@ class StudioStorageTests(unittest.TestCase):
                     "workspace_id": "workspace_01",
                     "operation": "forge.validate",
                     "state": "running",
-                    "input": {},
-                    "result": None,
-                    "error": None,
+                    "input": {"profile": "release", "legacy_flags": ["offline"]},
+                    "result": {"partial": True},
+                    "error": {"legacy": "interrupted"},
                     "created_at": timestamp,
                     "updated_at": timestamp,
                 }
@@ -76,6 +77,29 @@ class StudioStorageTests(unittest.TestCase):
                     "(job_id, workspace_id, state, record_json) VALUES (?, ?, ?, ?)",
                     ("job_01", "workspace_01", "running", encode_json(job)),
                 )
+                queued = {
+                    **job,
+                    "job_id": "job_02",
+                    "state": "queued",
+                    "result": None,
+                    "error": None,
+                }
+                store.connection.execute(
+                    "INSERT INTO jobs "
+                    "(job_id, workspace_id, state, record_json) VALUES (?, ?, ?, ?)",
+                    ("job_02", "workspace_01", "queued", encode_json(queued)),
+                )
+                managed_name_legacy = {
+                    **queued,
+                    "job_id": "job_03",
+                    "operation": "runtime.headless",
+                    "input": {"legacy_command": "headless --old-contract"},
+                }
+                store.connection.execute(
+                    "INSERT INTO jobs "
+                    "(job_id, workspace_id, state, record_json) VALUES (?, ?, ?, ?)",
+                    ("job_03", "workspace_01", "queued", encode_json(managed_name_legacy)),
+                )
                 store.connection.commit()
 
             with StudioStore(data_dir) as reopened:
@@ -83,8 +107,21 @@ class StudioStorageTests(unittest.TestCase):
                     "SELECT state, record_json FROM jobs WHERE job_id = 'job_01'"
                 ).fetchone()
                 self.assertEqual("orphaned", row["state"])
+                queued_row = reopened.connection.execute(
+                    "SELECT state FROM jobs WHERE job_id = 'job_02'"
+                ).fetchone()
+                self.assertEqual("queued", queued_row["state"])
                 events = reopened.list_events(workspace_id="workspace_01")
                 self.assertEqual("job.orphaned", events[0]["topic"])
+                jobs = JobManager(reopened)
+                self.assertEqual("forge.validate", jobs.get("job_01")["operation"])
+                self.assertEqual(
+                    {"legacy_command": "headless --old-contract"},
+                    jobs.get("job_03")["input"],
+                )
+                self.assertEqual({"job_01", "job_02", "job_03"}, {j["job_id"] for j in jobs.list()})
+                self.assertEqual("canceled", jobs.cancel("job_01")["state"])
+                self.assertEqual("canceled", jobs.cancel("job_03")["state"])
 
     def test_secondary_store_never_migrates_or_orphans_primary_state(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -115,7 +152,7 @@ class StudioStorageTests(unittest.TestCase):
                     "workspace_id": "workspace_01",
                     "operation": "forge.validate",
                     "state": "running",
-                    "input": {},
+                    "input": {"profile": "release"},
                     "result": None,
                     "error": None,
                     "created_at": timestamp,

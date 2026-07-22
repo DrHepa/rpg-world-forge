@@ -147,8 +147,8 @@ class StudioServiceTests(unittest.TestCase):
                     "params": {
                         "job_id": "job_01",
                         "workspace_id": "workspace_01",
-                        "operation": "forge.validate",
-                        "input": {},
+                        "operation": "runtime.headless",
+                        "input": {"worldpack": "build/missing-worldpack.json", "ticks": 0},
                     },
                 }
             )

@@ -395,7 +395,7 @@ class StudioAuthoringTests(unittest.TestCase):
         discriminated = (
             set(schema["$defs"]["legacyMethod"]["enum"])
             | set(schema["$defs"]["workspaceScopedAuthoringMethod"]["enum"])
-            | {"source.read"}
+            | {"source.read", "job.create", "job.cancel"}
         )
         self.assertEqual(METHODS, frozenset(discriminated))
         for method in (
