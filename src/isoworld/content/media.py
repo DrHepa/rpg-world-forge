@@ -57,52 +57,108 @@ def _file_state(info: os.stat_result) -> tuple[int, int, int, int, int]:
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
-def _path_snapshot(root: Path, relative: PurePosixPath, *, limit: int) -> _PathSnapshot:
-    absolute_root = Path(os.path.abspath(root))
-    current = Path(absolute_root.anchor)
+def _non_following_stat(path: Path) -> os.stat_result:
+    return os.stat(path, follow_symlinks=False)
+
+
+def _is_link_or_reparse(info: os.stat_result) -> bool:
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
+def _lexical_absolute_path(path: Path) -> Path:
+    return path if path.is_absolute() else Path.cwd() / path
+
+
+def _directory_snapshot(root: Path) -> tuple[tuple[Path, tuple[int, int]], ...]:
+    current = Path(root.anchor)
     directories: list[tuple[Path, tuple[int, int]]] = []
-    for part in absolute_root.parts[1:] if absolute_root.anchor else absolute_root.parts:
+    offset = 0
+    if root.anchor:
+        try:
+            info = _non_following_stat(current)
+        except OSError as exc:
+            raise MediaValidationError(
+                f"Resource parent is missing or unreadable: {current}: {exc}"
+            ) from exc
+        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+            raise MediaValidationError(f"Resource parent is not a safe directory: {current}")
+        directories.append((current, _identity(info)))
+        offset = 1
+    for part in root.parts[offset:]:
         if current == Path():
             current = Path(part)
         else:
             current /= part
         try:
-            info = current.lstat()
+            info = _non_following_stat(current)
         except OSError as exc:
             raise MediaValidationError(
                 f"Resource parent is missing or unreadable: {current}: {exc}"
             ) from exc
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
             raise MediaValidationError(f"Resource parent is not a safe directory: {current}")
         directories.append((current, _identity(info)))
     if not directories:
-        info = absolute_root.lstat()
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-            raise MediaValidationError(f"Resource parent is not a safe directory: {absolute_root}")
-        directories.append((absolute_root, _identity(info)))
+        try:
+            info = _non_following_stat(root)
+        except OSError as exc:
+            raise MediaValidationError(
+                f"Resource parent is missing or unreadable: {root}: {exc}"
+            ) from exc
+        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+            raise MediaValidationError(f"Resource parent is not a safe directory: {root}")
+        directories.append((root, _identity(info)))
+    return tuple(directories)
+
+
+def _canonical_root_snapshot(root: Path) -> tuple[Path, tuple[tuple[Path, tuple[int, int]], ...]]:
+    lexical_root = _lexical_absolute_path(root)
+    lexical_directories = _directory_snapshot(lexical_root)
+    try:
+        canonical_root = lexical_root.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise MediaValidationError(
+            f"Resource parent is missing or unreadable: {lexical_root}: {exc}"
+        ) from exc
+    if canonical_root == lexical_root:
+        return canonical_root, lexical_directories
+
+    canonical_directories = _directory_snapshot(canonical_root)
+    if canonical_directories[-1][1] != lexical_directories[-1][1]:
+        raise MediaValidationError(f"Resource parent changed while resolving: {lexical_root}")
+    return canonical_root, canonical_directories
+
+
+def _path_snapshot(root: Path, relative: PurePosixPath, *, limit: int) -> _PathSnapshot:
+    absolute_root, captured_directories = _canonical_root_snapshot(root)
+    directories = list(captured_directories)
 
     current = absolute_root
     for part in relative.parts[:-1]:
         current /= part
         try:
-            info = current.lstat()
+            info = _non_following_stat(current)
         except OSError as exc:
             raise MediaValidationError(
                 f"Resource parent is missing or unreadable: {current}: {exc}"
             ) from exc
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
             raise MediaValidationError(f"Resource parent is not a safe directory: {current}")
         directories.append((current, _identity(info)))
 
     target = absolute_root.joinpath(*relative.parts)
     try:
-        info = target.lstat()
+        info = _non_following_stat(target)
     except OSError as exc:
         raise MediaValidationError(
             f"Processed asset is missing or unreadable: {target}: {exc}"
         ) from exc
-    if stat.S_ISLNK(info.st_mode):
-        raise MediaValidationError(f"Processed asset must not be a symbolic link: {target}")
+    if _is_link_or_reparse(info):
+        raise MediaValidationError(
+            f"Processed asset must not be a symbolic link or reparse point: {target}"
+        )
     if not stat.S_ISREG(info.st_mode):
         raise MediaValidationError(f"Processed asset is not a regular file: {target}")
     if info.st_nlink != 1:
@@ -332,7 +388,7 @@ def read_validated_media(
     *,
     limit: int = MAX_MEDIA_BYTES,
 ) -> ValidatedMedia:
-    source = Path(os.path.abspath(Path(path)))
+    source = _lexical_absolute_path(Path(path))
     return read_validated_resource(
         source.parent, PurePosixPath(source.name), media_type, limit=limit
     )

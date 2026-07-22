@@ -1,0 +1,81 @@
+# Keep repository text and byte-canonical contracts stable on every checkout.
+* text=auto
+
+*.py text eol=lf
+*.pyi text eol=lf
+*.json text eol=lf
+*.gltf text eol=lf
+*.ldtk text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.ini text eol=lf
+*.cfg text eol=lf
+*.conf text eol=lf
+*.lock text eol=lf
+*.in text eol=lf
+*.tmpl text eol=lf
+*.md text eol=lf
+*.rst text eol=lf
+*.txt text eol=lf
+*.csv text eol=lf
+*.xml text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.ts text eol=lf
+*.svg text eol=lf
+*.vert text eol=lf
+*.frag text eol=lf
+*.glsl text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
+*.bat text eol=lf
+*.cmd text eol=lf
+
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.gitleaksignore text eol=lf
+.editorconfig text eol=lf
+.github/CODEOWNERS text eol=lf
+LICENSE text eol=lf
+
+# Runtime assets, package artifacts, fonts, audio, and models are exact bytes.
+*.png -text
+*.jpg -text
+*.jpeg -text
+*.gif -text
+*.webp -text
+*.bmp -text
+*.tga -text
+*.ico -text
+*.wav -text
+*.ogg -text
+*.mp3 -text
+*.flac -text
+*.m4a -text
+*.aac -text
+*.ttf -text
+*.otf -text
+*.woff -text
+*.woff2 -text
+*.glb -text
+*.bin -text
+*.blend -text
+*.zip -text
+*.whl -text
+*.tar -text
+*.gz -text
+*.tgz -text
+*.bz2 -text
+*.xz -text
+*.7z -text
+*.rwfworld -text
+*.pdf -text
+*.mp4 -text
+*.webm -text
+*.pyc -text
+*.pyd -text
+*.dll -text
+*.so -text
+*.dylib -text

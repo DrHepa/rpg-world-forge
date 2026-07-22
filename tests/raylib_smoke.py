@@ -21,11 +21,13 @@ from isoworld.world.state import initial_world_state
 
 
 def main() -> int:
-    pr.set_config_flags(pr.FLAG_WINDOW_HIDDEN)
-    pr.init_window(96, 64, "RPG World Forge raylib smoke test")
     image = None
     registry = None
     try:
+        pr.set_config_flags(pr.FLAG_WINDOW_HIDDEN)
+        pr.init_window(96, 64, "RPG World Forge raylib smoke test")
+        if not pr.is_window_ready():
+            raise RuntimeError("raylib did not produce a ready graphical window")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             texture_path = root / "smoke.png"

@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import json
 import re
+import stat
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
+import worldforge.game_boundary as game_boundary_module
+import worldforge.game_boundary_policy as boundary_policy_module
 from worldforge.game_boundary import audit_game_repository
 from worldforge.runtime_audit import audit_runtime
 
@@ -130,6 +135,102 @@ class ArchitectureTests(unittest.TestCase):
             )
 
             self.assertEqual([], audit_game_repository(root))
+
+    def test_game_repository_root_symlink_remains_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            root = parent / "game"
+            root.mkdir()
+            alias = parent / "game-alias"
+            try:
+                alias.symlink_to(root, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"directory symlinks unavailable: {exc}")
+
+            with patch.object(
+                game_boundary_module,
+                "_structure_findings",
+                side_effect=AssertionError("link target was traversed"),
+            ) as traversal:
+                findings = audit_game_repository(alias)
+
+            traversal.assert_not_called()
+            self.assertTrue(
+                any(finding.detail == "FS_SYMLINK:." for finding in findings),
+                findings,
+            )
+
+    def test_game_repository_linked_ancestor_is_rejected_before_target_traversal(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary)
+            actual_parent = parent / "actual"
+            root = actual_parent / "game"
+            root.mkdir(parents=True)
+            alias = parent / "actual-alias"
+            try:
+                alias.symlink_to(actual_parent, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"directory symlinks unavailable: {exc}")
+
+            with patch.object(
+                game_boundary_module,
+                "_structure_findings",
+                side_effect=AssertionError("link target was traversed"),
+            ) as traversal:
+                findings = audit_game_repository(alias / "game")
+
+            traversal.assert_not_called()
+            self.assertTrue(
+                any(finding.detail == "FS_SYMLINK:." for finding in findings),
+                findings,
+            )
+
+    def test_game_repository_reparse_root_is_rejected_before_target_traversal(
+        self,
+    ) -> None:
+        for directory in (True, False):
+            with self.subTest(directory=directory), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary) / "game"
+                if directory:
+                    root.mkdir()
+                else:
+                    root.write_text("not a directory\n", encoding="utf-8")
+                real_stat = boundary_policy_module._non_following_stat
+
+                def reparse_root(
+                    candidate: Path,
+                    expected_root: Path = root,
+                    stat_file=real_stat,
+                ) -> object:
+                    info = stat_file(candidate)
+                    if candidate == expected_root:
+                        return SimpleNamespace(
+                            st_mode=info.st_mode,
+                            st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT,
+                        )
+                    return info
+
+                with (
+                    patch.object(
+                        boundary_policy_module,
+                        "_non_following_stat",
+                        side_effect=reparse_root,
+                    ),
+                    patch.object(
+                        game_boundary_module,
+                        "_structure_findings",
+                        side_effect=AssertionError("reparse target was traversed"),
+                    ) as traversal,
+                ):
+                    findings = audit_game_repository(root)
+
+                traversal.assert_not_called()
+                self.assertTrue(
+                    any(finding.detail == "FS_SYMLINK:." for finding in findings),
+                    findings,
+                )
 
     def test_game_repository_rejects_forge_and_world_authoring_paths(self) -> None:
         forbidden_paths = (

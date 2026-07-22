@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
+import worldforge.game_boundary_policy as policy_module
 from worldforge.game_boundary_policy import (
     DEFAULT_IGNORED_TOP_LEVEL,
     JSONPolicyError,
@@ -34,6 +38,12 @@ class GameBoundaryPolicyTests(unittest.TestCase):
         self.assertIn("FS_HARDLINK:regular.txt", issues)
         self.assertIn("FS_HARDLINK:alias.txt", issues)
 
+    def test_regular_tree_accepts_an_ordinary_single_link_file(self) -> None:
+        regular = self.root / "regular.txt"
+        regular.write_text("safe", encoding="utf-8")
+
+        self.assertEqual((), validate_regular_tree(self.root))
+
     def test_regular_tree_skips_only_shared_operational_roots(self) -> None:
         ignored = self.root / ".venv"
         ignored.mkdir()
@@ -60,6 +70,37 @@ class GameBoundaryPolicyTests(unittest.TestCase):
         except OSError as exc:
             self.skipTest(f"symlinks unavailable: {exc}")
         self.assertIn("FS_SYMLINK:link.txt", validate_regular_tree(self.root))
+
+    def test_regular_tree_rejects_reparse_entries_without_traversing_targets(self) -> None:
+        reparse_directory = self.root / "reparse-directory"
+        reparse_directory.mkdir()
+        nested = reparse_directory / "must-not-be-inspected.txt"
+        nested.write_text("unsafe", encoding="utf-8")
+        reparse_file = self.root / "reparse-file.txt"
+        reparse_file.write_text("unsafe", encoding="utf-8")
+        real_stat = policy_module._non_following_stat
+
+        def reparse_entries(candidate: Path) -> object:
+            if candidate == nested:
+                raise AssertionError("reparse directory target was traversed")
+            info = real_stat(candidate)
+            if candidate in {reparse_directory, reparse_file}:
+                return SimpleNamespace(
+                    st_mode=info.st_mode,
+                    st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT,
+                )
+            return info
+
+        with patch.object(
+            policy_module,
+            "_non_following_stat",
+            side_effect=reparse_entries,
+        ):
+            issues = validate_regular_tree(self.root)
+
+        self.assertIn("FS_SYMLINK:reparse-directory", issues)
+        self.assertIn("FS_SYMLINK:reparse-file.txt", issues)
+        self.assertFalse(any("must-not-be-inspected" in issue for issue in issues), issues)
 
     @unittest.skipUnless(hasattr(os, "mkfifo"), "POSIX FIFO support required")
     def test_regular_tree_rejects_fifo(self) -> None:

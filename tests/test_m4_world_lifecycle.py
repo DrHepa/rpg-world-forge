@@ -623,7 +623,7 @@ class CloneWorldProjectTests(unittest.TestCase):
                 title="Derived World",
                 version="0.4.0",
             )
-            self.assertEqual(target / "source/manifest.json", manifest)
+            self.assertEqual((target / "source/manifest.json").resolve(strict=True), manifest)
             for relative in (
                 "source/secrets/diegetic_truth.json",
                 "source/build/city.json",
@@ -1093,6 +1093,7 @@ class BumpWorldVersionTests(unittest.TestCase):
                 _read(root / ".worldforge/status.json")["world_version"],
             )
 
+    @unittest.skipUnless(os.name == "posix", "POSIX open-file rename semantics required")
     def test_lock_cleanup_never_unlinks_a_replacement_owner(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "world"
@@ -1119,6 +1120,42 @@ class BumpWorldVersionTests(unittest.TestCase):
                     )
             self.assertEqual("replacement owner\n", lock_path.read_text(encoding="utf-8"))
             self.assertTrue(displaced_path.is_file())
+
+    @unittest.skipUnless(os.name == "nt", "Windows open-file rename semantics required")
+    def test_windows_lock_rename_denial_is_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "world"
+            _make_v2_world(root)
+            lock_path = root / ".worldforge/lifecycle.lock"
+            displaced_path = root / ".worldforge/displaced-owner.lock"
+            control_paths = (
+                root / ".worldforge/project.json",
+                root / "source/world.json",
+                root / ".worldforge/status.json",
+            )
+            before = {path: path.read_bytes() for path in control_paths}
+
+            def rename_open_lock(_updates: dict[Path, object]) -> None:
+                lock_path.rename(displaced_path)
+
+            with patch(
+                "worldforge.world_lifecycle._commit_json_transaction",
+                side_effect=rename_open_lock,
+            ):
+                with self.assertRaises(PermissionError) as raised:
+                    bump_world_version(
+                        root,
+                        expected_version="1.2.3",
+                        part="patch",
+                        reason="Windows fail-closed test",
+                        approved_by="lead",
+                    )
+
+            self.assertIn(raised.exception.winerror, {5, 32})
+            self.assertFalse(lock_path.exists())
+            self.assertFalse(displaced_path.exists())
+            for path, payload in before.items():
+                self.assertEqual(payload, path.read_bytes(), path)
 
     def test_concurrent_bump_cannot_pass_the_same_expected_version(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

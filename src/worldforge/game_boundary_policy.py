@@ -78,6 +78,52 @@ def _file_kind(mode: int) -> str:
     return "other"
 
 
+def _non_following_stat(path: Path) -> os.stat_result:
+    return os.stat(path, follow_symlinks=False)
+
+
+def _is_link_or_reparse(info: os.stat_result) -> bool:
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
+def _lexical_absolute_path(path: PathLike) -> Path:
+    candidate = Path(path)
+    return candidate if candidate.is_absolute() else Path.cwd() / candidate
+
+
+def _lexical_components(path: Path) -> tuple[Path, ...]:
+    current = Path(path.anchor)
+    components: list[Path] = []
+    offset = 0
+    if path.anchor:
+        components.append(current)
+        offset = 1
+    for part in path.parts[offset:]:
+        current /= part
+        components.append(current)
+    return tuple(components or (path,))
+
+
+def validate_lexical_directory_root(root: PathLike) -> tuple[str, ...]:
+    """Reject linked or reparse-point components before resolving a trust root."""
+
+    root_path = _lexical_absolute_path(root)
+    for component in _lexical_components(root_path):
+        try:
+            info = _non_following_stat(component)
+        except FileNotFoundError:
+            return ("FS_MISSING:.",)
+        except OSError:
+            return ("FS_UNREADABLE:.",)
+        if _is_link_or_reparse(info):
+            return ("FS_SYMLINK:.",)
+        if not stat.S_ISDIR(info.st_mode):
+            return ("FS_NOT_DIRECTORY:.",)
+    return ()
+
+
 def validate_regular_tree(
     root: PathLike,
     *,
@@ -85,18 +131,11 @@ def validate_regular_tree(
 ) -> tuple[str, ...]:
     """Reject links, hardlinked files, and entries other than directories/files."""
 
-    root_path = Path(root)
+    root_path = _lexical_absolute_path(root)
     ignored = frozenset(ignored_top_level)
-    try:
-        root_info = root_path.lstat()
-    except FileNotFoundError:
-        return ("FS_MISSING:.",)
-    except OSError:
-        return ("FS_UNREADABLE:.",)
-    if stat.S_ISLNK(root_info.st_mode):
-        return ("FS_SYMLINK:.",)
-    if not stat.S_ISDIR(root_info.st_mode):
-        return ("FS_NOT_DIRECTORY:.",)
+    root_issues = validate_lexical_directory_root(root_path)
+    if root_issues:
+        return root_issues
 
     issues: list[str] = []
 
@@ -112,11 +151,14 @@ def validate_regular_tree(
                 continue
             relative = f"{prefix}/{entry.name}" if prefix else entry.name
             try:
-                info = entry.stat(follow_symlinks=False)
+                # DirEntry.stat() reports st_dev/st_ino/st_nlink as zero on
+                # Windows. A direct non-following stat returns the real link
+                # count needed by this security boundary.
+                info = _non_following_stat(Path(entry.path))
             except OSError:
                 issues.append(f"FS_UNREADABLE:{relative}")
                 continue
-            if stat.S_ISLNK(info.st_mode):
+            if _is_link_or_reparse(info):
                 issues.append(f"FS_SYMLINK:{relative}")
             elif stat.S_ISDIR(info.st_mode):
                 visit(Path(entry.path), relative)
@@ -169,8 +211,8 @@ def load_strict_json_object(
     source = Path(path)
     descriptor: int | None = None
     try:
-        before = source.lstat()
-        if stat.S_ISLNK(before.st_mode):
+        before = _non_following_stat(source)
+        if _is_link_or_reparse(before):
             raise JSONPolicyError("JSON_SYMLINK")
         if not stat.S_ISREG(before.st_mode):
             raise JSONPolicyError("JSON_NOT_REGULAR")

@@ -231,8 +231,9 @@ def _build_environment(epoch: int, environment_root: Path) -> dict[str, str]:
         "LANG": "C",
     }
     for name, value in os.environ.items():
-        if name.upper() in {"SYSTEMROOT", "WINDIR"}:
-            env[name] = value
+        canonical_name = name.upper()
+        if canonical_name in {"SYSTEMROOT", "WINDIR"}:
+            env[canonical_name] = value
     return env
 
 

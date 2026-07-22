@@ -340,7 +340,10 @@ class M4WorldLifecycleCliTests(unittest.TestCase):
                 cwd=root,
             )
             _assert_ok(self, created)
-            self.assertIn(f"manifest={source / 'source/manifest.json'}", created.stdout)
+            self.assertIn(
+                f"manifest={(source / 'source/manifest.json').resolve(strict=True)}",
+                created.stdout,
+            )
 
             status = _run_cli("world-status", source, cwd=root)
             _assert_ok(self, status)

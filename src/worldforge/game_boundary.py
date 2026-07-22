@@ -14,6 +14,7 @@ from worldforge.game_boundary_policy import (
     scan_python_capabilities,
     validate_dependency_provenance,
     validate_json_objects,
+    validate_lexical_directory_root,
     validate_regular_tree,
 )
 from worldforge.runtime_audit import BANNED_IMPORT_ROOTS, imported_modules
@@ -638,9 +639,12 @@ def _canonical_policy_findings(
     base: Path,
     *,
     suppress_dependency_issues: bool,
+    regular_tree_issues: tuple[str, ...] | None = None,
 ) -> list[GameBoundaryFinding]:
     issues = list(
-        validate_regular_tree(
+        regular_tree_issues
+        if regular_tree_issues is not None
+        else validate_regular_tree(
             base,
             ignored_top_level=DEFAULT_IGNORED_TOP_LEVEL,
         )
@@ -660,9 +664,30 @@ def _canonical_policy_findings(
 def audit_game_repository(root: str | Path) -> list[GameBoundaryFinding]:
     """Report authoring-control and AI dependencies that leaked into a game repository."""
 
-    base = Path(root)
-    if not base.is_dir():
-        raise GameBoundaryError(f"game repository root is not a directory: {base}")
+    requested_base = Path(root)
+    lexical_issues = validate_lexical_directory_root(requested_base)
+    if lexical_issues:
+        if lexical_issues == ("FS_SYMLINK:.",):
+            return [_policy_finding(lexical_issues[0])]
+        raise GameBoundaryError(f"game repository root is not a directory: {requested_base}")
+    lexical_base = requested_base if requested_base.is_absolute() else Path.cwd() / requested_base
+    try:
+        base = lexical_base.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise GameBoundaryError(
+            f"game repository root is not a stable directory: {requested_base}: {exc}"
+        ) from exc
+
+    regular_tree_issues = validate_regular_tree(
+        base,
+        ignored_top_level=DEFAULT_IGNORED_TOP_LEVEL,
+    )
+    link_issues = tuple(issue for issue in regular_tree_issues if issue.startswith("FS_SYMLINK:"))
+    if link_issues:
+        return sorted(
+            (_policy_finding(issue) for issue in link_issues),
+            key=lambda finding: (str(finding.path), finding.rule, finding.detail),
+        )
 
     findings, blocked_roots = _structure_findings(base)
     findings.extend(_python_import_findings(base, blocked_roots))
@@ -673,6 +698,7 @@ def audit_game_repository(root: str | Path) -> list[GameBoundaryFinding]:
         _canonical_policy_findings(
             base,
             suppress_dependency_issues=bool(dependency_findings),
+            regular_tree_issues=regular_tree_issues,
         )
     )
     unique = {

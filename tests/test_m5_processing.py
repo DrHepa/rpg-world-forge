@@ -195,6 +195,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                 },
             )
             output = root / "output"
+            canonical_output = output.resolve()
             original_link = asset_processing_module.os.link
             publication_links = 0
 
@@ -204,7 +205,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                 **kwargs: object,
             ) -> None:
                 nonlocal publication_links
-                if not kwargs and Path(destination).is_relative_to(output):
+                if not kwargs and Path(destination).resolve().is_relative_to(canonical_output):
                     publication_links += 1
                     if publication_links == 2:
                         raise OSError("injected publication failure")

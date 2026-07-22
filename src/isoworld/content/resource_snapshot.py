@@ -15,6 +15,8 @@ from isoworld.content.media import ValidatedMedia, read_validated_resource
 
 _SNAPSHOT_PREFIX = "isoworld-renderpack-"
 _DELETE_PREFIX = ".isoworld-delete-"
+_WINDOWS_LOCAL_SYSTEM_SID = "S-1-5-18"
+_WINDOWS_BUILTIN_ADMINISTRATORS_SID = "S-1-5-32-544"
 _Identity = tuple[int, int]
 _POSIX_DIRECTORY_FLAGS = (
     os.O_RDONLY
@@ -30,6 +32,12 @@ _SAFE_POSIX_DIR_FDS = os.name == "posix" and all(
 
 class ResourceSnapshotError(RuntimeError):
     """Raised when a private runtime resource snapshot loses safe ownership."""
+
+
+def _platform_name() -> str:
+    """Return the host platform through a narrow, testable seam."""
+
+    return os.name
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,8 +79,18 @@ def _windows_attributes(path: Path) -> int:
     return attributes
 
 
-def _windows_acl_is_private(path: Path) -> None:
-    """Reject any Windows allow ACE outside owner, SYSTEM, or Administrators."""
+def _windows_private_sid_strings() -> tuple[str, ...]:
+    """Return the exact principals granted access to a private snapshot."""
+
+    return (
+        _windows_current_user_sid_string(),
+        _WINDOWS_LOCAL_SYSTEM_SID,
+        _WINDOWS_BUILTIN_ADMINISTRATORS_SID,
+    )
+
+
+def _windows_acl_sid_inventory(path: Path) -> tuple[str, tuple[str, ...]]:
+    """Read the owner and every ordinary allow ACE from a Windows DACL."""
 
     advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -130,32 +148,30 @@ def _windows_acl_is_private(path: Path) -> None:
                 ("ace_size", ctypes.c_ushort),
             ]
 
-        create_well_known_sid = advapi32.CreateWellKnownSid
-        create_well_known_sid.argtypes = [
-            ctypes.c_int,
-            ctypes.c_void_p,
-            ctypes.c_void_p,
-            ctypes.POINTER(ctypes.c_uint32),
-        ]
-        create_well_known_sid.restype = ctypes.c_int
-        allowed_sids: list[ctypes.Array[ctypes.c_char]] = []
-        for sid_type in (22, 26):  # WinLocalSystemSid, WinBuiltinAdministratorsSid
-            size = ctypes.c_uint32(68)
-            buffer = ctypes.create_string_buffer(size.value)
-            if not create_well_known_sid(sid_type, None, buffer, ctypes.byref(size)):
+        convert_sid = advapi32.ConvertSidToStringSidW
+        convert_sid.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_wchar_p)]
+        convert_sid.restype = ctypes.c_int
+
+        def sid_string(sid: ctypes.c_void_p) -> str:
+            converted = ctypes.c_wchar_p()
+            if not convert_sid(sid, ctypes.byref(converted)):
                 error = ctypes.get_last_error()
                 raise ResourceSnapshotError(
-                    f"Could not build a Windows snapshot privacy SID: {ctypes.FormatError(error)}"
+                    f"Could not inspect a Windows snapshot SID: {ctypes.FormatError(error)}"
                 )
-            allowed_sids.append(buffer)
+            try:
+                value = converted.value
+                if value is None:
+                    raise ResourceSnapshotError("Windows returned an empty snapshot SID")
+                return value
+            finally:
+                local_free(ctypes.cast(converted, ctypes.c_void_p))
 
-        equal_sid = advapi32.EqualSid
-        equal_sid.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        equal_sid.restype = ctypes.c_int
         get_ace = advapi32.GetAce
         get_ace.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p)]
         get_ace.restype = ctypes.c_int
         acl = ctypes.cast(dacl, ctypes.POINTER(_Acl)).contents
+        allowed_aces: list[str] = []
         for index in range(acl.ace_count):
             ace = ctypes.c_void_p()
             if not get_ace(dacl, index, ctypes.byref(ace)):
@@ -170,14 +186,20 @@ def _windows_acl_is_private(path: Path) -> None:
                     raise ResourceSnapshotError(f"Windows snapshot ACL is not private: {path}")
                 continue
             sid = ctypes.c_void_p(ace.value + ctypes.sizeof(_AceHeader) + 4)
-            if equal_sid(sid, owner):
-                continue
-            if any(equal_sid(sid, ctypes.cast(value, ctypes.c_void_p)) for value in allowed_sids):
-                continue
-            raise ResourceSnapshotError(f"Windows snapshot ACL is not private: {path}")
+            allowed_aces.append(sid_string(sid))
+        return sid_string(owner), tuple(allowed_aces)
     finally:
         if descriptor.value:
             local_free(descriptor)
+
+
+def _windows_acl_is_private(path: Path) -> None:
+    """Require exactly the private principals used when the DACL is created."""
+
+    expected = frozenset(_windows_private_sid_strings())
+    owner, allowed_aces = _windows_acl_sid_inventory(path)
+    if owner not in expected or frozenset(allowed_aces) != expected:
+        raise ResourceSnapshotError(f"Windows snapshot ACL is not private: {path}")
 
 
 def _windows_current_user_sid_string() -> str:
@@ -256,8 +278,7 @@ def _windows_current_user_sid_string() -> str:
 def _windows_create_private_directory(path: Path) -> None:
     advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    sid = _windows_current_user_sid_string()
-    sddl = f"D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+    sddl = "D:P" + "".join(f"(A;OICI;FA;;;{sid})" for sid in _windows_private_sid_strings())
     descriptor = ctypes.c_void_p()
     convert_descriptor = advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW
     convert_descriptor.argtypes = [
@@ -538,16 +559,17 @@ class ResourceSnapshotOwner:
     )
 
     def __init__(self) -> None:
-        if os.name == "posix" and not sys.platform.startswith("linux"):
+        platform_name = _platform_name()
+        if platform_name == "posix" and not sys.platform.startswith("linux"):
             raise ResourceSnapshotError(
                 "Runtime resource snapshots support Linux and Windows; "
                 "this POSIX platform has no configured atomic no-replace claim"
             )
-        if os.name == "posix" and not _SAFE_POSIX_DIR_FDS:
+        if platform_name == "posix" and not _SAFE_POSIX_DIR_FDS:
             raise ResourceSnapshotError(
                 "Secure runtime snapshots require directory-relative filesystem primitives"
             )
-        if os.name not in {"posix", "nt"}:
+        if platform_name not in {"posix", "nt"}:
             raise ResourceSnapshotError("Runtime resource snapshots are unsupported here")
 
         # Construction remains closed until the root identity and stable handle
@@ -570,7 +592,7 @@ class ResourceSnapshotOwner:
         try:
             parent = self._parent.resolve(strict=True)
             self._parent = parent
-            if os.name == "posix":
+            if platform_name == "posix":
                 self._parent_descriptor = self._open_absolute_directory(parent)
             else:
                 self._parent_handle = _windows_lock_directory(parent)
@@ -579,7 +601,7 @@ class ResourceSnapshotOwner:
                 root_name = f"{_SNAPSHOT_PREFIX}{secrets.token_hex(16)}"
                 root_path = parent / root_name
                 try:
-                    if os.name == "posix":
+                    if platform_name == "posix":
                         assert self._parent_descriptor is not None
                         os.mkdir(root_name, 0o700, dir_fd=self._parent_descriptor)
                     else:
@@ -594,7 +616,7 @@ class ResourceSnapshotOwner:
             assert root_path is not None
             self.root = root_path
             self._active_root_name = root_name
-            if os.name == "posix":
+            if platform_name == "posix":
                 assert self._parent_descriptor is not None
                 created = os.stat(
                     root_name,
@@ -608,7 +630,7 @@ class ResourceSnapshotOwner:
             created_identity = _identity(created)
             self._directories[PurePosixPath(".")] = created_identity
 
-            if os.name == "posix":
+            if platform_name == "posix":
                 descriptor = os.open(
                     root_name,
                     _POSIX_DIRECTORY_FLAGS,

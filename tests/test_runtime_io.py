@@ -462,6 +462,7 @@ class AtomicRuntimeWriterTests(unittest.TestCase):
         self.assertEqual({"version": 2}, read_json_object(moved / "state.json"))
         self.assert_no_active_temporaries(moved / "state.json")
 
+    @unittest.skipUnless(os.name == "posix", "POSIX open-directory rename semantics required")
     def test_path_fallback_parent_swap_before_temp_creation_fails_closed(self) -> None:
         parent = self.root / "parent"
         destination = parent / "state.json"
@@ -495,6 +496,44 @@ class AtomicRuntimeWriterTests(unittest.TestCase):
         self.assertEqual({"version": 1}, read_json_object(moved / "state.json"))
         self.assert_no_active_temporaries(destination)
         self.assert_no_active_temporaries(moved / "state.json")
+
+    @unittest.skipUnless(os.name == "nt", "Windows open-directory rename semantics required")
+    def test_windows_parent_rename_denial_is_fail_closed(self) -> None:
+        parent = self.root / "parent"
+        destination = parent / "state.json"
+        with patch("isoworld.runtime_io._DIR_FD_PUBLICATION", False):
+            write_json_atomic(destination, {"version": 1})
+        moved = self.root / "moved"
+
+        def rename_open_parent(
+            parent_fd: int | None,
+            output_parent: Path,
+            prefix: str,
+            parent_identity: tuple[int, int],
+        ) -> tuple[int, str]:
+            self.assertIsNone(parent_fd)
+            output_parent.rename(moved)
+            raise AssertionError((prefix, parent_identity))
+
+        with (
+            patch("isoworld.runtime_io._DIR_FD_PUBLICATION", False),
+            patch(
+                "isoworld.runtime_io._create_temporary_entry",
+                side_effect=rename_open_parent,
+            ),
+            self.assertRaises(RuntimeIOError) as raised,
+        ):
+            write_json_atomic(destination, {"version": 2})
+
+        cause = raised.exception.__cause__
+        self.assertIsInstance(cause, PermissionError)
+        assert isinstance(cause, PermissionError)
+        self.assertIn(cause.winerror, {5, 32})
+        self.assertTrue(parent.is_dir())
+        self.assertFalse(moved.exists())
+        self.assertEqual({"version": 1}, read_json_object(destination))
+        self.assertEqual(b"\0", self.lock_path(destination).read_bytes())
+        self.assert_no_active_temporaries(destination)
 
     def test_save_and_replay_round_trip_through_atomic_writer(self) -> None:
         repository = Path(__file__).resolve().parents[1]

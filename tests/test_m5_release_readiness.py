@@ -89,6 +89,47 @@ class M5ReleaseReadinessTests(unittest.TestCase):
         self.assertIn(("actions/setup-python", SETUP_PYTHON_SHA), uses)
         self.assertIn(("pypa/gh-action-pip-audit", PIP_AUDIT_ACTION_SHA), uses)
 
+    def test_raylib_workflow_separates_graphical_and_cpu_media_smokes(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        graphical = workflow.split("  graphical-raylib-smoke:\n", 1)[1].split(
+            "  windows-raylib-cpu-media-smoke:\n", 1
+        )[0]
+        windows_cpu_media = workflow.split("  windows-raylib-cpu-media-smoke:\n", 1)[1].split(
+            "  dependency-audit:\n", 1
+        )[0]
+
+        self.assertIn("name: Graphical raylib smoke (Ubuntu 24.04)", graphical)
+        self.assertIn("runs-on: ubuntu-24.04", graphical)
+        self.assertIn("xvfb-run -a python tests/raylib_smoke.py", graphical)
+        self.assertNotIn("windows-2022", graphical)
+
+        self.assertIn("name: Raylib CPU/media smoke (Windows Server 2022)", windows_cpu_media)
+        self.assertIn("runs-on: windows-2022", windows_cpu_media)
+        self.assertIn("python tests/raylib_cpu_media_smoke.py", windows_cpu_media)
+        self.assertNotIn("tests/raylib_smoke.py", windows_cpu_media)
+        self.assertNotIn("graphical", windows_cpu_media.casefold())
+
+        graphical_smoke = (ROOT / "tests/raylib_smoke.py").read_text(encoding="utf-8")
+        self.assertIn(
+            "if not pr.is_window_ready():\n"
+            '            raise RuntimeError("raylib did not produce a ready graphical window")',
+            graphical_smoke,
+        )
+        self.assertLess(
+            graphical_smoke.index("if not pr.is_window_ready():"),
+            graphical_smoke.index("pr.export_image"),
+        )
+
+        cpu_media_smoke = (ROOT / "tests/raylib_cpu_media_smoke.py").read_text(encoding="utf-8")
+        for operation in (
+            "pr.gen_image_color",
+            "pr.export_image",
+            "pr.load_image",
+            "pr.get_image_color",
+        ):
+            self.assertIn(operation, cpu_media_smoke)
+        self.assertNotIn("pr.init_window", cpu_media_smoke)
+
     def test_security_jobs_verify_exact_inputs_and_scan_complete_history(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("fetch-depth: 0", workflow)

@@ -262,6 +262,19 @@ class _WinFunction:
         return self.result
 
 
+def _reparse_info(info: os.stat_result) -> SimpleNamespace:
+    return SimpleNamespace(
+        st_mode=info.st_mode,
+        st_dev=info.st_dev,
+        st_ino=info.st_ino,
+        st_nlink=info.st_nlink,
+        st_size=info.st_size,
+        st_mtime_ns=info.st_mtime_ns,
+        st_ctime_ns=info.st_ctime_ns,
+        st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT,
+    )
+
+
 class DirectMediaValidationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -290,6 +303,7 @@ class DirectMediaValidationTests(unittest.TestCase):
 
                 self.assertEqual(payload, validated.payload)
                 self.assertEqual(hashlib.sha256(payload).hexdigest(), validated.sha256)
+                self.assertEqual(path.resolve(strict=True), validated.path)
 
     def test_accepts_standard_animated_webp_with_anmf_frame(self) -> None:
         path = self.root / "animated.webp"
@@ -298,6 +312,95 @@ class DirectMediaValidationTests(unittest.TestCase):
         validated = read_validated_media(path, "image/webp")
 
         self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), validated.sha256)
+
+    def test_rejects_direct_parent_link_before_opening_target(self) -> None:
+        actual = self.root / "actual"
+        actual.mkdir()
+        (actual / "image.png").write_bytes(_png())
+        alias = self.root / "actual-alias"
+        try:
+            alias.symlink_to(actual, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlinks unavailable: {exc}")
+
+        with (
+            patch.object(
+                media_module,
+                "_open_resource",
+                side_effect=AssertionError("link target was opened"),
+            ) as open_resource,
+            self.assertRaisesRegex(MediaValidationError, "safe directory"),
+        ):
+            read_validated_media(alias / "image.png", "image/png")
+
+        open_resource.assert_not_called()
+
+    def test_rejects_linked_ancestor_before_path_normalization_or_open(self) -> None:
+        safe = self.root / "safe"
+        safe.mkdir()
+        (safe / "image.png").write_bytes(_png())
+        linked_target = self.root / "outside/nested"
+        linked_target.mkdir(parents=True)
+        linked = self.root / "linked"
+        try:
+            linked.symlink_to(linked_target, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlinks unavailable: {exc}")
+        source = linked / ".." / "safe/image.png"
+
+        with (
+            patch.object(
+                media_module,
+                "_open_resource",
+                side_effect=AssertionError("link target was opened"),
+            ) as open_resource,
+            self.assertRaisesRegex(MediaValidationError, "safe directory"),
+        ):
+            read_validated_media(source, "image/png")
+
+        open_resource.assert_not_called()
+
+    def test_rejects_reparse_parent_and_file_before_opening_target(self) -> None:
+        reparse_parent = self.root / "reparse-parent"
+        reparse_parent.mkdir()
+        nested_target = reparse_parent / "image.png"
+        nested_target.write_bytes(_png())
+        reparse_file = self.root / "reparse-file.png"
+        reparse_file.write_bytes(_png())
+        real_stat = media_module._non_following_stat
+
+        def reparse_parent_stat(candidate: Path) -> object:
+            if candidate == nested_target:
+                raise AssertionError("reparse directory target was inspected")
+            info = real_stat(candidate)
+            return _reparse_info(info) if candidate == reparse_parent else info
+
+        def reparse_file_stat(candidate: Path) -> object:
+            info = real_stat(candidate)
+            return _reparse_info(info) if candidate == reparse_file else info
+
+        cases = (
+            (nested_target, reparse_parent_stat, "safe directory"),
+            (reparse_file, reparse_file_stat, "symbolic link or reparse point"),
+        )
+        for path, stat_effect, message in cases:
+            with (
+                self.subTest(path=path.name),
+                patch.object(
+                    media_module,
+                    "_non_following_stat",
+                    side_effect=stat_effect,
+                ),
+                patch.object(
+                    media_module,
+                    "_open_resource",
+                    side_effect=AssertionError("reparse target was opened"),
+                ) as open_resource,
+                self.assertRaisesRegex(MediaValidationError, message),
+            ):
+                read_validated_media(path, "image/png")
+
+            open_resource.assert_not_called()
 
     def test_large_media_uses_spooled_mmap_without_retaining_a_second_payload(self) -> None:
         path = self.root / "tone.wav"
@@ -1104,14 +1207,89 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
                     ),
                     patch.object(
                         snapshot_module,
-                        "_windows_current_user_sid_string",
-                        return_value="S-1-5-21-test",
+                        "_windows_private_sid_strings",
+                        return_value=(
+                            "S-1-5-21-test",
+                            "S-1-5-18",
+                            "S-1-5-32-544",
+                        ),
                     ),
                     self.assertRaises(FileExistsError) as caught,
                 ):
                     snapshot_module._windows_create_private_directory(Path("mocked-collision"))
 
                 self.assertEqual(error, caught.exception.errno)
+
+    def test_windows_private_acl_accepts_exact_creation_principals(self) -> None:
+        principals = (
+            "S-1-5-21-current-user",
+            "S-1-5-18",
+            "S-1-5-32-544",
+        )
+        with (
+            patch.object(
+                snapshot_module,
+                "_windows_private_sid_strings",
+                return_value=principals,
+            ),
+            patch.object(
+                snapshot_module,
+                "_windows_acl_sid_inventory",
+                return_value=(principals[2], (principals[1], principals[0], principals[2])),
+            ),
+        ):
+            snapshot_module._windows_acl_is_private(Path("mocked-private-directory"))
+
+    def test_windows_private_acl_rejects_foreign_allow_ace(self) -> None:
+        principals = (
+            "S-1-5-21-current-user",
+            "S-1-5-18",
+            "S-1-5-32-544",
+        )
+        with (
+            patch.object(
+                snapshot_module,
+                "_windows_private_sid_strings",
+                return_value=principals,
+            ),
+            patch.object(
+                snapshot_module,
+                "_windows_acl_sid_inventory",
+                return_value=(principals[0], (*principals, "S-1-5-21-foreign")),
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "ACL is not private"),
+        ):
+            snapshot_module._windows_acl_is_private(Path("mocked-foreign-directory"))
+
+    def test_windows_private_acl_requires_every_creation_principal(self) -> None:
+        principals = (
+            "S-1-5-21-current-user",
+            "S-1-5-18",
+            "S-1-5-32-544",
+        )
+        with (
+            patch.object(
+                snapshot_module,
+                "_windows_private_sid_strings",
+                return_value=principals,
+            ),
+            patch.object(
+                snapshot_module,
+                "_windows_acl_sid_inventory",
+                return_value=(principals[0], principals[:2]),
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "ACL is not private"),
+        ):
+            snapshot_module._windows_acl_is_private(Path("mocked-incomplete-directory"))
+
+    @unittest.skipUnless(os.name == "nt", "native Windows ACL semantics")
+    def test_windows_created_private_acl_passes_native_validation(self) -> None:
+        path = self.root / "native-private-directory"
+        snapshot_module._windows_create_private_directory(path)
+        try:
+            snapshot_module._windows_acl_is_private(path)
+        finally:
+            path.rmdir()
 
     @unittest.skipUnless(os.name == "posix", "mocked Windows reopen semantics")
     def test_windows_reopen_closes_pending_and_registered_handles_on_identity_failure(
@@ -1283,8 +1461,7 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
 
         with (
             patch.object(tempfile, "tempdir", str(snapshot_parent)),
-            patch.object(snapshot_module.os, "name", "nt"),
-            patch.object(Path, "resolve", return_value=snapshot_parent),
+            patch.object(snapshot_module, "_platform_name", return_value="nt"),
             patch.object(snapshot_module, "_windows_lock_directory", return_value=777),
             patch.object(
                 snapshot_module,
@@ -1309,8 +1486,7 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
             warnings.simplefilter("always")
             with (
                 patch.object(tempfile, "tempdir", str(snapshot_parent)),
-                patch.object(snapshot_module.os, "name", "nt"),
-                patch.object(Path, "resolve", return_value=snapshot_parent),
+                patch.object(snapshot_module, "_platform_name", return_value="nt"),
                 patch.object(
                     snapshot_module,
                     "_windows_lock_directory",

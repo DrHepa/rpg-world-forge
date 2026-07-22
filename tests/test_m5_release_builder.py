@@ -218,6 +218,7 @@ class M5ReleaseBuilderTests(unittest.TestCase):
                 "PYTHONPATH": "untrusted-pythonpath",
                 "SECRET_TOKEN": "must-not-leak",
                 "SystemRoot": "C:\\Windows",
+                "windir": "C:\\Windows",
             }
             with patch.dict(release_builder.os.environ, inherited, clear=True):
                 environment = release_builder._build_environment(1234, environment_root)
@@ -226,7 +227,10 @@ class M5ReleaseBuilderTests(unittest.TestCase):
             self.assertNotIn("PYTHONHOME", environment)
             self.assertNotIn("PYTHONPATH", environment)
             self.assertNotIn("SECRET_TOKEN", environment)
-            self.assertEqual("C:\\Windows", environment["SystemRoot"])
+            self.assertEqual("C:\\Windows", environment["SYSTEMROOT"])
+            self.assertEqual("C:\\Windows", environment["WINDIR"])
+            self.assertNotIn("SystemRoot", environment)
+            self.assertNotIn("windir", environment)
             self.assertEqual("1234", environment["SOURCE_DATE_EPOCH"])
             self.assertEqual(str(environment_root / "home"), environment["HOME"])
             self.assertEqual(str(environment_root / "home"), environment["USERPROFILE"])
