@@ -8,7 +8,7 @@ from isoworld.core.fixed_step import FixedStep
 from isoworld.persistence import load_game, save_game
 from isoworld.render.render_state import RenderState, build_render_state
 from isoworld.render.renderer import IsometricRenderer
-from isoworld.render.resources import RaylibAssetRegistry
+from isoworld.render.resources import RaylibAssetRegistry, ResourceError
 from isoworld.world.narrative import available_dialogue_choices
 from isoworld.world.simulation import Simulation
 from isoworld.world.state import GameAction, WorldState
@@ -190,12 +190,14 @@ class GameApp:
 
         renderer = self.renderer
         pr.init_window(renderer.screen_width, renderer.screen_height, self.pack.title)
-        pr.set_exit_key(0)
-        pr.set_target_fps(60)
-        resources = (
-            RaylibAssetRegistry(pr, self.renderpack) if self.renderpack is not None else None
-        )
+        resources: RaylibAssetRegistry | None = None
+        primary_error: BaseException | None = None
         try:
+            pr.set_exit_key(0)
+            pr.set_target_fps(60)
+            resources = (
+                RaylibAssetRegistry(pr, self.renderpack) if self.renderpack is not None else None
+            )
             if resources is not None:
                 resources.load()
                 renderer.attach_resources(resources)
@@ -209,10 +211,31 @@ class GameApp:
                 pr.begin_drawing()
                 renderer.draw(pr, self._render_front)
                 pr.end_drawing()
-        finally:
-            if resources is not None:
-                self._resources = None
+        except BaseException as exc:
+            primary_error = exc
+
+        cleanup_errors: list[str] = []
+        self._resources = None
+        if resources is not None:
+            try:
                 resources.close()
-                renderer.attach_resources(None)
+            except BaseException as exc:
+                cleanup_errors.append(f"resource registry: {exc}")
+        try:
+            renderer.attach_resources(None)
+        except BaseException as exc:
+            cleanup_errors.append(f"renderer detachment: {exc}")
+        try:
             pr.close_window()
+        except BaseException as exc:
+            cleanup_errors.append(f"window close: {exc}")
+
+        if cleanup_errors:
+            cleanup_error = ResourceError("Runtime cleanup failed: " + "; ".join(cleanup_errors))
+            if primary_error is not None:
+                primary_error.add_note(str(cleanup_error))
+                raise primary_error from cleanup_error
+            raise cleanup_error
+        if primary_error is not None:
+            raise primary_error
         return 0

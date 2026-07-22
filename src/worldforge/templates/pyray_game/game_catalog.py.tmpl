@@ -959,41 +959,42 @@ def verify_release(
         loaded_render = load_renderpack(renderpack_path, loaded_world)
     except (WorldPackError, RenderPackError) as exc:
         raise CatalogError(f"Bundled runtime content is invalid: {exc}") from exc
-    if (
-        loaded_world.world_id != release.world_id
-        or loaded_render.world_id != release.world_id
-        or loaded_world.format_version != worldpack["format_version"]
-        or loaded_world.content_hash != worldpack["content_hash"]
-        or loaded_render.content_hash != renderpack["content_hash"]
-        or loaded_render.world_content_hash != loaded_world.content_hash
-    ):
-        raise CatalogError("Loaded runtime content disagrees with bundle metadata")
-    if loaded_world.content_hash != source_hashes["worldpack_content_hash"]:
-        raise CatalogError("Source worldpack hash disagrees with the bundled worldpack")
-    if tuple(loaded_world.runtime_requirements.required_features) != tuple(raw_features):
-        raise CatalogError("Worldpack and bundle feature requirements differ")
-    referenced_assets: dict[str, tuple[str, str]] = {}
-    for asset in loaded_render.assets:
-        for item in asset.files:
-            relative = _bundle_payload_path(
-                item.path,
-                f"renderpack asset {asset.id}",
-            ).as_posix()
-            if not relative.startswith("assets/"):
-                raise CatalogError(f"renderpack asset is outside assets/**: {relative}")
-            current = (item.sha256, item.media_type)
-            previous = referenced_assets.get(relative)
-            if previous is not None and previous != current:
-                raise CatalogError(f"renderpack conflicts on asset metadata: {relative}")
-            referenced_assets[relative] = current
-    manifest_assets = {
-        path: (record["sha256"], record["media_type"])
-        for path, record in records_by_path.items()
-        if path.startswith("assets/")
-    }
-    if referenced_assets != manifest_assets:
-        raise CatalogError("renderpack references and manifest asset inventory differ")
-    return VerifiedBundle(release, root, worldpack_path, renderpack_path, manifest)
+    with loaded_render:
+        if (
+            loaded_world.world_id != release.world_id
+            or loaded_render.world_id != release.world_id
+            or loaded_world.format_version != worldpack["format_version"]
+            or loaded_world.content_hash != worldpack["content_hash"]
+            or loaded_render.content_hash != renderpack["content_hash"]
+            or loaded_render.world_content_hash != loaded_world.content_hash
+        ):
+            raise CatalogError("Loaded runtime content disagrees with bundle metadata")
+        if loaded_world.content_hash != source_hashes["worldpack_content_hash"]:
+            raise CatalogError("Source worldpack hash disagrees with the bundled worldpack")
+        if tuple(loaded_world.runtime_requirements.required_features) != tuple(raw_features):
+            raise CatalogError("Worldpack and bundle feature requirements differ")
+        referenced_assets: dict[str, tuple[str, str]] = {}
+        for asset in loaded_render.assets:
+            for item in asset.files:
+                relative = _bundle_payload_path(
+                    item.path,
+                    f"renderpack asset {asset.id}",
+                ).as_posix()
+                if not relative.startswith("assets/"):
+                    raise CatalogError(f"renderpack asset is outside assets/**: {relative}")
+                current = (item.sha256, item.media_type)
+                previous = referenced_assets.get(relative)
+                if previous is not None and previous != current:
+                    raise CatalogError(f"renderpack conflicts on asset metadata: {relative}")
+                referenced_assets[relative] = current
+        manifest_assets = {
+            path: (record["sha256"], record["media_type"])
+            for path, record in records_by_path.items()
+            if path.startswith("assets/")
+        }
+        if referenced_assets != manifest_assets:
+            raise CatalogError("renderpack references and manifest asset inventory differ")
+        return VerifiedBundle(release, root, worldpack_path, renderpack_path, manifest)
 
 
 def verify_catalog(project_root: str | Path | None = None) -> tuple[VerifiedBundle, ...]:

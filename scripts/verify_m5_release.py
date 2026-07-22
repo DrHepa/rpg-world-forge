@@ -288,14 +288,22 @@ def _assert_safe_zip(archive_path: Path) -> list[str]:
 def _run_standalone_e2e(work_root: Path, fixture: Path, renderpack: Path) -> None:
     licenses = work_root / "runtime-licenses"
     _copy_runtime_notices(fixture, licenses)
-    bundle = export_runtime_bundle(
+    with export_runtime_bundle(
         WORLDPACK,
         renderpack,
         work_root / "bundle",
         release_id="1.0.0",
         licenses_directory=licenses,
-    )
-    verify_runtime_bundle(bundle.root, expected_bundle_hash=bundle.bundle_hash)
+    ) as bundle:
+        with verify_runtime_bundle(
+            bundle.root,
+            expected_bundle_hash=bundle.bundle_hash,
+        ):
+            pass
+        bundle_root = bundle.root
+        bundle_hash = bundle.bundle_hash
+        bundle_world_id = bundle.world_id
+        bundle_release_id = bundle.release_id
 
     game = work_root / "standalone-game"
     create_game_project(
@@ -305,9 +313,9 @@ def _run_standalone_e2e(work_root: Path, fixture: Path, renderpack: Path) -> Non
         source_revision="m5-release-readiness",
     )
     import_runtime_bundle(
-        bundle.root,
+        bundle_root,
         game,
-        expected_bundle_hash=bundle.bundle_hash,
+        expected_bundle_hash=bundle_hash,
     )
     if findings := audit_game_repository(game):
         raise ReadinessError(f"standalone game boundary audit failed: {findings}")
@@ -320,9 +328,9 @@ def _run_standalone_e2e(work_root: Path, fixture: Path, renderpack: Path) -> Non
         "-S",
         str(game / "run_game.py"),
         "--world",
-        bundle.world_id,
+        bundle_world_id,
         "--release",
-        bundle.release_id,
+        bundle_release_id,
         "--user-data",
         str(work_root / "game-user-data"),
     ]
@@ -360,9 +368,9 @@ def _run_standalone_e2e(work_root: Path, fixture: Path, renderpack: Path) -> Non
         "-S",
         str(extracted / "run_game.py"),
         "--world",
-        bundle.world_id,
+        bundle_world_id,
         "--release",
-        bundle.release_id,
+        bundle_release_id,
         "--user-data",
         str(work_root / "game-user-data"),
     ]

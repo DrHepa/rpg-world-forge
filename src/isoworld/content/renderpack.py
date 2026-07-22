@@ -6,16 +6,17 @@ import math
 import os
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import field as dataclass_field
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from isoworld.content.media import (
     MediaValidationError,
     read_validated_media,
-    read_validated_resource,
 )
 from isoworld.content.models import WorldPack
 from isoworld.content.portability import portable_path_key, portable_relative_path
+from isoworld.content.resource_snapshot import ResourceSnapshotError, ResourceSnapshotOwner
 from isoworld.runtime_io import RuntimeIOError, decode_json_object, read_json_object
 
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
@@ -133,6 +134,11 @@ class RenderPack:
     root: Path
     assets: tuple[RenderAsset, ...]
     bindings: tuple[RenderBinding, ...]
+    _snapshot_owner: ResourceSnapshotOwner | None = dataclass_field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
     def asset(self, asset_id: str) -> RenderAsset:
         for item in self.assets:
@@ -144,7 +150,40 @@ class RenderPack:
         return next((item for item in self.bindings if item.slot == slot), None)
 
     def resolve_file(self, item: AssetFile) -> Path:
+        if self._snapshot_owner is not None:
+            try:
+                return self._snapshot_owner.resolve_file(PurePosixPath(item.path))
+            except ResourceSnapshotError as exc:
+                raise RenderPackError(str(exc)) from exc
         return (self.root / item.path).resolve()
+
+    def close(self) -> None:
+        if self._snapshot_owner is None:
+            return
+        try:
+            self._snapshot_owner.close()
+        except ResourceSnapshotError as exc:
+            raise RenderPackError(str(exc)) from exc
+
+    def __enter__(self) -> RenderPack:
+        if self._snapshot_owner is not None and self._snapshot_owner.closed:
+            raise RenderPackError("Renderpack snapshot is already closed")
+        return self
+
+    def __exit__(self, exc_type: object, exc: BaseException | None, traceback: object) -> None:
+        try:
+            self.close()
+        except RenderPackError as cleanup_error:
+            if exc is not None:
+                raise cleanup_error from exc
+            raise
+
+    def __copy__(self) -> RenderPack:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> RenderPack:
+        memo[id(self)] = self
+        return self
 
 
 def _read_json(path: Path, *, limit: int) -> dict[str, Any]:
@@ -267,6 +306,8 @@ def load_clipset(path: str | Path) -> tuple[AnimationClip, ...]:
 
 
 def load_renderpack(path: str | Path, worldpack: WorldPack) -> RenderPack:
+    """Load a renderpack into a private snapshot owned by the returned object."""
+
     renderpack_path = Path(path)
     raw = _read_json(renderpack_path, limit=MAX_RENDERPACK_BYTES)
     if raw.get("format") != "isoworld.renderpack" or raw.get("format_version") != 1:
@@ -281,7 +322,36 @@ def load_renderpack(path: str | Path, worldpack: WorldPack) -> RenderPack:
     if raw.get("world_content_hash") != worldpack.content_hash:
         raise RenderPackError("The renderpack was built for different world content")
 
-    root = Path(os.path.abspath(renderpack_path.parent))
+    source_root = Path(os.path.abspath(renderpack_path.parent))
+    try:
+        owner = ResourceSnapshotOwner()
+    except ResourceSnapshotError as exc:
+        raise RenderPackError(f"Could not create private renderpack snapshot: {exc}") from exc
+    try:
+        return _load_renderpack_snapshot(
+            raw,
+            worldpack,
+            supplied_hash,
+            source_root,
+            owner,
+        )
+    except Exception as original:
+        try:
+            owner.close()
+        except ResourceSnapshotError as cleanup_error:
+            raise RenderPackError(
+                f"Renderpack validation failed and snapshot cleanup failed: {cleanup_error}"
+            ) from original
+        raise
+
+
+def _load_renderpack_snapshot(
+    raw: dict[str, Any],
+    worldpack: WorldPack,
+    supplied_hash: str,
+    source_root: Path,
+    owner: ResourceSnapshotOwner,
+) -> RenderPack:
     raw_assets = raw.get("assets")
     if not isinstance(raw_assets, list) or not raw_assets:
         raise RenderPackError("The renderpack must contain assets")
@@ -340,13 +410,13 @@ def load_renderpack(path: str | Path, worldpack: WorldPack) -> RenderPack:
             if not isinstance(media_type, str) or media_type not in ROLE_MEDIA_TYPES[role]:
                 raise RenderPackError(f"{file_context}/media_type is invalid")
             try:
-                resource = read_validated_resource(
-                    root,
+                resource = owner.materialize(
+                    source_root,
                     normalized,
                     media_type,
                     limit=MAX_ASSET_BYTES,
                 )
-            except MediaValidationError as exc:
+            except (MediaValidationError, ResourceSnapshotError) as exc:
                 raise RenderPackError(
                     f"{file_context}: contents do not match declared media type {media_type}: {exc}"
                 ) from exc
@@ -426,7 +496,8 @@ def load_renderpack(path: str | Path, worldpack: WorldPack) -> RenderPack:
         world_id=worldpack.world_id,
         world_content_hash=worldpack.content_hash,
         content_hash=supplied_hash,
-        root=root,
+        root=owner.root,
         assets=tuple(assets),
         bindings=tuple(bindings),
+        _snapshot_owner=owner,
     )

@@ -10,14 +10,15 @@ from pathlib import Path
 from game import GAME_ID, GAME_TITLE
 from game.catalog import (
     PROJECT_ROOT,
+    CatalogRelease,
     CatalogError,
     load_catalog,
     select_release,
     verify_release,
 )
 from isoworld.content.loader import WorldPackError, load_worldpack
-from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
-from isoworld.content.renderpack import RenderPackError, load_renderpack
+from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES, WorldPack
+from isoworld.content.renderpack import RenderPack, RenderPackError, load_renderpack
 from isoworld.core.app import GameApp
 from isoworld.persistence import (
     PersistenceError,
@@ -27,8 +28,13 @@ from isoworld.persistence import (
     state_digest,
     write_replay,
 )
+from isoworld.render.resources import ResourceError
 
 SLOT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+
+
+class _GameCleanupError(ResourceError):
+    """Carries owned renderpack cleanup behind the primary game error."""
 
 
 def _absolute_environment_root(name: str, fallback: Path) -> Path:
@@ -163,6 +169,126 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return args
 
 
+def _run_loaded(
+    args: argparse.Namespace,
+    selected: CatalogRelease,
+    pack: WorldPack,
+    renderpack: RenderPack,
+) -> tuple[int, str]:
+    user_data = args.user_data.expanduser().resolve()
+    if user_data == PROJECT_ROOT or PROJECT_ROOT in user_data.parents:
+        raise ValueError("--user-data must be outside the installed game tree")
+    replay_path = _replay_path(
+        user_data,
+        selected.world_id,
+        selected.release_id,
+        args.replay_slot,
+    )
+    if replay_path is not None:
+        actions, state = load_replay(replay_path, pack)
+        return (
+            0,
+            f"world={pack.world_id} release={selected.release_id} "
+            f"replay_actions={len(actions)} tick={state.tick} "
+            f"digest={state_digest(state)}",
+        )
+    record_path = _replay_path(
+        user_data,
+        selected.world_id,
+        selected.release_id,
+        args.record_replay_slot,
+    )
+    load_path = _save_path(
+        user_data,
+        selected.world_id,
+        selected.release_id,
+        args.load_slot,
+    )
+    quick_path = _save_path(
+        user_data,
+        selected.world_id,
+        selected.release_id,
+        args.quick_save_slot,
+    )
+    exit_path = _save_path(
+        user_data,
+        selected.world_id,
+        selected.release_id,
+        args.save_on_exit_slot,
+    )
+    initial = load_game(load_path, pack) if load_path is not None else None
+    app = GameApp(
+        pack,
+        initial,
+        quick_path,
+        renderpack,
+        replay_recording=record_path is not None,
+    )
+    if args.headless_ticks is not None:
+        state = app.run_headless(args.headless_ticks)
+        result = 0
+    else:
+        result = app.run()
+        state = app.simulation.state
+    if exit_path is not None:
+        save_game(exit_path, state, pack)
+    if record_path is not None:
+        write_replay(record_path, app.simulation.action_log, state, pack)
+    return (
+        result,
+        f"world={pack.world_id} release={selected.release_id} tick={state.tick} "
+        f"day={state.day} minute={state.minute_of_day} "
+        f"active_actor={state.active_actor_id} digest={state_digest(state)}",
+    )
+
+
+def _run_with_owned_renderpack(
+    args: argparse.Namespace,
+    selected: CatalogRelease,
+    pack: WorldPack,
+    renderpack: RenderPack,
+) -> tuple[int, str]:
+    primary_error: BaseException | None = None
+    result: tuple[int, str] | None = None
+    try:
+        result = _run_loaded(args, selected, pack, renderpack)
+    except BaseException as exc:
+        primary_error = exc
+
+    cleanup_error: BaseException | None = None
+    try:
+        renderpack.close()
+    except BaseException as exc:
+        cleanup_error = exc
+
+    if primary_error is not None:
+        if cleanup_error is not None:
+            cleanup_parts: list[str] = []
+            if isinstance(primary_error.__cause__, ResourceError) and str(
+                primary_error.__cause__
+            ).startswith("Runtime cleanup failed:"):
+                cleanup_parts.append(str(primary_error.__cause__))
+            cleanup_parts.append(f"renderpack cleanup failed: {cleanup_error}")
+            combined = _GameCleanupError("; ".join(cleanup_parts))
+            primary_error.add_note(str(combined))
+            raise primary_error from combined
+        raise primary_error
+    if cleanup_error is not None:
+        raise cleanup_error
+    assert result is not None
+    return result
+
+
+def _error_detail(exc: BaseException) -> str:
+    detail = str(exc)
+    cleanup = exc.__cause__
+    if isinstance(cleanup, _GameCleanupError) or (
+        isinstance(cleanup, ResourceError) and str(cleanup).startswith("Runtime cleanup failed:")
+    ):
+        detail += f"; {cleanup}"
+    return detail
+
+
 def main(arguments: Sequence[str] | None = None) -> int:
     args = _parse_args(arguments)
     try:
@@ -212,80 +338,19 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
         renderpack = load_renderpack(bundle.renderpack_path, pack)
-        user_data = args.user_data.expanduser().resolve()
-        if user_data == PROJECT_ROOT or PROJECT_ROOT in user_data.parents:
-            raise ValueError("--user-data must be outside the installed game tree")
-        replay_path = _replay_path(
-            user_data,
-            selected.world_id,
-            selected.release_id,
-            args.replay_slot,
-        )
-        if replay_path is not None:
-            actions, state = load_replay(replay_path, pack)
-            print(
-                f"world={pack.world_id} release={selected.release_id} "
-                f"replay_actions={len(actions)} tick={state.tick} "
-                f"digest={state_digest(state)}"
-            )
-            return 0
-        record_path = _replay_path(
-            user_data,
-            selected.world_id,
-            selected.release_id,
-            args.record_replay_slot,
-        )
-        load_path = _save_path(
-            user_data,
-            selected.world_id,
-            selected.release_id,
-            args.load_slot,
-        )
-        quick_path = _save_path(
-            user_data,
-            selected.world_id,
-            selected.release_id,
-            args.quick_save_slot,
-        )
-        exit_path = _save_path(
-            user_data,
-            selected.world_id,
-            selected.release_id,
-            args.save_on_exit_slot,
-        )
-        initial = load_game(load_path, pack) if load_path is not None else None
-        app = GameApp(
-            pack,
-            initial,
-            quick_path,
-            renderpack,
-            replay_recording=record_path is not None,
-        )
-        if args.headless_ticks is not None:
-            state = app.run_headless(args.headless_ticks)
-            result = 0
-        else:
-            result = app.run()
-            state = app.simulation.state
-        if exit_path is not None:
-            save_game(exit_path, state, pack)
-        if record_path is not None:
-            write_replay(record_path, app.simulation.action_log, state, pack)
-        print(
-            f"world={pack.world_id} release={selected.release_id} tick={state.tick} "
-            f"day={state.day} minute={state.minute_of_day} "
-            f"active_actor={state.active_actor_id} digest={state_digest(state)}"
-        )
+        result, success = _run_with_owned_renderpack(args, selected, pack, renderpack)
+        print(success)
         return result
     except (
         CatalogError,
         PersistenceError,
         RenderPackError,
+        ResourceError,
         WorldPackError,
         OSError,
         ValueError,
     ) as exc:
-        print(f"ERROR {exc}", file=sys.stderr)
+        print(f"ERROR {_error_detail(exc)}", file=sys.stderr)
         return 2
 
 

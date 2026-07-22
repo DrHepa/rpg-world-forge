@@ -329,9 +329,10 @@ def finalize_asset_release(
         from isoworld.content.loader import load_worldpack
         from isoworld.content.renderpack import load_renderpack
 
-        loaded = load_renderpack(deliverable_file, load_worldpack(worldpack_path))
+        with load_renderpack(deliverable_file, load_worldpack(worldpack_path)) as loaded:
+            loaded_world_id = loaded.world_id
         payload = read_json_object(deliverable_file, limit=64 * 1024 * 1024)
-        if loaded.world_id != manifest.get("world_id"):
+        if loaded_world_id != manifest.get("world_id"):
             raise AssetContractError("Renderpack world does not match the asset manifest")
         expected_format = "isoworld.renderpack"
     else:
@@ -1240,7 +1241,11 @@ def validate_asset_manifest_v3(
                             raise AssetContractError(
                                 "worldpack is required to verify a release renderpack"
                             )
-                        load_renderpack(deliverable_path, load_worldpack(worldpack_path))
+                        with load_renderpack(
+                            deliverable_path,
+                            load_worldpack(worldpack_path),
+                        ):
+                            pass
                 except (AssetContractError, ValueError) as exc:
                     issues.append(_issue("deliverable", f"runtime verification failed: {exc}"))
     if worldpack_path is not None:

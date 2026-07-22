@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -9,7 +10,9 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from game import GAME_ID, GAME_TITLE
@@ -36,6 +39,101 @@ class GameShellTests(unittest.TestCase):
         self.assertEqual(GAME_TITLE, __GAME_TITLE_PY__)
         self.assertRegex(RUNTIME_API_VERSION, r"^\d+\.\d+\.\d+$")
         self.assertIsInstance(SUPPORTED_RUNTIME_FEATURES, frozenset)
+
+    def test_success_is_not_printed_when_owned_renderpack_close_fails(self) -> None:
+        class FailingRenderPack:
+            def close(self) -> None:
+                raise game_main.RenderPackError("generated renderpack close failed")
+
+        args = SimpleNamespace(
+            list_worlds=False,
+            headless_ticks=0,
+            world="test_world",
+            release="1.0.0",
+            load_slot=None,
+            quick_save_slot=None,
+            save_on_exit_slot=None,
+            record_replay_slot=None,
+            replay_slot=None,
+        )
+        release = SimpleNamespace(world_id="test_world", release_id="1.0.0")
+        bundle = SimpleNamespace(
+            worldpack_path=Path("worldpack.json"), renderpack_path=Path("renderpack.json")
+        )
+        compatibility = SimpleNamespace(compatible=True, missing_optional_features=())
+        pack = SimpleNamespace(
+            compatibility_with=lambda *_: compatibility,
+        )
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with (
+            patch.object(game_main, "_parse_args", return_value=args),
+            patch.object(game_main, "load_catalog", return_value=(release,)),
+            patch.object(game_main, "select_release", return_value=release),
+            patch.object(game_main, "verify_release", return_value=bundle),
+            patch.object(game_main, "load_worldpack", return_value=pack),
+            patch.object(game_main, "load_renderpack", return_value=FailingRenderPack()),
+            patch.object(game_main, "_run_loaded", return_value=(0, "SUCCESS")),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = game_main.main([])
+
+        self.assertEqual(2, result)
+        self.assertEqual("", stdout.getvalue())
+        self.assertIn("generated renderpack close failed", stderr.getvalue())
+        self.assertNotIn("SUCCESS", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_body_error_stays_primary_and_cleanup_is_reported_without_traceback(self) -> None:
+        primary = game_main.PersistenceError("generated game body failed")
+
+        class FailingRenderPack:
+            def close(self) -> None:
+                raise game_main.RenderPackError("generated renderpack close failed")
+
+        args = SimpleNamespace(
+            list_worlds=False,
+            headless_ticks=0,
+            world="test_world",
+            release="1.0.0",
+            load_slot=None,
+            quick_save_slot=None,
+            save_on_exit_slot=None,
+            record_replay_slot=None,
+            replay_slot=None,
+        )
+        release = SimpleNamespace(world_id="test_world", release_id="1.0.0")
+        bundle = SimpleNamespace(
+            worldpack_path=Path("worldpack.json"), renderpack_path=Path("renderpack.json")
+        )
+        compatibility = SimpleNamespace(compatible=True, missing_optional_features=())
+        pack = SimpleNamespace(
+            compatibility_with=lambda *_: compatibility,
+        )
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with (
+            patch.object(game_main, "_parse_args", return_value=args),
+            patch.object(game_main, "load_catalog", return_value=(release,)),
+            patch.object(game_main, "select_release", return_value=release),
+            patch.object(game_main, "verify_release", return_value=bundle),
+            patch.object(game_main, "load_worldpack", return_value=pack),
+            patch.object(game_main, "load_renderpack", return_value=FailingRenderPack()),
+            patch.object(game_main, "_run_loaded", side_effect=primary),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = game_main.main([])
+
+        self.assertEqual(2, result)
+        self.assertEqual("", stdout.getvalue())
+        self.assertIn("generated game body failed", stderr.getvalue())
+        self.assertIn("generated renderpack close failed", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertIsInstance(primary.__cause__, game_main._GameCleanupError)
 
     def test_platform_user_data_defaults_are_absolute_and_fail_safe(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -12,6 +12,8 @@ class ResourceError(RuntimeError):
 
 
 class RaylibAssetRegistry:
+    """Load native resources while borrowing, never closing, the supplied renderpack."""
+
     def __init__(self, pr: Any, renderpack: RenderPack) -> None:
         self.pr = pr
         self.renderpack = renderpack
@@ -35,11 +37,19 @@ class RaylibAssetRegistry:
             raise ResourceError(f"raylib rejected {description}")
         return value
 
-    def _safe_unload(self, function_name: str, value: Any) -> None:
+    def _try_release(
+        self,
+        function_name: str,
+        value: Any,
+        description: str,
+        errors: list[str],
+    ) -> bool:
         try:
             getattr(self.pr, function_name)(value)
-        except Exception:
-            pass
+        except Exception as exc:
+            errors.append(f"{description}: {exc}")
+            return False
+        return True
 
     def load(self) -> None:
         if self._loaded:
@@ -112,8 +122,15 @@ class RaylibAssetRegistry:
                     )
             self._loaded = True
         except Exception as exc:
-            self.close()
-            raise ResourceError(f"Could not load processed renderpack resources: {exc}") from exc
+            cleanup_error: ResourceError | None = None
+            try:
+                self.close()
+            except ResourceError as caught:
+                cleanup_error = caught
+            detail = f"Could not load processed renderpack resources: {exc}"
+            if cleanup_error is not None:
+                detail += f"; cleanup failures: {cleanup_error}"
+            raise ResourceError(detail) from exc
 
     def _validate_clip_bounds(self, asset: RenderAsset) -> None:
         textures = self.textures.get(asset.id, ())
@@ -132,38 +149,92 @@ class RaylibAssetRegistry:
                     )
 
     def close(self) -> None:
+        errors: list[str] = []
         if self._current_music is not None:
-            try:
-                self.pr.stop_music_stream(self._current_music)
-            except Exception:
-                pass
+            self._try_release(
+                "stop_music_stream",
+                self._current_music,
+                "stop current music",
+                errors,
+            )
+
+        for asset_id in reversed(tuple(self.shaders)):
+            if self._try_release(
+                "unload_shader",
+                self.shaders[asset_id],
+                f"unload shader {asset_id}",
+                errors,
+            ):
+                self.shaders.pop(asset_id)
+
+        sequence_stores = (
+            (self.music, "unload_music_stream", "music"),
+            (self.sounds, "unload_sound", "sound"),
+        )
+        for store, function_name, kind in sequence_stores:
+            for asset_id in reversed(tuple(store)):
+                remaining = list(store[asset_id])
+                for index in range(len(remaining) - 1, -1, -1):
+                    if self._try_release(
+                        function_name,
+                        remaining[index],
+                        f"unload {kind} {asset_id}/{index}",
+                        errors,
+                    ):
+                        remaining.pop(index)
+                if remaining:
+                    store[asset_id] = tuple(remaining)
+                else:
+                    store.pop(asset_id)
+
+        for asset_id in reversed(tuple(self.fonts)):
+            if self._try_release(
+                "unload_font",
+                self.fonts[asset_id],
+                f"unload font {asset_id}",
+                errors,
+            ):
+                self.fonts.pop(asset_id)
+
+        for asset_id in reversed(tuple(self.textures)):
+            remaining = list(self.textures[asset_id])
+            for index in range(len(remaining) - 1, -1, -1):
+                if self._try_release(
+                    "unload_texture",
+                    remaining[index],
+                    f"unload texture {asset_id}/{index}",
+                    errors,
+                ):
+                    remaining.pop(index)
+            if remaining:
+                self.textures[asset_id] = tuple(remaining)
+            else:
+                self.textures.pop(asset_id)
+
+        current_still_owned = self._current_music is not None and any(
+            item is self._current_music for items in self.music.values() for item in items
+        )
+        if not current_still_owned:
             self._current_music = None
             self._current_music_asset = None
-        for shader in reversed(tuple(self.shaders.values())):
-            self._safe_unload("unload_shader", shader)
-        for music_items in reversed(tuple(self.music.values())):
-            for item in reversed(music_items):
-                self._safe_unload("unload_music_stream", item)
-        for sound_items in reversed(tuple(self.sounds.values())):
-            for item in reversed(sound_items):
-                self._safe_unload("unload_sound", item)
-        for font in reversed(tuple(self.fonts.values())):
-            self._safe_unload("unload_font", font)
-        for textures in reversed(tuple(self.textures.values())):
-            for texture in reversed(textures):
-                self._safe_unload("unload_texture", texture)
-        self.shaders.clear()
-        self.music.clear()
-        self.sounds.clear()
-        self.fonts.clear()
-        self.textures.clear()
-        if self._audio_initialized:
+
+        if self._audio_initialized and not self.music and not self.sounds:
             try:
                 self.pr.close_audio_device()
-            except Exception:
-                pass
-            self._audio_initialized = False
-        self._loaded = False
+            except Exception as exc:
+                errors.append(f"close audio device: {exc}")
+            else:
+                self._audio_initialized = False
+        self._loaded = bool(
+            self.shaders
+            or self.music
+            or self.sounds
+            or self.fonts
+            or self.textures
+            or self._audio_initialized
+        )
+        if errors:
+            raise ResourceError("Resource cleanup failed: " + "; ".join(errors))
 
     def binding(self, slot: str) -> RenderBinding | None:
         return self.renderpack.binding(slot)

@@ -172,10 +172,13 @@ def _open_resource(snapshot: _PathSnapshot, relative: PurePosixPath) -> tuple[in
 def _capture_descriptor(
     descriptor: int,
     *,
+    expected_size: int,
     limit: int,
     retain_limit: int,
-) -> tuple[BinaryIO, bytes | None, str]:
+) -> tuple[BinaryIO, bytes | None, str, int]:
     capture = tempfile.SpooledTemporaryFile(max_size=retain_limit, mode="w+b")
+    if expected_size > retain_limit:
+        capture.rollover()
     digest = hashlib.sha256()
     total = 0
     try:
@@ -191,10 +194,55 @@ def _capture_descriptor(
         capture.seek(0)
         retained = capture.read() if total <= retain_limit else None
         capture.seek(0)
-        return capture, retained, digest.hexdigest()
+        return capture, retained, digest.hexdigest(), total
     except Exception:
         capture.close()
         raise
+
+
+def _write_descriptor(descriptor: int, payload: bytes) -> None:
+    position = 0
+    while position < len(payload):
+        written = os.write(descriptor, payload[position:])
+        if written <= 0:
+            raise OSError("Could not make progress while materializing resource bytes")
+        position += written
+
+
+def _copy_capture_to_descriptor(
+    capture: BinaryIO,
+    destination: int,
+    *,
+    expected_sha256: str,
+    expected_size: int,
+) -> None:
+    """Stream one validated capture into an already exclusive regular file."""
+
+    before = os.fstat(destination)
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size != 0:
+        raise MediaValidationError("Snapshot destination is not a new private regular file")
+    destination_identity = _identity(before)
+    copied_hash = hashlib.sha256()
+    copied_size = 0
+    capture.seek(0)
+    while True:
+        chunk = capture.read(_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        copied_size += len(chunk)
+        copied_hash.update(chunk)
+        _write_descriptor(destination, chunk)
+    os.fsync(destination)
+    after = os.fstat(destination)
+    if (
+        not stat.S_ISREG(after.st_mode)
+        or after.st_nlink != 1
+        or _identity(after) != destination_identity
+        or after.st_size != copied_size
+    ):
+        raise MediaValidationError("Snapshot destination identity changed while writing")
+    if copied_size != expected_size or copied_hash.hexdigest() != expected_sha256:
+        raise MediaValidationError("Snapshot bytes differ from the validated resource capture")
 
 
 def _retained_limit(media_type: str, effective_limit: int) -> int:
@@ -219,8 +267,9 @@ def read_validated_resource(
     media_type: str,
     *,
     limit: int = MAX_MEDIA_BYTES,
+    materialize_descriptor: int | None = None,
 ) -> ValidatedMedia:
-    """Read, hash, and structurally validate one resource from one stable descriptor."""
+    """Validate one stable read and optionally materialize that exact capture."""
 
     effective_limit = _media_limit(media_type, limit)
     snapshot = _path_snapshot(Path(root), relative, limit=effective_limit)
@@ -238,8 +287,9 @@ def read_validated_resource(
             raise MediaValidationError(
                 f"Resource identity changed while opening: {snapshot.target}"
             )
-        capture, payload, digest = _capture_descriptor(
+        capture, payload, digest, total = _capture_descriptor(
             descriptor,
+            expected_size=before.st_size,
             limit=effective_limit,
             retain_limit=_retained_limit(media_type, effective_limit),
         )
@@ -255,6 +305,13 @@ def read_validated_resource(
                 f"Resource identity changed while reading: {snapshot.target}"
             )
         _verify_snapshot(snapshot, relative, limit=effective_limit)
+        if materialize_descriptor is not None:
+            _copy_capture_to_descriptor(
+                capture,
+                materialize_descriptor,
+                expected_sha256=digest,
+                expected_size=total,
+            )
         return ValidatedMedia(snapshot.target, payload, digest)
     except MediaValidationError:
         raise

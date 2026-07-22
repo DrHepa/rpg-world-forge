@@ -196,6 +196,8 @@ class M5ReleaseReadinessTests(unittest.TestCase):
             '"-m", "pip", "check"',
             '"-I", "-m", "worldforge", "audit-contracts"',
             'ROOT / "scripts/build_release.py"',
+            "with export_runtime_bundle(",
+            "with verify_runtime_bundle(",
         ):
             with self.subTest(required=required):
                 self.assertIn(required, driver)

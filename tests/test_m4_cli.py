@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -8,13 +9,63 @@ import sys
 import tempfile
 import unittest
 import wave
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
+import isoworld.__main__ as isoworld_cli
+import worldforge.__main__ as worldforge_cli
 from isoworld.content.loader import load_worldpack
 from worldforge.integrity import canonical_payload_hash
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPILED = ROOT / "content/compiled/foundation.worldpack.json"
+
+
+class _TrackedBundle:
+    def __init__(self) -> None:
+        self.root = Path("tracked-bundle")
+        self.world_id = "tracked_world"
+        self.release_id = "1.0.0"
+        self.bundle_hash = "a" * 64
+        self.close_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
+
+    def __enter__(self) -> _TrackedBundle:
+        return self
+
+    def __exit__(self, exc_type: object, exc: BaseException | None, traceback: object) -> None:
+        self.close()
+
+
+class _FailingBundle:
+    def __init__(self, *, body_error: BaseException | None = None) -> None:
+        self.root = Path("failing-bundle")
+        self.release_id = "1.0.0"
+        self.bundle_hash = "b" * 64
+        self.body_error = body_error
+        self.close_calls = 0
+
+    @property
+    def world_id(self) -> str:
+        if self.body_error is not None:
+            raise self.body_error
+        return "failing_world"
+
+    def close(self) -> None:
+        self.close_calls += 1
+        raise worldforge_cli.BundleError("bundle close failed")
+
+
+class _FailingRuntimeRenderPack:
+    def __init__(self) -> None:
+        self.close_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
+        raise isoworld_cli.RenderPackError("renderpack close failed")
 
 
 def _run_cli(*arguments: str | Path, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -189,6 +240,69 @@ class M5RuntimeExecutionCliTests(unittest.TestCase):
                     self.assertTrue(result.stderr.startswith("ERROR: "), result.stderr)
                     self.assertNotIn("Traceback", result.stderr)
 
+    def test_runtime_cli_prints_no_success_when_renderpack_close_fails(self) -> None:
+        renderpack = _FailingRuntimeRenderPack()
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch.object(isoworld_cli, "load_worldpack", return_value=object()),
+            patch.object(isoworld_cli, "load_renderpack", return_value=renderpack),
+            patch.object(
+                isoworld_cli,
+                "_run_loaded",
+                return_value=(0, "world=would-have-succeeded"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = isoworld_cli.main(
+                [
+                    "--pack",
+                    "worldpack.json",
+                    "--renderpack",
+                    "renderpack.json",
+                    "--headless-ticks",
+                    "0",
+                ]
+            )
+
+        self.assertEqual(1, result)
+        self.assertEqual("", stdout.getvalue())
+        self.assertIn("renderpack close failed", stderr.getvalue())
+        self.assertNotIn("would-have-succeeded", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertEqual(1, renderpack.close_calls)
+
+    def test_runtime_cli_preserves_primary_and_reports_close_failure(self) -> None:
+        renderpack = _FailingRuntimeRenderPack()
+        primary = isoworld_cli.PersistenceError("runtime body failed")
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch.object(isoworld_cli, "load_worldpack", return_value=object()),
+            patch.object(isoworld_cli, "load_renderpack", return_value=renderpack),
+            patch.object(isoworld_cli, "_run_loaded", side_effect=primary),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = isoworld_cli.main(
+                [
+                    "--pack",
+                    "worldpack.json",
+                    "--renderpack",
+                    "renderpack.json",
+                    "--headless-ticks",
+                    "0",
+                ]
+            )
+
+        self.assertEqual(1, result)
+        self.assertEqual("", stdout.getvalue())
+        self.assertIn("runtime body failed", stderr.getvalue())
+        self.assertIn("renderpack cleanup failed: renderpack close failed", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertEqual(1, renderpack.close_calls)
+
     def test_replay_save_and_record_argument_conflicts_exit_two(self) -> None:
         cases = (
             ("--replay", "replay.json", "--headless-ticks", "0"),
@@ -313,6 +427,151 @@ class M4WorldLifecycleCliTests(unittest.TestCase):
 
 
 class M4BundleAndGameCliTests(unittest.TestCase):
+    def test_bundle_cli_success_paths_close_owned_verification_snapshots(self) -> None:
+        exported = _TrackedBundle()
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "worldforge",
+                    "export-bundle",
+                    "worldpack.json",
+                    "renderpack.json",
+                    "bundle",
+                    "--release-id",
+                    "1.0.0",
+                    "--licenses",
+                    "licenses",
+                ],
+            ),
+            patch.object(
+                worldforge_cli,
+                "export_runtime_bundle",
+                return_value=exported,
+            ),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(0, worldforge_cli.main())
+        self.assertEqual(1, exported.close_calls)
+
+        verified = _TrackedBundle()
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "worldforge",
+                    "verify-bundle",
+                    "bundle",
+                    "--expected-hash",
+                    "a" * 64,
+                ],
+            ),
+            patch.object(
+                worldforge_cli,
+                "verify_runtime_bundle",
+                return_value=verified,
+            ),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(0, worldforge_cli.main())
+        self.assertEqual(1, verified.close_calls)
+
+        post_import = _TrackedBundle()
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "worldforge",
+                    "import-bundle",
+                    "bundle",
+                    "game",
+                    "--expected-hash",
+                    "a" * 64,
+                ],
+            ),
+            patch.object(
+                worldforge_cli,
+                "import_runtime_bundle",
+                return_value=Path("game/release"),
+            ),
+            patch.object(
+                worldforge_cli,
+                "verify_runtime_bundle",
+                return_value=post_import,
+            ),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(0, worldforge_cli.main())
+        self.assertEqual(1, post_import.close_calls)
+
+    def test_bundle_cli_prints_no_ok_when_owned_close_fails(self) -> None:
+        bundle = _FailingBundle()
+        output = io.StringIO()
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "worldforge",
+                    "export-bundle",
+                    "worldpack.json",
+                    "renderpack.json",
+                    "bundle",
+                    "--release-id",
+                    "1.0.0",
+                    "--licenses",
+                    "licenses",
+                ],
+            ),
+            patch.object(
+                worldforge_cli,
+                "export_runtime_bundle",
+                return_value=bundle,
+            ),
+            redirect_stdout(output),
+        ):
+            result = worldforge_cli.main()
+
+        self.assertEqual(1, result)
+        self.assertIn("ERROR bundle close failed", output.getvalue())
+        self.assertNotIn("OK bundle=", output.getvalue())
+        self.assertNotIn("Traceback", output.getvalue())
+        self.assertEqual(1, bundle.close_calls)
+
+    def test_bundle_cli_preserves_primary_and_reports_close_failure(self) -> None:
+        bundle = _FailingBundle(body_error=worldforge_cli.BundleError("bundle body failed"))
+        output = io.StringIO()
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "worldforge",
+                    "verify-bundle",
+                    "bundle",
+                    "--expected-hash",
+                    "b" * 64,
+                ],
+            ),
+            patch.object(
+                worldforge_cli,
+                "verify_runtime_bundle",
+                return_value=bundle,
+            ),
+            redirect_stdout(output),
+        ):
+            result = worldforge_cli.main()
+
+        self.assertEqual(1, result)
+        self.assertIn("bundle body failed", output.getvalue())
+        self.assertIn("bundle cleanup failed: bundle close failed", output.getvalue())
+        self.assertNotIn("OK bundle=", output.getvalue())
+        self.assertNotIn("Traceback", output.getvalue())
+        self.assertEqual(1, bundle.close_calls)
+
     def test_bundle_and_standalone_game_workflow_through_cli(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

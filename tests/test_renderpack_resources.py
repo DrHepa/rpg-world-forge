@@ -1,22 +1,35 @@
 from __future__ import annotations
 
 import binascii
+import copy
+import gc
 import hashlib
 import json
 import mmap
 import os
+import stat
 import struct
 import tempfile
+import tracemalloc
 import unittest
+import warnings
 import wave
 import zlib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import isoworld.content.media as media_module
+import isoworld.content.resource_snapshot as snapshot_module
 from isoworld.content.loader import load_worldpack
-from isoworld.content.media import MediaValidationError, read_validated_media
-from isoworld.content.renderpack import RenderPackError, load_renderpack
+from isoworld.content.media import (
+    MediaValidationError,
+    media_signature_matches,
+    read_validated_media,
+)
+from isoworld.content.renderpack import RenderPack, RenderPackError, load_renderpack
+from isoworld.content.resource_snapshot import ResourceSnapshotError, ResourceSnapshotOwner
+from isoworld.render.resources import RaylibAssetRegistry, ResourceError
 
 ROOT = Path(__file__).resolve().parents[1]
 WORLDPACK = ROOT / "content/compiled/foundation.worldpack.json"
@@ -89,6 +102,22 @@ def _wav() -> bytes:
             target.setframerate(22050)
             target.writeframes(b"\0\0" * 8)
         return path.read_bytes()
+
+
+def _write_large_wav(path: Path, *, data_bytes: int = 5 * 1024 * 1024) -> None:
+    with wave.open(str(path), "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(22050)
+        target.writeframes(b"\0" * (data_bytes - data_bytes % 2))
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _ogg() -> bytes:
@@ -186,6 +215,51 @@ def _asset(
             }
         ],
     }
+
+
+class _ByteReadingRaylib:
+    def __init__(
+        self,
+        *,
+        unload_fails: bool = False,
+        close_audio_fails: bool = False,
+    ) -> None:
+        self.loaded_payloads: list[bytes] = []
+        self.unload_fails = unload_fails
+        self.close_audio_fails = close_audio_fails
+        self.close_audio_calls = 0
+        self.unload_sound_calls = 0
+
+    def init_audio_device(self) -> None:
+        pass
+
+    def is_audio_device_ready(self) -> bool:
+        return True
+
+    def load_sound(self, path: str) -> object:
+        self.loaded_payloads.append(Path(path).read_bytes())
+        return object()
+
+    def is_sound_valid(self, value: object) -> bool:
+        return True
+
+    def unload_sound(self, value: object) -> None:
+        self.unload_sound_calls += 1
+        if self.unload_fails:
+            raise RuntimeError("native unload failed")
+
+    def close_audio_device(self) -> None:
+        self.close_audio_calls += 1
+        if self.close_audio_fails:
+            raise RuntimeError("audio close failed")
+
+
+class _WinFunction:
+    def __init__(self, result: object) -> None:
+        self.result = result
+
+    def __call__(self, *args: object) -> object:
+        return self.result
 
 
 class DirectMediaValidationTests(unittest.TestCase):
@@ -553,6 +627,1501 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
 
         self.assertEqual("neutral_sfx", loaded.assets[0].id)
         self.assertEqual(1, capture_payload.call_count)
+        loaded.close()
+
+    def test_copy_seam_uses_validated_capture_after_source_replacement(self) -> None:
+        resource = self.root / "tone.wav"
+        original = _wav()
+        replacement = original + b"substituted"
+        resource.write_bytes(original)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    "tone.wav",
+                    "audio/wav",
+                    hashlib.sha256(original).hexdigest(),
+                )
+            ],
+        )
+        original_copy = media_module._copy_capture_to_descriptor
+
+        def replace_then_copy(*args: object, **kwargs: object) -> None:
+            resource.write_bytes(replacement)
+            original_copy(*args, **kwargs)
+
+        with patch(
+            "isoworld.content.media._copy_capture_to_descriptor",
+            side_effect=replace_then_copy,
+        ):
+            loaded = load_renderpack(renderpack, self.pack)
+
+        item = loaded.assets[0].files[0]
+        self.assertEqual(original, loaded.resolve_file(item).read_bytes())
+        self.assertEqual(hashlib.sha256(original).hexdigest(), item.sha256)
+        loaded.close()
+
+    def test_raylib_reads_snapshot_after_source_replacement_and_deletion(self) -> None:
+        resource = self.root / "tone.wav"
+        original = _wav()
+        resource.write_bytes(original)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    "tone.wav",
+                    "audio/wav",
+                    hashlib.sha256(original).hexdigest(),
+                )
+            ],
+        )
+        snapshot_parent = self.root / "snapshots"
+        snapshot_parent.mkdir()
+        with patch.object(tempfile, "tempdir", str(snapshot_parent)):
+            loaded = load_renderpack(renderpack, self.pack)
+            resource.write_bytes(original + b"replacement")
+            resource.unlink()
+            fake = _ByteReadingRaylib(unload_fails=True)
+            registry = RaylibAssetRegistry(fake, loaded)
+            registry.load()
+            with self.assertRaisesRegex(ResourceError, "unload sound neutral_sfx/0"):
+                registry.close()
+            self.assertEqual(1, len(registry.sounds["neutral_sfx"]))
+            fake.unload_fails = False
+            registry.close()
+
+            self.assertEqual([original], fake.loaded_payloads)
+            self.assertTrue(loaded.root.exists(), "the registry must only borrow the renderpack")
+            loaded.close()
+        self.assertEqual([], list(snapshot_parent.iterdir()))
+
+    def test_snapshot_rejects_in_place_byte_change_before_fake_raylib_load(self) -> None:
+        resource = self.root / "tone.wav"
+        original = _wav()
+        resource.write_bytes(original)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    resource.name,
+                    "audio/wav",
+                    hashlib.sha256(original).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        item = loaded.assets[0].files[0]
+        snapshot = loaded.resolve_file(item)
+        original_state = snapshot.stat()
+        if os.name == "posix":
+            self.assertEqual(0o400, snapshot.stat().st_mode & 0o777)
+
+        os.chmod(snapshot, 0o600)
+        changed = bytes((original[0] ^ 0xFF,)) + original[1:]
+        snapshot.write_bytes(changed)
+        fake = _ByteReadingRaylib()
+        registry = RaylibAssetRegistry(fake, loaded)
+        with self.assertRaisesRegex(ResourceError, "Snapshot file state changed"):
+            registry.load()
+        self.assertEqual([], fake.loaded_payloads)
+
+        snapshot.write_bytes(original)
+        os.utime(
+            snapshot,
+            ns=(original_state.st_atime_ns, original_state.st_mtime_ns),
+        )
+        os.chmod(snapshot, 0o400 if os.name == "posix" else stat.S_IREAD)
+        loaded.close()
+
+    def test_registry_surfaces_audio_close_failure_and_retries_remaining_state(self) -> None:
+        resource = self.root / "tone.wav"
+        payload = _wav()
+        resource.write_bytes(payload)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    resource.name,
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        fake = _ByteReadingRaylib(close_audio_fails=True)
+        registry = RaylibAssetRegistry(fake, loaded)
+        registry.load()
+
+        with self.assertRaisesRegex(ResourceError, "close audio device: audio close failed"):
+            registry.close()
+        self.assertEqual({}, registry.sounds)
+        self.assertTrue(registry._audio_initialized)
+        self.assertTrue(loaded.root.exists(), "the registry must not close its renderpack")
+
+        fake.close_audio_fails = False
+        registry.close()
+        self.assertEqual(2, fake.close_audio_calls)
+        self.assertFalse(registry._audio_initialized)
+        loaded.close()
+
+    def test_registry_attempts_every_unload_and_retains_each_failed_handle(self) -> None:
+        first = self.root / "first.wav"
+        second = self.root / "second.wav"
+        payload = _wav()
+        first.write_bytes(payload)
+        second.write_bytes(payload)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "first_sfx",
+                    "sfx",
+                    "audio",
+                    first.name,
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                ),
+                _asset(
+                    "second_sfx",
+                    "sfx",
+                    "audio",
+                    second.name,
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                ),
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        fake = _ByteReadingRaylib(unload_fails=True)
+        registry = RaylibAssetRegistry(fake, loaded)
+        registry.load()
+
+        with self.assertRaisesRegex(ResourceError, "first_sfx/0") as caught:
+            registry.close()
+        self.assertIn("second_sfx/0", str(caught.exception))
+        self.assertEqual(2, fake.unload_sound_calls)
+        self.assertEqual({"first_sfx", "second_sfx"}, set(registry.sounds))
+        self.assertTrue(registry._audio_initialized)
+
+        fake.unload_fails = False
+        registry.close()
+        self.assertEqual(4, fake.unload_sound_calls)
+        self.assertEqual({}, registry.sounds)
+        loaded.close()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX privacy modes")
+    def test_snapshot_rejects_a_world_readable_sealed_file(self) -> None:
+        resource = self.root / "tone.wav"
+        payload = _wav()
+        resource.write_bytes(payload)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    resource.name,
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        item = loaded.assets[0].files[0]
+        snapshot = loaded.resolve_file(item)
+        os.chmod(snapshot, 0o644)
+        with self.assertRaisesRegex(RenderPackError, "state changed|not sealed and private"):
+            loaded.resolve_file(item)
+        os.chmod(snapshot, 0o400)
+        loaded.close()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX directory descriptor semantics")
+    def test_creation_stays_in_owned_directory_when_visible_parent_is_replaced(self) -> None:
+        source_root = self.root / "source"
+        source = source_root / "audio/tone.wav"
+        source.parent.mkdir(parents=True)
+        source.write_bytes(_wav())
+        attacker = self.root / "attacker"
+        attacker.mkdir()
+        owner = ResourceSnapshotOwner()
+        original_open = snapshot_module._open_new_file
+        swapped: dict[str, Path] = {}
+
+        def replace_parent_then_open(**kwargs: object) -> int:
+            parent = Path(kwargs["parent_path"])
+            moved = parent.with_name(f"{parent.name}-owned")
+            parent.rename(moved)
+            parent.symlink_to(attacker, target_is_directory=True)
+            swapped.update(parent=parent, moved=moved)
+            return original_open(**kwargs)
+
+        with (
+            patch.object(
+                snapshot_module,
+                "_open_new_file",
+                side_effect=replace_parent_then_open,
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "directory"),
+        ):
+            owner.materialize(
+                source_root,
+                PurePosixPath("audio/tone.wav"),
+                "audio/wav",
+                limit=1024 * 1024,
+            )
+
+        self.assertFalse((attacker / "tone.wav").exists())
+        self.assertFalse((swapped["moved"] / "tone.wav").exists())
+        swapped["parent"].unlink()
+        swapped["moved"].rename(swapped["parent"])
+        owner.close()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX symlink semantics")
+    def test_intermediate_symlink_to_moved_owned_directory_is_rejected(self) -> None:
+        resource = self.root / "audio/tone.wav"
+        resource.parent.mkdir()
+        payload = _wav()
+        resource.write_bytes(payload)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    "audio/tone.wav",
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        owned_parent = loaded.root / "audio"
+        moved_parent = loaded.root / "audio-owned"
+        owned_parent.rename(moved_parent)
+        owned_parent.symlink_to(moved_parent.name, target_is_directory=True)
+
+        with self.assertRaisesRegex(RenderPackError, "no longer a directory"):
+            loaded.resolve_file(loaded.assets[0].files[0])
+        with self.assertRaises(RenderPackError):
+            loaded.close()
+        self.assertTrue(owned_parent.is_symlink())
+        owner = loaded._snapshot_owner
+        assert owner is not None
+        self.assertFalse(owner.closed)
+
+        owned_parent.unlink()
+        moved_parent.rename(owned_parent)
+        loaded.close()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX no-replace cleanup claims")
+    def test_file_cleanup_claim_never_deletes_a_replacement_and_is_retryable(self) -> None:
+        resource = self.root / "tone.wav"
+        payload = _wav()
+        resource.write_bytes(payload)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    resource.name,
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        original_claim = snapshot_module._claim_entry
+        seam: dict[str, Path] = {}
+
+        def replace_file_at_claim(**kwargs: object) -> None:
+            parent = Path(kwargs["parent_path"])
+            source_name = str(kwargs["source_name"])
+            if not bool(kwargs["directory"]) and not seam:
+                source = parent / source_name
+                moved = parent / f"{source_name}.owned"
+                source.rename(moved)
+                source.write_bytes(b"foreign replacement")
+                seam.update(source=source, moved=moved)
+            original_claim(**kwargs)
+
+        with (
+            patch.object(
+                snapshot_module,
+                "_claim_entry",
+                side_effect=replace_file_at_claim,
+            ),
+            self.assertRaisesRegex(RenderPackError, "identity changed before cleanup"),
+        ):
+            loaded.close()
+
+        self.assertEqual(b"foreign replacement", seam["source"].read_bytes())
+        owner = loaded._snapshot_owner
+        assert owner is not None
+        self.assertFalse(owner.closed)
+        seam["source"].unlink()
+        seam["moved"].rename(seam["source"])
+        loaded.close()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX no-replace cleanup claims")
+    def test_root_cleanup_claim_never_deletes_a_replacement_and_is_retryable(self) -> None:
+        resource = self.root / "tone.wav"
+        payload = _wav()
+        resource.write_bytes(payload)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    resource.name,
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        original_claim = snapshot_module._claim_entry
+        seam: dict[str, Path] = {}
+
+        def replace_root_at_claim(**kwargs: object) -> None:
+            parent = Path(kwargs["parent_path"])
+            source_name = str(kwargs["source_name"])
+            if bool(kwargs["directory"]) and parent == loaded.root.parent and not seam:
+                source = parent / source_name
+                moved = parent / f"{source_name}-owned"
+                source.rename(moved)
+                source.mkdir(mode=0o700)
+                seam.update(source=source, moved=moved)
+            original_claim(**kwargs)
+
+        with (
+            patch.object(
+                snapshot_module,
+                "_claim_entry",
+                side_effect=replace_root_at_claim,
+            ),
+            self.assertRaisesRegex(RenderPackError, "identity changed before cleanup"),
+        ):
+            loaded.close()
+
+        self.assertTrue(seam["source"].is_dir())
+        owner = loaded._snapshot_owner
+        assert owner is not None
+        self.assertFalse(owner.closed)
+        seam["source"].rmdir()
+        seam["moved"].rename(seam["source"])
+        loaded.close()
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows raw-handle semantics")
+    def test_windows_lock_closes_raw_handle_and_preserves_validation_and_close_errors(
+        self,
+    ) -> None:
+        kernel32 = SimpleNamespace(CreateFileW=_WinFunction(321))
+        validation_error = ResourceSnapshotError("injected attribute validation failure")
+        close_error = ResourceSnapshotError("injected raw handle close failure")
+
+        with (
+            patch.object(
+                snapshot_module.ctypes,
+                "WinDLL",
+                create=True,
+                return_value=kernel32,
+            ),
+            patch.object(
+                snapshot_module,
+                "_windows_attributes",
+                side_effect=validation_error,
+            ),
+            patch.object(
+                snapshot_module,
+                "_windows_close_handle",
+                side_effect=close_error,
+            ) as close_handle,
+            self.assertRaises(ResourceSnapshotError) as caught,
+        ):
+            snapshot_module._windows_lock_directory(Path("mocked-windows-directory"))
+
+        close_handle.assert_called_once_with(321)
+        self.assertIs(validation_error, caught.exception.__cause__)
+        self.assertIn("attribute validation failure", str(caught.exception))
+        self.assertIn("raw handle close failure", str(caught.exception))
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows CreateDirectory semantics")
+    def test_windows_directory_collisions_are_normalized_for_allocation_retry(self) -> None:
+        for error in (80, 183):
+            with self.subTest(error=error):
+                advapi32 = SimpleNamespace(
+                    ConvertStringSecurityDescriptorToSecurityDescriptorW=_WinFunction(1)
+                )
+                kernel32 = SimpleNamespace(
+                    CreateDirectoryW=_WinFunction(0),
+                    LocalFree=_WinFunction(None),
+                )
+                with (
+                    patch.object(
+                        snapshot_module.ctypes,
+                        "WinDLL",
+                        create=True,
+                        side_effect=[advapi32, kernel32],
+                    ),
+                    patch.object(
+                        snapshot_module.ctypes,
+                        "get_last_error",
+                        create=True,
+                        return_value=error,
+                    ),
+                    patch.object(
+                        snapshot_module.ctypes,
+                        "FormatError",
+                        create=True,
+                        side_effect=lambda value: f"winerror {value}",
+                    ),
+                    patch.object(
+                        snapshot_module,
+                        "_windows_current_user_sid_string",
+                        return_value="S-1-5-21-test",
+                    ),
+                    self.assertRaises(FileExistsError) as caught,
+                ):
+                    snapshot_module._windows_create_private_directory(Path("mocked-collision"))
+
+                self.assertEqual(error, caught.exception.errno)
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows reopen semantics")
+    def test_windows_reopen_closes_pending_and_registered_handles_on_identity_failure(
+        self,
+    ) -> None:
+        owner = ResourceSnapshotOwner()
+        owner._ensure_parent(PurePosixPath("audio/tone.wav"))
+        root_info = owner._active_root.lstat()
+        validation_error = OSError("injected reopened identity failure")
+
+        with (
+            patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(
+                snapshot_module,
+                "_windows_lock_directory",
+                side_effect=[401, 402],
+            ),
+            patch.object(Path, "lstat", side_effect=[root_info, validation_error]),
+            patch.object(
+                snapshot_module,
+                "_windows_close_handle",
+                side_effect=[
+                    ResourceSnapshotError("injected pending handle close failure"),
+                    None,
+                ],
+            ) as close_handle,
+            self.assertRaises(ResourceSnapshotError) as caught,
+        ):
+            owner._reopen_windows_directory_handles()
+
+        self.assertEqual([((402,), {}), ((401,), {})], close_handle.call_args_list)
+        self.assertIs(validation_error, caught.exception.__cause__)
+        self.assertIn("reopened identity failure", str(caught.exception))
+        self.assertIn("pending handle close failure", str(caught.exception))
+        self.assertEqual({PurePosixPath("audio"): 402}, owner._directory_handles)
+        owner._directory_handles.clear()
+        owner.close()
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows partial-handle recovery")
+    def test_windows_reopen_reuses_partial_root_handle_without_leaking_it(self) -> None:
+        owner = ResourceSnapshotOwner()
+        owner._ensure_parent(PurePosixPath("audio/tone.wav"))
+        root_relative = PurePosixPath(".")
+        child_relative = PurePosixPath("audio")
+        owner._directory_handles = {root_relative: 501}
+        root_info = owner._active_root.lstat()
+        child_info = (owner._active_root / "audio").lstat()
+
+        with (
+            patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(
+                snapshot_module,
+                "_windows_lock_directory",
+                return_value=502,
+            ) as lock_directory,
+            patch.object(Path, "lstat", side_effect=[root_info, child_info]),
+            patch.object(snapshot_module, "_windows_close_handle") as close_handle,
+        ):
+            owner._reopen_windows_directory_handles()
+
+        self.assertEqual(
+            {root_relative: 501, child_relative: 502},
+            owner._directory_handles,
+        )
+        lock_directory.assert_called_once_with(owner._active_root / "audio")
+        close_handle.assert_not_called()
+        owner._directory_handles.clear()
+        owner.close()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX directory descriptor semantics")
+    def test_root_creation_failure_closes_parent_descriptor_without_finalizer_warning(
+        self,
+    ) -> None:
+        snapshot_parent = self.root / "failed-root-parent"
+        snapshot_parent.mkdir()
+        opened: list[int] = []
+        original_open_parent = ResourceSnapshotOwner._open_absolute_directory
+        owner = object.__new__(ResourceSnapshotOwner)
+
+        def capture_parent(path: Path) -> int:
+            descriptor = original_open_parent(path)
+            opened.append(descriptor)
+            return descriptor
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with (
+                patch.object(tempfile, "tempdir", str(snapshot_parent)),
+                patch.object(
+                    ResourceSnapshotOwner,
+                    "_open_absolute_directory",
+                    side_effect=capture_parent,
+                ),
+                patch.object(
+                    snapshot_module.os,
+                    "mkdir",
+                    side_effect=OSError("injected root creation failure"),
+                ),
+                self.assertRaisesRegex(OSError, "root creation failure"),
+            ):
+                owner.__init__()
+
+            self.assertTrue(owner.closed)
+            self.assertEqual(1, len(opened))
+            with self.assertRaises(OSError):
+                os.fstat(opened[0])
+            del owner
+            gc.collect()
+
+        self.assertFalse(
+            any("finalize runtime resource snapshot" in str(item.message) for item in caught)
+        )
+        self.assertEqual([], list(snapshot_parent.iterdir()))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX directory descriptor semantics")
+    def test_root_identity_failure_closes_parent_descriptor_without_finalizer_warning(
+        self,
+    ) -> None:
+        snapshot_parent = self.root / "failed-identity-parent"
+        snapshot_parent.mkdir()
+        opened: list[int] = []
+        original_open_parent = ResourceSnapshotOwner._open_absolute_directory
+        original_stat = snapshot_module.os.stat
+        owner = object.__new__(ResourceSnapshotOwner)
+
+        def capture_parent(path: Path) -> int:
+            descriptor = original_open_parent(path)
+            opened.append(descriptor)
+            return descriptor
+
+        def fail_root_identity(path: object, *args: object, **kwargs: object) -> os.stat_result:
+            if str(path).startswith("isoworld-renderpack-") and kwargs.get("dir_fd") in opened:
+                raise OSError("injected root identity failure")
+            return original_stat(path, *args, **kwargs)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with (
+                patch.object(tempfile, "tempdir", str(snapshot_parent)),
+                patch.object(
+                    ResourceSnapshotOwner,
+                    "_open_absolute_directory",
+                    side_effect=capture_parent,
+                ),
+                patch.object(snapshot_module.os, "stat", side_effect=fail_root_identity),
+                self.assertRaisesRegex(ResourceSnapshotError, "identity was not acquired"),
+            ):
+                owner.__init__()
+
+            self.assertTrue(owner.closed)
+            self.assertEqual(1, len(opened))
+            with self.assertRaises(OSError):
+                os.fstat(opened[0])
+            del owner
+            gc.collect()
+
+        self.assertFalse(
+            any("finalize runtime resource snapshot" in str(item.message) for item in caught)
+        )
+        leftovers = list(snapshot_parent.iterdir())
+        self.assertEqual(1, len(leftovers))
+        leftovers[0].rmdir()
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows parent-handle semantics")
+    def test_windows_root_creation_failure_closes_parent_handle(self) -> None:
+        snapshot_parent = self.root / "failed-windows-root-parent"
+        snapshot_parent.mkdir()
+        owner = object.__new__(ResourceSnapshotOwner)
+
+        with (
+            patch.object(tempfile, "tempdir", str(snapshot_parent)),
+            patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(Path, "resolve", return_value=snapshot_parent),
+            patch.object(snapshot_module, "_windows_lock_directory", return_value=777),
+            patch.object(
+                snapshot_module,
+                "_windows_create_private_directory",
+                side_effect=OSError("injected Windows root creation failure"),
+            ),
+            patch.object(snapshot_module, "_windows_close_handle") as close_handle,
+            self.assertRaisesRegex(OSError, "Windows root creation failure"),
+        ):
+            owner.__init__()
+
+        self.assertTrue(owner.closed)
+        close_handle.assert_called_once_with(777)
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows initialization retry")
+    def test_windows_parent_handle_close_failure_remains_retryable_until_closed(self) -> None:
+        snapshot_parent = self.root / "failed-windows-parent-close"
+        snapshot_parent.mkdir()
+        owner = object.__new__(ResourceSnapshotOwner)
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with (
+                patch.object(tempfile, "tempdir", str(snapshot_parent)),
+                patch.object(snapshot_module.os, "name", "nt"),
+                patch.object(Path, "resolve", return_value=snapshot_parent),
+                patch.object(
+                    snapshot_module,
+                    "_windows_lock_directory",
+                    return_value=778,
+                ),
+                patch.object(
+                    snapshot_module,
+                    "_windows_create_private_directory",
+                    side_effect=OSError("injected Windows root creation failure"),
+                ),
+                patch.object(
+                    snapshot_module,
+                    "_windows_close_handle",
+                    side_effect=[
+                        ResourceSnapshotError("injected Windows parent handle close failure"),
+                        None,
+                    ],
+                ) as close_handle,
+            ):
+                with self.assertRaisesRegex(
+                    ResourceSnapshotError,
+                    "Windows parent handle close failure",
+                ):
+                    owner.__init__()
+
+                self.assertFalse(owner.closed)
+                self.assertTrue(owner._root_removed)
+                self.assertEqual(778, owner._parent_handle)
+                owner.close()
+                self.assertTrue(owner.closed)
+                self.assertIsNone(owner._parent_handle)
+                self.assertEqual(
+                    [((778,), {}), ((778,), {})],
+                    close_handle.call_args_list,
+                )
+            del owner
+            gc.collect()
+
+        self.assertFalse(
+            any("finalize runtime resource snapshot" in str(item.message) for item in caught)
+        )
+
+    @unittest.skipUnless(os.name == "posix", "POSIX directory descriptor semantics")
+    def test_new_directory_open_failure_rolls_back_provisional_linux_ownership(self) -> None:
+        owner = ResourceSnapshotOwner()
+        original_open = snapshot_module.os.open
+        root_descriptor = owner._directory_descriptors[PurePosixPath(".")]
+
+        def fail_new_directory_open(path: object, *args: object, **kwargs: object) -> int:
+            if path == "audio" and kwargs.get("dir_fd") == root_descriptor:
+                raise OSError("injected directory descriptor failure")
+            return original_open(path, *args, **kwargs)
+
+        with (
+            patch.object(
+                snapshot_module.os,
+                "open",
+                side_effect=fail_new_directory_open,
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "directory descriptor failure"),
+        ):
+            owner._ensure_parent(PurePosixPath("audio/tone.wav"))
+
+        relative = PurePosixPath("audio")
+        self.assertFalse((owner.root / "audio").exists())
+        self.assertNotIn(relative, owner._directories)
+        self.assertNotIn(relative, owner._directory_descriptors)
+        owner.close()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX partial ownership semantics")
+    def test_failed_partial_unlink_records_exact_inventory_for_close_retry(self) -> None:
+        owner = ResourceSnapshotOwner()
+        relative = PurePosixPath("partial.bin")
+        target, parent_relative, descriptor, identity = owner._open_target(relative)
+        os.write(descriptor, b"owned partial bytes")
+        os.close(descriptor)
+        original_unlink = snapshot_module.os.unlink
+        failed = False
+
+        def fail_first_claim_unlink(path: object, *args: object, **kwargs: object) -> None:
+            nonlocal failed
+            if not failed and str(path).startswith(".isoworld-delete-"):
+                failed = True
+                raise OSError("injected partial unlink failure")
+            original_unlink(path, *args, **kwargs)
+
+        with (
+            patch.object(snapshot_module.os, "unlink", side_effect=fail_first_claim_unlink),
+            self.assertRaisesRegex(ResourceSnapshotError, "partial unlink failure"),
+        ):
+            owner._remove_partial(parent_relative, relative.name, identity)
+
+        self.assertTrue(failed)
+        self.assertEqual(b"owned partial bytes", target.read_bytes())
+        self.assertEqual(0o400, stat.S_IMODE(target.stat().st_mode))
+        self.assertIn(relative, owner._files)
+        owner.close()
+        self.assertTrue(owner.closed)
+        self.assertFalse(owner.root.exists())
+
+    @unittest.skipUnless(os.name == "posix", "POSIX partial ownership semantics")
+    def test_failed_partial_claim_records_restored_target_for_close_retry(self) -> None:
+        owner = ResourceSnapshotOwner()
+        relative = PurePosixPath("partial-claim.bin")
+        target, parent_relative, descriptor, identity = owner._open_target(relative)
+        os.write(descriptor, b"claim retry bytes")
+        os.close(descriptor)
+
+        with (
+            patch.object(
+                snapshot_module,
+                "_claim_entry",
+                side_effect=ResourceSnapshotError("injected partial claim failure"),
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "ownership was recorded for retry"),
+        ):
+            owner._remove_partial(parent_relative, relative.name, identity)
+
+        self.assertEqual(b"claim retry bytes", target.read_bytes())
+        self.assertEqual(0o400, stat.S_IMODE(target.stat().st_mode))
+        self.assertIn(relative, owner._files)
+        owner.close()
+        self.assertTrue(owner.closed)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX close ordering semantics")
+    def test_target_close_failure_registers_partial_before_combined_error(self) -> None:
+        owner = ResourceSnapshotOwner()
+        relative = PurePosixPath("close-failure.bin")
+        original_entry_stat = owner._entry_stat
+        original_close = snapshot_module.os.close
+        stat_calls = 0
+        close_failures = 0
+
+        def fail_first_entry_stat(
+            parent_relative: PurePosixPath,
+            name: str,
+        ) -> os.stat_result:
+            nonlocal stat_calls
+            stat_calls += 1
+            if stat_calls == 1:
+                raise ResourceSnapshotError("injected target identity validation failure")
+            return original_entry_stat(parent_relative, name)
+
+        def close_then_fail_twice(descriptor: int) -> None:
+            nonlocal close_failures
+            original_close(descriptor)
+            if close_failures < 2:
+                close_failures += 1
+                raise OSError("injected target descriptor close failure")
+
+        with (
+            patch.object(
+                ResourceSnapshotOwner,
+                "_entry_stat",
+                side_effect=fail_first_entry_stat,
+            ),
+            patch.object(snapshot_module.os, "close", side_effect=close_then_fail_twice),
+            self.assertRaises(ResourceSnapshotError) as caught,
+        ):
+            owner._open_target(relative)
+
+        self.assertEqual(2, close_failures)
+        self.assertIn("target descriptor close failure", str(caught.exception))
+        self.assertIn("partial ownership was recorded", str(caught.exception))
+        self.assertIn(relative, owner._files)
+        target = owner._active_root / relative
+        self.assertEqual(0o400, stat.S_IMODE(target.stat().st_mode))
+        owner.close()
+        self.assertTrue(owner.closed)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX materialization reconciliation")
+    def test_materialize_validation_and_close_failure_tracks_partial_for_retry(self) -> None:
+        owner = ResourceSnapshotOwner()
+        relative = PurePosixPath("validation-close.wav")
+        original_close = snapshot_module.os.close
+        close_failed = False
+
+        def write_then_fail_validation(
+            *args: object,
+            **kwargs: object,
+        ) -> object:
+            descriptor = int(kwargs["materialize_descriptor"])
+            os.write(descriptor, b"identity-bound partial")
+            raise MediaValidationError("injected material validation failure")
+
+        def close_then_fail_once(descriptor: int) -> None:
+            nonlocal close_failed
+            original_close(descriptor)
+            if not close_failed:
+                close_failed = True
+                raise OSError("injected material target close failure")
+
+        with (
+            patch.object(
+                snapshot_module,
+                "read_validated_resource",
+                side_effect=write_then_fail_validation,
+            ),
+            patch.object(snapshot_module.os, "close", side_effect=close_then_fail_once),
+            self.assertRaises(ResourceSnapshotError) as caught,
+        ):
+            owner.materialize(
+                self.root,
+                relative,
+                "audio/wav",
+                limit=1024,
+            )
+
+        self.assertTrue(close_failed)
+        self.assertIn("material validation failure", str(caught.exception))
+        self.assertIn("material target close failure", str(caught.exception))
+        self.assertIn("ownership was recorded", str(caught.exception))
+        self.assertIn(relative, owner._files)
+        target = owner._active_root / relative
+        self.assertTrue(target.is_file())
+        self.assertEqual(b"identity-bound partial", target.read_bytes())
+        owner.close()
+        self.assertTrue(owner.closed)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX close ordering semantics")
+    def test_nested_directory_close_failure_retains_retryable_ownership(self) -> None:
+        owner = ResourceSnapshotOwner()
+        relative = PurePosixPath("audio")
+        owner._ensure_parent(relative / "tone.wav")
+        descriptor = owner._directory_descriptors[relative]
+
+        with (
+            patch.object(
+                snapshot_module.os,
+                "close",
+                side_effect=OSError("injected nested descriptor close failure"),
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "nested descriptor close failure"),
+        ):
+            owner._remove_owned_directory(relative, owner._directories[relative])
+
+        self.assertTrue((owner._active_root / relative).is_dir())
+        self.assertEqual(descriptor, owner._directory_descriptors[relative])
+        self.assertIn(relative, owner._directories)
+        owner.close()
+        self.assertTrue(owner.closed)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX close ordering semantics")
+    def test_root_handle_close_failure_does_not_remove_or_forget_root(self) -> None:
+        owner = ResourceSnapshotOwner()
+        root_relative = PurePosixPath(".")
+        descriptor = owner._directory_descriptors[root_relative]
+
+        with (
+            patch.object(
+                snapshot_module.os,
+                "close",
+                side_effect=OSError("injected root descriptor close failure"),
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "root descriptor close failure"),
+        ):
+            owner.close()
+
+        self.assertFalse(owner.closed)
+        self.assertFalse(owner._root_removed)
+        self.assertTrue(owner._active_root.is_dir())
+        self.assertEqual(descriptor, owner._directory_descriptors[root_relative])
+        self.assertIn(root_relative, owner._directories)
+        owner.close()
+        self.assertTrue(owner.closed)
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows close ordering semantics")
+    def test_windows_root_handle_close_failure_retains_retryable_ownership(self) -> None:
+        owner = ResourceSnapshotOwner()
+        root_relative = PurePosixPath(".")
+        owner._directory_handles[root_relative] = 601
+
+        with (
+            patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(ResourceSnapshotOwner, "_check_open", return_value=None),
+            patch.object(ResourceSnapshotOwner, "_scan_inventory", return_value=None),
+            patch.object(ResourceSnapshotOwner, "_claim_root", return_value=None),
+            patch.object(ResourceSnapshotOwner, "_validate_directory", return_value=None),
+            patch.object(
+                snapshot_module,
+                "_windows_close_handle",
+                side_effect=ResourceSnapshotError("injected Windows root handle close failure"),
+            ) as close_handle,
+            self.assertRaisesRegex(
+                ResourceSnapshotError,
+                "Windows root handle close failure",
+            ),
+        ):
+            owner.close()
+
+        close_handle.assert_called_once_with(601)
+        self.assertFalse(owner.closed)
+        self.assertFalse(owner._root_removed)
+        self.assertTrue(owner._active_root.is_dir())
+        self.assertEqual(601, owner._directory_handles[root_relative])
+        self.assertIn(root_relative, owner._directories)
+        owner._directory_handles.pop(root_relative)
+        owner.close()
+        self.assertTrue(owner.closed)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX close ordering semantics")
+    def test_parent_handle_close_failure_finalizes_on_retry_after_root_removal(self) -> None:
+        owner = ResourceSnapshotOwner()
+        root_relative = PurePosixPath(".")
+        parent_descriptor = owner._parent_descriptor
+        assert parent_descriptor is not None
+        original_close = snapshot_module.os.close
+        parent_failed = False
+
+        def fail_parent_once(descriptor: int) -> None:
+            nonlocal parent_failed
+            if descriptor == parent_descriptor and not parent_failed:
+                parent_failed = True
+                raise OSError("injected parent descriptor close failure")
+            original_close(descriptor)
+
+        with (
+            patch.object(snapshot_module.os, "close", side_effect=fail_parent_once),
+            self.assertRaisesRegex(ResourceSnapshotError, "parent descriptor close failure"),
+        ):
+            owner.close()
+
+        self.assertTrue(parent_failed)
+        self.assertFalse(owner.closed)
+        self.assertTrue(owner._root_removed)
+        self.assertFalse(owner._active_root.exists())
+        self.assertEqual(parent_descriptor, owner._parent_descriptor)
+        self.assertIn(root_relative, owner._directories)
+        owner.close()
+        self.assertTrue(owner.closed)
+        self.assertIsNone(owner._parent_descriptor)
+
+    @unittest.skipUnless(os.name == "posix", "simulated unsupported POSIX platform")
+    def test_darwin_fails_before_allocating_an_unclosable_snapshot(self) -> None:
+        with (
+            patch.object(snapshot_module.sys, "platform", "darwin"),
+            self.assertRaisesRegex(
+                ResourceSnapshotError,
+                "support Linux and Windows",
+            ),
+        ):
+            ResourceSnapshotOwner()
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows ownership path")
+    def test_new_directory_handle_failure_rolls_back_provisional_windows_ownership(self) -> None:
+        owner = ResourceSnapshotOwner()
+
+        def create_directory(path: Path) -> None:
+            path.mkdir(mode=0o700)
+
+        with (
+            patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(
+                ResourceSnapshotOwner,
+                "_validate_directory",
+                return_value=None,
+            ),
+            patch.object(
+                snapshot_module,
+                "_windows_create_private_directory",
+                side_effect=create_directory,
+            ),
+            patch.object(
+                snapshot_module,
+                "_windows_lock_directory",
+                side_effect=ResourceSnapshotError("injected Windows handle failure"),
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "Windows handle failure"),
+        ):
+            owner._ensure_parent(PurePosixPath("audio/tone.wav"))
+
+        relative = PurePosixPath("audio")
+        self.assertFalse((owner.root / "audio").exists())
+        self.assertNotIn(relative, owner._directories)
+        self.assertNotIn(relative, owner._directory_handles)
+        owner.close()
+
+    @unittest.skipUnless(os.name == "posix", "POSIX initialization cleanup semantics")
+    def test_failed_initialization_root_removal_rolls_back_and_retries(self) -> None:
+        snapshot_parent = self.root / "initialization-snapshots"
+        snapshot_parent.mkdir()
+        owner = object.__new__(ResourceSnapshotOwner)
+        original_rmdir = snapshot_module.os.rmdir
+        rmdir_calls = 0
+
+        def fail_first_rmdir(*args: object, **kwargs: object) -> None:
+            nonlocal rmdir_calls
+            rmdir_calls += 1
+            if rmdir_calls == 1:
+                raise OSError("injected root removal failure")
+            original_rmdir(*args, **kwargs)
+
+        with (
+            patch.object(tempfile, "tempdir", str(snapshot_parent)),
+            patch.object(
+                snapshot_module,
+                "_private_directory",
+                side_effect=ResourceSnapshotError("injected initialization failure"),
+            ),
+            patch.object(
+                snapshot_module.os,
+                "rmdir",
+                side_effect=fail_first_rmdir,
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "ownership was restored"),
+        ):
+            owner.__init__()
+
+        self.assertFalse(owner.closed)
+        self.assertTrue(owner.root.is_dir())
+        self.assertTrue(owner._active_root_name.startswith("isoworld-renderpack-"))
+        self.assertIn(PurePosixPath("."), owner._directory_descriptors)
+        owner.close()
+        self.assertTrue(owner.closed)
+        self.assertEqual([], list(snapshot_parent.iterdir()))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX initialization close semantics")
+    def test_failed_initialization_parent_close_failure_remains_finalizable(self) -> None:
+        snapshot_parent = self.root / "initialization-parent-close"
+        snapshot_parent.mkdir()
+        owner = object.__new__(ResourceSnapshotOwner)
+        original_close = snapshot_module.os.close
+        parent_close_failed = False
+
+        def fail_parent_once(descriptor: int) -> None:
+            nonlocal parent_close_failed
+            if descriptor == getattr(owner, "_parent_descriptor", None) and not parent_close_failed:
+                parent_close_failed = True
+                raise OSError("injected initialization parent close failure")
+            original_close(descriptor)
+
+        with (
+            patch.object(tempfile, "tempdir", str(snapshot_parent)),
+            patch.object(
+                snapshot_module,
+                "_private_directory",
+                side_effect=ResourceSnapshotError("injected initialization failure"),
+            ),
+            patch.object(snapshot_module.os, "close", side_effect=fail_parent_once),
+            self.assertRaisesRegex(
+                ResourceSnapshotError,
+                "initialization parent close failure",
+            ),
+        ):
+            owner.__init__()
+
+        root_relative = PurePosixPath(".")
+        self.assertTrue(parent_close_failed)
+        self.assertFalse(owner.closed)
+        self.assertTrue(owner._root_removed)
+        self.assertFalse(owner.root.exists())
+        self.assertIn(root_relative, owner._directories)
+        self.assertIsNotNone(owner._parent_descriptor)
+        owner.close()
+        self.assertTrue(owner.closed)
+        self.assertEqual([], list(snapshot_parent.iterdir()))
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows rollback semantics")
+    def test_windows_failed_unlink_restores_readonly_seal_before_retry(self) -> None:
+        resource = self.root / "tone.wav"
+        payload = _wav()
+        resource.write_bytes(payload)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    resource.name,
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        owner = loaded._snapshot_owner
+        assert owner is not None
+        owner._claim_root()
+        relative = PurePosixPath(resource.name)
+        record = owner._files[relative]
+
+        with (
+            patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(
+                ResourceSnapshotOwner,
+                "_validate_file",
+                return_value=record,
+            ),
+            patch.object(
+                snapshot_module,
+                "_validate_file_privacy",
+                return_value=None,
+            ),
+            patch.object(
+                Path,
+                "unlink",
+                side_effect=OSError("injected Windows unlink failure"),
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "Windows unlink failure"),
+        ):
+            owner._remove_owned_file(relative, record)
+
+        restored = owner._active_root / relative.name
+        self.assertTrue(restored.is_file())
+        self.assertEqual(0o400, stat.S_IMODE(restored.stat().st_mode))
+        self.assertIn(relative, owner._files)
+        loaded.close()
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows handle semantics")
+    def test_windows_directory_claim_failure_restores_stable_handle_for_retry(self) -> None:
+        resource = self.root / "audio/tone.wav"
+        resource.parent.mkdir()
+        payload = _wav()
+        resource.write_bytes(payload)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    "audio/tone.wav",
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        owner = loaded._snapshot_owner
+        assert owner is not None
+        owner._claim_root()
+        relative = PurePosixPath("audio")
+        identity = owner._directories[relative]
+        owner._directory_handles[relative] = 101
+
+        with (
+            patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(
+                ResourceSnapshotOwner,
+                "_validate_directory",
+                return_value=None,
+            ),
+            patch.object(snapshot_module, "_windows_close_handle") as close_handle,
+            patch.object(
+                snapshot_module,
+                "_windows_lock_directory",
+                return_value=202,
+            ),
+            patch.object(
+                snapshot_module,
+                "_claim_entry",
+                side_effect=ResourceSnapshotError("injected Windows claim failure"),
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "Windows claim failure"),
+        ):
+            owner._remove_owned_directory(relative, identity)
+
+        close_handle.assert_called_once_with(101)
+        self.assertEqual(202, owner._directory_handles[relative])
+        self.assertIn(relative, owner._directories)
+        owner._directory_handles.pop(relative)
+        loaded.close()
+
+    @unittest.skipUnless(os.name == "posix", "mocked Windows root-claim semantics")
+    def test_windows_root_reopen_failure_rolls_back_before_claim_commit(self) -> None:
+        owner = ResourceSnapshotOwner()
+        original_name = owner._active_root_name
+        reopen_calls = 0
+
+        def fail_then_reopen() -> None:
+            nonlocal reopen_calls
+            reopen_calls += 1
+            if reopen_calls == 1:
+                raise ResourceSnapshotError("injected root handle reopen failure")
+            owner._directory_handles = {
+                relative: 100 + index for index, relative in enumerate(owner._directories)
+            }
+
+        def reopen_all() -> None:
+            owner._directory_handles = {
+                relative: 200 + index for index, relative in enumerate(owner._directories)
+            }
+
+        with (
+            patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(
+                ResourceSnapshotOwner,
+                "_release_windows_directory_handles",
+                return_value=None,
+            ),
+            patch.object(
+                ResourceSnapshotOwner,
+                "_reopen_windows_directory_handles",
+                side_effect=fail_then_reopen,
+            ) as reopen,
+            self.assertRaisesRegex(ResourceSnapshotError, "root handle reopen failure"),
+        ):
+            owner._claim_root()
+
+        self.assertEqual(2, reopen.call_count)
+        self.assertEqual(original_name, owner._active_root_name)
+        self.assertFalse(owner._root_claimed)
+        self.assertTrue(owner._active_root.is_dir())
+
+        with (
+            patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(
+                ResourceSnapshotOwner,
+                "_release_windows_directory_handles",
+                return_value=None,
+            ),
+            patch.object(
+                ResourceSnapshotOwner,
+                "_reopen_windows_directory_handles",
+                side_effect=reopen_all,
+            ),
+            patch.object(ResourceSnapshotOwner, "_scan_inventory", return_value=None),
+        ):
+            owner._claim_root()
+
+        self.assertTrue(owner._root_claimed)
+        owner.close()
+
+    def test_large_snapshot_has_bounded_python_allocation(self) -> None:
+        resource = self.root / "large.wav"
+        _write_large_wav(resource)
+        digest = _sha256_file(resource)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    resource.name,
+                    "audio/wav",
+                    digest,
+                )
+            ],
+        )
+
+        original_capture = media_module._capture_descriptor
+
+        def reset_peak_then_capture(*args: object, **kwargs: object) -> object:
+            tracemalloc.reset_peak()
+            return original_capture(*args, **kwargs)
+
+        gc.collect()
+        tracemalloc.start()
+        try:
+            with patch(
+                "isoworld.content.media._capture_descriptor",
+                side_effect=reset_peak_then_capture,
+            ):
+                loaded = load_renderpack(renderpack, self.pack)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertLess(peak, 6 * 1024 * 1024)
+        self.assertEqual(digest, _sha256_file(loaded.resolve_file(loaded.assets[0].files[0])))
+        loaded.close()
+
+    def test_failure_and_success_lifecycles_leave_no_snapshot_entries(self) -> None:
+        snapshot_parent = self.root / "snapshots"
+        snapshot_parent.mkdir()
+        valid = _wav()
+
+        def renderpack_for(name: str, payload: bytes, digest: str) -> Path:
+            resource = self.root / name
+            resource.write_bytes(payload)
+            return _renderpack(
+                self.root,
+                self.pack,
+                [
+                    _asset(
+                        "neutral_sfx",
+                        "sfx",
+                        "audio",
+                        name,
+                        "audio/wav",
+                        digest,
+                    )
+                ],
+            )
+
+        with patch.object(tempfile, "tempdir", str(snapshot_parent)):
+            mismatch = renderpack_for("mismatch.wav", valid, "0" * 64)
+            with self.assertRaisesRegex(RenderPackError, "sha256 does not match"):
+                load_renderpack(mismatch, self.pack)
+            self.assertEqual([], list(snapshot_parent.iterdir()))
+
+            invalid = b"not a wav"
+            bad_signature = renderpack_for(
+                "invalid.wav",
+                invalid,
+                hashlib.sha256(invalid).hexdigest(),
+            )
+            with self.assertRaisesRegex(RenderPackError, "declared media type"):
+                load_renderpack(bad_signature, self.pack)
+            self.assertEqual([], list(snapshot_parent.iterdir()))
+
+            partial = renderpack_for(
+                "partial.wav",
+                valid,
+                hashlib.sha256(valid).hexdigest(),
+            )
+
+            def fail_partial_write(descriptor: int, payload: bytes) -> None:
+                os.write(descriptor, payload[:8])
+                raise OSError("injected partial snapshot write")
+
+            with (
+                patch(
+                    "isoworld.content.media._write_descriptor",
+                    side_effect=fail_partial_write,
+                ),
+                self.assertRaisesRegex(RenderPackError, "partial snapshot write"),
+            ):
+                load_renderpack(partial, self.pack)
+            self.assertEqual([], list(snapshot_parent.iterdir()))
+
+            success = renderpack_for(
+                "success.wav",
+                valid,
+                hashlib.sha256(valid).hexdigest(),
+            )
+            loaded = load_renderpack(success, self.pack)
+            self.assertEqual(1, len(list(snapshot_parent.iterdir())))
+            loaded.close()
+            loaded.close()
+            self.assertEqual([], list(snapshot_parent.iterdir()))
+
+            large = self.root / "signature.wav"
+            _write_large_wav(large)
+            self.assertTrue(media_signature_matches(large, "audio/wav"))
+            self.assertEqual([], list(snapshot_parent.iterdir()))
+
+    def test_root_identity_replacement_is_not_deleted(self) -> None:
+        resource = self.root / "tone.wav"
+        payload = _wav()
+        resource.write_bytes(payload)
+        renderpack = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    resource.name,
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack, self.pack)
+        original_root = loaded.root
+        moved_root = original_root.with_name(f"{original_root.name}-moved")
+        replacement_root = original_root
+        original_root.rename(moved_root)
+        replacement_root.mkdir()
+
+        with self.assertRaisesRegex(RenderPackError, "identity changed"):
+            loaded.close()
+        self.assertTrue(replacement_root.exists())
+        replacement_root.rmdir()
+        moved_root.rename(original_root)
+        loaded.close()
+        self.assertFalse(original_root.exists())
+
+    def test_owned_renderpack_copy_context_and_direct_construction_semantics(self) -> None:
+        resource = self.root / "tone.wav"
+        payload = _wav()
+        resource.write_bytes(payload)
+        renderpack_path = _renderpack(
+            self.root,
+            self.pack,
+            [
+                _asset(
+                    "neutral_sfx",
+                    "sfx",
+                    "audio",
+                    resource.name,
+                    "audio/wav",
+                    hashlib.sha256(payload).hexdigest(),
+                )
+            ],
+        )
+        loaded = load_renderpack(renderpack_path, self.pack)
+        self.assertIs(loaded, copy.copy(loaded))
+        self.assertIs(loaded, copy.deepcopy(loaded))
+        owned_root = loaded.root
+        with loaded as entered:
+            self.assertIs(loaded, entered)
+            self.assertTrue(entered.resolve_file(entered.assets[0].files[0]).exists())
+        self.assertFalse(owned_root.exists())
+
+        direct = RenderPack("world", "0" * 64, "1" * 64, self.root, (), ())
+        self.assertIs(direct, copy.copy(direct))
+        self.assertIs(direct, copy.deepcopy(direct))
+        direct.close()
+
+        finalized = load_renderpack(renderpack_path, self.pack)
+        finalized_root = finalized.root
+        del finalized
+        gc.collect()
+        self.assertFalse(finalized_root.exists())
 
 
 if __name__ == "__main__":

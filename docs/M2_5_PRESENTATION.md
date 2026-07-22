@@ -49,6 +49,9 @@ Audio is initialized only when the renderpack contains music or SFX. All loaded
 objects are cached and unloaded in reverse ownership order before the audio
 device and window close. Invalid raylib handles and clip rectangles fail during
 loading; partial-load failures still release every resource acquired earlier.
+The raylib registry borrows its renderpack. The application owns and closes the
+validated private resource snapshot only after native resources are unloaded;
+snapshot cleanup failures are surfaced rather than ignored.
 
 The renderer retains primitive fallbacks when no renderpack is supplied. This
 keeps headless/system development independent from the final art pipeline.

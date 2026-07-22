@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
@@ -49,6 +51,43 @@ from worldforge.world_lifecycle import (
     inspect_world_project,
     upgrade_legacy_world_project,
 )
+
+
+class _CliCleanupError(RuntimeError):
+    """Carries an owned CLI cleanup failure behind the primary operation error."""
+
+
+def _consume_owned_bundle(bundle: Any, body: Callable[[Any], str]) -> str:
+    primary_error: BaseException | None = None
+    message: str | None = None
+    try:
+        message = body(bundle)
+    except BaseException as exc:
+        primary_error = exc
+
+    cleanup_error: BaseException | None = None
+    try:
+        bundle.close()
+    except BaseException as exc:
+        cleanup_error = exc
+
+    if primary_error is not None:
+        if cleanup_error is not None:
+            combined = _CliCleanupError(f"bundle cleanup failed: {cleanup_error}")
+            primary_error.add_note(str(combined))
+            raise primary_error from combined
+        raise primary_error
+    if cleanup_error is not None:
+        raise cleanup_error
+    assert message is not None
+    return message
+
+
+def _cli_error_detail(error: BaseException) -> str:
+    detail = str(error)
+    if isinstance(error.__cause__, _CliCleanupError):
+        detail += f"; {error.__cause__}"
+    return detail
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -714,10 +753,14 @@ def main() -> int:
                 release_id=args.release_id,
                 licenses_directory=args.licenses,
             )
-            print(
-                f"OK bundle={bundle.root} world={bundle.world_id} "
-                f"release={bundle.release_id} hash={bundle.bundle_hash}"
+            message = _consume_owned_bundle(
+                bundle,
+                lambda owned: (
+                    f"OK bundle={owned.root} world={owned.world_id} "
+                    f"release={owned.release_id} hash={owned.bundle_hash}"
+                ),
             )
+            print(message)
             return 0
 
         if args.command == "verify-bundle":
@@ -725,10 +768,14 @@ def main() -> int:
                 args.bundle,
                 expected_bundle_hash=args.expected_hash,
             )
-            print(
-                f"OK bundle={bundle.root} world={bundle.world_id} "
-                f"release={bundle.release_id} hash={bundle.bundle_hash}"
+            message = _consume_owned_bundle(
+                bundle,
+                lambda owned: (
+                    f"OK bundle={owned.root} world={owned.world_id} "
+                    f"release={owned.release_id} hash={owned.bundle_hash}"
+                ),
             )
+            print(message)
             return 0
 
         if args.command == "import-bundle":
@@ -741,10 +788,14 @@ def main() -> int:
                 args.bundle,
                 expected_bundle_hash=args.expected_hash,
             )
-            print(
-                f"OK imported={imported} world={bundle.world_id} "
-                f"release={bundle.release_id} hash={bundle.bundle_hash}"
+            message = _consume_owned_bundle(
+                bundle,
+                lambda owned: (
+                    f"OK imported={imported} world={owned.world_id} "
+                    f"release={owned.release_id} hash={owned.bundle_hash}"
+                ),
             )
+            print(message)
             return 0
 
         if args.command == "check-compatibility":
@@ -819,10 +870,10 @@ def main() -> int:
         print(f"ERROR {exc}")
         return 1
     except (BundleError, GameScaffoldError, WorldPackError) as exc:
-        print(f"ERROR {exc}")
+        print(f"ERROR {_cli_error_detail(exc)}")
         return 1
     except ValueError as exc:
-        print(f"ERROR {exc}")
+        print(f"ERROR {_cli_error_detail(exc)}")
         return 1
 
 

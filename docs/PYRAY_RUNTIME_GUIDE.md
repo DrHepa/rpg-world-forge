@@ -373,8 +373,8 @@ The default suite remains headless and has no GPU/audio requirement:
 - test every imported world bundle independently and in the game catalog.
 
 A separate native smoke profile opens a window, loads the minimal processed
-pack, draws at least one frame, unloads it, and closes cleanly. Run it on
-Windows, Linux, and macOS release environments. Screenshot/golden tests are
+pack, draws at least one frame, unloads it, and closes cleanly. Run it on the
+supported Linux and Windows release environments. Screenshot/golden tests are
 useful only with a pinned platform/backend and explicit tolerance; they do not
 replace semantic render-plan tests. Raylib 6.0's memory/software backends are
 promising for future headless rendering, but the standard Python wheel's
@@ -382,7 +382,7 @@ supported path must be proven before making them a CI requirement.
 
 ## Packaging and platform policy
 
-Desktop Windows, Linux, and macOS are the M4 game-template targets. Use a
+Desktop Linux and Windows are the supported game-template targets. Use a
 `pyproject.toml`, the exact `raylib==6.0.1.0` dependency, and the committed
 `platform.lock.json`. The binding's
 official [installation table](https://electronstudio.github.io/raylib-python-cffi/README.html#installation)

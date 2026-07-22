@@ -6,7 +6,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from isoworld.content.loader import WorldPackError, load_worldpack
-from isoworld.content.renderpack import RenderPackError, load_renderpack
+from isoworld.content.models import WorldPack
+from isoworld.content.renderpack import RenderPack, RenderPackError, load_renderpack
 from isoworld.core.app import GameApp
 from isoworld.persistence import (
     PersistenceError,
@@ -17,6 +18,10 @@ from isoworld.persistence import (
     write_replay,
 )
 from isoworld.render.resources import ResourceError
+
+
+class _RuntimeCleanupError(ResourceError):
+    """Carries an owned-runtime cleanup failure behind the primary error."""
 
 
 def _nonnegative_ticks(value: str) -> int:
@@ -84,40 +89,94 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         pack = load_worldpack(args.pack)
         renderpack = load_renderpack(args.renderpack, pack) if args.renderpack is not None else None
-        if args.replay is not None:
-            actions, state = load_replay(args.replay, pack)
-            print(
-                f"world={pack.world_id} replay_actions={len(actions)} "
-                f"tick={state.tick} digest={state_digest(state)}"
-            )
-            return 0
-        initial = load_game(args.load_save, pack) if args.load_save is not None else None
-        app = GameApp(
-            pack,
-            initial,
-            args.save,
-            renderpack,
-            replay_recording=args.record_replay is not None,
-        )
-        if args.headless_ticks is not None:
-            state = app.run_headless(args.headless_ticks)
-            result = 0
-        else:
-            result = app.run()
-            state = app.simulation.state
-        if args.save_on_exit is not None:
-            save_game(args.save_on_exit, state, pack)
-        if args.record_replay is not None:
-            write_replay(args.record_replay, app.simulation.action_log, state, pack)
-        print(
-            f"world={pack.world_id} tick={state.tick} "
-            f"day={state.day} minute={state.minute_of_day} "
-            f"active_actor={state.active_actor_id} digest={state_digest(state)}"
-        )
+        result, success = _run_with_owned_renderpack(args, pack, renderpack)
+        print(success)
         return result
     except (WorldPackError, RenderPackError, PersistenceError, ResourceError) as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
+        detail = str(exc)
+        cleanup = exc.__cause__
+        if isinstance(cleanup, _RuntimeCleanupError) or (
+            isinstance(cleanup, ResourceError)
+            and str(cleanup).startswith("Runtime cleanup failed:")
+        ):
+            detail += f"; {cleanup}"
+        print(f"ERROR: {detail}", file=sys.stderr)
         return 1
+
+
+def _run_with_owned_renderpack(
+    args: argparse.Namespace,
+    pack: WorldPack,
+    renderpack: RenderPack | None,
+) -> tuple[int, str]:
+    primary_error: BaseException | None = None
+    result: tuple[int, str] | None = None
+    try:
+        result = _run_loaded(args, pack, renderpack)
+    except BaseException as exc:
+        primary_error = exc
+
+    cleanup_error: BaseException | None = None
+    if renderpack is not None:
+        try:
+            renderpack.close()
+        except BaseException as exc:
+            cleanup_error = exc
+
+    if primary_error is not None:
+        if cleanup_error is not None:
+            cleanup_parts: list[str] = []
+            if isinstance(primary_error.__cause__, ResourceError) and str(
+                primary_error.__cause__
+            ).startswith("Runtime cleanup failed:"):
+                cleanup_parts.append(str(primary_error.__cause__))
+            cleanup_parts.append(f"renderpack cleanup failed: {cleanup_error}")
+            combined = _RuntimeCleanupError("; ".join(cleanup_parts))
+            primary_error.add_note(str(combined))
+            raise primary_error from combined
+        raise primary_error
+    if cleanup_error is not None:
+        raise cleanup_error
+    assert result is not None
+    return result
+
+
+def _run_loaded(
+    args: argparse.Namespace,
+    pack: WorldPack,
+    renderpack: RenderPack | None,
+) -> tuple[int, str]:
+    if args.replay is not None:
+        actions, state = load_replay(args.replay, pack)
+        message = (
+            f"world={pack.world_id} replay_actions={len(actions)} "
+            f"tick={state.tick} digest={state_digest(state)}"
+        )
+        return 0, message
+    initial = load_game(args.load_save, pack) if args.load_save is not None else None
+    app = GameApp(
+        pack,
+        initial,
+        args.save,
+        renderpack,
+        replay_recording=args.record_replay is not None,
+    )
+    if args.headless_ticks is not None:
+        state = app.run_headless(args.headless_ticks)
+        result = 0
+    else:
+        result = app.run()
+        state = app.simulation.state
+    if args.save_on_exit is not None:
+        save_game(args.save_on_exit, state, pack)
+    if args.record_replay is not None:
+        write_replay(args.record_replay, app.simulation.action_log, state, pack)
+    message = (
+        f"world={pack.world_id} tick={state.tick} "
+        f"day={state.day} minute={state.minute_of_day} "
+        f"active_actor={state.active_actor_id} digest={state_digest(state)}"
+    )
+    return result, message
 
 
 if __name__ == "__main__":

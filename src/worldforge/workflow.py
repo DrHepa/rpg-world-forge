@@ -837,7 +837,10 @@ def validate_phase_report(
                                 try:
                                     from isoworld.content.renderpack import load_renderpack
 
-                                    load_renderpack(pack_path, locked_pack)
+                                    loaded_renderpack = load_renderpack(pack_path, locked_pack)
+                                    close_renderpack = getattr(loaded_renderpack, "close", None)
+                                    if callable(close_renderpack):
+                                        close_renderpack()
                                 except ValueError as exc:
                                     errors.append(f"P13 renderpack is invalid: {exc}")
                             if report.get("assetpack_path") is not None:

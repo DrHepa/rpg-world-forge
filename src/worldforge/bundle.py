@@ -279,6 +279,20 @@ class VerifiedRuntimeBundle:
     worldpack: WorldPack
     renderpack: RenderPack
 
+    def close(self) -> None:
+        self.renderpack.close()
+
+    def __enter__(self) -> VerifiedRuntimeBundle:
+        return self
+
+    def __exit__(self, exc_type: object, exc: BaseException | None, traceback: object) -> None:
+        try:
+            self.close()
+        except RenderPackError as cleanup_error:
+            if exc is not None:
+                raise cleanup_error from exc
+            raise
+
     @property
     def world_id(self) -> str:
         return self.manifest["world_id"]
@@ -792,10 +806,28 @@ def _stage_runtime_payload(
     _validate_renderpack_shape(renderpack_raw, "source renderpack")
     try:
         source_worldpack = load_worldpack(worldpack_path)
-        load_renderpack(renderpack_path, source_worldpack)
+        source_renderpack = load_renderpack(renderpack_path, source_worldpack)
     except (WorldPackError, RenderPackError) as exc:
         raise BundleError(f"Source runtime content is invalid: {exc}") from exc
+    try:
+        return _stage_runtime_payload_from_loaded(
+            stage,
+            source_worldpack,
+            source_renderpack,
+            worldpack_raw,
+            renderpack_raw,
+        )
+    finally:
+        source_renderpack.close()
 
+
+def _stage_runtime_payload_from_loaded(
+    stage: Path,
+    source_worldpack: WorldPack,
+    source_renderpack: RenderPack,
+    worldpack_raw: dict[str, Any],
+    renderpack_raw: dict[str, Any],
+) -> tuple[WorldPack, RenderPack, dict[str, Any], dict[str, Any], dict[str, str]]:
     canonical_worldpack = _pretty_json(worldpack_raw)
     (stage / "worldpack.json").write_bytes(canonical_worldpack)
 
@@ -803,7 +835,7 @@ def _stage_runtime_payload(
     assets = bundled_renderpack.get("assets")
     if not isinstance(assets, list):
         raise BundleError("Source renderpack assets must be a list")
-    source_root = renderpack_path.parent.resolve()
+    source_root = source_renderpack.root
     asset_media: dict[str, str] = {}
     for raw_asset in sorted(
         assets,
@@ -921,10 +953,14 @@ def export_runtime_bundle(
     stage.mkdir()
     stage_identity = directory_identity(stage, context="bundle export stage")
     installed = False
+    verified: VerifiedRuntimeBundle | None = None
     try:
         worldpack, renderpack, worldpack_raw, source_renderpack_raw, asset_media = (
             _stage_runtime_payload(Path(worldpack_path), Path(renderpack_path), stage)
         )
+        bundled_renderpack_hash = renderpack.content_hash
+        bundled_world_content_hash = renderpack.world_content_hash
+        renderpack.close()
         license_media = _copy_licenses(Path(licenses_directory), stage)
         media_types = {
             "worldpack.json": "application/json",
@@ -953,8 +989,8 @@ def export_runtime_bundle(
             "renderpack": {
                 "path": "renderpack.json",
                 "format_version": source_renderpack_raw["format_version"],
-                "content_hash": renderpack.content_hash,
-                "world_content_hash": renderpack.world_content_hash,
+                "content_hash": bundled_renderpack_hash,
+                "world_content_hash": bundled_world_content_hash,
             },
             "required_runtime_features": _runtime_features(worldpack_raw),
             "files": files,
@@ -977,6 +1013,12 @@ def export_runtime_bundle(
             renderpack=verified.renderpack,
         )
     except Exception as original_error:
+        snapshot_cleanup_error: RenderPackError | None = None
+        if verified is not None:
+            try:
+                verified.close()
+            except RenderPackError as cleanup_error:
+                snapshot_cleanup_error = cleanup_error
         if not installed and stage.exists():
             try:
                 quarantine_and_remove_owned_directory(
@@ -988,6 +1030,11 @@ def export_runtime_bundle(
                 raise BundleError(
                     f"Bundle export failed and staged cleanup could not complete: {cleanup_error}"
                 ) from original_error
+        if snapshot_cleanup_error is not None:
+            raise BundleError(
+                "Bundle export failed and verified snapshot cleanup could not complete: "
+                f"{snapshot_cleanup_error}"
+            ) from original_error
         raise
 
 
@@ -996,7 +1043,7 @@ def verify_runtime_bundle(
     *,
     expected_bundle_hash: str | None = None,
 ) -> VerifiedRuntimeBundle:
-    """Strictly verify a runtime bundle and return its loaded runtime artifacts."""
+    """Verify a bundle; the returned context owns a private renderpack snapshot."""
 
     root = Path(bundle_path).absolute()
     files_on_disk, directories_on_disk = _walk_regular_files(root, "runtime bundle")
@@ -1073,7 +1120,33 @@ def verify_runtime_bundle(
         renderpack = load_renderpack(root / "renderpack.json", worldpack)
     except (WorldPackError, RenderPackError) as exc:
         raise BundleError(f"Bundled runtime content is invalid: {exc}") from exc
+    try:
+        return _finish_runtime_bundle_verification(
+            root,
+            manifest,
+            records_by_path,
+            worldpack_raw,
+            worldpack,
+            renderpack,
+        )
+    except Exception as original:
+        try:
+            renderpack.close()
+        except RenderPackError as cleanup_error:
+            raise BundleError(
+                f"Bundle verification failed and snapshot cleanup failed: {cleanup_error}"
+            ) from original
+        raise
 
+
+def _finish_runtime_bundle_verification(
+    root: Path,
+    manifest: dict[str, Any],
+    records_by_path: dict[str, dict[str, Any]],
+    worldpack_raw: dict[str, Any],
+    worldpack: WorldPack,
+    renderpack: RenderPack,
+) -> VerifiedRuntimeBundle:
     if worldpack.world_id != manifest["world_id"] or renderpack.world_id != manifest["world_id"]:
         raise BundleError("World IDs disagree across the bundle")
     if worldpack.format_version != manifest["worldpack"]["format_version"]:
@@ -1384,11 +1457,11 @@ def _load_verified_catalog(game_root: Path) -> tuple[dict[str, Any], list[dict[s
     _audit_catalog_storage(game_root, releases)
     _audit_game_data_root(game_root, releases, shared_assets)
     for release in releases:
-        verified = verify_runtime_bundle(
+        with verify_runtime_bundle(
             game_root / PurePosixPath(release["path"]),
             expected_bundle_hash=release["bundle_hash"],
-        )
-        expected = _catalog_release(verified)
+        ) as verified:
+            expected = _catalog_release(verified)
         if expected != release:
             raise BundleError(
                 "Catalog metadata disagrees with imported bundle "
@@ -1579,7 +1652,8 @@ def _verify_journal_bundle(
     try:
         if directory_identity(path, context="journalled bundle") != identity:
             raise BundleError("Journalled bundle directory identity changed")
-        verify_runtime_bundle(path, expected_bundle_hash=bundle_hash)
+        with verify_runtime_bundle(path, expected_bundle_hash=bundle_hash):
+            pass
         if directory_identity(path, context="journalled bundle") != identity:
             raise BundleError("Journalled bundle directory changed during verification")
     except DirectoryPublishError as exc:
@@ -1712,6 +1786,35 @@ def import_runtime_bundle(
 
     _valid_sha256(expected_bundle_hash, "expected_bundle_hash")
     verified = verify_runtime_bundle(bundle_path, expected_bundle_hash=expected_bundle_hash)
+    primary_error: BaseException | None = None
+    imported: Path | None = None
+    try:
+        imported = _import_runtime_bundle_from_verified(verified, game_root)
+    except BaseException as exc:
+        primary_error = exc
+
+    cleanup_error: BaseException | None = None
+    try:
+        verified.close()
+    except BaseException as exc:
+        cleanup_error = exc
+
+    if primary_error is not None:
+        if cleanup_error is not None:
+            detail = f"Runtime bundle cleanup failed: {cleanup_error}"
+            primary_error.add_note(detail)
+            raise primary_error from cleanup_error
+        raise primary_error
+    if cleanup_error is not None:
+        raise cleanup_error
+    assert imported is not None
+    return imported
+
+
+def _import_runtime_bundle_from_verified(
+    verified: VerifiedRuntimeBundle,
+    game_root: str | Path,
+) -> Path:
     try:
         require_standalone_bundle_root(verified.root)
     except (OSError, ValueError) as exc:
@@ -1743,7 +1846,11 @@ def import_runtime_bundle(
                 root / "game_data/worlds" / verified.world_id / verified.release_id
             )
             if recovered == expected_destination:
-                verify_runtime_bundle(recovered, expected_bundle_hash=verified.bundle_hash)
+                with verify_runtime_bundle(
+                    recovered,
+                    expected_bundle_hash=verified.bundle_hash,
+                ):
+                    pass
                 verify_game_catalog_compatibility(
                     root,
                     runtime_contract["runtime_api_version"],
@@ -1839,7 +1946,11 @@ def _import_verified_bundle(
         }
         _write_import_journal(root / IMPORT_JOURNAL, journal)
         shutil.copytree(verified.root, temporary, symlinks=False, dirs_exist_ok=True)
-        verify_runtime_bundle(temporary, expected_bundle_hash=verified.bundle_hash)
+        with verify_runtime_bundle(
+            temporary,
+            expected_bundle_hash=verified.bundle_hash,
+        ):
+            pass
         ready_journal = {**journal, "state": "ready"}
         _replace_import_journal(root, journal, ready_journal)
         journal = ready_journal

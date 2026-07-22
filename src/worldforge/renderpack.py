@@ -321,7 +321,8 @@ def build_renderpack(
         )
         try:
             loaded_worldpack = load_worldpack(worldpack_file)
-            load_renderpack(staged_output, loaded_worldpack)
+            with load_renderpack(staged_output, loaded_worldpack):
+                pass
         except RenderPackError as exc:
             raise RenderPackBuildError(
                 f"Compiled renderpack failed runtime validation: {exc}"
@@ -361,7 +362,8 @@ def build_renderpack(
             (output, _publish_new_file(staged_output, output, runtime_root_identity))
         )
         try:
-            load_renderpack(output, loaded_worldpack)
+            with load_renderpack(output, loaded_worldpack):
+                pass
         except RenderPackError as exc:
             raise RenderPackBuildError(
                 f"Published renderpack failed runtime validation: {exc}"

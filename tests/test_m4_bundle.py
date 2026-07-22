@@ -118,7 +118,86 @@ def _game(root: Path, name: str = "game") -> Path:
     return game
 
 
+class _ImportVerified:
+    def __init__(self, close_error: BaseException | None = None) -> None:
+        self.close_error = close_error
+        self.close_calls = 0
+
+    def close(self) -> None:
+        self.close_calls += 1
+        if self.close_error is not None:
+            raise self.close_error
+
+
 class RuntimeBundleTests(unittest.TestCase):
+    def test_import_runtime_bundle_preserves_body_error_and_still_closes(self) -> None:
+        verified = _ImportVerified()
+        primary = BundleError("import body failed")
+
+        with (
+            patch("worldforge.bundle.verify_runtime_bundle", return_value=verified),
+            patch(
+                "worldforge.bundle._import_runtime_bundle_from_verified",
+                side_effect=primary,
+            ),
+            self.assertRaises(BundleError) as caught,
+        ):
+            import_runtime_bundle(
+                "bundle",
+                "game",
+                expected_bundle_hash="0" * 64,
+            )
+
+        self.assertIs(primary, caught.exception)
+        self.assertEqual(1, verified.close_calls)
+
+    def test_import_runtime_bundle_surfaces_close_only_failure(self) -> None:
+        cleanup = RuntimeError("verified bundle close failed")
+        verified = _ImportVerified(cleanup)
+
+        with (
+            patch("worldforge.bundle.verify_runtime_bundle", return_value=verified),
+            patch(
+                "worldforge.bundle._import_runtime_bundle_from_verified",
+                return_value=Path("installed"),
+            ),
+            self.assertRaises(RuntimeError) as caught,
+        ):
+            import_runtime_bundle(
+                "bundle",
+                "game",
+                expected_bundle_hash="0" * 64,
+            )
+
+        self.assertIs(cleanup, caught.exception)
+        self.assertEqual(1, verified.close_calls)
+
+    def test_import_runtime_bundle_keeps_body_primary_when_close_also_fails(self) -> None:
+        primary = BundleError("import body failed")
+        cleanup = RuntimeError("verified bundle close failed")
+        verified = _ImportVerified(cleanup)
+
+        with (
+            patch("worldforge.bundle.verify_runtime_bundle", return_value=verified),
+            patch(
+                "worldforge.bundle._import_runtime_bundle_from_verified",
+                side_effect=primary,
+            ),
+            self.assertRaises(BundleError) as caught,
+        ):
+            import_runtime_bundle(
+                "bundle",
+                "game",
+                expected_bundle_hash="0" * 64,
+            )
+
+        self.assertIs(primary, caught.exception)
+        self.assertIs(cleanup, caught.exception.__cause__)
+        self.assertTrue(
+            any("verified bundle close failed" in note for note in caught.exception.__notes__)
+        )
+        self.assertEqual(1, verified.close_calls)
+
     def test_bundle_export_and_import_require_independent_repository_roots(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -222,6 +301,30 @@ class RuntimeBundleTests(unittest.TestCase):
             self.assertEqual(first.bundle_hash, verify_runtime_bundle(first.root).bundle_hash)
             with self.assertRaisesRegex(BundleError, "expected immutable hash"):
                 verify_runtime_bundle(first.root, expected_bundle_hash="0" * 64)
+
+    def test_export_returns_exact_renderpack_with_live_snapshot_after_stage_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            snapshot_parent = root / "snapshot-temp"
+            snapshot_parent.mkdir()
+            with patch.object(tempfile, "tempdir", str(snapshot_parent)):
+                verified = _export(root, "published-bundle")
+                returned_renderpack = verified.renderpack
+                snapshot_root = returned_renderpack.root
+
+                self.assertEqual(root / "published-bundle", verified.root)
+                self.assertTrue(snapshot_root.is_dir())
+                self.assertEqual([snapshot_root], list(snapshot_parent.iterdir()))
+                for asset in returned_renderpack.assets:
+                    for item in asset.files:
+                        resolved = returned_renderpack.resolve_file(item)
+                        self.assertTrue(resolved.is_file())
+                        self.assertEqual(item.sha256, _sha256(resolved))
+
+                verified.close()
+                self.assertFalse(snapshot_root.exists())
+                self.assertEqual([], list(snapshot_parent.iterdir()))
+                self.assertTrue((verified.root / "renderpack.json").is_file())
 
     def test_export_uses_v5_runtime_requirements_as_bundle_features(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
