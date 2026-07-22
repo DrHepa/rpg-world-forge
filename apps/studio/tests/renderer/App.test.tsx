@@ -74,13 +74,64 @@ describe("Studio workbench", () => {
     render(<App />);
 
     expect((await screen.findAllByText("Runtime is not packaged yet")).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Visual lore, asset, and game tools are not implemented yet/u)).toBeInTheDocument();
+    expect(screen.getByText(/Visual lore, asset, and game tools remain future slices/u)).toBeInTheDocument();
+  });
+
+  it("binds Codex only through the named workspace operation", async () => {
+    const bindCodexWorkspace = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { state: "ready", message: "Codex is bound", pid: 456, workspaceId: "workspace_01" },
+    });
+    installApi({
+      initialize: vi.fn().mockResolvedValue({ ok: true, value: initialization }),
+      getServiceStatus: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { state: "ready", message: "ready", pid: 123 },
+      }),
+      listWorkspaces: vi.fn(),
+      listEvents: vi.fn(),
+      listChangesets: vi.fn(),
+      listJobs: vi.fn(),
+      onEvent: () => vi.fn(),
+      getCodexStatus: vi.fn().mockResolvedValue({
+        ok: true,
+        value: { state: "unbound", message: "Not bound", pid: null, workspaceId: null },
+      }),
+      bindCodexWorkspace,
+      onCodexEvent: () => vi.fn(),
+    });
+    render(<App />);
+    fireEvent.change(screen.getByLabelText("Registered workspace ID"), {
+      target: { value: "workspace_01" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Bind Codex" }));
+    await waitFor(() => expect(bindCodexWorkspace).toHaveBeenCalledWith("workspace_01"));
+    expect(await screen.findByText("Codex is bound")).toBeInTheDocument();
   });
 });
 
-function installApi(api: ForgeStudioApi): void {
+function installApi(api: Partial<ForgeStudioApi>): void {
+  const unavailable = vi.fn().mockResolvedValue({
+    ok: false,
+    error: { code: "service_unavailable", message: "Codex unavailable in fixture" },
+  });
+  const complete: ForgeStudioApi = {
+    getCodexStatus: unavailable,
+    bindCodexWorkspace: unavailable,
+    readCodexAccount: unavailable,
+    startCodexLogin: unavailable,
+    startCodexThread: unavailable,
+    resumeCodexThread: unavailable,
+    forkCodexThread: unavailable,
+    startCodexTurn: unavailable,
+    steerCodexTurn: unavailable,
+    interruptCodexTurn: unavailable,
+    answerCodexUserInput: unavailable,
+    onCodexEvent: () => vi.fn(),
+    ...api,
+  } as ForgeStudioApi;
   Object.defineProperty(window, "forgeStudio", {
     configurable: true,
-    value: api,
+    value: complete,
   });
 }

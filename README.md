@@ -146,14 +146,17 @@ The public contracts are
 [`studio-job`](schemas/studio-job.schema.json). The application boundary is
 recorded in [ADR-0011](docs/decisions/0011-forge-studio-application-service.md).
 
-The first desktop shell lives in [`apps/studio`](apps/studio). It is a
-sandboxed Electron client that loads only `rwf-studio://app`, exposes a narrow
-typed preload API, supervises the Python service without a shell or `PATH`
-fallback, and displays only real protocol status, responses, events, and
-errors. Development requires Node 24.14.1, npm 11.13.0, and an explicit
-`RWF_STUDIO_DEV_PYTHON` interpreter. Packaged Python/Codex runtimes and visual
-authoring features are intentionally not part of this shell batch; see
-[ADR-0012](docs/decisions/0012-forge-studio-desktop-shell.md).
+The desktop shell lives in [`apps/studio`](apps/studio). It is a sandboxed
+Electron client that loads only `rwf-studio://app`, exposes named typed preload
+operations, and supervises both the Python service and an optional exact Codex
+0.144.6 app-server without a shell or `PATH` fallback. Codex is bound to one
+registered workspace and can only stage or inspect changesets through the
+three-tool Forge MCP boundary; approval and apply remain human-controlled.
+Development requires explicit `RWF_STUDIO_DEV_PYTHON` and
+`RWF_STUDIO_DEV_CODEX` executables. Native packaged runtimes and the broader
+visual authoring tools remain separate release slices; see
+[ADR-0012](docs/decisions/0012-forge-studio-desktop-shell.md) and
+[ADR-0013](docs/decisions/0013-workspace-bound-codex-bridge.md).
 
 ## Quick start
 

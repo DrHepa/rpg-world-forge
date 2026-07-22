@@ -14,7 +14,8 @@
   "packageManager": "npm@11.13.0",
   "scripts": {
     "generate:types": "node scripts/generate-types.mjs",
-    "check:generated": "node scripts/generate-types.mjs --check",
+    "generate:codex-protocol": "node scripts/codex-protocol.mjs --generate",
+    "check:generated": "node scripts/generate-types.mjs --check && node scripts/codex-protocol.mjs --check",
     "build:renderer": "vite build",
     "build:processes": "node scripts/build-processes.mjs",
     "build": "npm run generate:types && npm run build:renderer && npm run build:processes",
@@ -71,6 +72,10 @@
       {
         "from": "resources/runtime-manifest.json",
         "to": "runtime-manifest.json"
+      },
+      {
+        "from": "protocol/codex-app-server-0.144.6",
+        "to": "protocol/codex-app-server-0.144.6"
       }
     ],
     "afterPack": "./scripts/after-pack.cjs",

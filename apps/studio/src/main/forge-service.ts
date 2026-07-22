@@ -25,17 +25,25 @@ interface InitializationResult {
   capabilities: Record<string, unknown>;
 }
 
+type ForgeServiceMethod = StudioReadMethod | "workspace.get";
+
 export interface ForgeServiceClient {
   readonly status: ForgeServiceStatus;
   subscribe(listener: (event: StudioActivityEvent) => void): () => void;
   initialize(): Promise<StudioReplyEnvelope>;
+  getWorkspace(workspaceId: string): Promise<ForgeWorkspaceBinding>;
   request(
     requestId: string,
-    method: StudioReadMethod,
+    method: ForgeServiceMethod,
     params: Record<string, unknown>,
     timeoutMs: number,
   ): Promise<StudioReplyEnvelope>;
   stop(): Promise<void>;
+}
+
+export interface ForgeWorkspaceBinding {
+  workspaceId: string;
+  worldRoot: string;
 }
 
 export class ForgeServiceSupervisor implements ForgeServiceClient {
@@ -81,7 +89,7 @@ export class ForgeServiceSupervisor implements ForgeServiceClient {
 
   public async request(
     requestId: string,
-    method: StudioReadMethod,
+    method: ForgeServiceMethod,
     params: Record<string, unknown>,
     timeoutMs: number,
   ): Promise<StudioReplyEnvelope> {
@@ -89,6 +97,19 @@ export class ForgeServiceSupervisor implements ForgeServiceClient {
       await this.initialize();
     }
     return await this.#transport.request(requestId, method, params, timeoutMs);
+  }
+
+  public async getWorkspace(workspaceId: string): Promise<ForgeWorkspaceBinding> {
+    const reply = await this.request(
+      randomUUID(),
+      "workspace.get",
+      { workspace_id: workspaceId },
+      10_000,
+    );
+    if (reply.kind === "error") {
+      throw new Error(`Forge workspace lookup failed: ${reply.error.message}`);
+    }
+    return parseWorkspaceBinding(reply.result, workspaceId);
   }
 
   public async stop(): Promise<void> {
@@ -179,7 +200,7 @@ export class UnavailableForgeService implements ForgeServiceClient {
 
   public request(
     requestId: string,
-    method: StudioReadMethod,
+    method: ForgeServiceMethod,
     params: Record<string, unknown>,
     timeoutMs: number,
   ): Promise<never> {
@@ -190,9 +211,54 @@ export class UnavailableForgeService implements ForgeServiceClient {
     return Promise.reject(new Error(this.reason));
   }
 
+  public getWorkspace(workspaceId: string): Promise<never> {
+    void workspaceId;
+    return Promise.reject(new Error(this.reason));
+  }
+
   public stop(): Promise<void> {
     return Promise.resolve();
   }
+}
+
+function parseWorkspaceBinding(
+  result: Record<string, unknown>,
+  expectedWorkspaceId: string,
+): ForgeWorkspaceBinding {
+  if (!hasExactKeys(result, ["workspace"]) || !isRecord(result.workspace)) {
+    throw new Error("Forge workspace lookup returned an invalid result");
+  }
+  const workspace = result.workspace;
+  if (
+    !hasExactKeys(workspace, [
+      "bundle_root",
+      "created_at",
+      "forge_root",
+      "format",
+      "format_version",
+      "game_root",
+      "world_root",
+      "workspace_id",
+    ]) ||
+    workspace.format !== "rpg-world-forge.forge_workspace" ||
+    workspace.format_version !== 1 ||
+    workspace.workspace_id !== expectedWorkspaceId ||
+    typeof workspace.world_root !== "string" ||
+    workspace.world_root.length === 0
+  ) {
+    throw new Error("Forge workspace lookup returned an incompatible workspace");
+  }
+  return { workspaceId: expectedWorkspaceId, worldRoot: workspace.world_root };
+}
+
+function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  const sorted = [...expected].sort();
+  return actual.length === sorted.length && actual.every((key, index) => key === sorted[index]);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function assertInitializationResult(value: Record<string, unknown>): asserts value is InitializationResult {

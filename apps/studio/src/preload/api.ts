@@ -1,6 +1,7 @@
 import {
   IPC_CHANNELS,
   type ForgeStudioApi,
+  type CodexActivityEvent,
   type StudioActivityEvent,
   type StudioClientResult,
   type StudioReplyEnvelope,
@@ -54,8 +55,68 @@ export function createStudioApi(transport: PreloadTransport): ForgeStudioApi {
       transport.on(IPC_CHANNELS.event, wrapped);
       return () => transport.removeListener(IPC_CHANNELS.event, wrapped);
     },
+    async getCodexStatus() {
+      return asClientResult(await transport.invoke(IPC_CHANNELS.codexStatus));
+    },
+    async bindCodexWorkspace(workspaceId) {
+      return asClientResult(await transport.invoke(IPC_CHANNELS.codexBindWorkspace, { workspaceId }));
+    },
+    async readCodexAccount() {
+      return asClientResult(await transport.invoke(IPC_CHANNELS.codexReadAccount));
+    },
+    async startCodexLogin(mode) {
+      return asClientResult(await transport.invoke(IPC_CHANNELS.codexStartLogin, { mode }));
+    },
+    async startCodexThread() {
+      return asClientResult(await transport.invoke(IPC_CHANNELS.codexStartThread));
+    },
+    async resumeCodexThread(threadId) {
+      return asClientResult(await transport.invoke(IPC_CHANNELS.codexResumeThread, { threadId }));
+    },
+    async forkCodexThread(threadId) {
+      return asClientResult(await transport.invoke(IPC_CHANNELS.codexForkThread, { threadId }));
+    },
+    async startCodexTurn(threadId, text) {
+      return asClientResult(await transport.invoke(IPC_CHANNELS.codexStartTurn, { threadId, text }));
+    },
+    async steerCodexTurn(threadId, turnId, text) {
+      return asClientResult(
+        await transport.invoke(IPC_CHANNELS.codexSteerTurn, { threadId, turnId, text }),
+      );
+    },
+    async interruptCodexTurn(threadId, turnId) {
+      return asClientResult(
+        await transport.invoke(IPC_CHANNELS.codexInterruptTurn, { threadId, turnId }),
+      );
+    },
+    async answerCodexUserInput(token, answers) {
+      return asClientResult(
+        await transport.invoke(IPC_CHANNELS.codexAnswerUserInput, { token, answers }),
+      );
+    },
+    onCodexEvent(listener: (event: CodexActivityEvent) => void) {
+      if (typeof listener !== "function") {
+        throw new TypeError("Codex event listener must be a function");
+      }
+      const wrapped = (_event: unknown, payload: unknown): void => {
+        if (isCodexActivityEvent(payload)) listener(payload);
+      };
+      transport.on(IPC_CHANNELS.codexEvent, wrapped);
+      return () => transport.removeListener(IPC_CHANNELS.codexEvent, wrapped);
+    },
   };
   return Object.freeze(api);
+}
+
+function isCodexActivityEvent(value: unknown): value is CodexActivityEvent {
+  if (typeof value !== "object" || value === null || !("type" in value)) return false;
+  const type = (value as { type?: unknown }).type;
+  return (
+    type === "codex-status" ||
+    type === "codex-stderr" ||
+    type === "codex-notification" ||
+    type === "codex-user-input"
+  );
 }
 
 function asClientResult<T>(value: unknown): StudioClientResult<T> {

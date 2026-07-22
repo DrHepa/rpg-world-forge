@@ -1,0 +1,33 @@
+{
+  "artifacts": {
+    "json_schema": {
+      "bytes": 2719809,
+      "files": 267,
+      "sha256": "fe9e9099c388569380a5595e75015321be54bf2215885c5e0a0696f6c717b81d"
+    },
+    "typescript": {
+      "bytes": 322075,
+      "files": 598,
+      "sha256": "125dc17b4ef299a13428dd348c26fbc2c5436cbade0da19c2087217da90931f6"
+    }
+  },
+  "codex_cli_version": "0.144.6",
+  "commands": {
+    "json_schema": [
+      "app-server",
+      "generate-json-schema",
+      "--out",
+      "<directory>"
+    ],
+    "typescript": [
+      "app-server",
+      "generate-ts",
+      "--out",
+      "<directory>"
+    ]
+  },
+  "experimental": false,
+  "format": "rpg-world-forge.codex_app_server_protocol_provenance",
+  "format_version": 1,
+  "mcp_protocol_version": "2025-11-25"
+}

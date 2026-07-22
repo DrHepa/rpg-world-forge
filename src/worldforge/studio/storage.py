@@ -7,7 +7,7 @@ import sqlite3
 import stat
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from isoworld.content.file_stat import FileStat, path_file_stat
 from worldforge.studio.contracts import validate_studio_job
@@ -72,13 +72,16 @@ def _is_link_or_reparse(info: FileStat) -> bool:
     )
 
 
-def _ensure_safe_directory(path: Path) -> None:
-    try:
-        path.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        raise StudioError(
-            "internal_error", f"Could not create Studio data directory: {exc}"
-        ) from exc
+def _ensure_safe_directory(path: Path, *, create: bool = True) -> None:
+    if create:
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise StudioError(
+                "internal_error", f"Could not create Studio data directory: {exc}"
+            ) from exc
+    elif not path.exists():
+        raise StudioError("invalid_state", f"Studio directory does not exist: {path}")
     current = Path(path.anchor)
     for part in path.parts[1:]:
         current /= part
@@ -109,17 +112,35 @@ def _safe_database_file(path: Path) -> tuple[int, int] | None:
 class StudioStore:
     """Durable Studio registry. Repository contents never enter this database."""
 
-    def __init__(self, data_dir: str | Path) -> None:
+    def __init__(
+        self,
+        data_dir: str | Path,
+        *,
+        mode: Literal["primary", "secondary"] = "primary",
+    ) -> None:
+        if mode not in {"primary", "secondary"}:
+            raise ValueError("Studio store mode must be 'primary' or 'secondary'")
+        self.mode = mode
         self.data_dir = _absolute(data_dir)
-        _ensure_safe_directory(self.data_dir)
+        create = mode == "primary"
+        _ensure_safe_directory(self.data_dir, create=create)
         self.blobs_dir = self.data_dir / "blobs/sha256"
         self.journals_dir = self.data_dir / "journals"
-        _ensure_safe_directory(self.blobs_dir)
-        _ensure_safe_directory(self.journals_dir)
+        _ensure_safe_directory(self.blobs_dir, create=create)
+        _ensure_safe_directory(self.journals_dir, create=create)
         self.database_path = self.data_dir / DATABASE_NAME
         before = _safe_database_file(self.database_path)
+        if mode == "secondary" and before is None:
+            raise StudioError(
+                "invalid_state", "Secondary Studio store requires an existing database"
+            )
         try:
-            self.connection = sqlite3.connect(self.database_path, timeout=5.0)
+            target: str | Path = self.database_path
+            uri = False
+            if mode == "secondary":
+                target = f"{self.database_path.as_uri()}?mode=rw"
+                uri = True
+            self.connection = sqlite3.connect(target, timeout=5.0, uri=uri)
         except sqlite3.Error as exc:
             raise StudioError("internal_error", f"Could not open Studio database: {exc}") from exc
         self.connection.row_factory = sqlite3.Row
@@ -128,9 +149,12 @@ class StudioStore:
             self.connection.close()
             raise StudioError("conflict", "Studio database identity changed while opening")
         try:
-            self._configure()
-            self._migrate()
-            self._orphan_running_jobs()
+            self._configure(require_existing_wal=mode == "secondary")
+            if mode == "primary":
+                self._migrate()
+                self._orphan_running_jobs()
+            else:
+                self._verify_schema()
         except Exception:
             self.connection.close()
             raise
@@ -147,18 +171,40 @@ class StudioStore:
     def blob_path(self, digest: str) -> Path:
         return self.blobs_dir / digest[:2] / digest
 
-    def _configure(self) -> None:
+    def _configure(self, *, require_existing_wal: bool) -> None:
         try:
             self.connection.execute("PRAGMA foreign_keys = ON")
             self.connection.execute("PRAGMA busy_timeout = 5000")
-            mode = self.connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]
+            pragma = "PRAGMA journal_mode" if require_existing_wal else "PRAGMA journal_mode = WAL"
+            mode = self.connection.execute(pragma).fetchone()[0]
             self.connection.execute("PRAGMA synchronous = FULL")
         except sqlite3.Error as exc:
             raise StudioError(
                 "internal_error", f"Could not configure Studio database: {exc}"
             ) from exc
         if str(mode).casefold() != "wal":
-            raise StudioError("internal_error", "Studio database could not enable WAL mode")
+            message = (
+                "Secondary Studio database is not already in WAL mode"
+                if require_existing_wal
+                else "Studio database could not enable WAL mode"
+            )
+            raise StudioError("internal_error", message)
+
+    def _verify_schema(self) -> None:
+        try:
+            row = self.connection.execute(
+                "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+            ).fetchone()
+            version = None if row is None else int(row["value"])
+        except (sqlite3.Error, ValueError) as exc:
+            raise StudioError(
+                "invalid_state", "Secondary Studio database schema is unavailable"
+            ) from exc
+        if version != SCHEMA_VERSION:
+            raise StudioError(
+                "invalid_state",
+                f"Secondary Studio database requires schema version {SCHEMA_VERSION}",
+            )
 
     def _migrate(self) -> None:
         try:

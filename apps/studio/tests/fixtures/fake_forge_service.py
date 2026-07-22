@@ -4,7 +4,6 @@ import json
 import sys
 import time
 
-
 MODE = sys.argv[1] if len(sys.argv) > 1 else "normal"
 
 if MODE == "backpressure":

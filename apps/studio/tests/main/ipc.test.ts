@@ -4,6 +4,11 @@ import {
   validateChangesetsListParams,
   validateEventsListParams,
   validateJobsListParams,
+  validateInterruptTurnArgument,
+  validateLoginArgument,
+  validateStartTurnArgument,
+  validateUserInputArgument,
+  validateWorkspaceArgument,
 } from "../../src/main/ipc";
 
 describe("Studio named read-only IPC filters", () => {
@@ -43,6 +48,33 @@ describe("Studio named read-only IPC filters", () => {
     [validateJobsListParams, []],
     [validateJobsListParams, { state: "queued", command: "shell.exec" }],
   ])("rejects malformed, unknown, or mutation-shaped filters %#", (validate, value) => {
+    expect(() => validate(value)).toThrow();
+  });
+});
+
+describe("Codex named IPC contracts", () => {
+  it("accepts only closed bounded values", () => {
+    expect(validateWorkspaceArgument({ workspaceId: "workspace_01" })).toEqual({ workspaceId: "workspace_01" });
+    expect(validateLoginArgument({ mode: "device-code" })).toEqual({ mode: "device-code" });
+    expect(validateStartTurnArgument({ threadId: "thread-1", text: "hello" })).toEqual({ threadId: "thread-1", text: "hello" });
+    expect(validateInterruptTurnArgument({ threadId: "thread-1", turnId: "turn-1" })).toEqual({ threadId: "thread-1", turnId: "turn-1" });
+    expect(validateUserInputArgument({
+      token: "00000000-0000-4000-8000-000000000000",
+      answers: { choice: ["North"] },
+    })).toEqual({
+      token: "00000000-0000-4000-8000-000000000000",
+      answers: { choice: ["North"] },
+    });
+  });
+
+  it.each([
+    [validateWorkspaceArgument, { workspaceId: "../bad" }],
+    [validateLoginArgument, { mode: "api-key" }],
+    [validateStartTurnArgument, { threadId: "thread-1", text: "ok", command: "shell" }],
+    [validateStartTurnArgument, { threadId: "../bad", text: "ok" }],
+    [validateInterruptTurnArgument, { threadId: "thread-1" }],
+    [validateUserInputArgument, { token: "bad", answers: { choice: ["x"] } }],
+  ])("rejects malformed or capability-shaped input %#", (validate, value) => {
     expect(() => validate(value)).toThrow();
   });
 });

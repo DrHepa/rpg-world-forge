@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import json
+import os
+import sys
+import threading
+
+
+MODE = os.environ.get("RWF_FAKE_CODEX_MODE", "normal")
+NEXT_SERVER_REQUEST_ID = 10_000
+PENDING_DENIALS: dict[int, str] = {}
+
+
+def send(value: object) -> None:
+    sys.stdout.write(json.dumps(value, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+
+
+def response(request_id: object, result: object) -> None:
+    send({"id": request_id, "result": result})
+
+
+def server_request(method: str, params: object | None = None) -> int:
+    global NEXT_SERVER_REQUEST_ID
+    request_id = NEXT_SERVER_REQUEST_ID
+    NEXT_SERVER_REQUEST_ID += 1
+    send({"id": request_id, "method": method, "params": params or {}})
+    return request_id
+
+
+def notification(method: str, params: object) -> None:
+    send({"method": method, "params": params})
+
+
+def handle_client_message(message: dict[str, object]) -> None:
+    method = message["method"]
+    if method == "initialized":
+        return
+    if method == "initialize":
+        response(
+            message["id"],
+            {
+                "userAgent": "codex-cli/0.144.6",
+                "codexHome": os.environ.get("CODEX_HOME", "fixture"),
+                "platformFamily": sys.platform,
+                "platformOs": sys.platform,
+            },
+        )
+        return
+    if MODE == "delayed":
+        threading.Timer(0.3, lambda: response(message["id"], {"delayed": True})).start()
+        return
+    if method == "account/read":
+        response(message["id"], {"account": None, "requiresOpenaiAuth": True})
+        if MODE == "denials":
+            for denied_method in (
+                "item/commandExecution/requestApproval",
+                "item/fileChange/requestApproval",
+                "applyPatchApproval",
+                "execCommandApproval",
+                "mcpServer/elicitation/request",
+                "item/permissions/requestApproval",
+                "item/tool/call",
+            ):
+                request_id = server_request(denied_method)
+                PENDING_DENIALS[request_id] = denied_method
+        if MODE == "unknown-request":
+            server_request("future/dangerous/request", {"command": "do not run"})
+        return
+    if method == "account/login/start":
+        response(message["id"], {"type": "deviceCode", "deviceCode": "fixture", "userCode": "ABCD"})
+        return
+    if method in {"thread/start", "thread/resume", "thread/fork"}:
+        response(message["id"], {"thread": {"id": "thread-1"}})
+        return
+    if method == "turn/start":
+        response(message["id"], {"turn": {"id": "turn-1", "status": "inProgress", "items": [], "error": None}})
+        if MODE == "workflow":
+            notification("turn/started", {"threadId": "thread-1", "turn": {"id": "turn-1"}})
+            notification(
+                "item/agentMessage/delta",
+                {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "itemId": "item-1",
+                    "delta": "hello ",
+                    "cwd": "/private/workspace",
+                },
+            )
+            notification(
+                "item/agentMessage/delta",
+                {"threadId": "thread-1", "turnId": "turn-1", "itemId": "item-1", "delta": "world"},
+            )
+            notification(
+                "turn/completed",
+                {
+                    "threadId": "thread-1",
+                    "turn": {"id": "turn-1", "status": "completed", "items": [], "error": None},
+                },
+            )
+        if MODE == "user-input":
+            server_request(
+                "item/tool/requestUserInput",
+                {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "itemId": "item-1",
+                    "autoResolutionMs": None,
+                    "questions": [
+                        {
+                            "id": "choice",
+                            "header": "Direction",
+                            "question": "Which direction should the Forge take?",
+                            "isOther": False,
+                            "isSecret": False,
+                            "options": [
+                                {"label": "North", "description": "Continue north"},
+                                {"label": "South", "description": "Continue south"},
+                            ],
+                        }
+                    ],
+                },
+            )
+        return
+    if method in {"turn/steer", "turn/interrupt"}:
+        response(message["id"], {})
+        return
+    send({"id": message["id"], "error": {"code": -32601, "message": "not implemented"}})
+
+
+for raw_line in sys.stdin.buffer:
+    if MODE == "malformed":
+        sys.stdout.buffer.write(b"{broken\n")
+        sys.stdout.buffer.flush()
+        continue
+    if MODE == "oversized":
+        sys.stdout.write("x" * 4096 + "\n")
+        sys.stdout.flush()
+        continue
+    if MODE == "crash":
+        raise SystemExit(17)
+    message = json.loads(raw_line)
+    if isinstance(message.get("method"), str):
+        handle_client_message(message)
+    elif message.get("id") in PENDING_DENIALS:
+        request_id = message["id"]
+        denied_method = PENDING_DENIALS.pop(request_id)
+        notification(
+            "fixture/denial",
+            {"method": denied_method, "response": message.get("result", message.get("error"))},
+        )

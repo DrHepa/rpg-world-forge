@@ -12,8 +12,13 @@ import {
 } from "electron";
 
 import { ForgeServiceSupervisor, UnavailableForgeService, type ForgeServiceClient } from "./forge-service";
+import {
+  UnavailableCodexBridge,
+  WorkspaceCodexBridge,
+  type CodexBridgeClient,
+} from "./codex-bridge";
 import { registerStudioIpc } from "./ipc";
-import { resolveForgeServiceLaunch } from "./runtime-manifest";
+import { resolveCodexRuntime, resolveForgeServiceLaunch } from "./runtime-manifest";
 import {
   CONTENT_SECURITY_POLICY,
   installSessionDenials,
@@ -52,8 +57,9 @@ async function startApplication(): Promise<void> {
   const dataDir = path.join(app.getPath("userData"), "service");
   await mkdir(dataDir, { recursive: true });
   const service = await createForgeService(dataDir);
+  const codex = await createCodexBridge(service, dataDir);
   const window = createMainWindow();
-  const unregisterIpc = registerStudioIpc(ipcMain, window, service);
+  const unregisterIpc = registerStudioIpc(ipcMain, window, service, codex);
   await window.loadURL(STUDIO_ENTRY_URL);
 
   let shuttingDown = false;
@@ -64,10 +70,32 @@ async function startApplication(): Promise<void> {
     event.preventDefault();
     shuttingDown = true;
     unregisterIpc();
-    void service.stop().finally(() => app.quit());
+    void Promise.allSettled([codex.stop(), service.stop()]).finally(() => app.quit());
   });
 
   app.on("window-all-closed", () => app.quit());
+}
+
+async function createCodexBridge(
+  service: ForgeServiceClient,
+  dataDir: string,
+): Promise<CodexBridgeClient> {
+  try {
+    const runtime = await resolveCodexRuntime({
+      packaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      dataDir,
+    });
+    return new WorkspaceCodexBridge({
+      service,
+      runtime,
+      codexHome: path.join(app.getPath("userData"), "codex-home"),
+      dataDir,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Codex runtime is unavailable";
+    return new UnavailableCodexBridge(message);
+  }
 }
 
 async function createForgeService(dataDir: string): Promise<ForgeServiceClient> {

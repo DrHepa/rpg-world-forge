@@ -14,6 +14,8 @@ import {
   type StudioReadMethod,
   type StudioReplyEnvelope,
 } from "../shared/studio-api";
+import type { CodexBridgeClient } from "./codex-bridge";
+import { CodexTransportError } from "./codex-supervisor";
 import type { ForgeServiceClient } from "./forge-service";
 import {
   StudioRequestCancelledError,
@@ -41,6 +43,7 @@ export function registerStudioIpc(
   ipcMain: IpcMain,
   window: BrowserWindow,
   service: ForgeServiceClient,
+  codex: CodexBridgeClient,
 ): () => void {
   const trusted = (event: IpcMainInvokeEvent): boolean =>
     isTrustedStudioSender(event, window.webContents);
@@ -90,21 +93,183 @@ export function registerStudioIpc(
     );
   });
 
+  ipcMain.handle(IPC_CHANNELS.codexStatus, (event, ...args: unknown[]) => {
+    const invalid = rejectUntrustedOrUnexpectedArguments(trusted(event), args);
+    return invalid ?? success(codex.status);
+  });
+  ipcMain.handle(IPC_CHANNELS.codexBindWorkspace, async (event, value: unknown) =>
+    trusted(event)
+      ? await captureValidated(() => validateWorkspaceArgument(value), (params) => capture(() => codex.bindWorkspace(params.workspaceId)))
+      : failure("invalid_request", "Rejected Studio IPC from an untrusted sender"),
+  );
+  ipcMain.handle(IPC_CHANNELS.codexReadAccount, async (event, ...args: unknown[]) => {
+    const invalid = rejectUntrustedOrUnexpectedArguments(trusted(event), args);
+    return invalid ?? await capture(() => codex.readAccount());
+  });
+  ipcMain.handle(IPC_CHANNELS.codexStartLogin, async (event, value: unknown) =>
+    trusted(event)
+      ? await captureValidated(() => validateLoginArgument(value), (params) => capture(() => codex.startLogin(params.mode)))
+      : failure("invalid_request", "Rejected Studio IPC from an untrusted sender"),
+  );
+  ipcMain.handle(IPC_CHANNELS.codexStartThread, async (event, ...args: unknown[]) => {
+    const invalid = rejectUntrustedOrUnexpectedArguments(trusted(event), args);
+    return invalid ?? await capture(() => codex.startThread());
+  });
+  ipcMain.handle(IPC_CHANNELS.codexResumeThread, async (event, value: unknown) =>
+    trusted(event)
+      ? await captureValidated(() => validateThreadArgument(value), (params) => capture(() => codex.resumeThread(params.threadId)))
+      : failure("invalid_request", "Rejected Studio IPC from an untrusted sender"),
+  );
+  ipcMain.handle(IPC_CHANNELS.codexForkThread, async (event, value: unknown) =>
+    trusted(event)
+      ? await captureValidated(() => validateThreadArgument(value), (params) => capture(() => codex.forkThread(params.threadId)))
+      : failure("invalid_request", "Rejected Studio IPC from an untrusted sender"),
+  );
+  ipcMain.handle(IPC_CHANNELS.codexStartTurn, async (event, value: unknown) =>
+    trusted(event)
+      ? await captureValidated(() => validateStartTurnArgument(value), (params) => capture(() => codex.startTurn(params.threadId, params.text)))
+      : failure("invalid_request", "Rejected Studio IPC from an untrusted sender"),
+  );
+  ipcMain.handle(IPC_CHANNELS.codexSteerTurn, async (event, value: unknown) =>
+    trusted(event)
+      ? await captureValidated(() => validateSteerTurnArgument(value), (params) => capture(() => codex.steerTurn(params.threadId, params.turnId, params.text)))
+      : failure("invalid_request", "Rejected Studio IPC from an untrusted sender"),
+  );
+  ipcMain.handle(IPC_CHANNELS.codexInterruptTurn, async (event, value: unknown) =>
+    trusted(event)
+      ? await captureValidated(() => validateInterruptTurnArgument(value), (params) => capture(() => codex.interruptTurn(params.threadId, params.turnId)))
+      : failure("invalid_request", "Rejected Studio IPC from an untrusted sender"),
+  );
+  ipcMain.handle(IPC_CHANNELS.codexAnswerUserInput, async (event, value: unknown) =>
+    trusted(event)
+      ? await captureValidated(() => validateUserInputArgument(value), (params) => capture(() => codex.answerUserInput(params.token, params.answers)))
+      : failure("invalid_request", "Rejected Studio IPC from an untrusted sender"),
+  );
+
   const unsubscribe = service.subscribe((activity) => {
     if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
       window.webContents.send(IPC_CHANNELS.event, activity);
     }
   });
+  const unsubscribeCodex = codex.subscribe((activity) => {
+    if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.codexEvent, activity);
+    }
+  });
 
   return () => {
     unsubscribe();
+    unsubscribeCodex();
     ipcMain.removeHandler(IPC_CHANNELS.initialize);
     ipcMain.removeHandler(IPC_CHANNELS.status);
     ipcMain.removeHandler(IPC_CHANNELS.listWorkspaces);
     ipcMain.removeHandler(IPC_CHANNELS.listEvents);
     ipcMain.removeHandler(IPC_CHANNELS.listChangesets);
     ipcMain.removeHandler(IPC_CHANNELS.listJobs);
+    ipcMain.removeHandler(IPC_CHANNELS.codexStatus);
+    ipcMain.removeHandler(IPC_CHANNELS.codexBindWorkspace);
+    ipcMain.removeHandler(IPC_CHANNELS.codexReadAccount);
+    ipcMain.removeHandler(IPC_CHANNELS.codexStartLogin);
+    ipcMain.removeHandler(IPC_CHANNELS.codexStartThread);
+    ipcMain.removeHandler(IPC_CHANNELS.codexResumeThread);
+    ipcMain.removeHandler(IPC_CHANNELS.codexForkThread);
+    ipcMain.removeHandler(IPC_CHANNELS.codexStartTurn);
+    ipcMain.removeHandler(IPC_CHANNELS.codexSteerTurn);
+    ipcMain.removeHandler(IPC_CHANNELS.codexInterruptTurn);
+    ipcMain.removeHandler(IPC_CHANNELS.codexAnswerUserInput);
   };
+}
+
+export function validateWorkspaceArgument(value: unknown): { workspaceId: string } {
+  const params = validateClosedParams(value, ["workspaceId"]);
+  return { workspaceId: validateWorkspaceId(params.workspaceId) };
+}
+
+export function validateLoginArgument(value: unknown): { mode: "browser" | "device-code" } {
+  const params = validateClosedParams(value, ["mode"]);
+  if (params.mode !== "browser" && params.mode !== "device-code") {
+    throw new TypeError("Codex login mode is invalid");
+  }
+  return { mode: params.mode };
+}
+
+export function validateThreadArgument(value: unknown): { threadId: string } {
+  const params = validateClosedParams(value, ["threadId"]);
+  return { threadId: validateCodexId(params.threadId, "thread") };
+}
+
+export function validateStartTurnArgument(value: unknown): { threadId: string; text: string } {
+  const params = validateClosedParams(value, ["threadId", "text"]);
+  return {
+    threadId: validateCodexId(params.threadId, "thread"),
+    text: validateTurnText(params.text),
+  };
+}
+
+export function validateSteerTurnArgument(
+  value: unknown,
+): { threadId: string; turnId: string; text: string } {
+  const params = validateClosedParams(value, ["threadId", "turnId", "text"]);
+  return {
+    threadId: validateCodexId(params.threadId, "thread"),
+    turnId: validateCodexId(params.turnId, "turn"),
+    text: validateTurnText(params.text),
+  };
+}
+
+export function validateInterruptTurnArgument(
+  value: unknown,
+): { threadId: string; turnId: string } {
+  const params = validateClosedParams(value, ["threadId", "turnId"]);
+  return {
+    threadId: validateCodexId(params.threadId, "thread"),
+    turnId: validateCodexId(params.turnId, "turn"),
+  };
+}
+
+export function validateUserInputArgument(
+  value: unknown,
+): { token: string; answers: Record<string, readonly string[]> } {
+  const params = validateClosedParams(value, ["token", "answers"]);
+  if (
+    typeof params.token !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(params.token) ||
+    !isRecord(params.answers)
+  ) {
+    throw new TypeError("Codex user-input response is invalid");
+  }
+  const answers: Record<string, readonly string[]> = {};
+  const entries = Object.entries(params.answers);
+  if (entries.length < 1 || entries.length > 3) {
+    throw new TypeError("Codex user-input response has an invalid question count");
+  }
+  for (const [questionId, raw] of entries) {
+    validateCodexId(questionId, "question");
+    if (
+      !Array.isArray(raw) ||
+      raw.length < 1 ||
+      raw.length > 8 ||
+      !raw.every((item: unknown) => typeof item === "string" && Buffer.byteLength(item, "utf8") <= 8_192)
+    ) {
+      throw new TypeError("Codex user-input answer is invalid");
+    }
+    answers[questionId] = raw.map((item: unknown) => String(item));
+  }
+  return { token: params.token, answers };
+}
+
+function validateCodexId(value: unknown, context: string): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(value)) {
+    throw new TypeError(`Codex ${context} ID is invalid`);
+  }
+  return value;
+}
+
+function validateTurnText(value: unknown): string {
+  if (typeof value !== "string" || value.length < 1 || Buffer.byteLength(value, "utf8") > 128 * 1024) {
+    throw new TypeError("Codex turn text exceeds the supported contract");
+  }
+  return value;
 }
 
 export function validateEventsListParams(value: unknown): EventsListParams {
@@ -171,10 +336,10 @@ async function requestRead(
   );
 }
 
-async function captureValidated<T>(
+async function captureValidated<T, U>(
   validate: () => T,
-  operation: (value: T) => Promise<StudioClientResult<StudioReplyEnvelope>>,
-): Promise<StudioClientResult<StudioReplyEnvelope>> {
+  operation: (value: T) => Promise<StudioClientResult<U>>,
+): Promise<StudioClientResult<U>> {
   let value: T;
   try {
     value = validate();
@@ -237,6 +402,9 @@ function classifyError(error: unknown): StudioClientError {
     return { code: "cancelled", message: error.message };
   }
   if (error instanceof StudioTransportError) {
+    return { code: "service_unavailable", message: error.message };
+  }
+  if (error instanceof CodexTransportError) {
     return { code: "service_unavailable", message: error.message };
   }
   return { code: "internal_error", message: describeUnknown(error) };

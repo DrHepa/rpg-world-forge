@@ -40,6 +40,7 @@ dev = [
 isoworld = "isoworld.__main__:main"
 worldforge = "worldforge.__main__:main"
 worldforge-studio-service = "worldforge.studio.__main__:main"
+worldforge-forge-mcp = "worldforge.studio.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

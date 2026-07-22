@@ -1,9 +1,23 @@
 {
+  "codex": {
+    "linux_arm64": "runtime/codex/linux-arm64/codex",
+    "linux_x64": "runtime/codex/linux-x64/codex",
+    "version": "0.144.6",
+    "win32_arm64": "runtime/codex/win32-arm64/codex.exe",
+    "win32_x64": "runtime/codex/win32-x64/codex.exe"
+  },
+  "codex_protocol": {
+    "manifest": "protocol/codex-app-server-0.144.6/manifest.json",
+    "version": "0.144.6"
+  },
   "format": "rpg-world-forge.studio_runtime_manifest",
-  "version": 1,
   "python": {
-    "module": "worldforge.studio",
-    "linux_x64": "runtime/python/bin/python3",
-    "win32_x64": "runtime/python/python.exe"
-  }
+    "linux_arm64": "runtime/python/linux-arm64/bin/python3",
+    "linux_x64": "runtime/python/linux-x64/bin/python3",
+    "mcp_module": "worldforge.studio.mcp_server",
+    "service_module": "worldforge.studio",
+    "win32_arm64": "runtime/python/win32-arm64/python.exe",
+    "win32_x64": "runtime/python/win32-x64/python.exe"
+  },
+  "version": 2
 }

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type {
+  CodexActivityEvent,
+  CodexBridgeStatus,
   ForgeServiceStatus,
   StudioActivityEvent,
   StudioClientResult,
@@ -24,6 +26,13 @@ const INITIAL_STATUS: ForgeServiceStatus = {
   pid: null,
 };
 
+const INITIAL_CODEX_STATUS: CodexBridgeStatus = {
+  state: "unbound",
+  message: "Codex is not bound to a Forge workspace",
+  pid: null,
+  workspaceId: null,
+};
+
 export function App() {
   const [status, setStatus] = useState<ForgeServiceStatus>(INITIAL_STATUS);
   const [activities, setActivities] = useState<StudioActivityEvent[]>([]);
@@ -31,6 +40,12 @@ export function App() {
   const [method, setMethod] = useState<ReadOperation>("workspace.list");
   const [reply, setReply] = useState<StudioReplyEnvelope | null>(null);
   const [pending, setPending] = useState(false);
+  const [codexStatus, setCodexStatus] = useState<CodexBridgeStatus>(INITIAL_CODEX_STATUS);
+  const [codexEvents, setCodexEvents] = useState<CodexActivityEvent[]>([]);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [turnText, setTurnText] = useState("");
+  const [codexPending, setCodexPending] = useState(false);
 
   useEffect(() => {
     const unsubscribe = window.forgeStudio.onEvent((activity) => {
@@ -38,6 +53,10 @@ export function App() {
       if (activity.type === "service-status") {
         setStatus(activity.status);
       }
+    });
+    const unsubscribeCodex = window.forgeStudio.onCodexEvent((activity) => {
+      setCodexEvents((current) => [...current.slice(-99), activity]);
+      if (activity.type === "codex-status") setCodexStatus(activity.status);
     });
     void window.forgeStudio.getServiceStatus().then((result) => {
       if (result.ok) {
@@ -53,7 +72,11 @@ export function App() {
         recordError(result.error.message);
       }
     });
-    return unsubscribe;
+    void window.forgeStudio.getCodexStatus().then((result) => {
+      if (result.ok) setCodexStatus(result.value);
+      else recordError(result.error.message);
+    });
+    return () => { unsubscribe(); unsubscribeCodex(); };
   }, []);
 
   const formattedReply = useMemo(
@@ -94,6 +117,33 @@ export function App() {
     }
   }
 
+  async function bindCodex(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    setCodexPending(true);
+    const result = await window.forgeStudio.bindCodexWorkspace(workspaceId);
+    setCodexPending(false);
+    if (result.ok) setCodexStatus(result.value);
+    else recordError(result.error.message);
+  }
+
+  async function startThread(): Promise<void> {
+    setCodexPending(true);
+    const result = await window.forgeStudio.startCodexThread();
+    setCodexPending(false);
+    if (result.ok) setThreadId(result.value.threadId);
+    else recordError(result.error.message);
+  }
+
+  async function startTurn(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    if (!threadId) return;
+    setCodexPending(true);
+    const result = await window.forgeStudio.startCodexTurn(threadId, turnText);
+    setCodexPending(false);
+    if (result.ok) setTurnText("");
+    else recordError(result.error.message);
+  }
+
   return (
     <main className="workbench">
       <header className="titlebar">
@@ -105,10 +155,10 @@ export function App() {
       </header>
 
       <section className="notice" aria-label="Implementation status">
-        <strong>Foundation shell</strong>
+        <strong>Secure Codex bridge</strong>
         <span>
-          This build exposes the real provider-free Forge service. Visual lore, asset, and game
-          tools are not implemented yet.
+          Codex can be bound to one registered workspace and may only stage reviewable Forge
+          changesets. Visual lore, asset, and game tools remain future slices.
         </span>
       </section>
 
@@ -122,6 +172,54 @@ export function App() {
             Use <code>workspace.list</code> to inspect workspaces already registered by the Forge
             service.
           </p>
+        </section>
+
+        <section className="panel codex-panel" aria-labelledby="codex-heading">
+          <div className="panel-heading">
+            <h2 id="codex-heading">Codex workspace</h2>
+            <span>{codexStatus.state}</span>
+          </div>
+          <p role="status">{codexStatus.message}</p>
+          <form onSubmit={(event) => void bindCodex(event)}>
+            <label>
+              Registered workspace ID
+              <input
+                aria-label="Registered workspace ID"
+                value={workspaceId}
+                onChange={(event) => setWorkspaceId(event.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <div className="actions">
+              <button type="submit" disabled={codexPending || workspaceId.length === 0}>
+                Bind Codex
+              </button>
+              <button
+                type="button"
+                disabled={codexPending || codexStatus.state !== "ready"}
+                onClick={() => void startThread()}
+              >
+                New thread
+              </button>
+            </div>
+          </form>
+          <form onSubmit={(event) => void startTurn(event)}>
+            <label>
+              Turn message
+              <textarea
+                aria-label="Turn message"
+                value={turnText}
+                onChange={(event) => setTurnText(event.target.value)}
+                disabled={!threadId}
+              />
+            </label>
+            <div className="actions">
+              <button type="submit" disabled={codexPending || !threadId || turnText.length === 0}>
+                Send turn
+              </button>
+            </div>
+          </form>
+          <small>{threadId ? `Thread ${threadId}` : "No active thread"}</small>
         </section>
 
         <section className="panel request-panel" aria-labelledby="request-heading">
@@ -175,6 +273,7 @@ export function App() {
               ))
             )}
           </ol>
+          <p>{codexEvents.length} Codex events</p>
         </section>
 
         <section className="panel errors" aria-labelledby="errors-heading">

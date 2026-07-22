@@ -46,6 +46,16 @@ worldforge.studio application service
                 `-- world lifecycle lock + durable external apply journal
 ```
 
+Electron main also owns a distinct Codex app-server boundary. It binds one
+registered canonical world root as the child working directory, creates a
+dedicated `CODEX_HOME`, and starts exactly Codex 0.144.6 with
+`app-server --stdio --strict-config`. The generated config fixes approval to
+`never`, sandboxing to read-only, network/web search off, empty shell
+inheritance, and one Forge MCP server. That stdlib MCP child is bound by argv to
+the Studio data directory and workspace ID and exposes only changeset stage,
+get, and list. It uses a secondary store attachment that never migrates the
+database or performs primary-service job or journal recovery.
+
 Canonical project files remain the source of truth. The SQLite database, staged
 content-addressed blobs, and apply journals live only under the explicit
 `--data-dir`; they are never placed in the Forge, world, bundle, or game roots.
@@ -81,16 +91,17 @@ guarantee or overwriting an unowned path.
 
 Durable jobs describe state only and execute nothing. Their state machine is
 the stable seam for later supervised Forge, Codex, Modly, Ollama, or Blender
-adapters. The Electron shell does not execute those jobs: it adds only a
-sandboxed workbench, strict service supervision, typed IPC, runtime-manifest
-loading, and release-hardening fuses. Provider adapters, file watching, and M6
-presentation work remain outside this foundation.
+adapters. The Electron shell does not execute those jobs. Codex proposals
+remain staged changesets and cannot approve or apply themselves. The shell adds
+a sandboxed workbench, strict service supervision, typed IPC, runtime-manifest
+loading, and release-hardening fuses. Other provider adapters, file watching,
+and M6 presentation work remain outside this foundation.
 
-Development selects the Python service through one explicit absolute
-`RWF_STUDIO_DEV_PYTHON` path. A package may select it only through the closed
-runtime manifest in Electron resources; it never searches `PATH`. The initial
-packaging skeleton contains no Python or Codex runtime and therefore reports
-that service as unavailable. Renderer artifacts use the same registered custom
+Development selects Python and Codex through explicit absolute
+`RWF_STUDIO_DEV_PYTHON` and `RWF_STUDIO_DEV_CODEX` paths. A package may select
+them only through the closed runtime manifest and pinned protocol provenance in
+Electron resources; it never searches `PATH`. Packages without both native
+runtimes report the bridge unavailable. Renderer artifacts use the same registered custom
 scheme in development and release, with no localhost or HMR server.
 
 AI is not a game subsystem. It does not decide dialogue, quests, routes, or

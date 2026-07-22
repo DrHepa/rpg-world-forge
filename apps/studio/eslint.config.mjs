@@ -6,7 +6,13 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist-electron/**", "dist-renderer/**", "eslint.config.mjs", "release/**"],
+    ignores: [
+      "dist-electron/**",
+      "dist-renderer/**",
+      "eslint.config.mjs",
+      "protocol/**",
+      "release/**",
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

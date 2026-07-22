@@ -86,6 +86,59 @@ class StudioStorageTests(unittest.TestCase):
                 events = reopened.list_events(workspace_id="workspace_01")
                 self.assertEqual("job.orphaned", events[0]["topic"])
 
+    def test_secondary_store_never_migrates_or_orphans_primary_state(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data_dir = Path(directory) / "studio"
+            with StudioStore(data_dir) as store:
+                timestamp = "2026-07-22T12:00:00Z"
+                workspace = {
+                    "format": "rpg-world-forge.forge_workspace",
+                    "format_version": 1,
+                    "workspace_id": "workspace_01",
+                    "forge_root": "/forge",
+                    "world_root": "/world",
+                    "game_root": None,
+                    "bundle_root": None,
+                    "created_at": timestamp,
+                }
+                store.connection.execute(
+                    "INSERT INTO workspaces "
+                    "(workspace_id, record_json, forge_dev, forge_ino, world_dev, world_ino, "
+                    "game_dev, game_ino, bundle_dev, bundle_ino) "
+                    "VALUES (?, ?, 1, 1, 2, 2, NULL, NULL, NULL, NULL)",
+                    ("workspace_01", encode_json(workspace)),
+                )
+                job = {
+                    "format": "rpg-world-forge.studio_job",
+                    "format_version": 1,
+                    "job_id": "job_01",
+                    "workspace_id": "workspace_01",
+                    "operation": "forge.validate",
+                    "state": "running",
+                    "input": {},
+                    "result": None,
+                    "error": None,
+                    "created_at": timestamp,
+                    "updated_at": timestamp,
+                }
+                store.connection.execute(
+                    "INSERT INTO jobs "
+                    "(job_id, workspace_id, state, record_json) VALUES (?, ?, ?, ?)",
+                    ("job_01", "workspace_01", "running", encode_json(job)),
+                )
+                store.connection.commit()
+
+            with StudioStore(data_dir, mode="secondary") as secondary:
+                row = secondary.connection.execute(
+                    "SELECT state FROM jobs WHERE job_id = 'job_01'"
+                ).fetchone()
+                self.assertEqual("running", row["state"])
+                self.assertEqual([], secondary.list_events(workspace_id="workspace_01"))
+
+            missing = Path(directory) / "missing"
+            with self.assertRaisesRegex(StudioError, "does not exist"):
+                StudioStore(missing, mode="secondary")
+
 
 if __name__ == "__main__":
     unittest.main()
