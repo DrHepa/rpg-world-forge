@@ -187,7 +187,7 @@ class BundlePublicationTests(unittest.TestCase):
                 expected_bundle_hash=bundle.bundle_hash,
             )
 
-            self.assertEqual(destination, recovered)
+            self.assertEqual(destination.resolve(), recovered.resolve())
             self.assertFalse((game / IMPORT_JOURNAL).exists())
             catalog = json.loads((game / "game_data/worlds.lock.json").read_text(encoding="utf-8"))
             self.assertEqual(1, len(catalog["releases"]))

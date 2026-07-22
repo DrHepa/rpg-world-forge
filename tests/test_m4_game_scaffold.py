@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+import unicodedata
 import unittest
 import wave
 import zipfile
@@ -750,10 +751,18 @@ class GameScaffoldTests(unittest.TestCase):
             self.assertFalse(script_package.exists())
             benchmark.write_bytes(benchmark_bytes)
 
-            first_case = game / "src/game/Foo.py"
-            second_case = game / "src/game/foo.py"
-            first_case.write_text("VALUE = 1\n", encoding="utf-8")
-            second_case.write_text("VALUE = 2\n", encoding="utf-8")
+            first_case = game / "src/game/Straße.py"
+            second_case = game / "src/game/Strasse.py"
+            first_case.write_bytes(b"VALUE = 1\n")
+            second_case.write_bytes(b"VALUE = 2\n")
+            self.assertEqual(first_case.name, unicodedata.normalize("NFC", first_case.name))
+            self.assertEqual(second_case.name, unicodedata.normalize("NFC", second_case.name))
+            self.assertEqual(first_case.name.casefold(), second_case.name.casefold())
+            materialized_names = {path.name for path in first_case.parent.iterdir()}
+            self.assertIn(first_case.name, materialized_names)
+            self.assertIn(second_case.name, materialized_names)
+            self.assertEqual(b"VALUE = 1\n", first_case.read_bytes())
+            self.assertEqual(b"VALUE = 2\n", second_case.read_bytes())
             case_package = root / "case-collision.zip"
             case_result = _run_game_script(
                 game,
@@ -924,7 +933,10 @@ class GameScaffoldTests(unittest.TestCase):
                 game,
                 expected_bundle_hash=bundle.bundle_hash,
             )
-            self.assertEqual(game / "game_data/worlds/modly_foundation/1.0.0", imported)
+            self.assertEqual(
+                (game / "game_data/worlds/modly_foundation/1.0.0").resolve(),
+                imported.resolve(),
+            )
             outside = root / "outside"
             outside.mkdir()
             verified = _run_game_script(

@@ -632,7 +632,7 @@ class M4BundleAndGameCliTests(unittest.TestCase):
                 cwd=root,
             )
             _assert_ok(self, imported)
-            release = game / "game_data/worlds/foundation_slice/1.0.0"
+            release = (game / "game_data/worlds/foundation_slice/1.0.0").resolve()
             self.assertIn(f"imported={release}", imported.stdout)
             self.assertTrue((release / "worldpack.json").is_file())
 

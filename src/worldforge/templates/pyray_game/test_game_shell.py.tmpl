@@ -569,7 +569,7 @@ class GameShellTests(unittest.TestCase):
     def test_packager_archives_one_private_snapshot_under_source_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             source = PROJECT_ROOT / "src/game/package_race_probe.py"
-            source.write_text("VALUE = 'before'\n", encoding="utf-8")
+            source.write_bytes(b"VALUE = 'before'\n")
             output = Path(temporary) / "snapshot.zip"
             specification = importlib.util.spec_from_file_location(
                 "game_package_script",
@@ -585,7 +585,7 @@ class GameShellTests(unittest.TestCase):
             def mutate_source_then_write(archive, relative, snapshot_path):
                 nonlocal mutated
                 if not mutated:
-                    source.write_text("VALUE = 'after'\n", encoding="utf-8")
+                    source.write_bytes(b"VALUE = 'after'\n")
                     mutated = True
                 return original_write(archive, relative, snapshot_path)
 
