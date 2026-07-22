@@ -21,6 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from isoworld.content.file_stat import descriptor_file_stat, path_file_stat  # noqa: E402
 from verify_game import (  # noqa: E402
     read_game_identity,
     verify_dependencies,
@@ -112,14 +113,14 @@ def _exclusive_game_mutation() -> Iterator[None]:
         descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     except FileExistsError as exc:
         raise ValueError("Another game mutation is already in progress") from exc
-    identity = os.fstat(descriptor)
+    identity = descriptor_file_stat(descriptor)
     try:
         os.write(descriptor, f"pid={os.getpid()} operation=package\n".encode("ascii"))
         yield
     finally:
         os.close(descriptor)
         try:
-            current = lock_path.lstat()
+            current = path_file_stat(lock_path)
         except FileNotFoundError:
             current = None
         if current is not None and (current.st_dev, current.st_ino) == (

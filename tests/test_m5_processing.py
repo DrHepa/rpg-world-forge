@@ -19,7 +19,7 @@ from worldforge.asset_processing import (
     process_asset_recipe,
     verify_processing_receipt,
 )
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 
 
 def _pillow() -> tuple[Any, Any]:
@@ -37,10 +37,7 @@ def _write_recipe(path: Path, value: dict[str, object]) -> Path:
         **value,
     }
     payload["content_hash"] = canonical_payload_hash(payload)
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    path.write_bytes(canonical_json_bytes(payload))
     return path
 
 

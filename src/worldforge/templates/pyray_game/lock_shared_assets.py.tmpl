@@ -13,6 +13,10 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from isoworld.content.file_stat import descriptor_file_stat, path_file_stat  # noqa: E402
+
 SHARED_ROOT = PROJECT_ROOT / "game_data/shared"
 LOCK_PATH = PROJECT_ROOT / "game_data/shared.lock.json"
 NOTICES_PATH = PROJECT_ROOT / "THIRD_PARTY_NOTICES.md"
@@ -69,14 +73,14 @@ def _exclusive_mutation() -> Iterator[None]:
         descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     except FileExistsError as exc:
         raise ValueError("Another game mutation is already in progress") from exc
-    identity = os.fstat(descriptor)
+    identity = descriptor_file_stat(descriptor)
     try:
         os.write(descriptor, f"pid={os.getpid()} operation=shared-assets\n".encode("ascii"))
         yield
     finally:
         os.close(descriptor)
         try:
-            current = path.lstat()
+            current = path_file_stat(path)
         except FileNotFoundError:
             current = None
         if current is not None and (current.st_dev, current.st_ino) == (

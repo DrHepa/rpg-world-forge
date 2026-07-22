@@ -12,6 +12,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from isoworld.content.file_stat import FileStat, descriptor_file_stat, path_file_stat
+
 POLICY_API_VERSION = "1"
 MAX_JSON_BYTES = 16 * 1024 * 1024
 DEFAULT_IGNORED_TOP_LEVEL = frozenset(
@@ -78,11 +80,11 @@ def _file_kind(mode: int) -> str:
     return "other"
 
 
-def _non_following_stat(path: Path) -> os.stat_result:
-    return os.stat(path, follow_symlinks=False)
+def _non_following_stat(path: Path) -> FileStat:
+    return path_file_stat(path)
 
 
-def _is_link_or_reparse(info: os.stat_result) -> bool:
+def _is_link_or_reparse(info: FileStat) -> bool:
     return stat.S_ISLNK(info.st_mode) or bool(
         getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
     )
@@ -228,7 +230,7 @@ def load_strict_json_object(
             | getattr(os, "O_NOFOLLOW", 0)
             | getattr(os, "O_NONBLOCK", 0),
         )
-        opened = os.fstat(descriptor)
+        opened = descriptor_file_stat(descriptor)
         if (
             not stat.S_ISREG(opened.st_mode)
             or opened.st_nlink != 1

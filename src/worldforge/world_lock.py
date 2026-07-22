@@ -5,6 +5,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from isoworld.content.file_stat import descriptor_file_stat, path_file_stat
+
 
 @contextmanager
 def exclusive_world_lifecycle(
@@ -30,14 +32,14 @@ def exclusive_world_lifecycle(
         raise error_type("Another world lifecycle operation is already in progress") from exc
     except OSError as exc:
         raise error_type(f"Could not acquire the world lifecycle lock: {exc}") from exc
-    identity = os.fstat(descriptor)
+    identity = descriptor_file_stat(descriptor)
     try:
         os.write(descriptor, f"pid={os.getpid()}\n".encode("ascii"))
         yield root
     finally:
         os.close(descriptor)
         try:
-            current = lock_path.lstat()
+            current = path_file_stat(lock_path)
         except FileNotFoundError:
             current = None
         if current is not None and (current.st_dev, current.st_ino) == (

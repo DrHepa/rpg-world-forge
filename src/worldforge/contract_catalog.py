@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-import json
 import re
 import stat
 import sysconfig
@@ -11,6 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from worldforge.asset_io import AssetContractError, read_json_object
+from worldforge.integrity import canonical_json_bytes
 
 CATALOG_FORMAT = "rpg-world-forge.contract_catalog"
 CATALOG_VERSION = 1
@@ -138,9 +138,7 @@ def _read_canonical_catalog(catalog_path: Path) -> dict[str, Any]:
         catalog = read_json_object(catalog_path)
     except AssetContractError as exc:
         raise ContractCatalogError(str(exc)) from exc
-    canonical = (json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode(
-        "utf-8"
-    )
+    canonical = canonical_json_bytes(catalog)
     if raw != canonical:
         raise ContractCatalogError(_issue("catalog", "must use canonical sorted JSON bytes"))
     return catalog

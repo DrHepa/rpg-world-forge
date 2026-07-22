@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import stat
@@ -10,6 +9,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from isoworld.content.file_stat import descriptor_file_stat, path_file_stat
 from isoworld.content.loader import load_worldpack
 from isoworld.content.renderpack import RenderPackError, load_renderpack
 from worldforge.assets import (
@@ -18,7 +18,7 @@ from worldforge.assets import (
     _resolve_inside,
     validate_asset_manifest,
 )
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 
 
 class RenderPackBuildError(ValueError):
@@ -138,7 +138,7 @@ def _remove_owned_file_at(
         if parent_fd is not None:
             info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         else:
-            info = (parent / name).lstat()
+            info = path_file_stat(parent / name)
         if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != identity:
             return
         if parent_fd is not None:
@@ -171,14 +171,14 @@ def _publish_new_file(
                 descriptor = os.open(destination.name, flags, 0o666, dir_fd=parent_fd)
             else:
                 descriptor = os.open(destination, flags, 0o666)
-            opened = os.fstat(descriptor)
+            opened = descriptor_file_stat(descriptor)
             identity = (opened.st_dev, opened.st_ino)
             with source.open("rb") as input_file, os.fdopen(descriptor, "wb") as output_file:
                 descriptor = None
                 shutil.copyfileobj(input_file, output_file, length=1024 * 1024)
                 output_file.flush()
                 os.fsync(output_file.fileno())
-                info = os.fstat(output_file.fileno())
+                info = descriptor_file_stat(output_file.fileno())
             return info.st_dev, info.st_ino
         except Exception:
             if descriptor is not None:
@@ -195,7 +195,7 @@ def _publish_new_file(
 
 def _remove_owned_file(path: Path, identity: tuple[int, int]) -> None:
     try:
-        info = path.lstat()
+        info = path_file_stat(path)
     except OSError:
         return
     if stat.S_ISREG(info.st_mode) and (info.st_dev, info.st_ino) == identity:
@@ -315,10 +315,7 @@ def build_renderpack(
         }
         payload["content_hash"] = canonical_payload_hash(payload)
         staged_output = stage / output.name
-        staged_output.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        staged_output.write_bytes(canonical_json_bytes(payload))
         try:
             loaded_worldpack = load_worldpack(worldpack_file)
             with load_renderpack(staged_output, loaded_worldpack):

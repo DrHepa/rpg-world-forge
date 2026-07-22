@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from worldforge.integrity import canonical_json_bytes
 from worldforge.validation import ID_PATTERN
 
 
@@ -267,7 +268,4 @@ def import_map_file(
 def write_imported_map(path: str | Path, value: dict[str, Any]) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    target.write_bytes(canonical_json_bytes(value))

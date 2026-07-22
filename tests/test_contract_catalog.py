@@ -12,11 +12,22 @@ from pathlib import Path
 
 from worldforge.__main__ import main
 from worldforge.contract_catalog import ContractCatalogError, audit_contracts, load_contract_catalog
+from worldforge.integrity import canonical_json_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _write_canonical_json(path: Path, payload: object) -> None:
+    path.write_bytes(canonical_json_bytes(payload))
+
+
 class ContractCatalogTests(unittest.TestCase):
+    def test_canonical_json_bytes_are_explicit_utf8_lf(self) -> None:
+        payload = canonical_json_bytes({"z": "café", "a": 1})
+
+        self.assertEqual(b'{\n  "a": 1,\n  "z": "caf\xc3\xa9"\n}\n', payload)
+        self.assertNotIn(b"\r\n", payload)
+
     def test_source_catalog_audits_every_schema(self) -> None:
         result = audit_contracts(ROOT)
         schemas = {
@@ -71,11 +82,7 @@ class ContractCatalogTests(unittest.TestCase):
 
             with self.subTest("format mismatch"):
                 mutated = {**original, "format": "rpg-world-forge.assetpack"}
-                fixture_path.write_bytes(
-                    (
-                        json.dumps(mutated, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-                    ).encode("utf-8")
-                )
+                _write_canonical_json(fixture_path, mutated)
                 with self.assertRaisesRegex(
                     ContractCatalogError,
                     rf"contracts/{entry_index}/fixtures/0/format: fixture value",
@@ -84,11 +91,7 @@ class ContractCatalogTests(unittest.TestCase):
 
             with self.subTest("version mismatch"):
                 mutated = {**original, "format_version": 999}
-                fixture_path.write_bytes(
-                    (
-                        json.dumps(mutated, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-                    ).encode("utf-8")
-                )
+                _write_canonical_json(fixture_path, mutated)
                 with self.assertRaisesRegex(
                     ContractCatalogError,
                     rf"contracts/{entry_index}/fixtures/0/format_version: fixture value",
@@ -116,10 +119,7 @@ class ContractCatalogTests(unittest.TestCase):
             shutil.copytree(ROOT / "schemas", root / "schemas")
             payload = json.loads((root / "contracts/catalog.json").read_text(encoding="utf-8"))
             payload["contracts"][0]["schema"] = "schemas/missing.schema.json"
-            (root / "contracts/catalog.json").write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            _write_canonical_json(root / "contracts/catalog.json", payload)
             stdout = io.StringIO()
             stderr = io.StringIO()
             with (
@@ -200,9 +200,8 @@ class ContractCatalogTests(unittest.TestCase):
                 root = Path(temp)
                 shutil.copytree(ROOT / "contracts", root / "contracts")
                 shutil.copytree(ROOT / "schemas", root / "schemas")
-                (root / "contracts/catalog.json").write_text(
-                    json.dumps(catalog, ensure_ascii=False, sort_keys=True) + "\n",
-                    encoding="utf-8",
+                (root / "contracts/catalog.json").write_bytes(
+                    (json.dumps(catalog, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
                 )
                 with self.assertRaisesRegex(ContractCatalogError, "canonical"):
                     audit_contracts(root)
@@ -241,10 +240,7 @@ class ContractCatalogTests(unittest.TestCase):
             root = Path(temp)
             (root / "contracts").mkdir()
             (root / "schemas").mkdir()
-            (root / "contracts/catalog.json").write_text(
-                json.dumps(subset, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            _write_canonical_json(root / "contracts/catalog.json", subset)
             for entry in subset["contracts"]:
                 source = ROOT / entry["schema"]
                 target = root / entry["schema"]
@@ -281,10 +277,7 @@ class ContractCatalogTests(unittest.TestCase):
             root = Path(temp)
             shutil.copytree(ROOT / "contracts", root / "contracts")
             shutil.copytree(ROOT / "schemas", root / "schemas")
-            (root / "contracts/catalog.json").write_text(
-                json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            _write_canonical_json(root / "contracts/catalog.json", catalog)
             with self.assertRaisesRegex(ContractCatalogError, message):
                 audit_contracts(root)
 
@@ -293,10 +286,7 @@ class ContractCatalogTests(unittest.TestCase):
             root = Path(temp)
             shutil.copytree(ROOT / "contracts", root / "contracts")
             shutil.copytree(ROOT / "schemas", root / "schemas")
-            (root / "contracts/catalog.json").write_text(
-                json.dumps(catalog, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            _write_canonical_json(root / "contracts/catalog.json", catalog)
             with (
                 unittest.mock.patch(
                     "worldforge.contract_catalog._candidate_install_roots", return_value=[root]

@@ -21,6 +21,11 @@ from unittest.mock import patch
 
 import isoworld.content.media as media_module
 import isoworld.content.resource_snapshot as snapshot_module
+from isoworld.content.file_stat import (
+    WindowsFileStat,
+    descriptor_file_stat,
+    path_file_stat,
+)
 from isoworld.content.loader import load_worldpack
 from isoworld.content.media import (
     MediaValidationError,
@@ -367,6 +372,7 @@ class DirectMediaValidationTests(unittest.TestCase):
         nested_target.write_bytes(_png())
         reparse_file = self.root / "reparse-file.png"
         reparse_file.write_bytes(_png())
+        canonical_reparse_file = reparse_file.resolve(strict=True)
         real_stat = media_module._non_following_stat
 
         def reparse_parent_stat(candidate: Path) -> object:
@@ -377,7 +383,7 @@ class DirectMediaValidationTests(unittest.TestCase):
 
         def reparse_file_stat(candidate: Path) -> object:
             info = real_stat(candidate)
-            return _reparse_info(info) if candidate == reparse_file else info
+            return _reparse_info(info) if candidate == canonical_reparse_file else info
 
         cases = (
             (nested_target, reparse_parent_stat, "safe directory"),
@@ -401,6 +407,167 @@ class DirectMediaValidationTests(unittest.TestCase):
                 read_validated_media(path, "image/png")
 
             open_resource.assert_not_called()
+
+    def test_handle_stat_contract_ignores_divergent_windows_path_stat(self) -> None:
+        path = self.root / "unchanged.png"
+        path.write_bytes(_png())
+        real_path_stat = os.stat
+        real_descriptor_stat = os.fstat
+        target_path_states: list[WindowsFileStat] = []
+        descriptor_states: list[WindowsFileStat] = []
+
+        def handle_state(info: os.stat_result) -> WindowsFileStat:
+            return WindowsFileStat(
+                st_mode=info.st_mode,
+                st_dev=info.st_dev,
+                st_ino=info.st_ino,
+                st_nlink=info.st_nlink,
+                st_size=info.st_size,
+                st_mtime_ns=info.st_mtime_ns,
+                st_ctime_ns=info.st_ctime_ns,
+                st_file_attributes=getattr(info, "st_file_attributes", 0),
+            )
+
+        def legacy_path_stat(candidate: object, *args: object, **kwargs: object) -> object:
+            info = real_path_stat(candidate, *args, **kwargs)
+            return SimpleNamespace(
+                st_dev=info.st_dev + 1,
+                st_ino=info.st_ino + 1,
+                st_size=info.st_size,
+                st_mtime_ns=info.st_mtime_ns,
+                st_ctime_ns=info.st_ctime_ns,
+                st_mode=info.st_mode,
+                st_nlink=info.st_nlink,
+                st_file_attributes=getattr(info, "st_file_attributes", 0),
+            )
+
+        def legacy_descriptor_stat(descriptor: int) -> object:
+            info = real_descriptor_stat(descriptor)
+            return SimpleNamespace(
+                st_dev=info.st_dev + 2,
+                st_ino=info.st_ino + 2,
+                st_size=info.st_size,
+                st_mtime_ns=info.st_mtime_ns,
+                st_ctime_ns=info.st_ctime_ns,
+                st_mode=info.st_mode,
+                st_nlink=info.st_nlink,
+                st_file_attributes=getattr(info, "st_file_attributes", 0),
+            )
+
+        def path_handle_stat(candidate: object) -> WindowsFileStat:
+            state = handle_state(real_path_stat(candidate, follow_symlinks=False))
+            if Path(candidate) == path:
+                target_path_states.append(state)
+            return state
+
+        def descriptor_handle_stat(descriptor: int) -> WindowsFileStat:
+            state = handle_state(real_descriptor_stat(descriptor))
+            descriptor_states.append(state)
+            return state
+
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            divergent_descriptor_state = legacy_descriptor_stat(descriptor)
+        finally:
+            os.close(descriptor)
+        self.assertNotEqual(
+            media_module._file_state(legacy_path_stat(path, follow_symlinks=False)),
+            media_module._file_state(divergent_descriptor_state),
+        )
+
+        with (
+            patch.object(media_module, "_DIR_FD_READ", False),
+            patch.object(media_module.os, "stat", side_effect=legacy_path_stat) as legacy_stat,
+            patch.object(
+                media_module.os,
+                "fstat",
+                side_effect=legacy_descriptor_stat,
+            ) as legacy_fstat,
+            patch.object(
+                media_module,
+                "path_file_stat",
+                side_effect=path_handle_stat,
+            ) as path_stat,
+            patch.object(
+                media_module,
+                "descriptor_file_stat",
+                side_effect=descriptor_handle_stat,
+            ) as fd_stat,
+        ):
+            validated = read_validated_media(path, "image/png")
+
+        self.assertEqual(hashlib.sha256(_png()).hexdigest(), validated.sha256)
+        self.assertGreater(path_stat.call_count, 0)
+        self.assertGreater(fd_stat.call_count, 0)
+        self.assertTrue(target_path_states)
+        self.assertTrue(descriptor_states)
+        self.assertEqual(
+            media_module._file_state(target_path_states[0]),
+            media_module._file_state(descriptor_states[0]),
+        )
+        legacy_stat.assert_not_called()
+        legacy_fstat.assert_not_called()
+
+    @unittest.skipUnless(os.name == "nt", "native Windows file identity contract")
+    def test_native_windows_path_and_descriptor_file_states_agree(self) -> None:
+        path = self.root / "native-identity.png"
+        payload = _png()
+        path.write_bytes(payload)
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+        try:
+            path_state = path_file_stat(path)
+            descriptor_state = descriptor_file_stat(descriptor)
+            fields = (
+                "st_mode",
+                "st_dev",
+                "st_ino",
+                "st_nlink",
+                "st_size",
+                "st_mtime_ns",
+                "st_ctime_ns",
+                "st_file_attributes",
+            )
+
+            self.assertIsInstance(path_state, WindowsFileStat)
+            self.assertIsInstance(descriptor_state, WindowsFileStat)
+            self.assertEqual(
+                tuple(getattr(path_state, field) for field in fields),
+                tuple(getattr(descriptor_state, field) for field in fields),
+            )
+            self.assertTrue(stat.S_ISREG(path_state.st_mode))
+            self.assertEqual(1, path_state.st_nlink)
+            self.assertEqual(len(payload), path_state.st_size)
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            self.assertEqual(payload, os.read(descriptor, len(payload)))
+        finally:
+            os.close(descriptor)
+
+        with self.assertRaises(OSError):
+            os.fstat(descriptor)
+
+    def test_rejects_same_byte_file_replacement_before_open(self) -> None:
+        path = self.root / "replace-me.png"
+        payload = _png()
+        path.write_bytes(payload)
+        original_open = media_module._open_resource
+        replaced = False
+
+        def replace_then_open(snapshot: object, relative: PurePosixPath) -> tuple[int, list[int]]:
+            nonlocal replaced
+            target = snapshot.target
+            target.rename(target.with_name("original.png"))
+            target.write_bytes(payload)
+            replaced = True
+            return original_open(snapshot, relative)
+
+        with (
+            patch.object(media_module, "_open_resource", side_effect=replace_then_open),
+            self.assertRaisesRegex(MediaValidationError, "identity changed while opening"),
+        ):
+            read_validated_media(path, "image/png")
+
+        self.assertTrue(replaced)
+        self.assertEqual(payload, path.read_bytes())
 
     def test_large_media_uses_spooled_mmap_without_retaining_a_second_payload(self) -> None:
         path = self.root / "tone.wav"
@@ -509,6 +676,46 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary_directory.cleanup)
         self.root = Path(self.temporary_directory.name)
+
+    def test_snapshot_file_state_uses_handle_contract_on_windows(self) -> None:
+        source_root = self.root / "source"
+        source_root.mkdir()
+        source = source_root / "tone.wav"
+        source.write_bytes(_wav())
+        owner = ResourceSnapshotOwner()
+        raw_path_stat = patch.object(
+            snapshot_module,
+            "_entry_stat",
+            side_effect=AssertionError("incompatible path stat tuple was used"),
+        )
+        try:
+            with (
+                patch.object(snapshot_module, "_platform_name", return_value="nt"),
+                patch.object(
+                    snapshot_module,
+                    "path_file_stat",
+                    side_effect=lambda candidate: os.stat(candidate, follow_symlinks=False),
+                ) as path_stat,
+                patch.object(
+                    snapshot_module,
+                    "descriptor_file_stat",
+                    side_effect=os.fstat,
+                ) as fd_stat,
+                raw_path_stat as incompatible_stat,
+            ):
+                captured = owner.materialize(
+                    source_root,
+                    PurePosixPath("tone.wav"),
+                    "audio/wav",
+                    limit=len(_wav()),
+                )
+
+            self.assertEqual(hashlib.sha256(_wav()).hexdigest(), captured.sha256)
+            incompatible_stat.assert_not_called()
+            self.assertGreater(path_stat.call_count, 0)
+            self.assertGreater(fd_stat.call_count, 0)
+        finally:
+            owner.close()
 
     def test_rejects_nonportable_and_noncanonical_paths(self) -> None:
         invalid = (
@@ -1840,6 +2047,12 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
         with (
             patch.object(snapshot_module.os, "name", "nt"),
             patch.object(
+                snapshot_module,
+                "path_file_stat",
+                side_effect=lambda candidate: os.stat(candidate, follow_symlinks=False),
+            ),
+            patch.object(snapshot_module, "descriptor_file_stat", side_effect=os.fstat),
+            patch.object(
                 ResourceSnapshotOwner,
                 "_validate_directory",
                 return_value=None,
@@ -1972,6 +2185,12 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
 
         with (
             patch.object(snapshot_module.os, "name", "nt"),
+            patch.object(
+                snapshot_module,
+                "path_file_stat",
+                side_effect=lambda candidate: os.stat(candidate, follow_symlinks=False),
+            ),
+            patch.object(snapshot_module, "descriptor_file_stat", side_effect=os.fstat),
             patch.object(
                 ResourceSnapshotOwner,
                 "_validate_file",

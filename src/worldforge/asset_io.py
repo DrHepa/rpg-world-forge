@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from isoworld.content.file_stat import FileStat, descriptor_file_stat, path_file_stat
 from isoworld.content.portability import is_portable_path_component
 from worldforge.integrity import canonical_payload_hash
 
@@ -273,11 +274,11 @@ def _open_verified_output_parent(path: Path) -> Iterator[tuple[int | None, tuple
         os.close(descriptor)
 
 
-def _entry_info(parent_fd: int | None, parent: Path, name: str) -> os.stat_result | None:
+def _entry_info(parent_fd: int | None, parent: Path, name: str) -> FileStat | None:
     try:
         if parent_fd is not None:
             return os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-        return (parent / name).lstat()
+        return path_file_stat(parent / name)
     except FileNotFoundError:
         return None
 
@@ -388,7 +389,7 @@ def _exclusive_write_lock(
         raise AssetContractError(f"Another writer is updating {destination}") from exc
     except OSError as exc:
         raise AssetContractError(f"Could not lock {destination}: {exc}") from exc
-    info = os.fstat(descriptor)
+    info = descriptor_file_stat(descriptor)
     identity = (info.st_dev, info.st_ino)
     os.close(descriptor)
     try:
@@ -434,7 +435,7 @@ def write_json_atomic(
             destination.parent,
             f".{destination.name}.",
         )
-        temporary_info = os.fstat(descriptor)
+        temporary_info = descriptor_file_stat(descriptor)
         temporary_identity = (temporary_info.st_dev, temporary_info.st_ino)
         try:
             with os.fdopen(descriptor, "wb") as target:

@@ -30,7 +30,7 @@ from worldforge.directory_publish import (
 from worldforge.game_boundary import GameBoundaryError, audit_game_repository
 from worldforge.game_lock import GameMutationLockError, exclusive_game_mutation
 from worldforge.game_scaffold import verify_game_runtime_snapshot
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.repository_boundary import (
     assert_new_repository_target,
     require_standalone_bundle_root,
@@ -340,7 +340,7 @@ def _read_json(path: Path, *, limit: int, context: str) -> dict[str, Any]:
 
 
 def _pretty_json(value: dict[str, Any]) -> bytes:
-    return (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    return canonical_json_bytes(value)
 
 
 def _sha256_bytes(value: bytes) -> str:

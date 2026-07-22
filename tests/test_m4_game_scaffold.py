@@ -28,7 +28,7 @@ from worldforge.game_scaffold import (
     create_game_project,
     update_game_runtime_snapshot,
 )
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.scaffold import ScaffoldError, create_world_project
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,10 +66,7 @@ def _write_fixture(
     worldpack_raw["world"]["id"] = world_id
     worldpack_raw["content_hash"] = canonical_payload_hash(worldpack_raw)
     worldpack = source / "worldpack.json"
-    worldpack.write_text(
-        json.dumps(worldpack_raw, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    worldpack.write_bytes(canonical_json_bytes(worldpack_raw))
     pack = load_worldpack(worldpack)
     audio = source / "mutable/audio.wav"
     audio.parent.mkdir()
@@ -101,7 +98,7 @@ def _write_fixture(
     }
     renderpack_raw["content_hash"] = canonical_payload_hash(renderpack_raw)
     renderpack = source / "renderpack.json"
-    renderpack.write_text(json.dumps(renderpack_raw), encoding="utf-8")
+    renderpack.write_bytes(json.dumps(renderpack_raw).encode("utf-8"))
     licenses = root / "licenses"
     licenses.mkdir()
     (licenses / "CONTENT-LICENSE.txt").write_text("Fixture: CC0-1.0\n", encoding="utf-8")
@@ -226,9 +223,10 @@ class GameScaffoldTests(unittest.TestCase):
             )
             fixture = game / "tests/fixtures/replay.json"
             fixture.parent.mkdir(parents=True)
-            fixture.write_text(
-                json.dumps({"actions": [], "format": "game.replay_fixture"}) + "\n",
-                encoding="utf-8",
+            fixture.write_bytes(
+                (json.dumps({"actions": [], "format": "game.replay_fixture"}) + "\n").encode(
+                    "utf-8"
+                )
             )
             extra_test = game / "tests/helpers/test_extra.py"
             extra_test.parent.mkdir(parents=True)
@@ -295,9 +293,8 @@ class GameScaffoldTests(unittest.TestCase):
             self.assertEqual(_sha256(lock_path), manifest["shared_assets_lock_hash"])
 
             provider_fixture = game / "tests/fixtures/provider.json"
-            provider_fixture.write_text(
-                json.dumps({"provider": "must-not-ship"}) + "\n",
-                encoding="utf-8",
+            provider_fixture.write_bytes(
+                (json.dumps({"provider": "must-not-ship"}) + "\n").encode("utf-8")
             )
             rejected_package = root / "provider-fixture.zip"
             rejected = _run_game_script(
@@ -315,10 +312,7 @@ class GameScaffoldTests(unittest.TestCase):
             mismatch = json.loads(lock_bytes)
             mismatch["files"][0]["media_type"] = "audio/wav"
             mismatch["content_hash"] = canonical_payload_hash(mismatch)
-            lock_path.write_text(
-                json.dumps(mismatch, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            lock_path.write_bytes(canonical_json_bytes(mismatch))
             mismatched = _run_game_script(
                 game,
                 str(game / "scripts/verify_game.py"),
@@ -594,10 +588,7 @@ class GameScaffoldTests(unittest.TestCase):
             platform = json.loads(platform_bytes)
             platform["locked_requirements"].append("openai==1.0.0")
             platform["locked_requirements"].sort(key=str.casefold)
-            platform_path.write_text(
-                json.dumps(platform, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            platform_path.write_bytes(canonical_json_bytes(platform))
             requirements_path.write_text(
                 "\n".join(platform["locked_requirements"]) + "\n",
                 encoding="utf-8",

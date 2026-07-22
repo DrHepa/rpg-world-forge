@@ -270,9 +270,8 @@ class GameShellTests(unittest.TestCase):
             corrupted = json.loads(original)
             corrupted["final_state_digest"] = "0" * 64
             try:
-                replay.write_text(
-                    json.dumps(corrupted, indent=2, sort_keys=True) + "\n",
-                    encoding="utf-8",
+                replay.write_bytes(
+                    (json.dumps(corrupted, indent=2, sort_keys=True) + "\n").encode("utf-8")
                 )
                 rejected = subprocess.run(
                     [*base, "--replay-slot", "smoke"],

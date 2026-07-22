@@ -32,7 +32,7 @@ from worldforge.assetpack import (
     verify_assetpack,
 )
 from worldforge.assets import validate_asset_manifest
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -115,7 +115,7 @@ def _document(**updates: object) -> dict[str, object]:
 def _write_hashed_json(path: Path, value: dict[str, object]) -> dict[str, object]:
     value = bind_content_hash(value)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_bytes(canonical_json_bytes(value))
     return value
 
 
@@ -589,7 +589,7 @@ def _fixture(
 
 def _rewrite_hashed(path: Path, value: dict[str, object]) -> None:
     value["content_hash"] = canonical_payload_hash(value)
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_bytes(canonical_json_bytes(value))
 
 
 class GLBInspectorTests(unittest.TestCase):

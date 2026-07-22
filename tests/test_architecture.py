@@ -474,7 +474,7 @@ class ArchitectureTests(unittest.TestCase):
             findings = audit_game_repository(root)
 
             self.assertEqual(1, len(findings))
-            self.assertEqual("assets/models/hero.BLEND", str(findings[0].path))
+            self.assertEqual("assets/models/hero.BLEND", findings[0].path.as_posix())
             self.assertEqual("forbidden_game_path", findings[0].rule)
 
     def test_game_repository_rejects_authoring_metadata_in_runtime_json(self) -> None:

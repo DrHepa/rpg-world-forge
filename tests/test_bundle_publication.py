@@ -20,6 +20,65 @@ from worldforge.game_scaffold import create_game_project
 
 
 class BundlePublicationTests(unittest.TestCase):
+    def test_windows_access_denied_is_a_collision_only_when_destination_exists(self) -> None:
+        class _MoveFile:
+            argtypes: object = None
+            restype: object = None
+
+            def __call__(self, source: str, destination: str, flags: int) -> int:
+                del source, destination, flags
+                return 0
+
+        class _Kernel32:
+            MoveFileExW = _MoveFile()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            destination = root / "destination"
+            destination.mkdir()
+            with (
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "WinDLL",
+                    return_value=_Kernel32(),
+                    create=True,
+                ),
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "get_last_error",
+                    return_value=5,
+                    create=True,
+                ),
+                self.assertRaises(FileExistsError),
+            ):
+                directory_publish_module._windows_rename_noreplace(source, destination)
+
+            destination.rmdir()
+            with (
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "WinDLL",
+                    return_value=_Kernel32(),
+                    create=True,
+                ),
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "get_last_error",
+                    return_value=5,
+                    create=True,
+                ),
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "FormatError",
+                    return_value="Access is denied",
+                    create=True,
+                ),
+                self.assertRaisesRegex(DirectoryPublishError, "Access is denied"),
+            ):
+                directory_publish_module._windows_rename_noreplace(source, destination)
+
     def _bundle_and_game(self, root: Path) -> tuple[object, Path]:
         game = root / "game"
         create_game_project(game, game_id="publication_game", title="Publication Game")
@@ -57,10 +116,11 @@ class BundlePublicationTests(unittest.TestCase):
             root = Path(directory)
             worldpack, renderpack, licenses = _write_fixture(root / "fixture")
             destination = root / "bundle"
+            canonical_destination = destination.resolve(strict=False)
             original_publish = bundle_module.publish_directory_noreplace
 
             def race(source: Path, target: Path) -> tuple[int, int]:
-                if target == destination:
+                if target.resolve(strict=False) == canonical_destination:
                     target.mkdir()
                     (target / "concurrent.txt").write_text(
                         "preserve me\n",

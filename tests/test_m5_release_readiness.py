@@ -19,6 +19,7 @@ from scripts.verify_m5_release import (
     _tree_records,
     verify_release_readiness,
 )
+from worldforge.integrity import canonical_json_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/ci.yml"
@@ -61,14 +62,14 @@ def _write_live_toolchain_fixture(output: Path, python_version: str) -> None:
     receipt = fixture / relative
     document = json.loads(receipt.read_text(encoding="utf-8"))
     document["toolchain"]["python_version"] = python_version
-    receipt.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    receipt.write_bytes(canonical_json_bytes(document))
     payload = receipt.read_bytes()
     lock_path = fixture / "fixture.lock.json"
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
     record = next(item for item in lock["files"] if item["path"] == relative)
     record["sha256"] = hashlib.sha256(payload).hexdigest()
     record["size"] = len(payload)
-    lock_path.write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    lock_path.write_bytes(canonical_json_bytes(lock))
 
 
 class M5ReleaseReadinessTests(unittest.TestCase):

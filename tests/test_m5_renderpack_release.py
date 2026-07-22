@@ -25,7 +25,7 @@ from worldforge.asset_manifest_v3 import finalize_asset_release
 from worldforge.asset_processing import process_asset_recipe
 from worldforge.asset_production import create_production_request
 from worldforge.assets import validate_asset_manifest
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.renderpack import RenderPackBuildError, build_renderpack
 
 WORLDPACK = Path(__file__).resolve().parents[1] / "content/compiled/foundation.worldpack.json"
@@ -469,10 +469,7 @@ class M5RenderPackReleaseTests(unittest.TestCase):
                 **kwargs: object,
             ) -> None:
                 if Path(path) == manifest:
-                    manifest.write_text(
-                        json.dumps(concurrent, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                        encoding="utf-8",
-                    )
+                    manifest.write_bytes(canonical_json_bytes(concurrent))
                 original_write(path, value, **kwargs)  # type: ignore[arg-type]
 
             with (
@@ -529,7 +526,7 @@ class M5RenderPackReleaseTests(unittest.TestCase):
                 destination: Path,
                 parent_identity: tuple[int, int],
             ) -> tuple[int, int]:
-                if destination == output.resolve():
+                if destination.resolve(strict=False) == output.resolve(strict=False):
                     raise OSError("injected deliverable publication failure")
                 return original_publish(source, destination, parent_identity)
 

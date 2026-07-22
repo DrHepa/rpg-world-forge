@@ -5,6 +5,18 @@ import json
 from typing import Any
 
 
+def canonical_json_bytes(payload: object) -> bytes:
+    """Encode one deterministic pretty JSON document as explicit UTF-8 LF bytes."""
+
+    document = json.dumps(
+        payload,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    )
+    return (document + "\n").encode("utf-8")
+
+
 def canonical_payload_hash(payload: dict[str, Any], *, hash_field: str = "content_hash") -> str:
     """Return the canonical SHA-256 used by compiled forge artifacts."""
 

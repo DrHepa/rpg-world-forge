@@ -10,6 +10,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from isoworld.content.file_stat import FileStat, descriptor_file_stat, path_file_stat
+
 MAX_JSON_BYTES = 16 * 1024 * 1024
 _DIR_FD_PUBLICATION = os.name == "posix" and all(
     function in os.supports_dir_fd for function in (os.open, os.rename, os.stat)
@@ -180,21 +182,21 @@ def _open_verified_output_parent(path: Path) -> Iterator[tuple[int | None, tuple
         os.close(descriptor)
 
 
-def _entry_info(parent_fd: int | None, parent: Path, name: str) -> os.stat_result | None:
+def _entry_info(parent_fd: int | None, parent: Path, name: str) -> FileStat | None:
     try:
         if parent_fd is not None:
             return os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-        return (parent / name).lstat()
+        return path_file_stat(parent / name)
     except FileNotFoundError:
         return None
 
 
-def _entry_identity(info: os.stat_result) -> tuple[int, int]:
+def _entry_identity(info: FileStat) -> tuple[int, int]:
     return info.st_dev, info.st_ino
 
 
 def _validated_target_identity(
-    info: os.stat_result | None,
+    info: FileStat | None,
     destination: Path,
 ) -> tuple[int, int] | None:
     if info is None:
@@ -284,7 +286,7 @@ def _verify_lock_entry(
     parent_identity: tuple[int, int],
 ) -> None:
     _verify_parent_identity(parent, parent_identity)
-    opened = os.fstat(descriptor)
+    opened = descriptor_file_stat(descriptor)
     current = _entry_info(parent_fd, parent, name)
     if (
         not stat.S_ISREG(opened.st_mode)
@@ -350,7 +352,7 @@ def _open_lock_entry(
         raise RuntimeIOError(f"Could not open persistence lock {parent / name}: {exc}") from exc
 
     try:
-        info = os.fstat(descriptor)
+        info = descriptor_file_stat(descriptor)
         identity = _entry_identity(info)
         current = _entry_info(parent_fd, parent, name)
         if (
@@ -503,7 +505,7 @@ def write_json_atomic(path: str | Path, value: object) -> None:
                 temporary_identity: tuple[int, int] | None = None
                 descriptor_owned = True
                 try:
-                    temporary_info = os.fstat(descriptor)
+                    temporary_info = descriptor_file_stat(descriptor)
                     temporary_identity = _entry_identity(temporary_info)
                     if not stat.S_ISREG(temporary_info.st_mode) or temporary_info.st_nlink != 1:
                         raise RuntimeIOError("Temporary output is not a standalone regular file")

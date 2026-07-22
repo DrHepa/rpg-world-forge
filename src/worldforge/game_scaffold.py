@@ -17,7 +17,7 @@ from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATU
 from isoworld.content.portability import is_portable_path_component
 from worldforge.game_boundary import audit_game_repository
 from worldforge.game_lock import GameMutationLockError, exclusive_game_mutation
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.repository_boundary import (
     assert_new_repository_target,
     require_standalone_game_root,
@@ -64,10 +64,7 @@ def _sha256(data: bytes) -> str:
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    temporary.write_bytes(canonical_json_bytes(payload))
     os.replace(temporary, path)
 
 
@@ -120,9 +117,7 @@ def verify_game_runtime_snapshot(root: Path) -> dict[str, Any]:
         raise GameScaffoldError("The runtime lock feature inventory is invalid")
     if manifest["content_hash"] != canonical_payload_hash(manifest):
         raise GameScaffoldError("The runtime lock content hash does not verify")
-    expected_bytes = (
-        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    ).encode("utf-8")
+    expected_bytes = canonical_json_bytes(manifest)
     if data != expected_bytes:
         raise GameScaffoldError("The runtime lock is not canonically serialized")
     records = manifest["files"]

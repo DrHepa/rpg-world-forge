@@ -22,6 +22,10 @@ from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from isoworld.content.file_stat import descriptor_file_stat, path_file_stat  # noqa: E402
+
 PINNED_TOOLS = {
     "build": "1.5.0",
     "setuptools": "83.0.0",
@@ -437,7 +441,7 @@ def _entry_identity(path: Path) -> tuple[int, int] | None:
 
 def _unlink_owned_file(path: Path, identity: tuple[int, int]) -> None:
     try:
-        info = path.lstat()
+        info = path_file_stat(path)
     except OSError:
         return
     if stat.S_ISREG(info.st_mode) and (info.st_dev, info.st_ino) == identity:
@@ -471,7 +475,7 @@ def _stage_artifact(source: Path, output_dir: Path) -> tuple[Path, tuple[int, in
             ) from exc
     if descriptor is None or stage is None:
         raise ReleaseBuildError(f"could not allocate release staging file for {source.name}")
-    opened = os.fstat(descriptor)
+    opened = descriptor_file_stat(descriptor)
     identity = (opened.st_dev, opened.st_ino)
     try:
         with source.open("rb") as input_stream, os.fdopen(descriptor, "wb") as output_stream:
@@ -483,7 +487,7 @@ def _stage_artifact(source: Path, output_dir: Path) -> tuple[Path, tuple[int, in
             else:
                 stage.chmod(0o644)
             os.fsync(output_stream.fileno())
-            staged_info = os.fstat(output_stream.fileno())
+            staged_info = descriptor_file_stat(output_stream.fileno())
             if (staged_info.st_dev, staged_info.st_ino) != identity:
                 raise ReleaseBuildError(f"release staging identity changed: {stage}")
     except Exception:

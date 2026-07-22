@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from isoworld.content.file_stat import FileStat, descriptor_file_stat, path_file_stat
 from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.media import media_signature_matches
 from isoworld.content.models import WorldPack
@@ -208,11 +209,11 @@ def _open_verified_parent(path: Path, expected: tuple[int, int]) -> Iterator[int
         os.close(descriptor)
 
 
-def _entry_info(parent_fd: int | None, parent: Path, name: str) -> os.stat_result | None:
+def _entry_info(parent_fd: int | None, parent: Path, name: str) -> FileStat | None:
     try:
         if parent_fd is not None:
             return os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
-        return (parent / name).lstat()
+        return path_file_stat(parent / name)
     except FileNotFoundError:
         return None
 
@@ -294,7 +295,7 @@ def _reject_existing_path(path: Path, *, context: str) -> None:
 
 def _unlink_if_same(path: Path, identity: tuple[int, int]) -> None:
     try:
-        info = path.lstat()
+        info = path_file_stat(path)
     except OSError:
         return
     if (info.st_dev, info.st_ino) == identity and stat.S_ISREG(info.st_mode):
@@ -332,7 +333,7 @@ def _copy_exclusive(
             raise AssetPackError(f"Refusing to overwrite {destination}") from exc
         except OSError as exc:
             raise AssetPackError(f"Could not create runtime file {destination}: {exc}") from exc
-        info = os.fstat(descriptor)
+        info = descriptor_file_stat(descriptor)
         identity = (info.st_dev, info.st_ino)
         try:
             with source.open("rb") as input_stream, os.fdopen(descriptor, "wb") as output_stream:
@@ -368,7 +369,7 @@ def _publish_json_exclusive(
             path.parent,
             f".{path.name}.",
         )
-        info = os.fstat(descriptor)
+        info = descriptor_file_stat(descriptor)
         identity = (info.st_dev, info.st_ino)
         linked = False
         try:

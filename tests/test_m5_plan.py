@@ -19,6 +19,7 @@ from worldforge.asset_io import (
 from worldforge.asset_manifest_v3 import bind_asset_plan
 from worldforge.assets import init_asset_manifest, validate_asset_manifest
 from worldforge.compiler import compile_project
+from worldforge.integrity import canonical_json_bytes
 from worldforge.scaffold import create_world_project
 from worldforge.workflow import PHASES, complete_phase, reopen_phase, validate_phase_report
 
@@ -590,10 +591,7 @@ class M5PlanTests(unittest.TestCase):
                 **kwargs: object,
             ) -> None:
                 if Path(path) == manifest:
-                    manifest.write_text(
-                        json.dumps(concurrent, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                        encoding="utf-8",
-                    )
+                    manifest.write_bytes(canonical_json_bytes(concurrent))
                 original_write(path, value, **kwargs)  # type: ignore[arg-type]
 
             with (

@@ -11,6 +11,12 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from isoworld.content.file_stat import (
+    FileStat,
+    descriptor_file_stat,
+    file_identity,
+    path_file_stat,
+)
 from isoworld.content.media import ValidatedMedia, read_validated_resource
 
 _SNAPSHOT_PREFIX = "isoworld-renderpack-"
@@ -50,11 +56,11 @@ class _FileRecord:
     sha256: str
 
 
-def _identity(info: os.stat_result) -> _Identity:
-    return info.st_dev, info.st_ino
+def _identity(info: FileStat) -> _Identity:
+    return file_identity(info)
 
 
-def _file_record(info: os.stat_result, digest: str) -> _FileRecord:
+def _file_record(info: FileStat, digest: str) -> _FileRecord:
     return _FileRecord(
         identity=_identity(info),
         size=info.st_size,
@@ -393,7 +399,7 @@ def _private_directory(path: Path, expected: _Identity) -> None:
         _windows_acl_is_private(path)
 
 
-def _stat_matches_record(info: os.stat_result, record: _FileRecord) -> bool:
+def _stat_matches_record(info: FileStat, record: _FileRecord) -> bool:
     return (
         stat.S_ISREG(info.st_mode)
         and info.st_nlink == 1
@@ -405,7 +411,7 @@ def _stat_matches_record(info: os.stat_result, record: _FileRecord) -> bool:
     )
 
 
-def _stat_matches_claimed_record(info: os.stat_result, record: _FileRecord) -> bool:
+def _stat_matches_claimed_record(info: FileStat, record: _FileRecord) -> bool:
     """Match state after an owner rename, which may legitimately advance ctime."""
 
     return (
@@ -418,7 +424,7 @@ def _stat_matches_claimed_record(info: os.stat_result, record: _FileRecord) -> b
     )
 
 
-def _validate_file_privacy(path: Path, info: os.stat_result) -> None:
+def _validate_file_privacy(path: Path, info: FileStat) -> None:
     if os.name == "posix" and stat.S_IMODE(info.st_mode) != 0o400:
         raise ResourceSnapshotError(f"Snapshot file is not sealed and private: {path}")
     if os.name == "nt":
@@ -486,6 +492,19 @@ def _entry_stat(
     return (parent_path / name).lstat()
 
 
+def _file_entry_stat(
+    parent_descriptor: int | None,
+    parent_path: Path,
+    name: str,
+) -> FileStat:
+    if _platform_name() == "nt":
+        return path_file_stat(parent_path / name)
+    if _platform_name() == "posix":
+        assert parent_descriptor is not None
+        return os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    raise ResourceSnapshotError("Secure snapshot file inspection is unsupported on this platform")
+
+
 def _open_new_file(
     *,
     parent_descriptor: int | None,
@@ -518,7 +537,11 @@ def _claim_entry(
             f"Could not atomically claim snapshot entry {parent_path / source_name}: {exc}"
         ) from exc
     try:
-        info = _entry_stat(parent_descriptor, parent_path, claim_name)
+        info = (
+            _entry_stat(parent_descriptor, parent_path, claim_name)
+            if directory
+            else _file_entry_stat(parent_descriptor, parent_path, claim_name)
+        )
         expected_type = stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
         if stat.S_ISLNK(info.st_mode) or not expected_type or _identity(info) != expected:
             raise ResourceSnapshotError(
@@ -1074,7 +1097,7 @@ class ResourceSnapshotOwner:
                 flags=flags,
                 mode=0o600,
             )
-            opened = os.fstat(descriptor)
+            opened = descriptor_file_stat(descriptor)
             identity = _identity(opened)
             if os.name == "posix":
                 os.fchmod(descriptor, 0o600)
@@ -1126,8 +1149,8 @@ class ResourceSnapshotOwner:
                 ) from original
             raise
 
-    def _entry_stat(self, parent_relative: PurePosixPath, name: str) -> os.stat_result:
-        return _entry_stat(
+    def _entry_stat(self, parent_relative: PurePosixPath, name: str) -> FileStat:
+        return _file_entry_stat(
             self._directory_descriptor(parent_relative),
             self._directory_path(parent_relative),
             name,
@@ -1217,7 +1240,7 @@ class ResourceSnapshotOwner:
         record: _FileRecord | None = None
         validation_error: BaseException | None = None
         try:
-            opened = os.fstat(descriptor)
+            opened = descriptor_file_stat(descriptor)
             if (
                 not stat.S_ISREG(opened.st_mode)
                 or opened.st_nlink != 1
@@ -1230,14 +1253,14 @@ class ResourceSnapshotOwner:
                 os.fchmod(descriptor, 0o400)
             else:
                 os.chmod(target, stat.S_IREAD)
-            sealed = os.fstat(descriptor)
+            sealed = descriptor_file_stat(descriptor)
             digest = hashlib.sha256()
             while True:
                 chunk = os.read(descriptor, 1024 * 1024)
                 if not chunk:
                     break
                 digest.update(chunk)
-            after = os.fstat(descriptor)
+            after = descriptor_file_stat(descriptor)
             record = _file_record(sealed, digest.hexdigest())
             if not _stat_matches_record(after, record):
                 raise ResourceSnapshotError(
@@ -1303,7 +1326,7 @@ class ResourceSnapshotOwner:
                 limit=limit,
                 materialize_descriptor=descriptor,
             )
-            opened = os.fstat(descriptor)
+            opened = descriptor_file_stat(descriptor)
             if (
                 not stat.S_ISREG(opened.st_mode)
                 or opened.st_nlink != 1
@@ -1318,7 +1341,7 @@ class ResourceSnapshotOwner:
             else:
                 os.chmod(target, stat.S_IREAD)
             os.fsync(descriptor)
-            sealed = os.fstat(descriptor)
+            sealed = descriptor_file_stat(descriptor)
             record = _file_record(sealed, resource.sha256)
             _validate_file_privacy(target, sealed)
             current = self._entry_stat(parent_relative, relative.name)
@@ -1403,7 +1426,7 @@ class ResourceSnapshotOwner:
         else:
             descriptor = os.open(self._directory_path(parent_relative) / name, flags)
         try:
-            before = os.fstat(descriptor)
+            before = descriptor_file_stat(descriptor)
             state_matches = _stat_matches_claimed_record if claimed else _stat_matches_record
             if not state_matches(before, expected):
                 raise ResourceSnapshotError("Snapshot file changed before content verification")
@@ -1413,7 +1436,7 @@ class ResourceSnapshotOwner:
                 if not chunk:
                     break
                 digest.update(chunk)
-            after = os.fstat(descriptor)
+            after = descriptor_file_stat(descriptor)
             if not state_matches(after, expected):
                 raise ResourceSnapshotError("Snapshot file changed during content verification")
             return digest.hexdigest()
@@ -1670,7 +1693,7 @@ class ResourceSnapshotOwner:
             directory=False,
         )
         try:
-            claimed_info = _entry_stat(parent_descriptor, parent_path, claim_name)
+            claimed_info = _file_entry_stat(parent_descriptor, parent_path, claim_name)
             if not _stat_matches_claimed_record(claimed_info, record):
                 raise ResourceSnapshotError(
                     f"Snapshot file changed after cleanup claim: {parent_path / relative.name}"
@@ -1692,7 +1715,7 @@ class ResourceSnapshotOwner:
                 if os.name == "nt":
                     claimed = parent_path / claim_name
                     os.chmod(claimed, stat.S_IREAD)
-                    restored = _entry_stat(parent_descriptor, parent_path, claim_name)
+                    restored = _file_entry_stat(parent_descriptor, parent_path, claim_name)
                     if not _stat_matches_claimed_record(restored, record):
                         raise ResourceSnapshotError(
                             f"Windows snapshot file seal was not restored: {claimed}"

@@ -87,6 +87,13 @@ def _windows_rename_noreplace(source: Path, destination: Path) -> None:
     error = get_last_error() if get_last_error is not None else 0
     if error in {80, 183}:  # ERROR_FILE_EXISTS, ERROR_ALREADY_EXISTS
         raise FileExistsError(error, "destination already exists", destination)
+    if error == 5:  # ERROR_ACCESS_DENIED can be Windows' directory-collision result.
+        try:
+            destination.lstat()
+        except OSError:
+            pass
+        else:
+            raise FileExistsError(error, "destination already exists", destination)
     formatter = getattr(ctypes, "FormatError", None)
     detail = formatter(error) if formatter is not None else f"Windows error {error}"
     raise DirectoryPublishError(error, detail, destination)

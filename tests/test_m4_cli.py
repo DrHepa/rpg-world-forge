@@ -16,7 +16,7 @@ from unittest.mock import patch
 import isoworld.__main__ as isoworld_cli
 import worldforge.__main__ as worldforge_cli
 from isoworld.content.loader import load_worldpack
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPILED = ROOT / "content/compiled/foundation.worldpack.json"
@@ -113,10 +113,7 @@ def _assert_ok(test: unittest.TestCase, result: subprocess.CompletedProcess[str]
 
 def _write_json(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    path.write_bytes(canonical_json_bytes(payload))
 
 
 def _write_bundle_inputs(root: Path) -> tuple[Path, Path, Path]:

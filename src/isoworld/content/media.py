@@ -13,6 +13,12 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
+from isoworld.content.file_stat import (
+    FileStat,
+    descriptor_file_stat,
+    file_identity,
+    path_file_stat,
+)
 from isoworld.runtime_io import RuntimeIOError, decode_json_object
 
 MAX_MEDIA_BYTES = 512 * 1024 * 1024
@@ -46,22 +52,30 @@ class _PathSnapshot:
     root: Path
     target: Path
     directories: tuple[tuple[Path, tuple[int, int]], ...]
-    target_state: tuple[int, int, int, int, int]
+    target_state: tuple[int, int, int, int, int, int, int]
 
 
-def _identity(info: os.stat_result) -> tuple[int, int]:
-    return info.st_dev, info.st_ino
+def _identity(info: FileStat) -> tuple[int, int]:
+    return file_identity(info)
 
 
-def _file_state(info: os.stat_result) -> tuple[int, int, int, int, int]:
-    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+def _file_state(info: FileStat) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+        stat.S_IFMT(info.st_mode),
+        info.st_nlink,
+    )
 
 
-def _non_following_stat(path: Path) -> os.stat_result:
-    return os.stat(path, follow_symlinks=False)
+def _non_following_stat(path: Path) -> FileStat:
+    return path_file_stat(path)
 
 
-def _is_link_or_reparse(info: os.stat_result) -> bool:
+def _is_link_or_reparse(info: FileStat) -> bool:
     return stat.S_ISLNK(info.st_mode) or bool(
         getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
     )
@@ -274,7 +288,7 @@ def _copy_capture_to_descriptor(
 ) -> None:
     """Stream one validated capture into an already exclusive regular file."""
 
-    before = os.fstat(destination)
+    before = descriptor_file_stat(destination)
     if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size != 0:
         raise MediaValidationError("Snapshot destination is not a new private regular file")
     destination_identity = _identity(before)
@@ -289,7 +303,7 @@ def _copy_capture_to_descriptor(
         copied_hash.update(chunk)
         _write_descriptor(destination, chunk)
     os.fsync(destination)
-    after = os.fstat(destination)
+    after = descriptor_file_stat(destination)
     if (
         not stat.S_ISREG(after.st_mode)
         or after.st_nlink != 1
@@ -334,7 +348,7 @@ def read_validated_resource(
     capture: BinaryIO | None = None
     try:
         descriptor, directories = _open_resource(snapshot, relative)
-        before = os.fstat(descriptor)
+        before = descriptor_file_stat(descriptor)
         if (
             not stat.S_ISREG(before.st_mode)
             or before.st_nlink != 1
@@ -355,7 +369,7 @@ def read_validated_resource(
             capture.flush()
             with mmap.mmap(capture.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
                 _validate_media_payload(mapped, media_type, snapshot.target)
-        after = os.fstat(descriptor)
+        after = descriptor_file_stat(descriptor)
         if _file_state(after) != _file_state(before):
             raise MediaValidationError(
                 f"Resource identity changed while reading: {snapshot.target}"

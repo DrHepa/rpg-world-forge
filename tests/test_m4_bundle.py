@@ -20,7 +20,7 @@ from worldforge.bundle import (
 )
 from worldforge.compiler import build_worldpack
 from worldforge.game_scaffold import create_game_project
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.project import load_source_project
 from worldforge.scaffold import create_world_project
 
@@ -30,6 +30,10 @@ COMPILED = ROOT / "content/compiled/foundation.worldpack.json"
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _write_canonical_json(path: Path, payload: object) -> None:
+    path.write_bytes(canonical_json_bytes(payload))
 
 
 def _write_wav(path: Path) -> None:
@@ -46,7 +50,7 @@ def _write_worldpack(root: Path, world_id: str = "modly_foundation") -> Path:
     raw["world"]["id"] = world_id
     raw["content_hash"] = canonical_payload_hash(raw)
     path = root / f"{world_id}.worldpack.json"
-    path.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_canonical_json(path, raw)
     return path
 
 
@@ -77,7 +81,7 @@ def _write_renderpack(root: Path, worldpack_path: Path) -> Path:
     }
     raw["content_hash"] = canonical_payload_hash(raw)
     path = root / "renderpack.json"
-    path.write_text(json.dumps(raw), encoding="utf-8")
+    path.write_bytes(json.dumps(raw).encode("utf-8"))
     return path
 
 
@@ -108,7 +112,7 @@ def _rewrite_manifest(bundle: Path, mutate) -> dict:
     raw = json.loads(path.read_text(encoding="utf-8"))
     mutate(raw)
     raw["bundle_hash"] = canonical_payload_hash(raw, hash_field="bundle_hash")
-    path.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_canonical_json(path, raw)
     return raw
 
 
@@ -312,7 +316,7 @@ class RuntimeBundleTests(unittest.TestCase):
                 returned_renderpack = verified.renderpack
                 snapshot_root = returned_renderpack.root
 
-                self.assertEqual(root / "published-bundle", verified.root)
+                self.assertEqual((root / "published-bundle").resolve(), verified.root.resolve())
                 self.assertTrue(snapshot_root.is_dir())
                 self.assertEqual([snapshot_root], list(snapshot_parent.iterdir()))
                 for asset in returned_renderpack.assets:
@@ -335,7 +339,7 @@ class RuntimeBundleTests(unittest.TestCase):
                 load_source_project(ROOT / "examples/foundation/source/manifest.json")
             )
             worldpack = source / "v5.worldpack.json"
-            worldpack.write_text(json.dumps(payload), encoding="utf-8")
+            worldpack.write_bytes(json.dumps(payload).encode("utf-8"))
             renderpack = _write_renderpack(source, worldpack)
             licenses = root / "licenses"
             licenses.mkdir()
@@ -381,7 +385,7 @@ class RuntimeBundleTests(unittest.TestCase):
             raw = json.loads(renderpack.read_text(encoding="utf-8"))
             raw["provider"] = "not-runtime-safe"
             raw["content_hash"] = canonical_payload_hash(raw)
-            renderpack.write_text(json.dumps(raw), encoding="utf-8")
+            renderpack.write_bytes(json.dumps(raw).encode("utf-8"))
             with self.assertRaisesRegex(BundleError, "provider metadata"):
                 export_runtime_bundle(
                     worldpack,
@@ -393,7 +397,7 @@ class RuntimeBundleTests(unittest.TestCase):
 
             raw.pop("provider")
             raw["content_hash"] = canonical_payload_hash(raw)
-            renderpack.write_text(json.dumps(raw), encoding="utf-8")
+            renderpack.write_bytes(json.dumps(raw).encode("utf-8"))
             (licenses / "unsafe-link.txt").symlink_to(licenses / "CONTENT-LICENSE.txt")
             with self.assertRaisesRegex(BundleError, "symlink"):
                 export_runtime_bundle(
@@ -520,9 +524,7 @@ class RuntimeBundleTests(unittest.TestCase):
             renderpack = json.loads(renderpack_path.read_text(encoding="utf-8"))
             renderpack["model_id"] = "leaked-model"
             renderpack["content_hash"] = canonical_payload_hash(renderpack)
-            renderpack_path.write_text(
-                json.dumps(renderpack, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-            )
+            _write_canonical_json(renderpack_path, renderpack)
 
             def reseal(manifest: dict) -> None:
                 record = next(
@@ -545,7 +547,7 @@ class RuntimeBundleTests(unittest.TestCase):
             source_asset.write_text("this is not wave audio\n", encoding="utf-8")
             renderpack_raw["assets"][0]["files"][0]["sha256"] = _sha256(source_asset)
             renderpack_raw["content_hash"] = canonical_payload_hash(renderpack_raw)
-            renderpack.write_text(json.dumps(renderpack_raw), encoding="utf-8")
+            renderpack.write_bytes(json.dumps(renderpack_raw).encode("utf-8"))
             with self.assertRaisesRegex(BundleError, "declared media type"):
                 export_runtime_bundle(
                     worldpack,
@@ -562,10 +564,7 @@ class RuntimeBundleTests(unittest.TestCase):
             bundled_raw = json.loads(bundled_renderpack.read_text(encoding="utf-8"))
             bundled_raw["assets"][0]["files"][0]["sha256"] = _sha256(asset)
             bundled_raw["content_hash"] = canonical_payload_hash(bundled_raw)
-            bundled_renderpack.write_text(
-                json.dumps(bundled_raw, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            _write_canonical_json(bundled_renderpack, bundled_raw)
 
             def reseal(manifest: dict) -> None:
                 by_path = {item["path"]: item for item in manifest["files"]}
@@ -638,14 +637,11 @@ class RuntimeBundleTests(unittest.TestCase):
             worldpack_raw["runtime_requirements"]["required_features"].append("unsupported_feature")
             worldpack_raw["runtime_requirements"]["required_features"].sort()
             worldpack_raw["content_hash"] = canonical_payload_hash(worldpack_raw)
-            worldpack.write_text(
-                json.dumps(worldpack_raw, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            _write_canonical_json(worldpack, worldpack_raw)
             renderpack_raw = json.loads(renderpack.read_text(encoding="utf-8"))
             renderpack_raw["world_content_hash"] = worldpack_raw["content_hash"]
             renderpack_raw["content_hash"] = canonical_payload_hash(renderpack_raw)
-            renderpack.write_text(json.dumps(renderpack_raw), encoding="utf-8")
+            renderpack.write_bytes(json.dumps(renderpack_raw).encode("utf-8"))
             incompatible = export_runtime_bundle(
                 worldpack,
                 renderpack,

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import json
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from worldforge.integrity import canonical_payload_hash
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.project import SourceProject, load_source_project
 from worldforge.validation import ValidationIssue, validate_project
 
@@ -119,8 +118,5 @@ def compile_project(manifest_path: str | Path, output_path: str | Path) -> dict[
     payload = build_worldpack(project)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    output.write_bytes(canonical_json_bytes(payload))
     return payload

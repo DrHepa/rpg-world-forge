@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from worldforge.integrity import canonical_json_bytes
 from worldforge.project import SourceProject, load_source_project
 
 
@@ -346,7 +346,4 @@ def analyze_manifest(manifest_path: str | Path) -> dict[str, Any]:
 def write_analysis(path: str | Path, report: dict[str, Any]) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    target.write_bytes(canonical_json_bytes(report))

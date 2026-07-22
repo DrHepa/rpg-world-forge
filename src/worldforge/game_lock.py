@@ -5,6 +5,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from isoworld.content.file_stat import descriptor_file_stat, path_file_stat
+
 
 class GameMutationLockError(ValueError):
     """Raised when an external game mutation cannot acquire exclusive ownership."""
@@ -23,14 +25,14 @@ def exclusive_game_mutation(root: Path, operation: str) -> Iterator[None]:
         ) from exc
     except OSError as exc:
         raise GameMutationLockError(f"Could not acquire the game mutation lock: {exc}") from exc
-    identity = os.fstat(descriptor)
+    identity = descriptor_file_stat(descriptor)
     try:
         os.write(descriptor, f"pid={os.getpid()} operation={operation}\n".encode())
         yield
     finally:
         os.close(descriptor)
         try:
-            current = lock_path.lstat()
+            current = path_file_stat(lock_path)
         except FileNotFoundError:
             current = None
         if current is not None and (current.st_dev, current.st_ino) == (
