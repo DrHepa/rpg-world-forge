@@ -110,6 +110,42 @@ different actors, genres, rules, maps, languages, and campaigns without
 changing the Forge. Independent game repositories import only immutable,
 hash-locked releases.
 
+## Forge Studio application service
+
+Forge Studio v1 begins with a local, provider-free Python application service.
+It preserves the separate Forge, world-authoring, bundle, and game repository
+roots while giving a future desktop client one strict interface for durable
+workspace registration, events, job state, and explicitly approved source
+changesets. It does not run models, providers, Blender, Modly, watchers, or the
+game runtime.
+
+Start the service with an explicit user-data directory outside every project:
+
+```bash
+worldforge-studio-service --data-dir /path/to/user-data/rpg-world-forge-studio
+```
+
+The process reads and writes one strict UTF-8 JSON object per line on standard
+input/output. Public v1 request methods are `service.initialize`,
+`workspace.register/list/get`, `events.list`, `changeset.create/get/list`,
+`changeset.approve/reject/apply`, and `job.create/get/list/transition/cancel`.
+Contract errors are returned as correlated `error` envelopes; a malformed line
+does not terminate the stream.
+
+Changesets initially edit only UTF-8 files beneath a registered world's
+`source/` directory. Proposed bytes are content-addressed under the external
+data directory. Applying them requires explicit approval, rechecks every base
+hash and filesystem identity under the world lifecycle lock, and uses a durable
+journal so an interrupted multi-file apply is completed or rolled back without
+claiming cross-filesystem atomicity.
+
+The public contracts are
+[`forge-workspace`](schemas/forge-workspace.schema.json),
+[`studio-protocol`](schemas/studio-protocol.schema.json),
+[`studio-changeset`](schemas/studio-changeset.schema.json), and
+[`studio-job`](schemas/studio-job.schema.json). The application boundary is
+recorded in [ADR-0011](docs/decisions/0011-forge-studio-application-service.md).
+
 ## Quick start
 
 ```bash

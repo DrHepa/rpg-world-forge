@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/studio-protocol.schema.json",
+  "title": "Forge Studio NDJSON application protocol v1",
+  "type": "object",
+  "required": ["protocol", "protocol_version", "kind", "request_id"],
+  "properties": {
+    "protocol": {"const": "rpg-world-forge.studio_protocol"},
+    "protocol_version": {"const": 1},
+    "kind": {"enum": ["request", "response", "error", "event"]},
+    "request_id": {"type": ["string", "null"], "minLength": 1}
+  },
+  "oneOf": [
+    {"$ref": "#/$defs/request"},
+    {"$ref": "#/$defs/response"},
+    {"$ref": "#/$defs/error"},
+    {"$ref": "#/$defs/event"}
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["protocol", "protocol_version", "kind", "request_id"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"enum": ["request", "response", "error", "event"]},
+        "request_id": {"type": ["string", "null"], "minLength": 1}
+      }
+    },
+    "method": {
+      "enum": [
+        "service.initialize",
+        "workspace.register",
+        "workspace.list",
+        "workspace.get",
+        "events.list",
+        "changeset.create",
+        "changeset.get",
+        "changeset.list",
+        "changeset.approve",
+        "changeset.reject",
+        "changeset.apply",
+        "job.create",
+        "job.get",
+        "job.list",
+        "job.transition",
+        "job.cancel"
+      ]
+    },
+    "request": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+          "properties": {
+            "protocol": {"const": "rpg-world-forge.studio_protocol"},
+            "protocol_version": {"const": 1},
+            "kind": {"const": "request"},
+            "request_id": {"type": "string", "minLength": 1},
+            "method": {"$ref": "#/$defs/method"},
+            "params": {"type": "object"}
+          }
+        }
+      ]
+    },
+    "response": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["protocol", "protocol_version", "kind", "request_id", "result"],
+          "properties": {
+            "protocol": {"const": "rpg-world-forge.studio_protocol"},
+            "protocol_version": {"const": 1},
+            "kind": {"const": "response"},
+            "request_id": {"type": "string", "minLength": 1},
+            "result": {"type": "object"}
+          }
+        }
+      ]
+    },
+    "errorCode": {
+      "enum": ["invalid_request", "not_found", "conflict", "invalid_state", "internal_error"]
+    },
+    "error": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["protocol", "protocol_version", "kind", "request_id", "error"],
+          "properties": {
+            "protocol": {"const": "rpg-world-forge.studio_protocol"},
+            "protocol_version": {"const": 1},
+            "kind": {"const": "error"},
+            "request_id": {"type": ["string", "null"], "minLength": 1},
+            "error": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["code", "message", "details"],
+              "properties": {
+                "code": {"$ref": "#/$defs/errorCode"},
+                "message": {"type": "string", "minLength": 1},
+                "details": {"type": "object"}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "event": {
+      "allOf": [
+        {"$ref": "#/$defs/base"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["protocol", "protocol_version", "kind", "request_id", "event"],
+          "properties": {
+            "protocol": {"const": "rpg-world-forge.studio_protocol"},
+            "protocol_version": {"const": 1},
+            "kind": {"const": "event"},
+            "request_id": {"type": "null"},
+            "event": {"type": "object"}
+          }
+        }
+      ]
+    }
+  }
+}

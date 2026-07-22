@@ -39,6 +39,7 @@ dev = [
 [project.scripts]
 isoworld = "isoworld.__main__:main"
 worldforge = "worldforge.__main__:main"
+worldforge-studio-service = "worldforge.studio.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

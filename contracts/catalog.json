@@ -829,6 +829,100 @@
       "version": 5
     },
     {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0011-forge-studio-application-service.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.forge_workspace",
+      "id": "forge-workspace",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_forge_workspace"
+      ],
+      "schema": "schemas/forge-workspace.schema.json",
+      "tests": [
+        "tests/test_studio_contracts.py",
+        "tests/test_studio_workspaces_jobs.py"
+      ],
+      "title": "Forge Studio workspace registry record v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0011-forge-studio-application-service.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_changeset",
+      "id": "studio-changeset",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_changeset"
+      ],
+      "schema": "schemas/studio-changeset.schema.json",
+      "tests": [
+        "tests/test_studio_contracts.py",
+        "tests/test_studio_changesets.py"
+      ],
+      "title": "Forge Studio staged file changeset v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0011-forge-studio-application-service.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_job",
+      "id": "studio-job",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_job"
+      ],
+      "schema": "schemas/studio-job.schema.json",
+      "tests": [
+        "tests/test_studio_contracts.py",
+        "tests/test_studio_storage.py",
+        "tests/test_studio_workspaces_jobs.py"
+      ],
+      "title": "Forge Studio durable job record v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0011-forge-studio-application-service.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_protocol",
+      "id": "studio-protocol",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_protocol_envelope",
+        "worldforge.studio.service:serve"
+      ],
+      "schema": "schemas/studio-protocol.schema.json",
+      "tests": [
+        "tests/test_studio_contracts.py",
+        "tests/test_studio_service.py"
+      ],
+      "title": "Forge Studio NDJSON application protocol v1",
+      "version": 1
+    },
+    {
       "cli_commands": [
         "audit-contracts"
       ],

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/studio-changeset.schema.json",
+  "title": "Forge Studio staged file changeset v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "changeset_id",
+    "workspace_id",
+    "status",
+    "operations",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "format": {"const": "rpg-world-forge.studio_changeset"},
+    "format_version": {"const": 1},
+    "changeset_id": {"$ref": "#/$defs/entityId"},
+    "workspace_id": {"$ref": "#/$defs/workspaceId"},
+    "status": {"enum": ["staged", "approved", "rejected", "applied"]},
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {"$ref": "#/$defs/operation"}
+    },
+    "created_at": {"$ref": "#/$defs/timestamp"},
+    "updated_at": {"$ref": "#/$defs/timestamp"}
+  },
+  "$defs": {
+    "workspaceId": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+    "entityId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "operation", "base_sha256", "proposed_sha256", "size"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "format": "rpg-world-forge-portable-source-path",
+          "x-worldforge-path-policy": {
+            "root": "source/",
+            "separator": "/",
+            "normalization": "NFC",
+            "reject_traversal_segments": true,
+            "reject_windows_reserved_names": true,
+            "reject_trailing_dot_or_space": true,
+            "max_component_utf8_bytes": 255,
+            "collision_key": "NFC-casefold"
+          },
+          "pattern": "^source/[^/\\\\\\u0000-\\u001f<>:\\u0022|?*]+(?:/[^/\\\\\\u0000-\\u001f<>:\\u0022|?*]+)*$"
+        },
+        "operation": {"enum": ["create", "replace", "delete"]},
+        "base_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "proposed_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "size": {"type": "integer", "minimum": 0, "maximum": 16777216}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"operation": {"const": "create"}}},
+          "then": {
+            "properties": {
+              "base_sha256": {"type": "null"},
+              "proposed_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"operation": {"const": "replace"}}},
+          "then": {
+            "properties": {
+              "base_sha256": {"$ref": "#/$defs/sha256"},
+              "proposed_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"operation": {"const": "delete"}}},
+          "then": {
+            "properties": {
+              "base_sha256": {"$ref": "#/$defs/sha256"},
+              "proposed_sha256": {"type": "null"},
+              "size": {"const": 0}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

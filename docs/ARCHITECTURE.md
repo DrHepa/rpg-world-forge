@@ -20,6 +20,65 @@ independent game repository <---------- copied, hash-locked data
 (pyray/raylib code, UX, saves, packaging; no authoring control plane)
 ```
 
+## Forge Studio application-service boundary
+
+Forge Studio is an authoring-time control plane under `worldforge`; it is not a
+runtime feature and never enters a worldpack, renderpack, assetpack, immutable
+bundle, or generated game. The first service boundary is deliberately
+provider-free:
+
+```text
+desktop supervisor (later)
+        |
+        | strict NDJSON request/response/error/event envelopes over stdio
+        v
+worldforge.studio application service
+        |-- public schema validators
+        |-- workspace boundary inspection
+        |-- SQLite registry, events, and job state
+        `-- approved, base-hashed source changesets
+                |
+                `-- world lifecycle lock + durable external apply journal
+```
+
+Canonical project files remain the source of truth. The SQLite database, staged
+content-addressed blobs, and apply journals live only under the explicit
+`--data-dir`; they are never placed in the Forge, world, bundle, or game roots.
+The database uses foreign keys, WAL, FULL synchronous writes, and a bounded busy
+timeout. A service restart marks interrupted `running` jobs as `orphaned` and
+records that transition as an event.
+
+A workspace requires the active Forge repository and one canonical v2 world
+repository. Optional game and bundle roots must pass their existing standalone
+boundary inspectors. Symlinked roots, repeated filesystem identities,
+casefold/NFC aliases, and nested or overlapping responsibilities are rejected.
+
+Studio changesets are not arbitrary filesystem patches. Version 1 permits
+creation, replacement, or deletion of standalone UTF-8 regular files only
+beneath `source/`, with portable paths and existing parent directories. Each
+operation captures the exact base SHA-256 or absence and stores proposed bytes
+by SHA-256 outside the repository. Approval and apply are separate state
+transitions. Apply rechecks roots, parents, link counts, identities, hashes, and
+base state while holding the existing world lifecycle lock. The public path
+schema names the `rpg-world-forge-portable-source-path` format and carries the
+NFC, traversal, reserved-name, trailing-dot/space, and UTF-8 component limit
+policy consumed by the shared Python validator. POSIX mutations are relative to
+a verified directory-descriptor chain; Windows holds no-delete handles for the
+entire directory chain. Visible identities are rechecked through the durable
+file and SQLite commit. Journal intent,
+including every reserved stage name, is durable before a stage is created.
+Same-directory exclusive link/unlink publication and the identity/hash journal
+provide crash recovery and rollback. POSIX flushes file and directory metadata;
+Windows uses write-through journal replacement plus `FlushFileBuffers` on the
+affected directory handle. If either platform cannot expose its required
+durability primitive, apply fails closed instead of claiming an equivalent
+guarantee or overwriting an unowned path.
+
+Durable jobs describe state only and execute nothing. Their state machine is
+the stable seam for later supervised Forge, Codex, Modly, Ollama, or Blender
+adapters. Those adapters, an Electron client, file watching, and M6 presentation
+work remain outside this foundation.
+
 AI is not a game subsystem. It does not decide dialogue, quests, routes, or
 actions during play. It may propose authoring material, but that material must
 be reviewed and compiled before it reaches the runtime.

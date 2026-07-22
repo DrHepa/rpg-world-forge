@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/forge-workspace.schema.json",
+  "title": "Forge Studio workspace registry record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "workspace_id",
+    "forge_root",
+    "world_root",
+    "game_root",
+    "bundle_root",
+    "created_at"
+  ],
+  "properties": {
+    "format": {"const": "rpg-world-forge.forge_workspace"},
+    "format_version": {"const": 1},
+    "workspace_id": {"$ref": "#/$defs/workspaceId"},
+    "forge_root": {"type": "string", "minLength": 1},
+    "world_root": {"type": "string", "minLength": 1},
+    "game_root": {"type": ["string", "null"], "minLength": 1},
+    "bundle_root": {"type": ["string", "null"], "minLength": 1},
+    "created_at": {"$ref": "#/$defs/timestamp"}
+  },
+  "$defs": {
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    }
+  }
+}
