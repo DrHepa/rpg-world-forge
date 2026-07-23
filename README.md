@@ -154,6 +154,10 @@ The Electron preload exposes these reads and the four offline jobs only as
 named capabilities. Electron main owns protocol methods, operation names, and
 request IDs; renderer input is limited to closed workspace IDs, portable
 relative paths, bounded ticks, and job IDs.
+The World cockpit groups those authorized sources, keeps drafts only in memory,
+checks JSON syntax, and renders bounded neutral map previews on Canvas. Drafts
+are explicitly not staged, never autosaved, and never written to a repository.
+Assets and Game remain labeled future work rather than simulated capabilities.
 
 Changesets initially edit only UTF-8 files beneath a registered world's
 `source/` directory. Proposed bytes are content-addressed under the external

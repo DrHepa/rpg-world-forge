@@ -59,14 +59,17 @@ uses `PATH`, `PYTHONPATH`, `PYTHONHOME`, `NODE_OPTIONS`, or renderer input.
 Electron Builder packages an ASAR shell with future Windows NSIS/ZIP and Linux
 AppImage/tar targets. Its after-pack hook disables RunAsNode, `NODE_OPTIONS`,
 and CLI inspect arguments; disables extra `file:` protocol privileges; enables
-cookie encryption, embedded ASAR integrity, and OnlyLoadAppFromAsar. The self-contained Python/Codex resources, signed
-installers, provider brokers, watchers, and visual authoring tools remain
-separate later changes.
+cookie encryption, embedded ASAR integrity, and OnlyLoadAppFromAsar. The
+self-contained Python/Codex resources, signed installers, provider brokers,
+watchers, asset production, and native game visualization remain separate later
+changes. The renderer may project verified World/lore reads into an in-memory
+draft cockpit and neutral non-authoritative Canvas preview.
 
 ## Consequences
 
-- The current workbench can show only real service initialization, status,
-  responses, events, and failures.
+- The current workbench shows registered world identity, manifest-authorized
+  sources, bounded validation/analysis findings, durable records, and explicit
+  in-memory drafts; it has no autosave, staging, or repository write path.
 - A compromised renderer cannot name IPC channels or directly reach files,
   commands, providers, local ports, or project roots.
 - Development requires one explicit interpreter setting; packaged builds are
