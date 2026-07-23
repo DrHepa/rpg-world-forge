@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   registerStudioIpc,
+  validateAssetCatalogInspectArgument,
+  validateAssetCatalogListArgument,
   validateAssetpackArgument,
   validateAssetReceiptArgument,
   validateCancelJobArgument,
@@ -108,6 +110,418 @@ describe("Studio named authoring and job IPC contracts", () => {
     [validateCancelJobArgument, { jobId: "../job" }],
   ])("rejects malformed or capability-shaped authoring/job input %#", (validate, value) => {
     expect(() => validate(value)).toThrow();
+  });
+});
+
+describe("Studio named asset catalog IPC contracts", () => {
+  const revision = "a".repeat(64);
+  const entryId = `asset_${"b".repeat(64)}`;
+
+  it("accepts only initial, revision-bound page, and exact inspection inputs", () => {
+    expect(validateAssetCatalogListArgument({ workspaceId: "workspace_01" })).toEqual({
+      workspaceId: "workspace_01",
+    });
+    expect(
+      validateAssetCatalogListArgument({
+        workspaceId: "workspace_01",
+        offset: 0,
+        expectedManifestRevision: revision,
+      }),
+    ).toEqual({
+      workspaceId: "workspace_01",
+      offset: 0,
+      expectedManifestRevision: revision,
+    });
+    expect(
+      validateAssetCatalogListArgument({
+        workspaceId: "workspace_01",
+        offset: 64,
+        expectedManifestRevision: revision,
+      }),
+    ).toEqual({
+      workspaceId: "workspace_01",
+      offset: 64,
+      expectedManifestRevision: revision,
+    });
+    expect(
+      validateAssetCatalogInspectArgument({
+        workspaceId: "workspace_01",
+        manifestRevision: revision,
+        entryId,
+      }),
+    ).toEqual({
+      workspaceId: "workspace_01",
+      manifestRevision: revision,
+      entryId,
+    });
+  });
+
+  it.each([
+    { workspaceId: "workspace_01", offset: 64 },
+    { workspaceId: "workspace_01", expectedManifestRevision: "a".repeat(64) },
+    {
+      workspaceId: "workspace_01",
+      offset: -1,
+      expectedManifestRevision: "a".repeat(64),
+    },
+    {
+      workspaceId: "workspace_01",
+      offset: 1.5,
+      expectedManifestRevision: "a".repeat(64),
+    },
+    {
+      workspaceId: "workspace_01",
+      offset: Number.MAX_SAFE_INTEGER + 1,
+      expectedManifestRevision: "a".repeat(64),
+    },
+    {
+      workspaceId: "workspace_01",
+      offset: 64,
+      expectedManifestRevision: "A".repeat(64),
+    },
+    { workspaceId: "workspace_01", limit: 64 },
+    { workspaceId: "workspace_01", cursor: "opaque" },
+    { workspaceId: "workspace_01", path: "assets/manifest.json" },
+    { workspaceId: "workspace_01", category: "manifest" },
+    { workspaceId: "workspace_01", mediaType: "application/json" },
+    { workspaceId: "workspace_01", method: "asset.catalog.list" },
+  ])("rejects renderer-shaped or malformed list input %#", (value) => {
+    expect(() => validateAssetCatalogListArgument(value)).toThrow();
+  });
+
+  it.each([
+    {
+      workspaceId: "workspace_01",
+      manifestRevision: "A".repeat(64),
+      entryId: `asset_${"b".repeat(64)}`,
+    },
+    {
+      workspaceId: "workspace_01",
+      manifestRevision: "a".repeat(64),
+      entryId: "asset_bad",
+    },
+    {
+      workspaceId: "workspace_01",
+      manifestRevision: "a".repeat(64),
+      entryId: `asset_${"b".repeat(64)}`,
+      path: "assets/manifest.json",
+    },
+    {
+      workspaceId: "workspace_01",
+      manifestRevision: "a".repeat(64),
+      entryId: `asset_${"b".repeat(64)}`,
+      binary: true,
+    },
+  ])("rejects malformed or authority-shaped inspection input %#", (value) => {
+    expect(() => validateAssetCatalogInspectArgument(value)).toThrow();
+  });
+
+  it("maps initial, revision-bound, and inspect calls with main-owned bounds", async () => {
+    const harness = createIpcHarness();
+    expect(
+      await harness.invoke(IPC_CHANNELS.listAssetCatalog, {
+        workspaceId: "workspace_01",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await harness.invoke(IPC_CHANNELS.listAssetCatalog, {
+        workspaceId: "workspace_01",
+        offset: 64,
+        expectedManifestRevision: revision,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await harness.invoke(IPC_CHANNELS.inspectAssetCatalogEntry, {
+        workspaceId: "workspace_01",
+        manifestRevision: revision,
+        entryId,
+      }),
+    ).toMatchObject({ ok: true });
+
+    expect(harness.request.mock.calls.map((call) => [call[1], call[2], call[3]])).toEqual([
+      [
+        "asset.catalog.list",
+        { workspace_id: "workspace_01", offset: 0, limit: 64 },
+        60_000,
+      ],
+      [
+        "asset.catalog.list",
+        {
+          workspace_id: "workspace_01",
+          offset: 64,
+          limit: 64,
+          expected_manifest_revision: revision,
+        },
+        60_000,
+      ],
+      [
+        "asset.catalog.inspect",
+        {
+          workspace_id: "workspace_01",
+          expected_manifest_revision: revision,
+          entry_id: entryId,
+        },
+        60_000,
+      ],
+    ]);
+  });
+
+  it("accepts exact correlated list and inspection replies", async () => {
+    const harness = createIpcHarness();
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(createAssetCatalogListResponse(requestId, {
+        manifestRevision: "d".repeat(64),
+        offset: 0,
+        entries: createAssetEntries(1),
+        nextOffset: null,
+      })),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.listAssetCatalog, {
+        workspaceId: "workspace_01",
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        method: "asset.catalog.list",
+        result: { manifest_revision: "d".repeat(64), offset: 0, next_offset: null },
+      },
+    });
+
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(createAssetCatalogListResponse(requestId, {
+        manifestRevision: revision,
+        offset: 64,
+        entries: createAssetEntries(64),
+        nextOffset: 128,
+      })),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.listAssetCatalog, {
+        workspaceId: "workspace_01",
+        offset: 64,
+        expectedManifestRevision: revision,
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        method: "asset.catalog.list",
+        result: { manifest_revision: revision, offset: 64, next_offset: 128 },
+      },
+    });
+
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(createAssetCatalogInspectResponse(requestId, revision, entryId)),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.inspectAssetCatalogEntry, {
+        workspaceId: "workspace_01",
+        manifestRevision: revision,
+        entryId,
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        method: "asset.catalog.inspect",
+        result: {
+          manifest_revision: revision,
+          entry: { entry_id: entryId },
+          inspection: { kind: "json" },
+        },
+      },
+    });
+  });
+
+  it("rejects mismatched, duplicate, oversized, nonmonotonic, and forged list replies", async () => {
+    const harness = createIpcHarness();
+    const exactArgument = {
+      workspaceId: "workspace_01",
+      offset: 64,
+      expectedManifestRevision: revision,
+    };
+    const base = createAssetCatalogListResponse("placeholder", {
+      manifestRevision: revision,
+      offset: 64,
+      entries: createAssetEntries(1),
+      nextOffset: null,
+    });
+    const cases = [
+      (requestId: string) => ({ ...base, request_id: `${requestId}-wrong` }),
+      (requestId: string) => ({ ...base, request_id: requestId, method: "source.list" }),
+      (requestId: string) => ({
+        ...base,
+        request_id: requestId,
+        result: { ...base.result, manifest_revision: "c".repeat(64) },
+      }),
+      (requestId: string) => ({
+        ...base,
+        request_id: requestId,
+        result: { ...base.result, offset: 0 },
+      }),
+      (requestId: string) => ({
+        ...base,
+        request_id: requestId,
+        result: { ...base.result, limit: 63 },
+      }),
+      (requestId: string) =>
+        createAssetCatalogListResponse(requestId, {
+          manifestRevision: revision,
+          offset: 64,
+          entries: [createAssetEntry(0), createAssetEntry(0)],
+          nextOffset: null,
+        }),
+      (requestId: string) =>
+        createAssetCatalogListResponse(requestId, {
+          manifestRevision: revision,
+          offset: 64,
+          entries: createAssetEntries(65),
+          nextOffset: null,
+        }),
+      (requestId: string) =>
+        createAssetCatalogListResponse(requestId, {
+          manifestRevision: revision,
+          offset: 64,
+          entries: createAssetEntries(1),
+          nextOffset: 64,
+        }),
+      (requestId: string) =>
+        createAssetCatalogListResponse(requestId, {
+          manifestRevision: revision,
+          offset: 64,
+          entries: createAssetEntries(64),
+          nextOffset: 129,
+        }),
+      (requestId: string) => ({
+        ...createAssetCatalogListResponse(requestId, {
+          manifestRevision: revision,
+          offset: 64,
+          entries: createAssetEntries(1),
+          nextOffset: null,
+        }),
+        result: {
+          ...base.result,
+          workspace_path: "/private/world",
+        },
+      }),
+      (requestId: string) =>
+        createAssetCatalogListResponse(requestId, {
+          manifestRevision: revision,
+          offset: 64,
+          entries: [{ ...createAssetEntry(0), path: "/private/world/asset.png" }],
+          nextOffset: null,
+        }),
+      (requestId: string) =>
+        createAssetCatalogListResponse(requestId, {
+          manifestRevision: revision,
+          offset: 64,
+          entries: [{ ...createAssetEntry(0), binary: "AA==" }],
+          nextOffset: null,
+        }),
+    ];
+
+    for (const reply of cases) {
+      harness.request.mockImplementationOnce((requestId: string) =>
+        Promise.resolve(reply(requestId)),
+      );
+      expect(await harness.invoke(IPC_CHANNELS.listAssetCatalog, exactArgument)).toMatchObject({
+        ok: false,
+        error: { code: "service_unavailable" },
+      });
+    }
+
+    const largestPageOffset = Number.MAX_SAFE_INTEGER - 63;
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(createAssetCatalogListResponse(requestId, {
+        manifestRevision: revision,
+        offset: largestPageOffset,
+        entries: createAssetEntries(64),
+        nextOffset: Number.MAX_SAFE_INTEGER + 1,
+      })),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.listAssetCatalog, {
+        workspaceId: "workspace_01",
+        offset: largestPageOffset,
+        expectedManifestRevision: revision,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "service_unavailable" },
+    });
+  });
+
+  it("rejects inspection replies with wrong authority or extra binary data", async () => {
+    const harness = createIpcHarness();
+    const argument = {
+      workspaceId: "workspace_01",
+      manifestRevision: revision,
+      entryId,
+    };
+    const cases = [
+      (requestId: string) =>
+        createAssetCatalogInspectResponse(requestId, "c".repeat(64), entryId),
+      (requestId: string) =>
+        createAssetCatalogInspectResponse(
+          requestId,
+          revision,
+          `asset_${"c".repeat(64)}`,
+        ),
+      (requestId: string) => ({
+        ...createAssetCatalogInspectResponse(requestId, revision, entryId),
+        result: {
+          ...createAssetCatalogInspectResponse(requestId, revision, entryId).result,
+          inspection: {
+            ...createAssetCatalogInspectResponse(requestId, revision, entryId).result
+              .inspection,
+            binary: "AA==",
+          },
+        },
+      }),
+    ];
+
+    for (const reply of cases) {
+      harness.request.mockImplementationOnce((requestId: string) =>
+        Promise.resolve(reply(requestId)),
+      );
+      expect(
+        await harness.invoke(IPC_CHANNELS.inspectAssetCatalogEntry, argument),
+      ).toMatchObject({
+        ok: false,
+        error: { code: "service_unavailable" },
+      });
+    }
+  });
+
+  it("rejects untrusted and extra-argument catalog requests before the service", async () => {
+    const harness = createIpcHarness();
+    expect(
+      await harness.invoke(
+        IPC_CHANNELS.listAssetCatalog,
+        { workspaceId: "workspace_01" },
+        { trusted: false },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(
+      await harness.invoke(
+        IPC_CHANNELS.inspectAssetCatalogEntry,
+        {
+          workspaceId: "workspace_01",
+          manifestRevision: revision,
+          entryId,
+        },
+        { extraArgument: true },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(harness.request).not.toHaveBeenCalled();
+  });
+
+  it("removes both catalog handlers during teardown", () => {
+    const harness = createIpcHarness();
+    harness.dispose();
+    expect(harness.removeHandler).toHaveBeenCalledWith(IPC_CHANNELS.listAssetCatalog);
+    expect(harness.removeHandler).toHaveBeenCalledWith(
+      IPC_CHANNELS.inspectAssetCatalogEntry,
+    );
   });
 });
 
@@ -834,9 +1248,16 @@ function createIpcHarness() {
     status: { state: "unbound", message: "unbound", pid: null, workspaceId: null },
     subscribe: () => () => undefined,
   };
-  registerStudioIpc(ipcMain as never, window as never, service as never, codex as never);
+  const dispose = registerStudioIpc(
+    ipcMain as never,
+    window as never,
+    service as never,
+    codex as never,
+  );
 
   return {
+    dispose,
+    removeHandler: ipcMain.removeHandler,
     request,
     async invoke(
       channel: string,
@@ -851,6 +1272,79 @@ function createIpcHarness() {
         : { sender: {}, senderFrame: mainFrame };
       const args = options.extraArgument ? [argument, { forbidden: true }] : [argument];
       return await handler(event, ...args);
+    },
+  };
+}
+
+function createAssetEntry(index: number) {
+  const suffix = index.toString(16).padStart(64, "0");
+  return {
+    entry_id: `asset_${suffix}`,
+    asset_id: `asset-${String(index)}`,
+    category: "manifest",
+    role: null,
+    path: `assets/catalog-${String(index)}.json`,
+    sha256: suffix,
+    media_type: "application/json",
+    selected: false,
+    inspectable: true,
+  };
+}
+
+function createAssetEntries(count: number) {
+  return Array.from({ length: count }, (_, index) => createAssetEntry(index));
+}
+
+function createAssetCatalogListResponse(
+  requestId: string,
+  {
+    manifestRevision,
+    offset,
+    entries,
+    nextOffset,
+  }: {
+    manifestRevision: string;
+    offset: number;
+    entries: readonly Record<string, unknown>[];
+    nextOffset: number | null;
+  },
+) {
+  return {
+    protocol: "rpg-world-forge.studio_protocol",
+    protocol_version: 1,
+    kind: "response",
+    request_id: requestId,
+    method: "asset.catalog.list",
+    result: {
+      manifest_revision: manifestRevision,
+      offset,
+      limit: 64,
+      entries,
+      next_offset: nextOffset,
+    },
+  };
+}
+
+function createAssetCatalogInspectResponse(
+  requestId: string,
+  manifestRevision: string,
+  entryId: string,
+) {
+  return {
+    protocol: "rpg-world-forge.studio_protocol",
+    protocol_version: 1,
+    kind: "response",
+    request_id: requestId,
+    method: "asset.catalog.inspect",
+    result: {
+      manifest_revision: manifestRevision,
+      entry: { ...createAssetEntry(0), entry_id: entryId },
+      inspection: {
+        kind: "json",
+        encoding: "utf-8",
+        content: "{}",
+        value: {},
+      },
     },
   };
 }

@@ -1,4 +1,8 @@
 import type {
+  AssetCatalogInspectResponse as StudioAssetCatalogInspectResponse,
+  AssetCatalogListResponse as StudioAssetCatalogListResponse,
+  AssetCatalogEntry as StudioAssetCatalogEntry,
+  AssetInspection as StudioAssetInspection,
   AssetReceiptValidateOperation as StudioAssetReceiptValidateOperation,
   AssetReceiptValidateInput as StudioAssetReceiptValidateInput,
   AssetpackVerifyOperation as StudioAssetpackVerifyOperation,
@@ -43,6 +47,10 @@ import type {
 } from "../generated/studio-protocol";
 
 export type {
+  StudioAssetCatalogEntry,
+  StudioAssetCatalogInspectResponse,
+  StudioAssetCatalogListResponse,
+  StudioAssetInspection,
   StudioErrorEnvelope,
   StudioEventEnvelope,
   StudioAssetReceiptValidateInput,
@@ -87,6 +95,12 @@ export type StudioWorkspaceOverviewReply =
   | StudioErrorEnvelope;
 export type StudioSourceListReply = StudioSourceListResponse | StudioErrorEnvelope;
 export type StudioSourceReadReply = StudioSourceReadResponse | StudioErrorEnvelope;
+export type StudioAssetCatalogListReply =
+  | StudioAssetCatalogListResponse
+  | StudioErrorEnvelope;
+export type StudioAssetCatalogInspectReply =
+  | StudioAssetCatalogInspectResponse
+  | StudioErrorEnvelope;
 export type StudioWorldValidateReply = StudioWorldValidateResponse | StudioErrorEnvelope;
 export type StudioWorldAnalyzeReply = StudioWorldAnalyzeResponse | StudioErrorEnvelope;
 export type StudioJobCreateReply = StudioJobCreateResponse | StudioErrorEnvelope;
@@ -153,6 +167,8 @@ export type StudioCapabilityMethod =
   | "workspace.overview"
   | "source.list"
   | "source.read"
+  | "asset.catalog.list"
+  | "asset.catalog.inspect"
   | "world.validate"
   | "world.analyze"
   | "changeset.create"
@@ -189,6 +205,11 @@ export interface JobsListParams {
     | "canceled"
     | "orphaned";
   limit?: number;
+}
+
+export interface StudioAssetCatalogPage {
+  offset: number;
+  manifestRevision: string;
 }
 
 export type StudioActivityEvent =
@@ -284,6 +305,15 @@ export interface ForgeStudioApi {
     workspaceId: string,
     path: string,
   ): Promise<StudioClientResult<StudioSourceReadReply>>;
+  listAssetCatalog(
+    workspaceId: string,
+    page?: StudioAssetCatalogPage,
+  ): Promise<StudioClientResult<StudioAssetCatalogListReply>>;
+  inspectAssetCatalogEntry(
+    workspaceId: string,
+    manifestRevision: string,
+    entryId: string,
+  ): Promise<StudioClientResult<StudioAssetCatalogInspectReply>>;
   stageSourceDocument(
     workspaceId: string,
     path: string,
@@ -351,6 +381,8 @@ export const STUDIO_METHODS: ReadonlySet<StudioMethod> = new Set([
   "workspace.overview",
   "source.list",
   "source.read",
+  "asset.catalog.list",
+  "asset.catalog.inspect",
   "world.validate",
   "world.analyze",
   "events.list",
@@ -385,6 +417,8 @@ export const IPC_CHANNELS = Object.freeze({
   getWorkspaceOverview: "studio:get-workspace-overview",
   listSourceDocuments: "studio:list-source-documents",
   readSourceDocument: "studio:read-source-document",
+  listAssetCatalog: "studio:list-asset-catalog",
+  inspectAssetCatalogEntry: "studio:inspect-asset-catalog-entry",
   stageSourceDocument: "studio:stage-source-document",
   getChangeset: "studio:get-changeset",
   readChangesetDiff: "studio:read-changeset-diff",

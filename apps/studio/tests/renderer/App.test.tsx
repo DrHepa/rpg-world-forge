@@ -497,6 +497,8 @@ function createApi(overrides: Partial<ForgeStudioApi> = {}) {
     getWorkspaceOverview,
     listSourceDocuments,
     readSourceDocument,
+    listAssetCatalog: unavailable,
+    inspectAssetCatalogEntry: unavailable,
     stageSourceDocument,
     getChangeset,
     readChangesetDiff,

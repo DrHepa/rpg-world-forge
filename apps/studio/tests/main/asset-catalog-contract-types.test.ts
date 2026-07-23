@@ -10,6 +10,16 @@ import type {
   StudioRequestParams,
   StudioSuccessForMethod,
 } from "../../src/main/ndjson-supervisor";
+import {
+  IPC_CHANNELS,
+  STUDIO_METHODS,
+  STUDIO_READ_METHODS,
+  type ForgeStudioApi,
+  type StudioAssetCatalogInspectReply,
+  type StudioAssetCatalogListReply,
+  type StudioAssetCatalogPage,
+  type StudioClientResult,
+} from "../../src/shared/studio-api";
 
 describe("generated asset catalog contracts", () => {
   it("maps the two exact methods without a legacy transport fallback", () => {
@@ -58,5 +68,28 @@ describe("generated asset catalog contracts", () => {
     expect(inspect.entry_id).toMatch(/^asset_/);
     expect(invalidLaterPage.offset).toBe(64);
     expect(rendererPath.entry_id).toBe(inspect.entry_id);
+  });
+
+  it("exposes only two exact named Electron catalog capabilities", () => {
+    expectTypeOf<ForgeStudioApi["listAssetCatalog"]>().parameters.toEqualTypeOf<
+      [workspaceId: string, page?: StudioAssetCatalogPage]
+    >();
+    expectTypeOf<ForgeStudioApi["listAssetCatalog"]>().returns.toEqualTypeOf<
+      Promise<StudioClientResult<StudioAssetCatalogListReply>>
+    >();
+    expectTypeOf<ForgeStudioApi["inspectAssetCatalogEntry"]>().parameters.toEqualTypeOf<
+      [workspaceId: string, manifestRevision: string, entryId: string]
+    >();
+    expectTypeOf<ForgeStudioApi["inspectAssetCatalogEntry"]>().returns.toEqualTypeOf<
+      Promise<StudioClientResult<StudioAssetCatalogInspectReply>>
+    >();
+
+    expect(IPC_CHANNELS.listAssetCatalog).toBe("studio:list-asset-catalog");
+    expect(IPC_CHANNELS.inspectAssetCatalogEntry).toBe(
+      "studio:inspect-asset-catalog-entry",
+    );
+    expect(STUDIO_METHODS.has("asset.catalog.list")).toBe(true);
+    expect(STUDIO_METHODS.has("asset.catalog.inspect")).toBe(true);
+    expect([...STUDIO_READ_METHODS]).not.toContain("asset.catalog.list");
   });
 });

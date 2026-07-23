@@ -2,6 +2,8 @@ import {
   IPC_CHANNELS,
   type ForgeStudioApi,
   type CodexActivityEvent,
+  type StudioAssetCatalogInspectReply,
+  type StudioAssetCatalogListReply,
   type StudioAssetReceiptValidateReply,
   type StudioAssetpackVerifyReply,
   type StudioActivityEvent,
@@ -72,6 +74,29 @@ export function createStudioApi(transport: PreloadTransport): ForgeStudioApi {
     async readSourceDocument(workspaceId, path) {
       return asClientResult<StudioSourceReadReply>(
         await transport.invoke(IPC_CHANNELS.readSourceDocument, { workspaceId, path }),
+      );
+    },
+    async listAssetCatalog(workspaceId, page) {
+      return asClientResult<StudioAssetCatalogListReply>(
+        await transport.invoke(
+          IPC_CHANNELS.listAssetCatalog,
+          page === undefined
+            ? { workspaceId }
+            : {
+                workspaceId,
+                offset: page.offset,
+                expectedManifestRevision: page.manifestRevision,
+              },
+        ),
+      );
+    },
+    async inspectAssetCatalogEntry(workspaceId, manifestRevision, entryId) {
+      return asClientResult<StudioAssetCatalogInspectReply>(
+        await transport.invoke(IPC_CHANNELS.inspectAssetCatalogEntry, {
+          workspaceId,
+          manifestRevision,
+          entryId,
+        }),
       );
     },
     async stageSourceDocument(workspaceId, path, baseSha256, content) {

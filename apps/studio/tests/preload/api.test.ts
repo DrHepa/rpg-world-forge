@@ -27,7 +27,9 @@ describe("preload API", () => {
       "getServiceStatus",
       "getWorkspaceOverview",
       "initialize",
+      "inspectAssetCatalogEntry",
       "interruptCodexTurn",
+      "listAssetCatalog",
       "listChangesets",
       "listEvents",
       "listJobs",
@@ -65,6 +67,16 @@ describe("preload API", () => {
     await api.getWorkspaceOverview("workspace_01");
     await api.listSourceDocuments("workspace_01");
     await api.readSourceDocument("workspace_01", "source/world.json");
+    await api.listAssetCatalog("workspace_01");
+    await api.listAssetCatalog("workspace_01", {
+      offset: 64,
+      manifestRevision: "c".repeat(64),
+    });
+    await api.inspectAssetCatalogEntry(
+      "workspace_01",
+      "c".repeat(64),
+      `asset_${"d".repeat(64)}`,
+    );
     await api.stageSourceDocument(
       "workspace_01",
       "source/world.json",
@@ -134,6 +146,23 @@ describe("preload API", () => {
         workspaceId: "workspace_01",
         path: "source/world.json",
       }],
+      [IPC_CHANNELS.listAssetCatalog, { workspaceId: "workspace_01" }],
+      [
+        IPC_CHANNELS.listAssetCatalog,
+        {
+          workspaceId: "workspace_01",
+          offset: 64,
+          expectedManifestRevision: "c".repeat(64),
+        },
+      ],
+      [
+        IPC_CHANNELS.inspectAssetCatalogEntry,
+        {
+          workspaceId: "workspace_01",
+          manifestRevision: "c".repeat(64),
+          entryId: `asset_${"d".repeat(64)}`,
+        },
+      ],
       [IPC_CHANNELS.stageSourceDocument, {
         workspaceId: "workspace_01",
         path: "source/world.json",

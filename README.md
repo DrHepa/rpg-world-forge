@@ -134,8 +134,9 @@ worldforge-studio-service --data-dir /path/to/user-data/rpg-world-forge-studio
 The process reads and writes one strict UTF-8 JSON object per line on standard
 input/output. Public v1 request methods are `service.initialize`,
 `workspace.register/list/get/overview`, `source.list/read`,
-`world.validate/analyze`, `events.list`, `changeset.create/get/list`,
-`changeset.diff/approve/reject/apply`, and `job.create/get/list/transition/cancel`.
+`asset.catalog.list/inspect`, `world.validate/analyze`, `events.list`,
+`changeset.create/get/list`, `changeset.diff/approve/reject/apply`, and
+`job.create/get/list/transition/cancel`.
 Contract errors are returned as correlated `error` envelopes; a malformed line
 does not terminate the stream.
 
@@ -155,9 +156,11 @@ documents. They return portable paths and hashes from bounded, pinned reads;
 never absolute repository paths. Validation and narrative analysis reuse the
 existing Forge domain logic entirely in memory and do not publish reports.
 The Electron preload exposes these reads and the four offline jobs only as
-named capabilities. Electron main owns protocol methods, operation names, and
-request IDs; renderer input is limited to closed workspace IDs, portable
-relative paths, bounded ticks, and job IDs.
+named capabilities. Its two asset catalog methods bind pagination and
+inspection to an exact manifest revision; Electron main owns the 64-entry page
+limit, protocol methods, operation names, request IDs, and timeouts. Renderer
+input cannot supply catalog paths, media types, categories, cursors, binary
+payloads, or arbitrary parameters.
 The World cockpit groups those authorized sources, keeps drafts only in memory,
 checks JSON syntax, and renders bounded neutral map previews on Canvas. A dirty,
 syntax-valid draft can be explicitly staged as one exact base-hashed replacement
@@ -165,8 +168,9 @@ for human review; it is never autosaved or written directly. The cockpit opens
 the returned immutable v2 text and JSON Pointer diff, requires separate approve
 and apply confirmations, and refreshes verified sources only after apply
 succeeds. Legacy v1 records remain readable with exact diff unavailable; the
-desktop does not offer fresh v1 approval or apply. Assets and Game remain
-labeled future work rather than simulated capabilities.
+desktop does not offer fresh v1 approval or apply. The Assets and Game cockpit
+panels remain labeled future work; the catalog boundary is not presented as a
+finished visual tool.
 
 Changesets edit only UTF-8 files beneath a registered world's `source/`
 directory. New v2 records retain the exact base and proposed snapshots in

@@ -2,6 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from "electron";
 
+import type {
+  AssetCatalogInspectRequest as StudioAssetCatalogInspectRequest,
+  AssetCatalogListRequest as StudioAssetCatalogListRequest,
+} from "../generated/studio-protocol";
 import {
   IPC_CHANNELS,
   type ChangesetsListParams,
@@ -9,6 +13,8 @@ import {
   type ForgeServiceStatus,
   type JobsListParams,
   type StudioActivityEvent,
+  type StudioAssetCatalogInspectReply,
+  type StudioAssetCatalogListReply,
   type StudioCapabilityMethod,
   type StudioClientError,
   type StudioClientResult,
@@ -32,7 +38,10 @@ import {
 import { isTrustedStudioSender } from "./security";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const ASSET_CATALOG_REQUEST_TIMEOUT_MS = 60_000;
+const ASSET_CATALOG_PAGE_SIZE = 64;
 const WORKSPACE_ID_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/u;
+const ASSET_ENTRY_ID_PATTERN = /^asset_[0-9a-f]{64}$/u;
 const JOB_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,127}$/u;
 const CHANGESET_ID_PATTERN = JOB_ID_PATTERN;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
@@ -146,6 +155,31 @@ export function registerStudioIpc(
         requestNamed(service, "source.read", { workspace_id: workspaceId, path }),
     );
   });
+
+  ipcMain.handle(IPC_CHANNELS.listAssetCatalog, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateAssetCatalogListArgument),
+      (argument) => requestAssetCatalogList(service, argument),
+    );
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.inspectAssetCatalogEntry,
+    async (event, ...args: unknown[]) => {
+      if (!trusted(event)) return untrustedFailure();
+      return await captureValidated(
+        () => validateSingleArgument(args, validateAssetCatalogInspectArgument),
+        ({ workspaceId, manifestRevision, entryId }) =>
+          requestAssetCatalogInspect(
+            service,
+            workspaceId,
+            manifestRevision,
+            entryId,
+          ),
+      );
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.stageSourceDocument, async (event, ...args: unknown[]) => {
     if (!trusted(event)) return untrustedFailure();
@@ -353,6 +387,8 @@ export function registerStudioIpc(
     ipcMain.removeHandler(IPC_CHANNELS.getWorkspaceOverview);
     ipcMain.removeHandler(IPC_CHANNELS.listSourceDocuments);
     ipcMain.removeHandler(IPC_CHANNELS.readSourceDocument);
+    ipcMain.removeHandler(IPC_CHANNELS.listAssetCatalog);
+    ipcMain.removeHandler(IPC_CHANNELS.inspectAssetCatalogEntry);
     ipcMain.removeHandler(IPC_CHANNELS.stageSourceDocument);
     ipcMain.removeHandler(IPC_CHANNELS.getChangeset);
     ipcMain.removeHandler(IPC_CHANNELS.readChangesetDiff);
@@ -393,6 +429,72 @@ export function validateSourceReadArgument(
     throw new TypeError("Studio source path is invalid");
   }
   return { workspaceId: validateWorkspaceId(params.workspaceId), path: params.path };
+}
+
+export type AssetCatalogListArgument =
+  | { workspaceId: string }
+  | {
+      workspaceId: string;
+      offset: number;
+      expectedManifestRevision: string;
+    };
+
+export function validateAssetCatalogListArgument(
+  value: unknown,
+): AssetCatalogListArgument {
+  const params = validateClosedParams(value, [
+    "workspaceId",
+    "offset",
+    "expectedManifestRevision",
+  ]);
+  const workspaceId = validateWorkspaceId(params.workspaceId);
+  const hasOffset = Object.hasOwn(params, "offset");
+  const hasExpectedRevision = Object.hasOwn(params, "expectedManifestRevision");
+  if (hasOffset !== hasExpectedRevision) {
+    throw new TypeError(
+      "Studio asset catalog pages require both offset and expected manifest revision",
+    );
+  }
+  if (!hasOffset) {
+    return { workspaceId };
+  }
+  if (!Number.isSafeInteger(params.offset) || (params.offset as number) < 0) {
+    throw new TypeError("Studio asset catalog offset must be a non-negative safe integer");
+  }
+  return {
+    workspaceId,
+    offset: params.offset as number,
+    expectedManifestRevision: validateSha256(
+      params.expectedManifestRevision,
+      "asset catalog manifest revision",
+    ),
+  };
+}
+
+export function validateAssetCatalogInspectArgument(value: unknown): {
+  workspaceId: string;
+  manifestRevision: string;
+  entryId: string;
+} {
+  const params = validateClosedParams(value, [
+    "workspaceId",
+    "manifestRevision",
+    "entryId",
+  ]);
+  if (
+    typeof params.entryId !== "string" ||
+    !ASSET_ENTRY_ID_PATTERN.test(params.entryId)
+  ) {
+    throw new TypeError("Studio asset catalog entry ID is invalid");
+  }
+  return {
+    workspaceId: validateWorkspaceId(params.workspaceId),
+    manifestRevision: validateSha256(
+      params.manifestRevision,
+      "asset catalog manifest revision",
+    ),
+    entryId: params.entryId,
+  };
 }
 
 export function validateStageSourceDocumentArgument(value: unknown): {
@@ -682,6 +784,79 @@ async function requestNamed(
   );
 }
 
+async function requestAssetCatalogList(
+  service: ForgeServiceClient,
+  argument: AssetCatalogListArgument,
+): Promise<StudioClientResult<StudioAssetCatalogListReply>> {
+  const requestId = randomUUID();
+  const offset = "offset" in argument ? argument.offset : 0;
+  const expectedManifestRevision =
+    "expectedManifestRevision" in argument
+      ? argument.expectedManifestRevision
+      : undefined;
+  const params =
+    expectedManifestRevision === undefined
+      ? ({
+          workspace_id: argument.workspaceId,
+          offset: 0,
+          limit: ASSET_CATALOG_PAGE_SIZE,
+        } satisfies StudioAssetCatalogListRequest["params"])
+      : ({
+          workspace_id: argument.workspaceId,
+          offset,
+          limit: ASSET_CATALOG_PAGE_SIZE,
+          expected_manifest_revision: expectedManifestRevision,
+        } satisfies StudioAssetCatalogListRequest["params"]);
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        "asset.catalog.list",
+        params,
+        ASSET_CATALOG_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) =>
+        validateAssetCatalogListReply(
+          reply,
+          requestId,
+          offset,
+          expectedManifestRevision,
+        ),
+      ),
+  );
+}
+
+async function requestAssetCatalogInspect(
+  service: ForgeServiceClient,
+  workspaceId: string,
+  manifestRevision: string,
+  entryId: string,
+): Promise<StudioClientResult<StudioAssetCatalogInspectReply>> {
+  const requestId = randomUUID();
+  const params = {
+    workspace_id: workspaceId,
+    expected_manifest_revision: manifestRevision,
+    entry_id: entryId,
+  } satisfies StudioAssetCatalogInspectRequest["params"];
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        "asset.catalog.inspect",
+        params,
+        ASSET_CATALOG_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) =>
+        validateAssetCatalogInspectReply(
+          reply,
+          requestId,
+          manifestRevision,
+          entryId,
+        ),
+      ),
+  );
+}
+
 async function requestJobCreate(
   service: ForgeServiceClient,
   workspaceId: string,
@@ -822,6 +997,60 @@ function validateNamedReply(
     throw new StudioProtocolError(`Forge Studio returned an invalid ${method} reply`);
   }
   return value;
+}
+
+function validateAssetCatalogListReply(
+  value: unknown,
+  requestId: string,
+  offset: number,
+  expectedManifestRevision: string | undefined,
+): StudioAssetCatalogListReply {
+  const reply = validateNamedReply(value, requestId, "asset.catalog.list");
+  if (reply.kind === "error") return reply;
+  if (reply.method !== "asset.catalog.list") {
+    throw new StudioProtocolError(
+      "Forge Studio returned an invalid asset.catalog.list reply",
+    );
+  }
+  const { result } = reply;
+  const entryIds = result.entries.map((entry) => entry.entry_id);
+  if (
+    result.offset !== offset ||
+    result.limit !== ASSET_CATALOG_PAGE_SIZE ||
+    (expectedManifestRevision !== undefined &&
+      result.manifest_revision !== expectedManifestRevision) ||
+    new Set(entryIds).size !== entryIds.length ||
+    (result.next_offset !== null &&
+      (!Number.isSafeInteger(result.next_offset) ||
+        result.entries.length !== ASSET_CATALOG_PAGE_SIZE ||
+        result.next_offset <= offset ||
+        result.next_offset !== offset + result.entries.length))
+  ) {
+    throw new StudioProtocolError(
+      "Forge Studio returned a mismatched asset catalog page",
+    );
+  }
+  return reply;
+}
+
+function validateAssetCatalogInspectReply(
+  value: unknown,
+  requestId: string,
+  manifestRevision: string,
+  entryId: string,
+): StudioAssetCatalogInspectReply {
+  const reply = validateNamedReply(value, requestId, "asset.catalog.inspect");
+  if (reply.kind === "error") return reply;
+  if (
+    reply.method !== "asset.catalog.inspect" ||
+    reply.result.manifest_revision !== manifestRevision ||
+    reply.result.entry.entry_id !== entryId
+  ) {
+    throw new StudioProtocolError(
+      "Forge Studio returned a mismatched asset catalog inspection",
+    );
+  }
+  return reply;
 }
 
 function validateJobCreateReply(
@@ -1073,6 +1302,13 @@ function validateWorkspaceId(value: unknown): string {
 function validateChangesetId(value: unknown): string {
   if (typeof value !== "string" || !CHANGESET_ID_PATTERN.test(value)) {
     throw new TypeError("Studio changeset ID is invalid");
+  }
+  return value;
+}
+
+function validateSha256(value: unknown, context: string): string {
+  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) {
+    throw new TypeError(`Studio ${context} is invalid`);
   }
   return value;
 }

@@ -31,14 +31,15 @@ permission path. It runs with sandboxing, context isolation, web security, a
 closed CSP, and deny-by-default session handlers.
 
 The preload exposes only initialization, service status, named list operations,
-the five existing read-only authoring queries, four fixed offline job actions,
-job cancellation, six named human changeset review controls, and Studio
-activity subscription on fixed IPC channels. The changeset controls stage one
-base-hashed source replacement or get, diff, approve, reject, and apply one
-identified changeset. Main selects every protocol method and operation, creates
-every request ID, validates closed identifiers, portable paths, hashes, text,
-scalar filters, and bounds, and correlates the returned review identity and
-status.
+the five existing read-only World authoring queries, two revision-bound asset
+catalog reads, four fixed offline job actions, job cancellation, six named human
+changeset review controls, and Studio activity subscription on fixed IPC
+channels. The changeset controls stage one base-hashed source replacement or
+get, diff, approve, reject, and apply one identified changeset. Main selects
+every protocol method and operation, creates every request ID, fixes asset
+catalog pages at 64 entries, validates closed identifiers, revisions, portable
+paths, hashes, text, scalar filters, and bounds, and correlates returned catalog
+and review identities.
 Neither the renderer nor preload receives a generic method/params request,
 arbitrary operation name, `ipcRenderer`, root path, filesystem function,
 executable, module, environment, working directory, approval transition,
@@ -78,6 +79,9 @@ draft cockpit and neutral non-authoritative Canvas preview.
   Legacy v1 records are readable but cannot be freshly approved or applied in
   the desktop because they have no exact immutable diff. The boundary provides
   no autosave, arbitrary filesystem operation, or generic repository write path.
+- The named asset catalog boundary lists and inspects only manifest-authorized
+  entries under an exact revision. The renderer cannot choose paths, media
+  types, categories, cursors, page bounds, or binary payloads.
 - A compromised renderer cannot name IPC channels or directly reach files,
   commands, providers, local ports, or project roots.
 - Development requires one explicit interpreter setting; packaged builds are
