@@ -13,3 +13,9 @@ The M6 contract group defines a static capability catalog, six exact world
 presentation profiles, adapter declarations, hash-bound compositions, and
 compatibility reports. These contracts select no engine or executable and do
 not make a declared adapter runtime-ready.
+
+`composed-runtime-bundle.schema.json` seals one compatible composition, its
+four contracts, freshly recomputed compatibility evidence, unchanged M5 packs,
+and approved notices into an exact runtime-only tree. The catalog intentionally
+lists no committed built-bundle fixture: tests build temporary bundles from
+neutral inputs and compare their exact bytes and hashes.

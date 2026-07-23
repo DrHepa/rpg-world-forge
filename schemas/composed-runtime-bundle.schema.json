@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/composed-runtime-bundle.schema.json",
+  "title": "RPG World Forge immutable composed runtime bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "bundle_id",
+    "bundle_version",
+    "compatibility_target",
+    "contracts",
+    "compatibility_evidence",
+    "packs",
+    "files",
+    "licenses",
+    "bundle_hash"
+  ],
+  "properties": {
+    "format": {"const": "rpg-world-forge.composed_runtime_bundle"},
+    "format_version": {"const": 1},
+    "bundle_id": {"$ref": "#/$defs/id"},
+    "bundle_version": {"$ref": "#/$defs/semver"},
+    "compatibility_target": {"$ref": "#/$defs/compatibility_target"},
+    "contracts": {"$ref": "#/$defs/contracts"},
+    "compatibility_evidence": {"$ref": "#/$defs/evidence_ref"},
+    "packs": {"$ref": "#/$defs/packs"},
+    "files": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 100000,
+      "items": {"$ref": "#/$defs/file"}
+    },
+    "licenses": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": {"$ref": "#/$defs/file"}
+    },
+    "bundle_hash": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^(?:contracts/(?:runtime-composition|runtime-presentation-profile|runtime-capability-catalog|runtime-adapter)\\.json|evidence/runtime-compatibility-report\\.json|packs/worldpack/worldpack\\.json|packs/(?:renderpack|assetpack)/(?:[^/\\\\]+/)*[^/\\\\]+|licenses/[^/\\\\]+)$",
+      "not": {"pattern": "(?:^|/)\\.{1,2}(?:/|$)"}
+    },
+    "compatibility_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "runtime_api_version"],
+      "properties": {
+        "platform": {"enum": ["linux_x86_64", "windows_x86_64"]},
+        "runtime_api_version": {"$ref": "#/$defs/semver"}
+      }
+    },
+    "base_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "format", "format_version", "content_hash"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "format": {"type": "string", "minLength": 1, "maxLength": 128},
+        "format_version": {"type": "integer", "minimum": 1},
+        "content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "catalog_ref": {
+      "allOf": [
+        {"$ref": "#/$defs/base_ref"},
+        {
+          "type": "object",
+          "properties": {
+            "path": {"const": "contracts/runtime-capability-catalog.json"},
+            "format": {"const": "rpg-world-forge.runtime_capability_catalog"},
+            "format_version": {"const": 1}
+          }
+        }
+      ]
+    },
+    "profile_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "format", "format_version", "id", "content_hash"],
+      "properties": {
+        "path": {"const": "contracts/runtime-presentation-profile.json"},
+        "format": {"const": "rpg-world-forge.runtime_presentation_profile"},
+        "format_version": {"const": 1},
+        "id": {"$ref": "#/$defs/id"},
+        "content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "adapter_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "format", "format_version", "id", "version", "content_hash"],
+      "properties": {
+        "path": {"const": "contracts/runtime-adapter.json"},
+        "format": {"const": "rpg-world-forge.runtime_adapter"},
+        "format_version": {"const": 1},
+        "id": {"$ref": "#/$defs/id"},
+        "version": {"$ref": "#/$defs/semver"},
+        "content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "composition_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "world_id",
+        "release_id",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {"const": "contracts/runtime-composition.json"},
+        "format": {"const": "rpg-world-forge.runtime_composition"},
+        "format_version": {"const": 1},
+        "world_id": {"$ref": "#/$defs/id"},
+        "release_id": {"$ref": "#/$defs/semver"},
+        "content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_composition",
+        "presentation_profile",
+        "capability_catalog",
+        "runtime_adapter"
+      ],
+      "properties": {
+        "runtime_composition": {"$ref": "#/$defs/composition_ref"},
+        "presentation_profile": {"$ref": "#/$defs/profile_ref"},
+        "capability_catalog": {"$ref": "#/$defs/catalog_ref"},
+        "runtime_adapter": {"$ref": "#/$defs/adapter_ref"}
+      }
+    },
+    "evidence_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "composition_hash",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {"const": "evidence/runtime-compatibility-report.json"},
+        "format": {"const": "rpg-world-forge.runtime_compatibility_report"},
+        "format_version": {"const": 1},
+        "composition_hash": {"$ref": "#/$defs/sha256"},
+        "content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "worldpack_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "world_id",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {"const": "packs/worldpack/worldpack.json"},
+        "format": {"const": "isoworld.worldpack"},
+        "format_version": {"type": "integer", "minimum": 1, "maximum": 5},
+        "world_id": {"$ref": "#/$defs/id"},
+        "content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "renderpack_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "world_content_hash",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {"const": "packs/renderpack/renderpack.json"},
+        "format": {"const": "isoworld.renderpack"},
+        "format_version": {"const": 1},
+        "world_content_hash": {"$ref": "#/$defs/sha256"},
+        "content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "assetpack_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "world_content_hash",
+        "content_hash"
+      ],
+      "properties": {
+        "path": {"const": "packs/assetpack/assetpack.json"},
+        "format": {"const": "rpg-world-forge.assetpack"},
+        "format_version": {"const": 1},
+        "world_content_hash": {"$ref": "#/$defs/sha256"},
+        "content_hash": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "packs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worldpack", "renderpack", "assetpack"],
+      "properties": {
+        "worldpack": {"$ref": "#/$defs/worldpack_ref"},
+        "renderpack": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/renderpack_ref"}]
+        },
+        "assetpack": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/assetpack_ref"}]
+        }
+      },
+      "not": {
+        "properties": {
+          "renderpack": {"type": "null"},
+          "assetpack": {"type": "null"}
+        },
+        "required": ["renderpack", "assetpack"]
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size", "media_type"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"type": "integer", "minimum": 0, "maximum": 2147483648},
+        "media_type": {
+          "enum": [
+            "application/json",
+            "audio/mpeg",
+            "audio/ogg",
+            "audio/wav",
+            "font/otf",
+            "font/ttf",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "model/gltf-binary",
+            "text/html",
+            "text/markdown",
+            "text/plain",
+            "text/x-glsl"
+          ]
+        }
+      }
+    }
+  }
+}

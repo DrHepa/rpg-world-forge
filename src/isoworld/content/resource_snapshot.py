@@ -23,6 +23,7 @@ from isoworld.content.media import ValidatedMedia, read_validated_resource
 _SNAPSHOT_PREFIX = "isoworld-renderpack-"
 _DELETE_PREFIX = ".isoworld-delete-"
 _RESOURCE_SNAPSHOT_CHUNK_BYTES = 64 * 1024
+MAX_OWNED_RESOURCE_BYTES = 2 * 1024 * 1024 * 1024
 _WINDOWS_LOCAL_SYSTEM_SID = "S-1-5-18"
 _WINDOWS_BUILTIN_ADMINISTRATORS_SID = "S-1-5-32-544"
 _Identity = tuple[int, int]
@@ -51,6 +52,15 @@ class ResourceSnapshotChunk:
     cumulative_bytes: int
     cumulative_sha256: str
     eof: bool
+
+
+@dataclass(frozen=True, slots=True)
+class MaterializedResource:
+    """Metadata for one exact generic file captured into an owned snapshot."""
+
+    path: Path
+    size: int
+    sha256: str
 
 
 def _platform_name() -> str:
@@ -82,6 +92,87 @@ def _file_record(info: FileStat, digest: str) -> _FileRecord:
         mode=stat.S_IMODE(info.st_mode),
         sha256=digest,
     )
+
+
+def _source_state(info: FileStat) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+        stat.S_IFMT(info.st_mode),
+        info.st_nlink,
+    )
+
+
+def _is_link_or_reparse(info: FileStat) -> bool:
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0)
+        & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    )
+
+
+def _lexical_absolute(path: Path) -> Path:
+    return path if path.is_absolute() else Path.cwd() / path
+
+
+def _source_directory_snapshot(
+    root: Path, relative: PurePosixPath
+) -> tuple[
+    Path,
+    tuple[tuple[Path, _Identity], ...],
+    FileStat,
+]:
+    """Capture every lexical parent and one regular, single-link source file."""
+
+    absolute_root = _lexical_absolute(root)
+    current = Path(absolute_root.anchor)
+    directories: list[tuple[Path, _Identity]] = []
+    offset = 0
+    if absolute_root.anchor:
+        info = path_file_stat(current)
+        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+            raise ResourceSnapshotError(f"Resource source parent is unsafe: {current}")
+        directories.append((current, _identity(info)))
+        offset = 1
+    for part in absolute_root.parts[offset:]:
+        current /= part
+        info = path_file_stat(current)
+        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+            raise ResourceSnapshotError(f"Resource source parent is unsafe: {current}")
+        directories.append((current, _identity(info)))
+    if not directories:
+        info = path_file_stat(absolute_root)
+        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+            raise ResourceSnapshotError(f"Resource source parent is unsafe: {absolute_root}")
+        directories.append((absolute_root, _identity(info)))
+
+    current = absolute_root
+    for part in relative.parts[:-1]:
+        current /= part
+        info = path_file_stat(current)
+        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+            raise ResourceSnapshotError(f"Resource source parent is unsafe: {current}")
+        directories.append((current, _identity(info)))
+    target = absolute_root.joinpath(*relative.parts)
+    info = path_file_stat(target)
+    if _is_link_or_reparse(info) or not stat.S_ISREG(info.st_mode):
+        raise ResourceSnapshotError(f"Resource source must be a regular file: {target}")
+    if info.st_nlink != 1:
+        raise ResourceSnapshotError(f"Resource source must not be hard-linked: {target}")
+    return target, tuple(directories), info
+
+
+def _verify_source_snapshot(
+    root: Path,
+    relative: PurePosixPath,
+    directories: tuple[tuple[Path, _Identity], ...],
+    expected: FileStat,
+) -> None:
+    target, current_directories, current = _source_directory_snapshot(root, relative)
+    if current_directories != directories or _source_state(current) != _source_state(expected):
+        raise ResourceSnapshotError(f"Resource source identity changed while reading: {target}")
 
 
 def _reader_descriptor_matches(info: FileStat, record: _FileRecord) -> bool:
@@ -1595,6 +1686,195 @@ class ResourceSnapshotOwner:
             except ResourceSnapshotError as cleanup_error:
                 raise cleanup_error from original
             raise
+
+    def materialize_file(
+        self,
+        source_root: Path,
+        source_relative: PurePosixPath,
+        destination_relative: PurePosixPath | None = None,
+        *,
+        limit: int = MAX_OWNED_RESOURCE_BYTES,
+    ) -> MaterializedResource:
+        """Capture one stable generic file without retaining its bytes in memory.
+
+        This is deliberately separate from :meth:`materialize`: it does not
+        interpret media and therefore does not weaken any existing image,
+        audio, font, GLSL, or JSON limit. It exists for immutable containers
+        whose integral validators inspect the captured bytes later.
+        """
+
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= MAX_OWNED_RESOURCE_BYTES
+        ):
+            raise ValueError(f"limit must be in 1..{MAX_OWNED_RESOURCE_BYTES} bytes")
+        self._validate_relative(source_relative)
+        relative = source_relative if destination_relative is None else destination_relative
+        self._validate_relative(relative)
+
+        try:
+            source, directories, source_info = _source_directory_snapshot(
+                Path(source_root),
+                source_relative,
+            )
+        except (OSError, ResourceSnapshotError) as exc:
+            if isinstance(exc, ResourceSnapshotError):
+                raise
+            raise ResourceSnapshotError(
+                f"Could not inspect generic resource source: {exc}"
+            ) from exc
+        if source_info.st_size > limit:
+            raise ResourceSnapshotError(f"Resource source exceeds the {limit}-byte limit: {source}")
+
+        target, parent_relative, destination, identity = self._open_target(relative)
+        destination_open = True
+        source_descriptor: int | None = None
+        record: _FileRecord | None = None
+        try:
+            flags = (
+                os.O_RDONLY
+                | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOINHERIT", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
+            )
+            source_descriptor = os.open(source, flags)
+            before = descriptor_file_stat(source_descriptor)
+            if (
+                _is_link_or_reparse(before)
+                or not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or _source_state(before) != _source_state(source_info)
+            ):
+                raise ResourceSnapshotError(f"Resource source changed while opening: {source}")
+
+            digest = hashlib.sha256()
+            total = 0
+            while total < before.st_size:
+                chunk = os.read(
+                    source_descriptor,
+                    min(1024 * 1024, before.st_size - total),
+                )
+                if not chunk:
+                    raise ResourceSnapshotError(
+                        f"Resource source ended before its captured size: {source}"
+                    )
+                total += len(chunk)
+                if total > limit:
+                    raise ResourceSnapshotError(
+                        f"Resource source exceeds the {limit}-byte limit: {source}"
+                    )
+                digest.update(chunk)
+                offset = 0
+                while offset < len(chunk):
+                    written = os.write(destination, chunk[offset:])
+                    if written <= 0:
+                        raise OSError("Could not make progress while materializing resource")
+                    offset += written
+            if os.read(source_descriptor, 1):
+                raise ResourceSnapshotError(
+                    f"Resource source grew while it was being captured: {source}"
+                )
+            after = descriptor_file_stat(source_descriptor)
+            if _source_state(after) != _source_state(before):
+                raise ResourceSnapshotError(f"Resource source changed while reading: {source}")
+            _verify_source_snapshot(
+                Path(source_root),
+                source_relative,
+                directories,
+                source_info,
+            )
+            os.close(source_descriptor)
+            source_descriptor = None
+
+            opened = descriptor_file_stat(destination)
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or opened.st_nlink != 1
+                or _identity(opened) != identity
+                or opened.st_size != total
+            ):
+                raise ResourceSnapshotError(
+                    f"Snapshot target identity changed while materializing: {target}"
+                )
+            if os.name == "posix":
+                os.fchmod(destination, 0o400)
+            else:
+                os.chmod(target, stat.S_IREAD)
+            os.fsync(destination)
+            sealed = descriptor_file_stat(destination)
+            record = _file_record(sealed, digest.hexdigest())
+            _validate_file_privacy(target, sealed)
+            current = self._entry_stat(parent_relative, relative.name)
+            if not _stat_matches_record(current, record):
+                raise ResourceSnapshotError(
+                    f"Snapshot target changed while it was being sealed: {target}"
+                )
+            self._validate_directory(parent_relative)
+            os.close(destination)
+            destination_open = False
+            self._files[relative] = record
+            return MaterializedResource(
+                path=target,
+                size=record.size,
+                sha256=record.sha256,
+            )
+        except BaseException as original:
+            if relative in self._files:
+                raise
+            source_close_error: BaseException | None = None
+            if source_descriptor is not None:
+                try:
+                    os.close(source_descriptor)
+                except BaseException as exc:
+                    source_close_error = exc
+                source_descriptor = None
+            close_error: BaseException | None = None
+            if destination_open:
+                try:
+                    os.close(destination)
+                except BaseException as exc:
+                    close_error = exc
+            if close_error is not None:
+                try:
+                    self._record_restored_partial(
+                        parent_relative,
+                        relative.name,
+                        identity,
+                    )
+                except BaseException as inventory_error:
+                    raise ResourceSnapshotError(
+                        f"{original}; additionally could not close generic snapshot "
+                        f"target: {close_error}; ownership reconciliation failed: "
+                        f"{inventory_error}"
+                    ) from original
+                raise ResourceSnapshotError(
+                    f"{original}; additionally could not close generic snapshot "
+                    f"target: {close_error}; ownership was recorded for retry"
+                    + (
+                        f"; source close also failed: {source_close_error}"
+                        if source_close_error is not None
+                        else ""
+                    )
+                ) from original
+            try:
+                self._remove_partial(parent_relative, relative.name, identity)
+            except ResourceSnapshotError as cleanup_error:
+                if source_close_error is not None:
+                    raise ResourceSnapshotError(
+                        f"{cleanup_error}; additionally source close failed: {source_close_error}"
+                    ) from original
+                raise cleanup_error from original
+            if source_close_error is not None:
+                raise ResourceSnapshotError(
+                    f"{original}; additionally could not close generic resource "
+                    f"source: {source_close_error}"
+                ) from original
+            raise
+        finally:
+            if source_descriptor is not None:
+                os.close(source_descriptor)
 
     def _hash_entry(
         self,

@@ -199,6 +199,23 @@ runtime, collision, animation, composed bundle, package, or M6 release.
 
 [ADR-0016](decisions/0016-runtime-composition-contracts.md) records this seam.
 
+### Immutable composed bundle
+
+Once an exact static registry can satisfy a verified adapter declaration, the
+Forge can seal the four M6 contracts, a freshly recomputed compatibility
+report, the unchanged selected worldpack/renderpack/assetpack payloads, and
+approved notices into `rpg-world-forge.composed_runtime_bundle` v1. The bundle
+has an exact portable tree and file inventory, is published without
+replacement, and is loaded only through private identity-owned snapshots.
+
+The bundle stores declarations and compatibility evidence; it contains no
+Python locator, command, provider, model, MCP endpoint, authoring receipt, or
+workflow. Loading resolves an exact code-owned registry value but never invokes
+it. Therefore a valid composed bundle is not evidence of native rendering,
+physics, animation, playability, performance, packaging, or M6 release
+readiness. [ADR-0017](decisions/0017-immutable-composed-runtime-bundle.md)
+records the ownership and publication boundary.
+
 ## State flow
 
 The runtime uses a small reactive-style flow:

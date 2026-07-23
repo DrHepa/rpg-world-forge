@@ -26,6 +26,9 @@ def repository_kind(path: str | Path) -> str | None:
     )
     if all(marker.exists() and not marker.is_symlink() for marker in game_markers):
         return "game"
+    composed_bundle_marker = candidate / "composed-bundle.manifest.json"
+    if composed_bundle_marker.is_file() and not composed_bundle_marker.is_symlink():
+        return "composed_bundle"
     bundle_markers = (
         candidate / "bundle.manifest.json",
         candidate / "worldpack.json",
@@ -51,7 +54,7 @@ def assert_new_repository_target(
         raise ValueError(f"The {repository_type} repository must live outside the Forge repository")
     for ancestor in (target_input.parent, *target_input.parent.parents):
         kind = repository_kind(ancestor)
-        if kind in {"world", "game", "bundle", "forge", "unsafe"}:
+        if kind in {"world", "game", "bundle", "composed_bundle", "forge", "unsafe"}:
             raise ValueError(
                 f"The {repository_type} repository cannot be nested inside a {kind} repository"
             )
@@ -69,8 +72,33 @@ def require_standalone_bundle_root(path: str | Path) -> Path:
         raise ValueError("The source is not a recognizable runtime bundle")
     for ancestor in root.parents:
         kind = repository_kind(ancestor)
-        if kind in {"world", "game", "bundle", "forge", "unsafe"}:
+        if kind in {"world", "game", "bundle", "composed_bundle", "forge", "unsafe"}:
             raise ValueError(f"The runtime bundle cannot be nested inside a {kind} repository")
+    return root
+
+
+def require_standalone_composed_bundle_root(path: str | Path) -> Path:
+    """Return an external composed-runtime-bundle root with no repository ancestor."""
+
+    root_input = Path(path)
+    if root_input.is_symlink():
+        raise ValueError("The composed bundle root cannot be a symbolic link")
+    root = root_input.resolve()
+    if repository_kind(root) != "composed_bundle":
+        raise ValueError("The source is not a recognizable composed runtime bundle")
+    for ancestor in root.parents:
+        kind = repository_kind(ancestor)
+        if kind in {
+            "world",
+            "game",
+            "bundle",
+            "composed_bundle",
+            "forge",
+            "unsafe",
+        }:
+            raise ValueError(
+                f"The composed runtime bundle cannot be nested inside a {kind} repository"
+            )
     return root
 
 
@@ -85,7 +113,7 @@ def require_standalone_game_root(path: str | Path) -> Path:
         raise ValueError("The target is not a recognizable standalone game repository")
     for ancestor in root.parents:
         kind = repository_kind(ancestor)
-        if kind in {"world", "game", "bundle", "forge", "unsafe"}:
+        if kind in {"world", "game", "bundle", "composed_bundle", "forge", "unsafe"}:
             raise ValueError(f"The game repository cannot be nested inside a {kind} repository")
     required_files = (
         root / "runtime.lock.json",

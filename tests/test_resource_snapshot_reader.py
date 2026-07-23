@@ -282,6 +282,88 @@ class ResourceSnapshotReaderTests(unittest.TestCase):
 
         self.assertEqual([], list(self.snapshot_parent.iterdir()))
 
+    def test_generic_materialization_streams_exact_bytes_above_media_ceiling(self) -> None:
+        source_root = Path(self.temporary_directory.name) / "generic-source"
+        source_root.mkdir()
+        payload = bytes(range(251)) * 20_000
+        source = source_root / "model.glb"
+        source.write_bytes(payload)
+        owner = self._owner()
+        relative = PurePosixPath("packs/assetpack/assets/model.glb")
+
+        captured = owner.materialize_file(
+            source_root,
+            PurePosixPath(source.name),
+            relative,
+            limit=2 * 1024 * 1024 * 1024,
+        )
+
+        self.assertEqual(len(payload), captured.size)
+        self.assertEqual(hashlib.sha256(payload).hexdigest(), captured.sha256)
+        self.assertFalse(hasattr(captured, "payload"))
+        source.unlink()
+        self.assertEqual(payload, owner.resolve_file(relative).read_bytes())
+        owner.close()
+        self.assertEqual([], list(self.snapshot_parent.iterdir()))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX hardlink semantics")
+    def test_generic_materialization_rejects_hardlinked_sources_and_cleans_partial(
+        self,
+    ) -> None:
+        source_root = Path(self.temporary_directory.name) / "generic-hardlink"
+        source_root.mkdir()
+        source = source_root / "model.glb"
+        source.write_bytes(b"glTF")
+        outside = Path(self.temporary_directory.name) / "outside.glb"
+        os.link(source, outside)
+        owner = self._owner()
+
+        with self.assertRaisesRegex(ResourceSnapshotError, "hard-linked"):
+            owner.materialize_file(
+                source_root,
+                PurePosixPath(source.name),
+                PurePosixPath("packs/assetpack/model.glb"),
+            )
+
+        self.assertEqual(set(), set(owner._files))
+        owner.close()
+        self.assertEqual([], list(self.snapshot_parent.iterdir()))
+
+    def test_generic_materialization_rejects_source_mutation_during_stream(self) -> None:
+        source_root = Path(self.temporary_directory.name) / "generic-mutation"
+        source_root.mkdir()
+        source = source_root / "model.glb"
+        source.write_bytes(b"a" * (2 * 1024 * 1024))
+        owner = self._owner()
+        real_read = snapshot_module.os.read
+        mutated = False
+
+        def mutate_after_first_read(descriptor: int, size: int) -> bytes:
+            nonlocal mutated
+            chunk = real_read(descriptor, size)
+            if chunk and not mutated:
+                mutated = True
+                with source.open("r+b") as stream:
+                    stream.seek(-1, os.SEEK_END)
+                    stream.write(b"z")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            return chunk
+
+        with (
+            patch.object(snapshot_module.os, "read", side_effect=mutate_after_first_read),
+            self.assertRaisesRegex(ResourceSnapshotError, "changed while reading"),
+        ):
+            owner.materialize_file(
+                source_root,
+                PurePosixPath(source.name),
+                PurePosixPath("packs/assetpack/model.glb"),
+            )
+
+        self.assertEqual(set(), set(owner._files))
+        owner.close()
+        self.assertEqual([], list(self.snapshot_parent.iterdir()))
+
     @unittest.skipUnless(os.name == "posix", "POSIX link and replacement semantics")
     def test_rejects_modified_replaced_symlinked_and_hardlinked_snapshots(self) -> None:
         payload = b"identity-bound"

@@ -1070,6 +1070,33 @@
       "version": 1
     },
     {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0017-immutable-composed-runtime-bundle.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.composed_runtime_bundle",
+      "id": "composed-runtime-bundle",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.composed_bundle:build_composed_runtime_bundle",
+        "worldforge.composed_bundle:load_composed_runtime_bundle",
+        "worldforge.composed_bundle:verify_composed_runtime_bundle"
+      ],
+      "schema": "schemas/composed-runtime-bundle.schema.json",
+      "tests": [
+        "tests/test_m6_composed_bundle.py"
+      ],
+      "title": "RPG World Forge immutable composed runtime bundle v1",
+      "version": 1
+    },
+    {
       "cli_commands": [
         "audit-contracts"
       ],
