@@ -20,6 +20,7 @@ from worldforge.studio.authoring import (
 )
 from worldforge.studio.contracts import (
     EXACT_ASSET_CATALOG_METHODS,
+    EXACT_ASSET_PREVIEW_METHODS,
     EXACT_CHANGESET_METHODS,
     METHODS,
 )
@@ -401,6 +402,7 @@ class StudioAuthoringTests(unittest.TestCase):
             | set(schema["$defs"]["workspaceScopedAuthoringMethod"]["enum"])
             | set(EXACT_CHANGESET_METHODS)
             | set(EXACT_ASSET_CATALOG_METHODS)
+            | set(EXACT_ASSET_PREVIEW_METHODS)
             | {"source.read", "job.create", "job.cancel"}
         )
         self.assertEqual(METHODS, frozenset(discriminated))

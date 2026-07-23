@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import shutil
@@ -18,7 +19,6 @@ from isoworld.content.resource_snapshot import ResourceSnapshotChunk, ResourceSn
 from worldforge.integrity import canonical_json_bytes
 from worldforge.repository_boundary import FORGE_ROOT
 from worldforge.scaffold import create_world_project
-from worldforge.studio.assets import AssetCatalogManager
 from worldforge.studio.errors import StudioError, conflict
 from worldforge.studio.service import StudioService
 from worldforge.studio.storage import StudioStore
@@ -256,6 +256,48 @@ class AssetPreviewManagerUnitTests(unittest.TestCase):
         manager.close(handle)
         self.assertTrue(owners[0].reader.closed)
         self.assertTrue(owners[0].closed)
+
+    def test_sequence_is_bounded_by_the_maximum_preview_size(self) -> None:
+        manager, _, _ = self._manager([b"payload"])
+        opened = manager.open("workspace_01", "a" * 64, "asset_" + "b" * 64)
+        for sequence in (-1, 8192, True, 0.0):
+            with self.subTest(sequence=sequence), self.assertRaises(StudioError) as raised:
+                manager.read(opened["handle"], sequence)
+            self.assertEqual("invalid_request", raised.exception.code)
+            self.assertIn("sequence", raised.exception.message)
+        manager.close(opened["handle"])
+        manager.shutdown()
+
+    def test_reaper_start_failure_stops_and_joins_a_partially_started_thread(self) -> None:
+        events: list[object] = []
+        owner: list[object] = []
+
+        class PartialThread:
+            def __init__(self, *, target: object, name: str, daemon: bool) -> None:
+                events.append(("construct", name, daemon))
+                owner.append(target.__self__)
+                self.alive = True
+
+            def start(self) -> None:
+                events.append("start")
+                raise RuntimeError("injected reaper start failure")
+
+            def is_alive(self) -> bool:
+                return self.alive
+
+            def join(self, timeout: float | None = None) -> None:
+                events.append(("join", timeout))
+                self.alive = False
+
+        with (
+            mock.patch.object(preview_module.threading, "Thread", PartialThread),
+            self.assertRaisesRegex(RuntimeError, "reaper start failure"),
+        ):
+            preview_module.AssetPreviewManager(_FakeCatalog(_fake_authority([b"payload"])))
+        self.assertTrue(owner[0]._stop.is_set())
+        self.assertEqual(("construct", "asset-preview-reaper", True), events[0])
+        self.assertEqual("start", events[1])
+        self.assertEqual("join", events[2][0])
 
     def test_one_inflight_read_blocks_parallel_reads_and_close_wins_before_return(self) -> None:
         entered = threading.Event()
@@ -643,6 +685,7 @@ class AssetPreviewManagerIntegrationTests(unittest.TestCase):
         self.store = StudioStore(self.root / "studio-data")
         self.addCleanup(self.store.close)
         self.service = StudioService(self.store)
+        self.addCleanup(self.service.close)
         self.service.workspaces.register(
             {
                 "workspace_id": "workspace_01",
@@ -650,7 +693,7 @@ class AssetPreviewManagerIntegrationTests(unittest.TestCase):
                 "world_root": str(self.world),
             }
         )
-        self.catalog = AssetCatalogManager(self.service.workspaces)
+        self.catalog = self.service.assets
 
     def _install_fixture(self) -> None:
         create_world_project(
@@ -754,3 +797,101 @@ class AssetPreviewManagerIntegrationTests(unittest.TestCase):
                 manager.open("workspace_01", revision, entry["entry_id"])
         allocation.assert_not_called()
         manager.shutdown()
+
+    def test_service_protocol_round_trips_png_wav_and_rejects_font(self) -> None:
+        revision, entries = self._entries()
+        request_index = 0
+
+        def request(method: str, params: dict[str, object]) -> dict[str, object]:
+            nonlocal request_index
+            request_index += 1
+            return self.service.handle(
+                {
+                    "protocol": "rpg-world-forge.studio_protocol",
+                    "protocol_version": 1,
+                    "kind": "request",
+                    "request_id": f"preview-{request_index}",
+                    "method": method,
+                    "params": params,
+                }
+            )
+
+        with mock.patch.object(
+            snapshot_module.tempfile,
+            "gettempdir",
+            return_value=str(self.snapshot_parent),
+        ):
+            for media_type in ("image/png", "audio/wav"):
+                entry = next(
+                    item
+                    for item in entries
+                    if item["category"] == "runtime_output" and item["media_type"] == media_type
+                )
+                opened = request(
+                    "asset.preview.open",
+                    {
+                        "workspace_id": "workspace_01",
+                        "manifest_revision": revision,
+                        "entry_id": entry["entry_id"],
+                    },
+                )
+                self.assertEqual(
+                    {
+                        "handle",
+                        "manifest_revision",
+                        "entry_id",
+                        "media_type",
+                        "byte_length",
+                        "sha256",
+                        "chunk_bytes",
+                    },
+                    set(opened["result"]),
+                )
+                self.assertEqual(65_536, opened["result"]["chunk_bytes"])
+                self.assertNotIn(str(self.world), repr(opened))
+                handle = opened["result"]["handle"]
+                payload = bytearray()
+                sequence = 0
+                while True:
+                    read = request(
+                        "asset.preview.read",
+                        {"handle": handle, "sequence": sequence},
+                    )
+                    self.assertNotIn("payload", read["result"])
+                    self.assertNotIn("path", read["result"])
+                    encoded = read["result"]["data_base64"]
+                    chunk = base64.b64decode(encoded, validate=True)
+                    self.assertEqual(encoded, base64.b64encode(chunk).decode("ascii"))
+                    self.assertEqual(len(chunk), read["result"]["byte_length"])
+                    payload.extend(chunk)
+                    if read["result"]["eof"]:
+                        break
+                    self.assertEqual(65_536, len(chunk))
+                    sequence += 1
+                self.assertEqual(entry["sha256"], hashlib.sha256(payload).hexdigest())
+                closed = request("asset.preview.close", {"handle": handle})
+                self.assertEqual({"handle": handle, "closed": True}, closed["result"])
+
+            for media_type in ("font/ttf",):
+                entry = next(
+                    item
+                    for item in entries
+                    if item["category"] == "runtime_output" and item["media_type"] == media_type
+                )
+                with (
+                    self.subTest(media_type=media_type),
+                    self.assertRaisesRegex(
+                        StudioError,
+                        "not previewable",
+                    ),
+                ):
+                    request(
+                        "asset.preview.open",
+                        {
+                            "workspace_id": "workspace_01",
+                            "manifest_revision": revision,
+                            "entry_id": entry["entry_id"],
+                        },
+                    )
+
+        self.assertEqual([], list(self.snapshot_parent.iterdir()))

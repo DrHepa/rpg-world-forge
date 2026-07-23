@@ -7,11 +7,14 @@ process exposing three changeset staging/read tools. It cannot approve or apply
 changesets. The Python service already provides bounded workspace overview,
 manifest-authorized source inspection, release validation, and in-memory
 narrative analysis methods. It also exposes revision-bound, manifest-authorized
-asset catalog listing and metadata/text inspection. Electron maps those reads
+asset catalog listing and metadata/text inspection, plus bounded PNG/WAV
+preview leases under the same revision authority. Electron maps those reads
 and the human review boundary to exact named preload methods; catalog pages have
 a main-owned limit of 64, staging is only a one-file base-hashed replacement,
-and no generic RPC is exposed. The catalog boundary accepts no renderer paths,
-media types, categories, cursors, or binary payloads. The World cockpit can
+and no generic RPC is exposed. Preview calls accept no paths, media types,
+offsets, sizes, encodings, or renderer-supplied base64. Main validates each
+fixed 64 KiB protocol chunk, immediately decodes canonical base64, and exposes
+only a fresh `Uint8Array` through preload. The World cockpit can
 stage an explicit dirty syntax-valid draft, open bounded immutable v2 text and
 JSON Pointer evidence, and require separate human confirmations for approval,
 rejection, and apply. Approval never auto-applies; v1 reviews remain readable

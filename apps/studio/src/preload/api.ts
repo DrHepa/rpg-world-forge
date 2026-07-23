@@ -4,6 +4,9 @@ import {
   type CodexActivityEvent,
   type StudioAssetCatalogInspectReply,
   type StudioAssetCatalogListReply,
+  type StudioAssetPreviewChunkReply,
+  type StudioAssetPreviewCloseReply,
+  type StudioAssetPreviewOpenReply,
   type StudioAssetReceiptValidateReply,
   type StudioAssetpackVerifyReply,
   type StudioActivityEvent,
@@ -97,6 +100,28 @@ export function createStudioApi(transport: PreloadTransport): ForgeStudioApi {
           manifestRevision,
           entryId,
         }),
+      );
+    },
+    async openAssetPreview(workspaceId, manifestRevision, entryId) {
+      return asClientResult<StudioAssetPreviewOpenReply>(
+        await transport.invoke(IPC_CHANNELS.openAssetPreview, {
+          workspaceId,
+          manifestRevision,
+          entryId,
+        }),
+      );
+    },
+    async readAssetPreviewChunk(handle, sequence) {
+      return asClientResult<StudioAssetPreviewChunkReply>(
+        await transport.invoke(IPC_CHANNELS.readAssetPreviewChunk, {
+          handle,
+          sequence,
+        }),
+      );
+    },
+    async closeAssetPreview(handle) {
+      return asClientResult<StudioAssetPreviewCloseReply>(
+        await transport.invoke(IPC_CHANNELS.closeAssetPreview, { handle }),
       );
     },
     async stageSourceDocument(workspaceId, path, baseSha256, content) {

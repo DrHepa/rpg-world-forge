@@ -6,6 +6,9 @@ import {
   registerStudioIpc,
   validateAssetCatalogInspectArgument,
   validateAssetCatalogListArgument,
+  validateAssetPreviewCloseArgument,
+  validateAssetPreviewOpenArgument,
+  validateAssetPreviewReadArgument,
   validateAssetpackArgument,
   validateAssetReceiptArgument,
   validateCancelJobArgument,
@@ -522,6 +525,465 @@ describe("Studio named asset catalog IPC contracts", () => {
     expect(harness.removeHandler).toHaveBeenCalledWith(
       IPC_CHANNELS.inspectAssetCatalogEntry,
     );
+  });
+});
+
+describe("Studio named asset preview IPC contracts", () => {
+  const revision = "a".repeat(64);
+  const entryId = `asset_${"b".repeat(64)}`;
+  const handle = "C".repeat(43);
+
+  it("accepts only closed authority, handle, and bounded sequence inputs", () => {
+    expect(
+      validateAssetPreviewOpenArgument({
+        workspaceId: "workspace_01",
+        manifestRevision: revision,
+        entryId,
+      }),
+    ).toEqual({
+      workspaceId: "workspace_01",
+      manifestRevision: revision,
+      entryId,
+    });
+    expect(validateAssetPreviewReadArgument({ handle, sequence: 8191 })).toEqual({
+      handle,
+      sequence: 8191,
+    });
+    expect(validateAssetPreviewCloseArgument({ handle })).toEqual({ handle });
+
+    for (const value of [
+      {
+        workspaceId: "workspace_01",
+        manifestRevision: revision,
+        entryId,
+        path: "/private/preview.png",
+      },
+      { handle, sequence: 0, offset: 0 },
+      { handle, sequence: 0, size: 65_536 },
+      { handle, sequence: 0, encoding: "base64" },
+      { handle, sequence: 0, data_base64: "YQ==" },
+      { handle, sequence: -1 },
+      { handle, sequence: 8192 },
+      { handle, sequence: true },
+      { handle: "bad" },
+    ]) {
+      expect(() =>
+        "workspaceId" in value
+          ? validateAssetPreviewOpenArgument(value)
+          : "sequence" in value
+            ? validateAssetPreviewReadArgument(value)
+            : validateAssetPreviewCloseArgument(value),
+      ).toThrow();
+    }
+  });
+
+  it.each([
+    ["image/png", Buffer.from([0x89, 0x50, 0x4e, 0x47])],
+    ["audio/wav", Buffer.from("RIFF....WAVE", "ascii")],
+  ] as const)("round-trips %s only as a fresh Uint8Array", async (mediaType, payload) => {
+    const harness = createIpcHarness();
+    harness.request
+      .mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createAssetPreviewOpenResponse(
+            requestId,
+            handle,
+            revision,
+            entryId,
+            mediaType,
+            payload,
+          ),
+        ),
+      )
+      .mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createAssetPreviewReadResponse(
+            requestId,
+            handle,
+            0,
+            payload,
+            payload,
+            true,
+          ),
+        ),
+      )
+      .mockImplementationOnce((requestId: string) =>
+        Promise.resolve(createAssetPreviewCloseResponse(requestId, handle)),
+      );
+
+    expect(
+      await harness.invoke(IPC_CHANNELS.openAssetPreview, {
+        workspaceId: "workspace_01",
+        manifestRevision: revision,
+        entryId,
+      }),
+    ).toMatchObject({ ok: true, value: { result: { handle, media_type: mediaType } } });
+    const read = await harness.invoke(IPC_CHANNELS.readAssetPreviewChunk, {
+      handle,
+      sequence: 0,
+    });
+    expect(read).toMatchObject({
+      ok: true,
+      value: {
+        method: "asset.preview.read",
+        result: { handle, sequence: 0, byte_length: payload.byteLength, eof: true },
+      },
+    });
+    const result = (read as { value: { result: Record<string, unknown> } }).value.result;
+    expect(result.bytes).toBeInstanceOf(Uint8Array);
+    expect(Buffer.from(result.bytes as Uint8Array)).toEqual(payload);
+    expect(result).not.toHaveProperty("data_base64");
+    expect(result).not.toHaveProperty("path");
+    expect(
+      await harness.invoke(IPC_CHANNELS.closeAssetPreview, { handle }),
+    ).toMatchObject({ ok: true, value: { result: { handle, closed: true } } });
+
+    expect(harness.request.mock.calls.map((call) => [call[1], call[2]])).toEqual([
+      [
+        "asset.preview.open",
+        {
+          workspace_id: "workspace_01",
+          manifest_revision: revision,
+          entry_id: entryId,
+        },
+      ],
+      ["asset.preview.read", { handle, sequence: 0 }],
+      ["asset.preview.close", { handle }],
+    ]);
+  });
+
+  it("enforces fixed chunks, sequence, cumulative identity, EOF, and replay copies", async () => {
+    const harness = createIpcHarness();
+    const first = Buffer.alloc(65_536, 0x61);
+    const final = Buffer.from("tail");
+    const whole = Buffer.concat([first, final]);
+    harness.request
+      .mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createAssetPreviewOpenResponse(
+            requestId,
+            handle,
+            revision,
+            entryId,
+            "image/png",
+            whole,
+          ),
+        ),
+      )
+      .mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createAssetPreviewReadResponse(
+            requestId,
+            handle,
+            0,
+            first,
+            first,
+            false,
+          ),
+        ),
+      )
+      .mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createAssetPreviewReadResponse(
+            requestId,
+            handle,
+            1,
+            final,
+            whole,
+            true,
+          ),
+        ),
+      )
+      .mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createAssetPreviewReadResponse(
+            requestId,
+            handle,
+            1,
+            final,
+            whole,
+            true,
+          ),
+        ),
+      );
+
+    await harness.invoke(IPC_CHANNELS.openAssetPreview, {
+      workspaceId: "workspace_01",
+      manifestRevision: revision,
+      entryId,
+    });
+    const chunk0 = await harness.invoke(IPC_CHANNELS.readAssetPreviewChunk, {
+      handle,
+      sequence: 0,
+    });
+    const chunk1 = await harness.invoke(IPC_CHANNELS.readAssetPreviewChunk, {
+      handle,
+      sequence: 1,
+    });
+    const replay = await harness.invoke(IPC_CHANNELS.readAssetPreviewChunk, {
+      handle,
+      sequence: 1,
+    });
+    expect(chunk0).toMatchObject({
+      ok: true,
+      value: { result: { byte_length: 65_536, cumulative_bytes: 65_536, eof: false } },
+    });
+    expect(chunk1).toMatchObject({
+      ok: true,
+      value: {
+        result: {
+          byte_length: final.byteLength,
+          cumulative_bytes: whole.byteLength,
+          eof: true,
+        },
+      },
+    });
+    const firstBytes = (chunk1 as { value: { result: { bytes: Uint8Array } } }).value.result
+      .bytes;
+    const replayBytes = (replay as { value: { result: { bytes: Uint8Array } } }).value.result
+      .bytes;
+    expect(replayBytes).not.toBe(firstBytes);
+    expect(replayBytes).toEqual(firstBytes);
+  });
+
+  it("rejects forged open/read/close correlations and malformed base64", async () => {
+    const harness = createIpcHarness();
+    const payload = Buffer.from("abc");
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(
+        createAssetPreviewOpenResponse(
+          requestId,
+          handle,
+          revision,
+          entryId,
+          "image/png",
+          payload,
+        ),
+      ),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.openAssetPreview, {
+        workspaceId: "workspace_01",
+        manifestRevision: revision,
+        entryId,
+      }),
+    ).toMatchObject({ ok: true });
+
+    const valid = createAssetPreviewReadResponse(
+      "placeholder",
+      handle,
+      0,
+      payload,
+      payload,
+      true,
+    );
+    const forged = [
+      (requestId: string) => ({ ...valid, request_id: `${requestId}-wrong` }),
+      (requestId: string) => ({ ...valid, request_id: requestId, method: "source.read" }),
+      (requestId: string) => ({
+        ...valid,
+        request_id: requestId,
+        result: { ...valid.result, handle: "D".repeat(43) },
+      }),
+      (requestId: string) => ({
+        ...valid,
+        request_id: requestId,
+        result: {
+          ...valid.result,
+          sequence: 1,
+          cumulative_bytes: 65_539,
+        },
+      }),
+      (requestId: string) => ({
+        ...valid,
+        request_id: requestId,
+        result: { ...valid.result, data_base64: "YR==" },
+      }),
+      (requestId: string) => ({
+        ...valid,
+        request_id: requestId,
+        result: { ...valid.result, byte_length: 2 },
+      }),
+      (requestId: string) => ({
+        ...valid,
+        request_id: requestId,
+        result: { ...valid.result, cumulative_bytes: 4 },
+      }),
+      (requestId: string) => ({
+        ...valid,
+        request_id: requestId,
+        result: { ...valid.result, cumulative_sha256: "0".repeat(64) },
+      }),
+      (requestId: string) => ({
+        ...valid,
+        request_id: requestId,
+        result: { ...valid.result, eof: false },
+      }),
+      (requestId: string) => ({
+        ...valid,
+        request_id: requestId,
+        result: { ...valid.result, path: "/private/preview.png" },
+      }),
+    ];
+    for (const reply of forged) {
+      harness.request.mockImplementationOnce((requestId: string) =>
+        Promise.resolve(reply(requestId)),
+      );
+      expect(
+        await harness.invoke(IPC_CHANNELS.readAssetPreviewChunk, {
+          handle,
+          sequence: 0,
+        }),
+      ).toMatchObject({
+        ok: false,
+        error: { code: "service_unavailable" },
+      });
+    }
+
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(createAssetPreviewCloseResponse(requestId, "D".repeat(43))),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.closeAssetPreview, { handle }),
+    ).toMatchObject({ ok: false, error: { code: "service_unavailable" } });
+  });
+
+  it("rejects mismatched preview authority, forbidden media, and duplicate handles", async () => {
+    const payload = Buffer.from("preview");
+    const mutations: Array<(response: ReturnType<typeof createAssetPreviewOpenResponse>) => unknown> = [
+      (response) => ({
+        ...response,
+        result: { ...response.result, manifest_revision: "d".repeat(64) },
+      }),
+      (response) => ({
+        ...response,
+        result: {
+          ...response.result,
+          entry_id: `asset_${"d".repeat(64)}`,
+        },
+      }),
+      (response) => ({
+        ...response,
+        result: { ...response.result, media_type: "font/ttf" },
+      }),
+      (response) => ({
+        ...response,
+        result: { ...response.result, media_type: "model/gltf-binary" },
+      }),
+      (response) => ({
+        ...response,
+        result: { ...response.result, path: "/private/preview.png" },
+      }),
+    ];
+    for (const mutate of mutations) {
+      const harness = createIpcHarness();
+      harness.request.mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          mutate(
+            createAssetPreviewOpenResponse(
+              requestId,
+              handle,
+              revision,
+              entryId,
+              "image/png",
+              payload,
+            ),
+          ),
+        ),
+      );
+      expect(
+        await harness.invoke(IPC_CHANNELS.openAssetPreview, {
+          workspaceId: "workspace_01",
+          manifestRevision: revision,
+          entryId,
+        }),
+      ).toMatchObject({
+        ok: false,
+        error: { code: "service_unavailable" },
+      });
+    }
+
+    const duplicate = createIpcHarness();
+    duplicate.request
+      .mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createAssetPreviewOpenResponse(
+            requestId,
+            handle,
+            revision,
+            entryId,
+            "image/png",
+            payload,
+          ),
+        ),
+      )
+      .mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createAssetPreviewOpenResponse(
+            requestId,
+            handle,
+            revision,
+            entryId,
+            "image/png",
+            payload,
+          ),
+        ),
+      );
+    const argument = {
+      workspaceId: "workspace_01",
+      manifestRevision: revision,
+      entryId,
+    };
+    expect(await duplicate.invoke(IPC_CHANNELS.openAssetPreview, argument)).toMatchObject({
+      ok: true,
+    });
+    expect(await duplicate.invoke(IPC_CHANNELS.openAssetPreview, argument)).toMatchObject({
+      ok: false,
+      error: { code: "service_unavailable" },
+    });
+  });
+
+  it("rejects untrusted, extra-argument, and unopened-handle calls before service", async () => {
+    const harness = createIpcHarness();
+    expect(
+      await harness.invoke(
+        IPC_CHANNELS.openAssetPreview,
+        {
+          workspaceId: "workspace_01",
+          manifestRevision: revision,
+          entryId,
+        },
+        { trusted: false },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(
+      await harness.invoke(
+        IPC_CHANNELS.openAssetPreview,
+        {
+          workspaceId: "workspace_01",
+          manifestRevision: revision,
+          entryId,
+        },
+        { extraArgument: true },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(
+      await harness.invoke(IPC_CHANNELS.readAssetPreviewChunk, {
+        handle,
+        sequence: 0,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(harness.request).not.toHaveBeenCalled();
+  });
+
+  it("removes all preview handlers during teardown", () => {
+    const harness = createIpcHarness();
+    harness.dispose();
+    expect(harness.removeHandler).toHaveBeenCalledWith(IPC_CHANNELS.openAssetPreview);
+    expect(harness.removeHandler).toHaveBeenCalledWith(
+      IPC_CHANNELS.readAssetPreviewChunk,
+    );
+    expect(harness.removeHandler).toHaveBeenCalledWith(IPC_CHANNELS.closeAssetPreview);
   });
 });
 
@@ -1201,6 +1663,71 @@ describe("Codex named IPC contracts", () => {
     expect(() => validate(value)).toThrow();
   });
 });
+
+function createAssetPreviewOpenResponse(
+  requestId: string,
+  handle: string,
+  manifestRevision: string,
+  entryId: string,
+  mediaType: "image/png" | "audio/wav",
+  payload: Uint8Array,
+) {
+  return {
+    protocol: "rpg-world-forge.studio_protocol",
+    protocol_version: 1,
+    kind: "response",
+    request_id: requestId,
+    method: "asset.preview.open",
+    result: {
+      handle,
+      manifest_revision: manifestRevision,
+      entry_id: entryId,
+      media_type: mediaType,
+      byte_length: payload.byteLength,
+      sha256: createHash("sha256").update(payload).digest("hex"),
+      chunk_bytes: 65_536,
+    },
+  };
+}
+
+function createAssetPreviewReadResponse(
+  requestId: string,
+  handle: string,
+  sequence: number,
+  payload: Uint8Array,
+  cumulativePayload: Uint8Array,
+  eof: boolean,
+) {
+  return {
+    protocol: "rpg-world-forge.studio_protocol",
+    protocol_version: 1,
+    kind: "response",
+    request_id: requestId,
+    method: "asset.preview.read",
+    result: {
+      handle,
+      sequence,
+      data_base64: Buffer.from(payload).toString("base64"),
+      byte_length: payload.byteLength,
+      cumulative_bytes: cumulativePayload.byteLength,
+      cumulative_sha256: createHash("sha256")
+        .update(cumulativePayload)
+        .digest("hex"),
+      eof,
+    },
+  };
+}
+
+function createAssetPreviewCloseResponse(requestId: string, handle: string) {
+  return {
+    protocol: "rpg-world-forge.studio_protocol",
+    protocol_version: 1,
+    kind: "response",
+    request_id: requestId,
+    method: "asset.preview.close",
+    result: { handle, closed: true },
+  };
+}
 
 function createIpcHarness() {
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();

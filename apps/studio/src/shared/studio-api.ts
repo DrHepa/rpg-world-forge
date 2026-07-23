@@ -3,6 +3,9 @@ import type {
   AssetCatalogListResponse as StudioAssetCatalogListResponse,
   AssetCatalogEntry as StudioAssetCatalogEntry,
   AssetInspection as StudioAssetInspection,
+  AssetPreviewCloseResponse as StudioAssetPreviewCloseResponse,
+  AssetPreviewOpenResponse as StudioAssetPreviewOpenResponse,
+  AssetPreviewReadResponse as StudioWireAssetPreviewReadResponse,
   AssetReceiptValidateOperation as StudioAssetReceiptValidateOperation,
   AssetReceiptValidateInput as StudioAssetReceiptValidateInput,
   AssetpackVerifyOperation as StudioAssetpackVerifyOperation,
@@ -101,6 +104,23 @@ export type StudioAssetCatalogListReply =
 export type StudioAssetCatalogInspectReply =
   | StudioAssetCatalogInspectResponse
   | StudioErrorEnvelope;
+export type StudioAssetPreviewOpenReply =
+  | StudioAssetPreviewOpenResponse
+  | StudioErrorEnvelope;
+export type StudioAssetPreviewCloseReply =
+  | StudioAssetPreviewCloseResponse
+  | StudioErrorEnvelope;
+export type StudioAssetPreviewChunkResponse = Omit<
+  StudioWireAssetPreviewReadResponse,
+  "result"
+> & {
+  result: Omit<StudioWireAssetPreviewReadResponse["result"], "data_base64"> & {
+    bytes: Uint8Array;
+  };
+};
+export type StudioAssetPreviewChunkReply =
+  | StudioAssetPreviewChunkResponse
+  | StudioErrorEnvelope;
 export type StudioWorldValidateReply = StudioWorldValidateResponse | StudioErrorEnvelope;
 export type StudioWorldAnalyzeReply = StudioWorldAnalyzeResponse | StudioErrorEnvelope;
 export type StudioJobCreateReply = StudioJobCreateResponse | StudioErrorEnvelope;
@@ -169,6 +189,9 @@ export type StudioCapabilityMethod =
   | "source.read"
   | "asset.catalog.list"
   | "asset.catalog.inspect"
+  | "asset.preview.open"
+  | "asset.preview.read"
+  | "asset.preview.close"
   | "world.validate"
   | "world.analyze"
   | "changeset.create"
@@ -314,6 +337,18 @@ export interface ForgeStudioApi {
     manifestRevision: string,
     entryId: string,
   ): Promise<StudioClientResult<StudioAssetCatalogInspectReply>>;
+  openAssetPreview(
+    workspaceId: string,
+    manifestRevision: string,
+    entryId: string,
+  ): Promise<StudioClientResult<StudioAssetPreviewOpenReply>>;
+  readAssetPreviewChunk(
+    handle: string,
+    sequence: number,
+  ): Promise<StudioClientResult<StudioAssetPreviewChunkReply>>;
+  closeAssetPreview(
+    handle: string,
+  ): Promise<StudioClientResult<StudioAssetPreviewCloseReply>>;
   stageSourceDocument(
     workspaceId: string,
     path: string,
@@ -383,6 +418,9 @@ export const STUDIO_METHODS: ReadonlySet<StudioMethod> = new Set([
   "source.read",
   "asset.catalog.list",
   "asset.catalog.inspect",
+  "asset.preview.open",
+  "asset.preview.read",
+  "asset.preview.close",
   "world.validate",
   "world.analyze",
   "events.list",
@@ -419,6 +457,9 @@ export const IPC_CHANNELS = Object.freeze({
   readSourceDocument: "studio:read-source-document",
   listAssetCatalog: "studio:list-asset-catalog",
   inspectAssetCatalogEntry: "studio:inspect-asset-catalog-entry",
+  openAssetPreview: "studio:open-asset-preview",
+  readAssetPreviewChunk: "studio:read-asset-preview-chunk",
+  closeAssetPreview: "studio:close-asset-preview",
   stageSourceDocument: "studio:stage-source-document",
   getChangeset: "studio:get-changeset",
   readChangesetDiff: "studio:read-changeset-diff",

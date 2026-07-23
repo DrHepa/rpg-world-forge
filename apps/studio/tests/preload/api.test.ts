@@ -21,6 +21,7 @@ describe("preload API", () => {
       "approveChangeset",
       "bindCodexWorkspace",
       "cancelJob",
+      "closeAssetPreview",
       "forkCodexThread",
       "getChangeset",
       "getCodexStatus",
@@ -37,6 +38,8 @@ describe("preload API", () => {
       "listWorkspaces",
       "onCodexEvent",
       "onEvent",
+      "openAssetPreview",
+      "readAssetPreviewChunk",
       "readChangesetDiff",
       "readCodexAccount",
       "readSourceDocument",
@@ -77,6 +80,13 @@ describe("preload API", () => {
       "c".repeat(64),
       `asset_${"d".repeat(64)}`,
     );
+    await api.openAssetPreview(
+      "workspace_01",
+      "c".repeat(64),
+      `asset_${"d".repeat(64)}`,
+    );
+    await api.readAssetPreviewChunk("E".repeat(43), 0);
+    await api.closeAssetPreview("E".repeat(43));
     await api.stageSourceDocument(
       "workspace_01",
       "source/world.json",
@@ -163,6 +173,19 @@ describe("preload API", () => {
           entryId: `asset_${"d".repeat(64)}`,
         },
       ],
+      [
+        IPC_CHANNELS.openAssetPreview,
+        {
+          workspaceId: "workspace_01",
+          manifestRevision: "c".repeat(64),
+          entryId: `asset_${"d".repeat(64)}`,
+        },
+      ],
+      [
+        IPC_CHANNELS.readAssetPreviewChunk,
+        { handle: "E".repeat(43), sequence: 0 },
+      ],
+      [IPC_CHANNELS.closeAssetPreview, { handle: "E".repeat(43) }],
       [IPC_CHANNELS.stageSourceDocument, {
         workspaceId: "workspace_01",
         path: "source/world.json",

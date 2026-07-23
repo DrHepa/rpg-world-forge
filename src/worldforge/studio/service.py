@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import base64
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from worldforge.studio.asset_previews import AssetPreviewManager
 from worldforge.studio.assets import AssetCatalogManager
 from worldforge.studio.authoring import AuthoringManager
 from worldforge.studio.changesets import ChangesetManager
 from worldforge.studio.contracts import (
+    ASSET_PREVIEW_CHUNK_BYTES,
     METHODS,
     PROTOCOL_FORMAT,
     STUDIO_VERSION,
@@ -48,37 +51,52 @@ class StudioService:
         self.store = store
         self.scheduler = scheduler
         self._closed = False
+        self._preview_shutdown = False
         self.workspaces = WorkspaceManager(store)
         self.assets = AssetCatalogManager(self.workspaces)
-        self.authoring = AuthoringManager(self.workspaces)
-        self.changesets = ChangesetManager(store)
-        self.jobs = JobManager(store)
-        self._methods: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
-            "service.initialize": self._initialize,
-            "workspace.register": self._workspace_register,
-            "workspace.list": self._workspace_list,
-            "workspace.get": self._workspace_get,
-            "workspace.overview": self._workspace_overview,
-            "source.list": self._source_list,
-            "source.read": self._source_read,
-            "asset.catalog.list": self._asset_catalog_list,
-            "asset.catalog.inspect": self._asset_catalog_inspect,
-            "world.validate": self._world_validate,
-            "world.analyze": self._world_analyze,
-            "events.list": self._events_list,
-            "changeset.create": self._changeset_create,
-            "changeset.get": self._changeset_get,
-            "changeset.list": self._changeset_list,
-            "changeset.diff": self._changeset_diff,
-            "changeset.approve": self._changeset_approve,
-            "changeset.reject": self._changeset_reject,
-            "changeset.apply": self._changeset_apply,
-            "job.create": self._job_create,
-            "job.get": self._job_get,
-            "job.list": self._job_list,
-            "job.transition": self._job_transition,
-            "job.cancel": self._job_cancel,
-        }
+        preview_manager: AssetPreviewManager | None = None
+        try:
+            preview_manager = AssetPreviewManager(self.assets)
+            self.asset_previews = preview_manager
+            self.authoring = AuthoringManager(self.workspaces)
+            self.changesets = ChangesetManager(store)
+            self.jobs = JobManager(store)
+            self._methods: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+                "service.initialize": self._initialize,
+                "workspace.register": self._workspace_register,
+                "workspace.list": self._workspace_list,
+                "workspace.get": self._workspace_get,
+                "workspace.overview": self._workspace_overview,
+                "source.list": self._source_list,
+                "source.read": self._source_read,
+                "asset.catalog.list": self._asset_catalog_list,
+                "asset.catalog.inspect": self._asset_catalog_inspect,
+                "asset.preview.open": self._asset_preview_open,
+                "asset.preview.read": self._asset_preview_read,
+                "asset.preview.close": self._asset_preview_close,
+                "world.validate": self._world_validate,
+                "world.analyze": self._world_analyze,
+                "events.list": self._events_list,
+                "changeset.create": self._changeset_create,
+                "changeset.get": self._changeset_get,
+                "changeset.list": self._changeset_list,
+                "changeset.diff": self._changeset_diff,
+                "changeset.approve": self._changeset_approve,
+                "changeset.reject": self._changeset_reject,
+                "changeset.apply": self._changeset_apply,
+                "job.create": self._job_create,
+                "job.get": self._job_get,
+                "job.list": self._job_list,
+                "job.transition": self._job_transition,
+                "job.cancel": self._job_cancel,
+            }
+        except BaseException:
+            if preview_manager is not None:
+                try:
+                    preview_manager.shutdown()
+                except BaseException:
+                    pass
+            raise
 
     def handle(self, envelope: object) -> dict[str, Any]:
         if self._closed:
@@ -107,6 +125,10 @@ class StudioService:
 
     def close(self) -> None:
         self._closed = True
+        if self._preview_shutdown:
+            return
+        self.asset_previews.shutdown()
+        self._preview_shutdown = True
 
     @staticmethod
     def _initialize(params: dict[str, Any]) -> dict[str, Any]:
@@ -126,6 +148,7 @@ class StudioService:
                 "staged_changesets": True,
                 "durable_jobs": True,
                 "asset_catalog_inspection": True,
+                "asset_previews": True,
             },
         }
 
@@ -176,6 +199,45 @@ class StudioService:
             entry_id=params["entry_id"],
             expected_manifest_revision=params["expected_manifest_revision"],
         )
+
+    def _asset_preview_open(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(
+            params,
+            allowed={"workspace_id", "manifest_revision", "entry_id"},
+            required={"workspace_id", "manifest_revision", "entry_id"},
+        )
+        opened = self.asset_previews.open(
+            params["workspace_id"],
+            params["manifest_revision"],
+            params["entry_id"],
+        )
+        return {**opened, "chunk_bytes": ASSET_PREVIEW_CHUNK_BYTES}
+
+    def _asset_preview_read(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(
+            params,
+            allowed={"handle", "sequence"},
+            required={"handle", "sequence"},
+        )
+        chunk = self.asset_previews.read(params["handle"], params["sequence"])
+        payload = chunk.get("payload")
+        if not isinstance(payload, bytes):
+            raise StudioError("internal_error", "Asset preview read produced invalid bytes")
+        return {
+            "handle": chunk.get("handle"),
+            "sequence": chunk.get("sequence"),
+            "data_base64": base64.b64encode(payload).decode("ascii"),
+            "byte_length": len(payload),
+            "cumulative_bytes": chunk.get("cumulative_bytes"),
+            "cumulative_sha256": chunk.get("cumulative_sha256"),
+            "eof": chunk.get("eof"),
+        }
+
+    def _asset_preview_close(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(params, allowed={"handle"}, required={"handle"})
+        handle = params["handle"]
+        self.asset_previews.close(handle)
+        return {"handle": handle, "closed": True}
 
     def _world_validate(self, params: dict[str, Any]) -> dict[str, Any]:
         _closed_params(params, allowed={"workspace_id"}, required={"workspace_id"})

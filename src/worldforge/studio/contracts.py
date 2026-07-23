@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import math
 import re
 import unicodedata
@@ -26,6 +27,7 @@ ENTITY_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
 OPERATION_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 ASSET_ENTRY_ID_PATTERN = re.compile(r"^asset_[0-9a-f]{64}$")
+ASSET_PREVIEW_HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{43}$")
 TIMESTAMP_PATTERN = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$"
 )
@@ -55,6 +57,9 @@ METHODS = frozenset(
         "source.read",
         "asset.catalog.list",
         "asset.catalog.inspect",
+        "asset.preview.open",
+        "asset.preview.read",
+        "asset.preview.close",
         "world.validate",
         "world.analyze",
         "events.list",
@@ -78,6 +83,9 @@ WORKSPACE_AUTHORING_METHODS = frozenset(
 AUTHORING_METHODS = WORKSPACE_AUTHORING_METHODS | {"source.read"}
 EXACT_JOB_METHODS = frozenset({"job.create", "job.cancel"})
 EXACT_ASSET_CATALOG_METHODS = frozenset({"asset.catalog.list", "asset.catalog.inspect"})
+EXACT_ASSET_PREVIEW_METHODS = frozenset(
+    {"asset.preview.open", "asset.preview.read", "asset.preview.close"}
+)
 EXACT_CHANGESET_METHODS = frozenset(
     {
         "changeset.create",
@@ -96,6 +104,7 @@ LEGACY_METHODS = (
     - EXACT_JOB_METHODS
     - EXACT_CHANGESET_METHODS
     - EXACT_ASSET_CATALOG_METHODS
+    - EXACT_ASSET_PREVIEW_METHODS
 )
 MAX_STUDIO_SOURCE_DEPTH = 8
 MAX_STUDIO_SOURCE_BYTES = 256 * 1024
@@ -104,6 +113,11 @@ MAX_ASSET_CATALOG_PAGE = 64
 MAX_ASSET_INLINE_BYTES = 256 * 1024
 MAX_ASSET_CATALOG_PATH_DEPTH = 32
 MAX_ASSET_CATALOG_PATH_LENGTH = 4096
+ASSET_PREVIEW_CHUNK_BYTES = 64 * 1024
+MAX_ASSET_PREVIEW_BYTES = 512 * 1024 * 1024
+MAX_ASSET_PREVIEW_SEQUENCE = 8191
+MAX_ASSET_PREVIEW_BASE64_LENGTH = 87_384
+ASSET_PREVIEW_MEDIA_TYPES = frozenset({"audio/wav", "image/png"})
 ASSET_CATALOG_CATEGORIES = frozenset(
     {
         "manifest",
@@ -310,6 +324,29 @@ def _validate_asset_catalog_inspect_params(value: object, context: str) -> None:
         params["expected_manifest_revision"],
         f"{context}/expected_manifest_revision",
     )
+
+
+def _validate_asset_preview_params(method: str, value: object, context: str) -> None:
+    params = _object(value, context)
+    if method == "asset.preview.open":
+        _closed(params, {"workspace_id", "manifest_revision", "entry_id"}, context)
+        _identifier(params["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
+        _sha256(params["manifest_revision"], f"{context}/manifest_revision")
+        _identifier(params["entry_id"], f"{context}/entry_id", ASSET_ENTRY_ID_PATTERN)
+        return
+
+    if method == "asset.preview.read":
+        _closed(params, {"handle", "sequence"}, context)
+        _identifier(params["handle"], f"{context}/handle", ASSET_PREVIEW_HANDLE_PATTERN)
+        sequence = _integer(params["sequence"], f"{context}/sequence")
+        if sequence > MAX_ASSET_PREVIEW_SEQUENCE:
+            raise StudioContractError(
+                f"{context}/sequence must be at most {MAX_ASSET_PREVIEW_SEQUENCE}"
+            )
+        return
+
+    _closed(params, {"handle"}, context)
+    _identifier(params["handle"], f"{context}/handle", ASSET_PREVIEW_HANDLE_PATTERN)
 
 
 def _validate_changeset_create_params(value: object, context: str) -> None:
@@ -834,6 +871,96 @@ def _validate_asset_catalog_result(method: str, value: object, context: str) -> 
             raise StudioContractError(f"{context}/inspection identity is inconsistent")
     elif entry["inspectable"] is not True:
         raise StudioContractError(f"{context}/entry must be inspectable")
+
+
+def _validate_asset_preview_result(method: str, value: object, context: str) -> None:
+    result = _object(value, context)
+    if method == "asset.preview.open":
+        _closed(
+            result,
+            {
+                "handle",
+                "manifest_revision",
+                "entry_id",
+                "media_type",
+                "byte_length",
+                "sha256",
+                "chunk_bytes",
+            },
+            context,
+        )
+        _identifier(result["handle"], f"{context}/handle", ASSET_PREVIEW_HANDLE_PATTERN)
+        _sha256(result["manifest_revision"], f"{context}/manifest_revision")
+        _identifier(result["entry_id"], f"{context}/entry_id", ASSET_ENTRY_ID_PATTERN)
+        if result["media_type"] not in ASSET_PREVIEW_MEDIA_TYPES:
+            raise StudioContractError(f"{context}/media_type is not previewable")
+        byte_length = _integer(result["byte_length"], f"{context}/byte_length", minimum=1)
+        if byte_length > MAX_ASSET_PREVIEW_BYTES:
+            raise StudioContractError(
+                f"{context}/byte_length must be at most {MAX_ASSET_PREVIEW_BYTES}"
+            )
+        _sha256(result["sha256"], f"{context}/sha256")
+        if (
+            type(result["chunk_bytes"]) is not int
+            or result["chunk_bytes"] != ASSET_PREVIEW_CHUNK_BYTES
+        ):
+            raise StudioContractError(f"{context}/chunk_bytes must be {ASSET_PREVIEW_CHUNK_BYTES}")
+        return
+
+    if method == "asset.preview.close":
+        _closed(result, {"handle", "closed"}, context)
+        _identifier(result["handle"], f"{context}/handle", ASSET_PREVIEW_HANDLE_PATTERN)
+        if result["closed"] is not True:
+            raise StudioContractError(f"{context}/closed must be true")
+        return
+
+    _closed(
+        result,
+        {
+            "handle",
+            "sequence",
+            "data_base64",
+            "byte_length",
+            "cumulative_bytes",
+            "cumulative_sha256",
+            "eof",
+        },
+        context,
+    )
+    _identifier(result["handle"], f"{context}/handle", ASSET_PREVIEW_HANDLE_PATTERN)
+    sequence = _integer(result["sequence"], f"{context}/sequence")
+    if sequence > MAX_ASSET_PREVIEW_SEQUENCE:
+        raise StudioContractError(
+            f"{context}/sequence must be at most {MAX_ASSET_PREVIEW_SEQUENCE}"
+        )
+    encoded = _plain_string(
+        result["data_base64"],
+        f"{context}/data_base64",
+        max_length=MAX_ASSET_PREVIEW_BASE64_LENGTH,
+    )
+    if not encoded:
+        raise StudioContractError(f"{context}/data_base64 must be non-empty")
+    try:
+        decoded = base64.b64decode(encoded, validate=True)
+    except (ValueError, UnicodeEncodeError) as exc:
+        raise StudioContractError(f"{context}/data_base64 must be canonical base64") from exc
+    if base64.b64encode(decoded).decode("ascii") != encoded:
+        raise StudioContractError(f"{context}/data_base64 must be canonical base64")
+    byte_length = _integer(result["byte_length"], f"{context}/byte_length", minimum=1)
+    if byte_length > ASSET_PREVIEW_CHUNK_BYTES or len(decoded) != byte_length:
+        raise StudioContractError(f"{context}/byte_length does not match preview data")
+    cumulative_bytes = _integer(
+        result["cumulative_bytes"],
+        f"{context}/cumulative_bytes",
+        minimum=1,
+    )
+    expected_cumulative = sequence * ASSET_PREVIEW_CHUNK_BYTES + byte_length
+    if cumulative_bytes != expected_cumulative or cumulative_bytes > MAX_ASSET_PREVIEW_BYTES:
+        raise StudioContractError(f"{context}/cumulative_bytes is inconsistent")
+    _sha256(result["cumulative_sha256"], f"{context}/cumulative_sha256")
+    eof = _boolean(result["eof"], f"{context}/eof")
+    if not eof and byte_length != ASSET_PREVIEW_CHUNK_BYTES:
+        raise StudioContractError(f"{context}/byte_length must fill non-final chunks")
 
 
 def studio_job_path(value: object) -> PurePosixPath | None:
@@ -1400,6 +1527,8 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
             _validate_asset_catalog_list_params(envelope["params"], "envelope/params")
         elif method == "asset.catalog.inspect":
             _validate_asset_catalog_inspect_params(envelope["params"], "envelope/params")
+        elif method in EXACT_ASSET_PREVIEW_METHODS:
+            _validate_asset_preview_params(method, envelope["params"], "envelope/params")
         elif method == "changeset.create":
             _validate_changeset_create_params(envelope["params"], "envelope/params")
         elif method in {"changeset.get", "changeset.diff"}:
@@ -1425,6 +1554,8 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
             _validate_authoring_result(method, envelope["result"], "envelope/result")
         elif method in EXACT_ASSET_CATALOG_METHODS:
             _validate_asset_catalog_result(method, envelope["result"], "envelope/result")
+        elif method in EXACT_ASSET_PREVIEW_METHODS:
+            _validate_asset_preview_result(method, envelope["result"], "envelope/result")
         elif method in EXACT_CHANGESET_METHODS:
             _validate_changeset_result(method, envelope["result"], "envelope/result")
         elif method in EXACT_JOB_METHODS:

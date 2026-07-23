@@ -40,6 +40,7 @@ Electron main supervisor -- serves --> rwf-studio://app static artifacts
 worldforge.studio application service
         |-- public schema validators
         |-- workspace boundary inspection
+        |-- revision-guarded PNG/WAV preview leases
         |-- SQLite registry, events, and job state
         `-- approved, base-hashed source changesets
                 |
@@ -133,6 +134,15 @@ and never exposes arbitrary `job.create` or operation dispatch. Codex proposals
 remain staged changesets and cannot approve or apply themselves. Provider/model
 execution, Blender, Modly, Ollama, arbitrary commands, file watching, and M6
 presentation work remain outside this boundary.
+
+Asset previews are a separate three-method named boundary, not generic file
+access. The renderer can provide only a workspace/revision/entry tuple to open,
+then an opaque handle and bounded sequence to read or close. Python owns one
+preview manager, immutable snapshot lifetime, quotas, and shutdown cleanup.
+Electron main validates handle, authority, sequence, cumulative length, EOF,
+and SHA correlations, decodes canonical base64 immediately, and removes the
+encoded field before returning a fresh `Uint8Array` through preload. Only PNG
+and WAV are authorized; no preview UI is part of this boundary change.
 
 Development selects Python and Codex through explicit absolute
 `RWF_STUDIO_DEV_PYTHON` and `RWF_STUDIO_DEV_CODEX` paths. A package may select

@@ -134,7 +134,8 @@ worldforge-studio-service --data-dir /path/to/user-data/rpg-world-forge-studio
 The process reads and writes one strict UTF-8 JSON object per line on standard
 input/output. Public v1 request methods are `service.initialize`,
 `workspace.register/list/get/overview`, `source.list/read`,
-`asset.catalog.list/inspect`, `world.validate/analyze`, `events.list`,
+`asset.catalog.list/inspect`, `asset.preview.open/read/close`,
+`world.validate/analyze`, `events.list`,
 `changeset.create/get/list`, `changeset.diff/approve/reject/apply`, and
 `job.create/get/list/transition/cancel`.
 Contract errors are returned as correlated `error` envelopes; a malformed line
@@ -160,7 +161,12 @@ named capabilities. Its two asset catalog methods bind pagination and
 inspection to an exact manifest revision; Electron main owns the 64-entry page
 limit, protocol methods, operation names, request IDs, and timeouts. Renderer
 input cannot supply catalog paths, media types, categories, cursors, binary
-payloads, or arbitrary parameters.
+payloads, or arbitrary parameters. Three separate preview methods authorize
+only manifest-selected PNG/WAV entries and sequential 64 KiB chunks. Their
+arguments contain only revision/entry identity or an opaque handle/sequence;
+Electron main validates stream correlations, strips canonical protocol base64,
+and returns fresh `Uint8Array` bytes through the named preload boundary. No
+preview UI is introduced by this service boundary.
 The World cockpit groups those authorized sources, keeps drafts only in memory,
 checks JSON syntax, and renders bounded neutral map previews on Canvas. A dirty,
 syntax-valid draft can be explicitly staged as one exact base-hashed replacement

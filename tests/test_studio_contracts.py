@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import unicodedata
 import unittest
 from pathlib import Path
 
+import worldforge.studio.contracts as studio_contracts
 from worldforge.contract_catalog import audit_contracts, load_contract_catalog
 from worldforge.studio.changeset_review import compute_review_sha256
 from worldforge.studio.contracts import (
@@ -34,6 +37,7 @@ class StudioContractTests(unittest.TestCase):
         self.assertEqual(set(METHODS), set(definitions["method"]["enum"]))
         self.assertEqual(set(LEGACY_METHODS), set(definitions["legacyMethod"]["enum"]))
         self.assertTrue(set(EXACT_CHANGESET_METHODS).isdisjoint(LEGACY_METHODS))
+        self.assertTrue(studio_contracts.EXACT_ASSET_PREVIEW_METHODS.isdisjoint(LEGACY_METHODS))
         request_refs = {entry["$ref"] for entry in definitions["request"]["oneOf"]}
         response_refs = {entry["$ref"] for entry in definitions["response"]["oneOf"]}
         for name in (
@@ -47,6 +51,13 @@ class StudioContractTests(unittest.TestCase):
         ):
             self.assertIn(f"#/$defs/{name}Request", request_refs)
             self.assertIn(f"#/$defs/{name}Response", response_refs)
+        for name in ("assetPreviewOpen", "assetPreviewRead", "assetPreviewClose"):
+            self.assertIn(f"#/$defs/{name}Request", request_refs)
+            self.assertIn(f"#/$defs/{name}Response", response_refs)
+        self.assertEqual(
+            studio_contracts.MAX_ASSET_PREVIEW_BASE64_LENGTH,
+            definitions["assetPreviewBase64"]["maxLength"],
+        )
 
     def test_catalog_audits_all_studio_contracts(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -344,6 +355,149 @@ class StudioContractTests(unittest.TestCase):
         self.assertEqual(request, validate_studio_protocol_envelope(request))
         with self.assertRaisesRegex(StudioContractError, "method"):
             validate_studio_protocol_envelope({**request, "method": "provider.execute"})
+
+    def test_protocol_closes_and_bounds_asset_preview_requests_and_results(self) -> None:
+        revision = "a" * 64
+        entry_id = "asset_" + ("b" * 64)
+        handle = "C" * 43
+        request = {
+            "protocol": "rpg-world-forge.studio_protocol",
+            "protocol_version": 1,
+            "kind": "request",
+            "request_id": "preview-open",
+            "method": "asset.preview.open",
+            "params": {
+                "workspace_id": "workspace_01",
+                "manifest_revision": revision,
+                "entry_id": entry_id,
+            },
+        }
+        self.assertEqual(request, validate_studio_protocol_envelope(request))
+        for forbidden in ("path", "offset", "size", "length", "encoding", "base64"):
+            with self.subTest(forbidden=forbidden), self.assertRaises(StudioContractError):
+                validate_studio_protocol_envelope(
+                    {**request, "params": {**request["params"], forbidden: "forged"}}
+                )
+
+        read_request = {
+            **request,
+            "request_id": "preview-read",
+            "method": "asset.preview.read",
+            "params": {"handle": handle, "sequence": 0},
+        }
+        close_request = {
+            **request,
+            "request_id": "preview-close",
+            "method": "asset.preview.close",
+            "params": {"handle": handle},
+        }
+        self.assertEqual(read_request, validate_studio_protocol_envelope(read_request))
+        self.assertEqual(close_request, validate_studio_protocol_envelope(close_request))
+        for invalid_sequence in (-1, 8192, True, 0.0):
+            with (
+                self.subTest(sequence=invalid_sequence),
+                self.assertRaises(StudioContractError),
+            ):
+                validate_studio_protocol_envelope(
+                    {**read_request, "params": {"handle": handle, "sequence": invalid_sequence}}
+                )
+        for forged_params in (
+            {"handle": handle, "sequence": 0, "offset": 0},
+            {"handle": handle, "sequence": 0, "size": 1},
+            {"handle": handle, "sequence": 0, "encoding": "base64"},
+            {"handle": handle, "sequence": 0, "data_base64": "YQ=="},
+            {"handle": handle, "length": 1},
+        ):
+            with self.subTest(params=forged_params), self.assertRaises(StudioContractError):
+                validate_studio_protocol_envelope({**read_request, "params": forged_params})
+
+        open_response = {
+            **request,
+            "kind": "response",
+            "method": "asset.preview.open",
+            "result": {
+                "handle": handle,
+                "manifest_revision": revision,
+                "entry_id": entry_id,
+                "media_type": "image/png",
+                "byte_length": 3,
+                "sha256": hashlib.sha256(b"abc").hexdigest(),
+                "chunk_bytes": 65_536,
+            },
+        }
+        open_response.pop("params")
+        self.assertEqual(open_response, validate_studio_protocol_envelope(open_response))
+        self.assertNotIn("path", open_response["result"])
+        for invalid_media_type in ("font/ttf", "model/gltf-binary", "image/jpeg"):
+            with (
+                self.subTest(media_type=invalid_media_type),
+                self.assertRaises(StudioContractError),
+            ):
+                validate_studio_protocol_envelope(
+                    {
+                        **open_response,
+                        "result": {
+                            **open_response["result"],
+                            "media_type": invalid_media_type,
+                        },
+                    }
+                )
+
+        read_result = {
+            "handle": handle,
+            "sequence": 0,
+            "data_base64": base64.b64encode(b"abc").decode("ascii"),
+            "byte_length": 3,
+            "cumulative_bytes": 3,
+            "cumulative_sha256": hashlib.sha256(b"abc").hexdigest(),
+            "eof": True,
+        }
+        read_response = {
+            **open_response,
+            "request_id": "preview-read",
+            "method": "asset.preview.read",
+            "result": read_result,
+        }
+        self.assertEqual(read_response, validate_studio_protocol_envelope(read_response))
+        full_chunk = b"x" * 65_536
+        nonfinal = {
+            **read_result,
+            "data_base64": base64.b64encode(full_chunk).decode("ascii"),
+            "byte_length": 65_536,
+            "cumulative_bytes": 65_536,
+            "cumulative_sha256": hashlib.sha256(full_chunk).hexdigest(),
+            "eof": False,
+        }
+        self.assertEqual(
+            {**read_response, "result": nonfinal},
+            validate_studio_protocol_envelope({**read_response, "result": nonfinal}),
+        )
+        invalid_results = (
+            {**read_result, "data_base64": "YR=="},
+            {**read_result, "data_base64": "YWJj="},
+            {**read_result, "data_base64": ""},
+            {**read_result, "byte_length": 2},
+            {**read_result, "cumulative_bytes": 4},
+            {**read_result, "sequence": 1},
+            {**read_result, "eof": False},
+            {**read_result, "path": "/private/preview.png"},
+            {**read_result, "payload": "YWJj"},
+        )
+        for result in invalid_results:
+            with self.subTest(result=result), self.assertRaises(StudioContractError):
+                validate_studio_protocol_envelope({**read_response, "result": result})
+
+        close_response = {
+            **open_response,
+            "request_id": "preview-close",
+            "method": "asset.preview.close",
+            "result": {"handle": handle, "closed": True},
+        }
+        self.assertEqual(close_response, validate_studio_protocol_envelope(close_response))
+        with self.assertRaises(StudioContractError):
+            validate_studio_protocol_envelope(
+                {**close_response, "result": {"handle": handle, "closed": False}}
+            )
 
     def test_job_create_is_a_closed_operation_specific_allowlist(self) -> None:
         valid = (

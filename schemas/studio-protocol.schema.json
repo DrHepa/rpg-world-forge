@@ -38,6 +38,9 @@
         "source.read",
         "asset.catalog.list",
         "asset.catalog.inspect",
+        "asset.preview.open",
+        "asset.preview.read",
+        "asset.preview.close",
         "world.validate",
         "world.analyze",
         "events.list",
@@ -108,6 +111,16 @@
       "type": "string",
       "pattern": "^asset_[0-9a-f]{64}$"
     },
+    "assetPreviewHandle": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "assetPreviewBase64": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 87384,
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+    },
     "portableAssetCatalogPath": {
       "type": "string",
       "format": "rpg-world-forge-portable-asset-catalog-path",
@@ -159,6 +172,33 @@
         "workspace_id": {"$ref": "#/$defs/workspaceId"},
         "entry_id": {"$ref": "#/$defs/assetEntryId"},
         "expected_manifest_revision": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "assetPreviewOpenParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_id", "manifest_revision", "entry_id"],
+      "properties": {
+        "workspace_id": {"$ref": "#/$defs/workspaceId"},
+        "manifest_revision": {"$ref": "#/$defs/sha256"},
+        "entry_id": {"$ref": "#/$defs/assetEntryId"}
+      }
+    },
+    "assetPreviewReadParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handle", "sequence"],
+      "properties": {
+        "handle": {"$ref": "#/$defs/assetPreviewHandle"},
+        "sequence": {"type": "integer", "minimum": 0, "maximum": 8191}
+      }
+    },
+    "assetPreviewCloseParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handle"],
+      "properties": {
+        "handle": {"$ref": "#/$defs/assetPreviewHandle"}
       }
     },
     "assetCatalogEntry": {
@@ -412,6 +452,59 @@
         "manifest_revision": {"$ref": "#/$defs/sha256"},
         "entry": {"$ref": "#/$defs/assetCatalogEntry"},
         "inspection": {"$ref": "#/$defs/assetInspection"}
+      }
+    },
+    "assetPreviewOpenResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle",
+        "manifest_revision",
+        "entry_id",
+        "media_type",
+        "byte_length",
+        "sha256",
+        "chunk_bytes"
+      ],
+      "properties": {
+        "handle": {"$ref": "#/$defs/assetPreviewHandle"},
+        "manifest_revision": {"$ref": "#/$defs/sha256"},
+        "entry_id": {"$ref": "#/$defs/assetEntryId"},
+        "media_type": {"enum": ["image/png", "audio/wav"]},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 536870912},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "chunk_bytes": {"const": 65536}
+      }
+    },
+    "assetPreviewReadResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle",
+        "sequence",
+        "data_base64",
+        "byte_length",
+        "cumulative_bytes",
+        "cumulative_sha256",
+        "eof"
+      ],
+      "properties": {
+        "handle": {"$ref": "#/$defs/assetPreviewHandle"},
+        "sequence": {"type": "integer", "minimum": 0, "maximum": 8191},
+        "data_base64": {"$ref": "#/$defs/assetPreviewBase64"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 65536},
+        "cumulative_bytes": {"type": "integer", "minimum": 1, "maximum": 536870912},
+        "cumulative_sha256": {"$ref": "#/$defs/sha256"},
+        "eof": {"type": "boolean"}
+      }
+    },
+    "assetPreviewCloseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handle", "closed"],
+      "properties": {
+        "handle": {"$ref": "#/$defs/assetPreviewHandle"},
+        "closed": {"const": true}
       }
     },
     "sourceDocumentSummary": {
@@ -952,6 +1045,45 @@
         "params": {"$ref": "#/$defs/assetCatalogInspectParams"}
       }
     },
+    "assetPreviewOpenRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.preview.open"},
+        "params": {"$ref": "#/$defs/assetPreviewOpenParams"}
+      }
+    },
+    "assetPreviewReadRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.preview.read"},
+        "params": {"$ref": "#/$defs/assetPreviewReadParams"}
+      }
+    },
+    "assetPreviewCloseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.preview.close"},
+        "params": {"$ref": "#/$defs/assetPreviewCloseParams"}
+      }
+    },
     "changesetCreateRequest": {
       "type": "object",
       "additionalProperties": false,
@@ -1076,6 +1208,9 @@
         {"$ref": "#/$defs/sourceReadRequest"},
         {"$ref": "#/$defs/assetCatalogListRequest"},
         {"$ref": "#/$defs/assetCatalogInspectRequest"},
+        {"$ref": "#/$defs/assetPreviewOpenRequest"},
+        {"$ref": "#/$defs/assetPreviewReadRequest"},
+        {"$ref": "#/$defs/assetPreviewCloseRequest"},
         {"$ref": "#/$defs/changesetCreateRequest"},
         {"$ref": "#/$defs/changesetGetRequest"},
         {"$ref": "#/$defs/changesetListRequest"},
@@ -1163,6 +1298,45 @@
         "request_id": {"type": "string", "minLength": 1},
         "method": {"const": "asset.catalog.inspect"},
         "result": {"$ref": "#/$defs/assetCatalogInspectResult"}
+      }
+    },
+    "assetPreviewOpenResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.preview.open"},
+        "result": {"$ref": "#/$defs/assetPreviewOpenResult"}
+      }
+    },
+    "assetPreviewReadResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.preview.read"},
+        "result": {"$ref": "#/$defs/assetPreviewReadResult"}
+      }
+    },
+    "assetPreviewCloseResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.preview.close"},
+        "result": {"$ref": "#/$defs/assetPreviewCloseResult"}
       }
     },
     "worldValidateResponse": {
@@ -1328,6 +1502,9 @@
         {"$ref": "#/$defs/sourceReadResponse"},
         {"$ref": "#/$defs/assetCatalogListResponse"},
         {"$ref": "#/$defs/assetCatalogInspectResponse"},
+        {"$ref": "#/$defs/assetPreviewOpenResponse"},
+        {"$ref": "#/$defs/assetPreviewReadResponse"},
+        {"$ref": "#/$defs/assetPreviewCloseResponse"},
         {"$ref": "#/$defs/worldValidateResponse"},
         {"$ref": "#/$defs/worldAnalyzeResponse"},
         {"$ref": "#/$defs/changesetCreateResponse"},

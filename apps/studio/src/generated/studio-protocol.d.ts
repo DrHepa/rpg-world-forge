@@ -21,6 +21,9 @@ export type Method =
   | "source.read"
   | "asset.catalog.list"
   | "asset.catalog.inspect"
+  | "asset.preview.open"
+  | "asset.preview.read"
+  | "asset.preview.close"
   | "world.validate"
   | "world.analyze"
   | "events.list"
@@ -80,6 +83,16 @@ export type PortableSourcePath = string;
  * via the `definition` "assetEntryId".
  */
 export type AssetEntryId = string;
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewHandle".
+ */
+export type AssetPreviewHandle = string;
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewBase64".
+ */
+export type AssetPreviewBase64 = string;
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "portableAssetCatalogPath".
@@ -225,6 +238,9 @@ export type Request =
   | SourceReadRequest
   | AssetCatalogListRequest
   | AssetCatalogInspectRequest
+  | AssetPreviewOpenRequest
+  | AssetPreviewReadRequest
+  | AssetPreviewCloseRequest
   | ChangesetCreateRequest
   | ChangesetGetRequest
   | ChangesetListRequest
@@ -263,6 +279,9 @@ export type Response =
   | SourceReadResponse
   | AssetCatalogListResponse
   | AssetCatalogInspectResponse
+  | AssetPreviewOpenResponse
+  | AssetPreviewReadResponse
+  | AssetPreviewCloseResponse
   | WorldValidateResponse
   | WorldAnalyzeResponse
   | ChangesetCreateResponse
@@ -345,6 +364,30 @@ export interface AssetCatalogInspectParams {
   workspace_id: WorkspaceId;
   entry_id: AssetEntryId;
   expected_manifest_revision: Sha256;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewOpenParams".
+ */
+export interface AssetPreviewOpenParams {
+  workspace_id: WorkspaceId;
+  manifest_revision: Sha256;
+  entry_id: AssetEntryId;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewReadParams".
+ */
+export interface AssetPreviewReadParams {
+  handle: AssetPreviewHandle;
+  sequence: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewCloseParams".
+ */
+export interface AssetPreviewCloseParams {
+  handle: AssetPreviewHandle;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -472,6 +515,40 @@ export interface AssetCatalogInspectResult {
   manifest_revision: Sha256;
   entry: AssetCatalogEntry;
   inspection: AssetInspection;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewOpenResult".
+ */
+export interface AssetPreviewOpenResult {
+  handle: AssetPreviewHandle;
+  manifest_revision: Sha256;
+  entry_id: AssetEntryId;
+  media_type: "image/png" | "audio/wav";
+  byte_length: number;
+  sha256: Sha256;
+  chunk_bytes: 65536;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewReadResult".
+ */
+export interface AssetPreviewReadResult {
+  handle: AssetPreviewHandle;
+  sequence: number;
+  data_base64: AssetPreviewBase64;
+  byte_length: number;
+  cumulative_bytes: number;
+  cumulative_sha256: Sha256;
+  eof: boolean;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewCloseResult".
+ */
+export interface AssetPreviewCloseResult {
+  handle: AssetPreviewHandle;
+  closed: true;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -925,6 +1002,42 @@ export interface AssetCatalogInspectRequest {
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewOpenRequest".
+ */
+export interface AssetPreviewOpenRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "asset.preview.open";
+  params: AssetPreviewOpenParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewReadRequest".
+ */
+export interface AssetPreviewReadRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "asset.preview.read";
+  params: AssetPreviewReadParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewCloseRequest".
+ */
+export interface AssetPreviewCloseRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "asset.preview.close";
+  params: AssetPreviewCloseParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "changesetCreateRequest".
  */
 export interface ChangesetCreateRequest {
@@ -1250,6 +1363,42 @@ export interface AssetCatalogInspectResponse {
   request_id: string;
   method: "asset.catalog.inspect";
   result: AssetCatalogInspectResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewOpenResponse".
+ */
+export interface AssetPreviewOpenResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "asset.preview.open";
+  result: AssetPreviewOpenResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewReadResponse".
+ */
+export interface AssetPreviewReadResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "asset.preview.read";
+  result: AssetPreviewReadResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPreviewCloseResponse".
+ */
+export interface AssetPreviewCloseResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "asset.preview.close";
+  result: AssetPreviewCloseResult;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema

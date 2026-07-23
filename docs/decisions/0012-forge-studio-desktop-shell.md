@@ -91,6 +91,12 @@ or render asset files.
   switching disciplines preserves in-memory drafts without triggering new
   authoring reads. Asset pagination replaces the current page and keeps every
   continuation and inspection bound to the accepted manifest revision.
+- Three distinct preview capabilities open, sequentially read, and close
+  bounded PNG/WAV leases. They accept no paths, media types, offsets, sizes,
+  encodings, or caller-supplied base64. Electron main validates the correlated
+  fixed-chunk stream, decodes canonical protocol base64, and returns only fresh
+  `Uint8Array` bytes through preload. This authorization boundary does not add
+  renderer preview controls.
 - A compromised renderer cannot name IPC channels or directly reach files,
   commands, providers, local ports, or project roots.
 - Development requires one explicit interpreter setting; packaged builds are

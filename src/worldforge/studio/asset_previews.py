@@ -29,6 +29,7 @@ from worldforge.studio.errors import (
 )
 
 _CHUNK_BYTES = 64 * 1024
+_MAX_SEQUENCE = 8191
 _HANDLE_LENGTH = 43
 _HANDLE_ALPHABET = frozenset(string.ascii_letters + string.digits + "_-")
 
@@ -152,7 +153,17 @@ class AssetPreviewManager:
                 name="asset-preview-reaper",
                 daemon=True,
             )
-            self._reaper.start()
+            try:
+                self._reaper.start()
+            except BaseException:
+                self._shutdown = True
+                self._stop.set()
+                try:
+                    if self._reaper.is_alive() and self._reaper is not threading.current_thread():
+                        self._reaper.join(timeout=self._policy.shutdown_wait_seconds)
+                except BaseException:
+                    pass
+                raise
 
     def open(
         self,
@@ -490,8 +501,10 @@ class AssetPreviewManager:
 
     @staticmethod
     def _sequence(value: object) -> int:
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise invalid_request("Asset preview sequence must be a non-negative integer")
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _MAX_SEQUENCE:
+            raise invalid_request(
+                f"Asset preview sequence must be an integer from 0 to {_MAX_SEQUENCE}"
+            )
         return value
 
     def _expired(self, lease: _Lease, now: float) -> bool:

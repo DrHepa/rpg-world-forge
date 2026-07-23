@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -12,7 +13,7 @@ from worldforge.repository_boundary import FORGE_ROOT
 from worldforge.scaffold import create_world_project
 from worldforge.studio.errors import StudioError
 from worldforge.studio.jsonio import MAX_NDJSON_LINE_BYTES, decode_ndjson_object
-from worldforge.studio.service import StudioService, serve
+from worldforge.studio.service import StudioService, _close_runtime, serve
 from worldforge.studio.storage import StudioStore
 
 
@@ -78,6 +79,183 @@ class StudioServiceTests(unittest.TestCase):
             with self.assertRaises(StudioError) as raised:
                 service.handle(request)
         self.assertEqual("invalid_state", raised.exception.code)
+
+    def test_preview_methods_are_named_closed_and_strip_raw_bytes_from_protocol(self) -> None:
+        revision = "a" * 64
+        entry_id = "asset_" + ("b" * 64)
+        handle = "C" * 43
+        payload = b"\x89PNG"
+        digest = hashlib.sha256(payload).hexdigest()
+
+        class PreviewManager:
+            def __init__(self, _catalog: object) -> None:
+                self.calls: list[tuple[object, ...]] = []
+                self.shutdown_calls = 0
+
+            def open(self, *args: object) -> dict[str, object]:
+                self.calls.append(("open", *args))
+                return {
+                    "handle": handle,
+                    "manifest_revision": revision,
+                    "entry_id": entry_id,
+                    "media_type": "image/png",
+                    "byte_length": len(payload),
+                    "sha256": digest,
+                }
+
+            def read(self, *args: object) -> dict[str, object]:
+                self.calls.append(("read", *args))
+                return {
+                    "handle": handle,
+                    "sequence": 0,
+                    "payload": payload,
+                    "cumulative_bytes": len(payload),
+                    "cumulative_sha256": digest,
+                    "eof": True,
+                }
+
+            def close(self, *args: object) -> None:
+                self.calls.append(("close", *args))
+
+            def shutdown(self) -> None:
+                self.shutdown_calls += 1
+
+        manager = PreviewManager(object())
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            StudioStore(Path(directory) / "data") as store,
+            patch(
+                "worldforge.studio.service.AssetPreviewManager",
+                return_value=manager,
+            ) as factory,
+        ):
+            service = StudioService(store)
+            base = {
+                "protocol": "rpg-world-forge.studio_protocol",
+                "protocol_version": 1,
+                "kind": "request",
+            }
+            opened = service.handle(
+                {
+                    **base,
+                    "request_id": "preview-open",
+                    "method": "asset.preview.open",
+                    "params": {
+                        "workspace_id": "workspace_01",
+                        "manifest_revision": revision,
+                        "entry_id": entry_id,
+                    },
+                }
+            )
+            read = service.handle(
+                {
+                    **base,
+                    "request_id": "preview-read",
+                    "method": "asset.preview.read",
+                    "params": {"handle": handle, "sequence": 0},
+                }
+            )
+            closed = service.handle(
+                {
+                    **base,
+                    "request_id": "preview-close",
+                    "method": "asset.preview.close",
+                    "params": {"handle": handle},
+                }
+            )
+            service.close()
+            service.close()
+
+        factory.assert_called_once_with(service.assets)
+        self.assertEqual(65_536, opened["result"]["chunk_bytes"])
+        self.assertNotIn("path", opened["result"])
+        self.assertEqual(
+            {
+                "handle",
+                "sequence",
+                "data_base64",
+                "byte_length",
+                "cumulative_bytes",
+                "cumulative_sha256",
+                "eof",
+            },
+            set(read["result"]),
+        )
+        self.assertEqual(payload, base64.b64decode(read["result"]["data_base64"], validate=True))
+        self.assertNotIn("payload", read["result"])
+        self.assertEqual({"handle": handle, "closed": True}, closed["result"])
+        self.assertEqual(
+            [
+                ("open", "workspace_01", revision, entry_id),
+                ("read", handle, 0),
+                ("close", handle),
+            ],
+            manager.calls,
+        )
+        self.assertEqual(1, manager.shutdown_calls)
+
+    def test_preview_shutdown_is_first_retryable_stage_and_runtime_attempts_every_stage(
+        self,
+    ) -> None:
+        events: list[str] = []
+
+        class PreviewManager:
+            def __init__(self) -> None:
+                self.shutdown_calls = 0
+
+            def shutdown(self) -> None:
+                self.shutdown_calls += 1
+                events.append("preview.shutdown")
+                if self.shutdown_calls == 1:
+                    raise StudioError("internal_error", "preview cleanup failed")
+
+        class Scheduler:
+            def shutdown(self) -> None:
+                events.append("scheduler.shutdown")
+
+        class Store:
+            def close(self) -> None:
+                events.append("store.close")
+
+        manager = PreviewManager()
+        service = object.__new__(StudioService)
+        service._closed = False
+        service._preview_shutdown = False
+        service.asset_previews = manager
+        first_error = _close_runtime(service, Scheduler(), Store())
+        self.assertIsNotNone(first_error)
+        assert first_error is not None
+        self.assertEqual("preview cleanup failed", first_error.message)
+        self.assertEqual(
+            ["preview.shutdown", "scheduler.shutdown", "store.close"],
+            events,
+        )
+        service.close()
+        service.close()
+        self.assertEqual(2, manager.shutdown_calls)
+
+    def test_service_constructor_rolls_back_preview_manager_after_later_failure(self) -> None:
+        events: list[str] = []
+
+        class PreviewManager:
+            def __init__(self, _catalog: object) -> None:
+                events.append("preview.open")
+
+            def shutdown(self) -> None:
+                events.append("preview.shutdown")
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            StudioStore(Path(directory) / "data") as store,
+            patch("worldforge.studio.service.AssetPreviewManager", PreviewManager),
+            patch(
+                "worldforge.studio.service.AuthoringManager",
+                side_effect=StudioError("internal_error", "later startup failure"),
+            ),
+            self.assertRaisesRegex(StudioError, "later startup failure"),
+        ):
+            StudioService(store)
+        self.assertEqual(["preview.open", "preview.shutdown"], events)
 
     def test_eof_closes_service_scheduler_and_store_once_in_reverse_order(self) -> None:
         events: list[str] = []

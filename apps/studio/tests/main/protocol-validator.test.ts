@@ -6,6 +6,8 @@ import type {
   AssetCatalogInspectResponse,
   AssetCatalogListRequest,
   AssetCatalogListResponse,
+  AssetPreviewOpenRequest,
+  AssetPreviewReadResponse,
 } from "../../src/generated/studio-protocol";
 import type {
   StudioJobCancelResponse,
@@ -21,6 +23,56 @@ const protocol = {
 } as const;
 
 describe("Studio protocol authoring discrimination", () => {
+  it("closes preview authority and enforces canonical bounded chunks", () => {
+    const open: AssetPreviewOpenRequest = {
+      ...protocol,
+      kind: "request",
+      request_id: "preview-open",
+      method: "asset.preview.open",
+      params: {
+        workspace_id: "workspace_01",
+        manifest_revision: "a".repeat(64),
+        entry_id: `asset_${"b".repeat(64)}`,
+      },
+    };
+    const read: AssetPreviewReadResponse = {
+      ...protocol,
+      kind: "response",
+      request_id: "preview-read",
+      method: "asset.preview.read",
+      result: {
+        handle: "C".repeat(43),
+        sequence: 0,
+        data_base64: Buffer.from("abc").toString("base64"),
+        byte_length: 3,
+        cumulative_bytes: 3,
+        cumulative_sha256: "d".repeat(64),
+        eof: true,
+      },
+    };
+
+    expect(validateStudioEnvelope(open)).toBe(true);
+    expect(validateStudioEnvelope(read)).toBe(true);
+    expect(
+      validateStudioEnvelope({
+        ...open,
+        params: { ...open.params, path: "/private/preview.png" },
+      }),
+    ).toBe(false);
+    for (const result of [
+      { ...read.result, data_base64: "YR==" },
+      { ...read.result, data_base64: "%%==" },
+      { ...read.result, data_base64: "" },
+      { ...read.result, byte_length: 2 },
+      { ...read.result, cumulative_bytes: 4 },
+      { ...read.result, sequence: 1 },
+      { ...read.result, eof: false },
+      { ...read.result, payload: "YWJj" },
+    ]) {
+      expect(validateStudioEnvelope({ ...read, result })).toBe(false);
+    }
+  });
+
   it("closes revision-bound asset catalog requests", () => {
     const firstPage: AssetCatalogListRequest = {
       ...protocol,

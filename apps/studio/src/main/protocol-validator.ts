@@ -48,6 +48,10 @@ ajv.addFormat("rpg-world-forge-portable-asset-catalog-path", {
 ajv.addSchema(changesetSchema);
 ajv.addSchema(jobSchema);
 const validate: ValidateFunction<StudioEnvelope> = ajv.compile(protocolSchema);
+const ASSET_PREVIEW_CHUNK_BYTES = 64 * 1024;
+const MAX_ASSET_PREVIEW_BASE64_LENGTH = 87_384;
+const CANONICAL_BASE64_PATTERN =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;
 
 export function isPortableSourcePath(value: string): boolean {
   const parts = value.split("/");
@@ -105,7 +109,40 @@ function containsInvalidUnicode(value: string): boolean {
 }
 
 export function validateStudioEnvelope(value: unknown): value is StudioEnvelope {
-  return validate(value);
+  if (!validate(value)) {
+    return false;
+  }
+  if (value.kind !== "response" || value.method !== "asset.preview.read") {
+    return true;
+  }
+  const decoded = decodeCanonicalAssetPreviewBase64(value.result.data_base64);
+  if (
+    decoded === null ||
+    decoded.byteLength !== value.result.byte_length ||
+    value.result.cumulative_bytes !==
+      value.result.sequence * ASSET_PREVIEW_CHUNK_BYTES + value.result.byte_length ||
+    (!value.result.eof && value.result.byte_length !== ASSET_PREVIEW_CHUNK_BYTES)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+export function decodeCanonicalAssetPreviewBase64(value: unknown): Uint8Array | null {
+  if (
+    typeof value !== "string" ||
+    value.length < 4 ||
+    value.length > MAX_ASSET_PREVIEW_BASE64_LENGTH ||
+    value.length % 4 !== 0 ||
+    !CANONICAL_BASE64_PATTERN.test(value)
+  ) {
+    return null;
+  }
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.toString("base64") !== value) {
+    return null;
+  }
+  return new Uint8Array(decoded);
 }
 
 export function describeProtocolErrors(): string {

@@ -5,6 +5,9 @@ import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from "electron";
 import type {
   AssetCatalogInspectRequest as StudioAssetCatalogInspectRequest,
   AssetCatalogListRequest as StudioAssetCatalogListRequest,
+  AssetPreviewCloseRequest as StudioAssetPreviewCloseRequest,
+  AssetPreviewOpenRequest as StudioAssetPreviewOpenRequest,
+  AssetPreviewReadRequest as StudioAssetPreviewReadRequest,
 } from "../generated/studio-protocol";
 import {
   IPC_CHANNELS,
@@ -15,6 +18,9 @@ import {
   type StudioActivityEvent,
   type StudioAssetCatalogInspectReply,
   type StudioAssetCatalogListReply,
+  type StudioAssetPreviewChunkReply,
+  type StudioAssetPreviewCloseReply,
+  type StudioAssetPreviewOpenReply,
   type StudioCapabilityMethod,
   type StudioClientError,
   type StudioClientResult,
@@ -31,6 +37,7 @@ import {
   StudioTransportError,
 } from "./ndjson-supervisor";
 import {
+  decodeCanonicalAssetPreviewBase64,
   isPortableRelativePath,
   isPortableSourcePath,
   validateStudioEnvelope,
@@ -40,8 +47,12 @@ import { isTrustedStudioSender } from "./security";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const ASSET_CATALOG_REQUEST_TIMEOUT_MS = 60_000;
 const ASSET_CATALOG_PAGE_SIZE = 64;
+const ASSET_PREVIEW_REQUEST_TIMEOUT_MS = 60_000;
+const ASSET_PREVIEW_CHUNK_BYTES = 64 * 1024;
+const MAX_ASSET_PREVIEW_SEQUENCE = 8191;
 const WORKSPACE_ID_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/u;
 const ASSET_ENTRY_ID_PATTERN = /^asset_[0-9a-f]{64}$/u;
+const ASSET_PREVIEW_HANDLE_PATTERN = /^[A-Za-z0-9_-]{43}$/u;
 const JOB_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,127}$/u;
 const CHANGESET_ID_PATTERN = JOB_ID_PATTERN;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
@@ -76,6 +87,29 @@ const JOB_STATES = new Set([
   "orphaned",
 ]);
 
+interface AssetPreviewPreviousChunk {
+  sequence: number;
+  bytes: Uint8Array;
+  byteLength: number;
+  cumulativeBytes: number;
+  cumulativeSha256: string;
+  eof: boolean;
+}
+
+interface AssetPreviewState {
+  manifestRevision: string;
+  entryId: string;
+  mediaType: "image/png" | "audio/wav";
+  byteLength: number;
+  sha256: string;
+  chunkBytes: number;
+  nextSequence: number;
+  cumulativeBytes: number;
+  digest: ReturnType<typeof createHash>;
+  previous: AssetPreviewPreviousChunk | null;
+  eof: boolean;
+}
+
 export function registerStudioIpc(
   ipcMain: IpcMain,
   window: BrowserWindow,
@@ -84,6 +118,7 @@ export function registerStudioIpc(
 ): () => void {
   const trusted = (event: IpcMainInvokeEvent): boolean =>
     isTrustedStudioSender(event, window.webContents);
+  const assetPreviews = new Map<string, AssetPreviewState>();
 
   ipcMain.handle(IPC_CHANNELS.initialize, async (event, ...args: unknown[]) => {
     const invalid = rejectUntrustedOrUnexpectedArguments(trusted(event), args);
@@ -180,6 +215,34 @@ export function registerStudioIpc(
       );
     },
   );
+
+  ipcMain.handle(IPC_CHANNELS.openAssetPreview, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateAssetPreviewOpenArgument),
+      (argument) => requestAssetPreviewOpen(service, assetPreviews, argument),
+    );
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.readAssetPreviewChunk,
+    async (event, ...args: unknown[]) => {
+      if (!trusted(event)) return untrustedFailure();
+      return await captureValidated(
+        () => validateSingleArgument(args, validateAssetPreviewReadArgument),
+        ({ handle, sequence }) =>
+          requestAssetPreviewRead(service, assetPreviews, handle, sequence),
+      );
+    },
+  );
+
+  ipcMain.handle(IPC_CHANNELS.closeAssetPreview, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateAssetPreviewCloseArgument),
+      ({ handle }) => requestAssetPreviewClose(service, assetPreviews, handle),
+    );
+  });
 
   ipcMain.handle(IPC_CHANNELS.stageSourceDocument, async (event, ...args: unknown[]) => {
     if (!trusted(event)) return untrustedFailure();
@@ -389,6 +452,9 @@ export function registerStudioIpc(
     ipcMain.removeHandler(IPC_CHANNELS.readSourceDocument);
     ipcMain.removeHandler(IPC_CHANNELS.listAssetCatalog);
     ipcMain.removeHandler(IPC_CHANNELS.inspectAssetCatalogEntry);
+    ipcMain.removeHandler(IPC_CHANNELS.openAssetPreview);
+    ipcMain.removeHandler(IPC_CHANNELS.readAssetPreviewChunk);
+    ipcMain.removeHandler(IPC_CHANNELS.closeAssetPreview);
     ipcMain.removeHandler(IPC_CHANNELS.stageSourceDocument);
     ipcMain.removeHandler(IPC_CHANNELS.getChangeset);
     ipcMain.removeHandler(IPC_CHANNELS.readChangesetDiff);
@@ -413,6 +479,7 @@ export function registerStudioIpc(
     ipcMain.removeHandler(IPC_CHANNELS.codexSteerTurn);
     ipcMain.removeHandler(IPC_CHANNELS.codexInterruptTurn);
     ipcMain.removeHandler(IPC_CHANNELS.codexAnswerUserInput);
+    assetPreviews.clear();
   };
 }
 
@@ -495,6 +562,59 @@ export function validateAssetCatalogInspectArgument(value: unknown): {
     ),
     entryId: params.entryId,
   };
+}
+
+export function validateAssetPreviewOpenArgument(value: unknown): {
+  workspaceId: string;
+  manifestRevision: string;
+  entryId: string;
+} {
+  const params = validateClosedParams(value, [
+    "workspaceId",
+    "manifestRevision",
+    "entryId",
+  ]);
+  if (
+    typeof params.entryId !== "string" ||
+    !ASSET_ENTRY_ID_PATTERN.test(params.entryId)
+  ) {
+    throw new TypeError("Studio asset preview entry ID is invalid");
+  }
+  return {
+    workspaceId: validateWorkspaceId(params.workspaceId),
+    manifestRevision: validateSha256(
+      params.manifestRevision,
+      "asset preview manifest revision",
+    ),
+    entryId: params.entryId,
+  };
+}
+
+export function validateAssetPreviewReadArgument(value: unknown): {
+  handle: string;
+  sequence: number;
+} {
+  const params = validateClosedParams(value, ["handle", "sequence"]);
+  if (
+    !Number.isSafeInteger(params.sequence) ||
+    (params.sequence as number) < 0 ||
+    (params.sequence as number) > MAX_ASSET_PREVIEW_SEQUENCE
+  ) {
+    throw new TypeError(
+      `Studio asset preview sequence must be an integer from 0 to ${MAX_ASSET_PREVIEW_SEQUENCE}`,
+    );
+  }
+  return {
+    handle: validateAssetPreviewHandle(params.handle),
+    sequence: params.sequence as number,
+  };
+}
+
+export function validateAssetPreviewCloseArgument(value: unknown): {
+  handle: string;
+} {
+  const params = validateClosedParams(value, ["handle"]);
+  return { handle: validateAssetPreviewHandle(params.handle) };
 }
 
 export function validateStageSourceDocumentArgument(value: unknown): {
@@ -857,6 +977,138 @@ async function requestAssetCatalogInspect(
   );
 }
 
+async function requestAssetPreviewOpen(
+  service: ForgeServiceClient,
+  previews: Map<string, AssetPreviewState>,
+  argument: {
+    workspaceId: string;
+    manifestRevision: string;
+    entryId: string;
+  },
+): Promise<StudioClientResult<StudioAssetPreviewOpenReply>> {
+  const requestId = randomUUID();
+  const params = {
+    workspace_id: argument.workspaceId,
+    manifest_revision: argument.manifestRevision,
+    entry_id: argument.entryId,
+  } satisfies StudioAssetPreviewOpenRequest["params"];
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        "asset.preview.open",
+        params,
+        ASSET_PREVIEW_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) => {
+        const validated = validateNamedReply(
+          reply,
+          requestId,
+          "asset.preview.open",
+        );
+        if (validated.kind === "error") return validated;
+        if (
+          validated.method !== "asset.preview.open" ||
+          validated.result.manifest_revision !== argument.manifestRevision ||
+          validated.result.entry_id !== argument.entryId ||
+          validated.result.chunk_bytes !== ASSET_PREVIEW_CHUNK_BYTES ||
+          previews.has(validated.result.handle)
+        ) {
+          throw new StudioProtocolError(
+            "Forge Studio returned a mismatched asset preview authority",
+          );
+        }
+        previews.set(validated.result.handle, {
+          manifestRevision: validated.result.manifest_revision,
+          entryId: validated.result.entry_id,
+          mediaType: validated.result.media_type,
+          byteLength: validated.result.byte_length,
+          sha256: validated.result.sha256,
+          chunkBytes: validated.result.chunk_bytes,
+          nextSequence: 0,
+          cumulativeBytes: 0,
+          digest: createHash("sha256"),
+          previous: null,
+          eof: false,
+        });
+        return validated;
+      }),
+  );
+}
+
+async function requestAssetPreviewRead(
+  service: ForgeServiceClient,
+  previews: Map<string, AssetPreviewState>,
+  handle: string,
+  sequence: number,
+): Promise<StudioClientResult<StudioAssetPreviewChunkReply>> {
+  const state = previews.get(handle);
+  const replay = state?.previous?.sequence === sequence;
+  if (
+    state === undefined ||
+    (!replay && (state.eof || sequence !== state.nextSequence))
+  ) {
+    return failure(
+      "invalid_request",
+      "Studio asset preview handle or sequence is unavailable",
+    );
+  }
+  const requestId = randomUUID();
+  const params = { handle, sequence } satisfies StudioAssetPreviewReadRequest["params"];
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        "asset.preview.read",
+        params,
+        ASSET_PREVIEW_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) =>
+        validateAssetPreviewReadReply(reply, requestId, handle, sequence, state),
+      ),
+  );
+}
+
+async function requestAssetPreviewClose(
+  service: ForgeServiceClient,
+  previews: Map<string, AssetPreviewState>,
+  handle: string,
+): Promise<StudioClientResult<StudioAssetPreviewCloseReply>> {
+  if (!previews.has(handle)) {
+    return failure("invalid_request", "Studio asset preview handle is unavailable");
+  }
+  const requestId = randomUUID();
+  const params = { handle } satisfies StudioAssetPreviewCloseRequest["params"];
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        "asset.preview.close",
+        params,
+        ASSET_PREVIEW_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) => {
+        const validated = validateNamedReply(
+          reply,
+          requestId,
+          "asset.preview.close",
+        );
+        if (validated.kind === "error") return validated;
+        if (
+          validated.method !== "asset.preview.close" ||
+          validated.result.handle !== handle ||
+          validated.result.closed !== true
+        ) {
+          throw new StudioProtocolError(
+            "Forge Studio returned a mismatched asset preview close",
+          );
+        }
+        previews.delete(handle);
+        return validated;
+      }),
+  );
+}
+
 async function requestJobCreate(
   service: ForgeServiceClient,
   workspaceId: string,
@@ -1051,6 +1303,113 @@ function validateAssetCatalogInspectReply(
     );
   }
   return reply;
+}
+
+function validateAssetPreviewReadReply(
+  value: unknown,
+  requestId: string,
+  handle: string,
+  sequence: number,
+  state: AssetPreviewState,
+): StudioAssetPreviewChunkReply {
+  const reply = validateNamedReply(value, requestId, "asset.preview.read");
+  if (reply.kind === "error") return reply;
+  if (reply.method !== "asset.preview.read") {
+    throw new StudioProtocolError(
+      "Forge Studio returned an invalid asset preview read",
+    );
+  }
+  const { result } = reply;
+  const bytes = decodeCanonicalAssetPreviewBase64(result.data_base64);
+  if (
+    bytes === null ||
+    result.handle !== handle ||
+    result.sequence !== sequence ||
+    result.byte_length !== bytes.byteLength
+  ) {
+    throw new StudioProtocolError(
+      "Forge Studio returned a mismatched asset preview chunk",
+    );
+  }
+
+  const previous = state.previous;
+  const replay = previous !== null && previous.sequence === sequence;
+  if (replay) {
+    if (
+      previous.byteLength !== result.byte_length ||
+      previous.cumulativeBytes !== result.cumulative_bytes ||
+      previous.cumulativeSha256 !== result.cumulative_sha256 ||
+      previous.eof !== result.eof ||
+      !equalBytes(previous.bytes, bytes)
+    ) {
+      throw new StudioProtocolError(
+        "Forge Studio returned a changed asset preview replay",
+      );
+    }
+    return assetPreviewChunkReply(reply, bytes);
+  }
+
+  if (state.eof || sequence !== state.nextSequence) {
+    throw new StudioProtocolError(
+      "Forge Studio returned an unexpected asset preview sequence",
+    );
+  }
+  const expectedCumulative = state.cumulativeBytes + bytes.byteLength;
+  const pendingDigest = state.digest.copy();
+  pendingDigest.update(bytes);
+  const computedSha256 = pendingDigest.copy().digest("hex");
+  if (
+    result.cumulative_bytes !== expectedCumulative ||
+    result.cumulative_sha256 !== computedSha256 ||
+    result.cumulative_bytes > state.byteLength ||
+    (!result.eof &&
+      (result.byte_length !== state.chunkBytes ||
+        result.cumulative_bytes >= state.byteLength)) ||
+    (result.eof &&
+      (result.cumulative_bytes !== state.byteLength ||
+        result.cumulative_sha256 !== state.sha256))
+  ) {
+    throw new StudioProtocolError(
+      "Forge Studio returned an inconsistent asset preview stream",
+    );
+  }
+
+  state.digest = pendingDigest;
+  state.cumulativeBytes = result.cumulative_bytes;
+  state.nextSequence += 1;
+  state.eof = result.eof;
+  state.previous = {
+    sequence,
+    bytes: new Uint8Array(bytes),
+    byteLength: result.byte_length,
+    cumulativeBytes: result.cumulative_bytes,
+    cumulativeSha256: result.cumulative_sha256,
+    eof: result.eof,
+  };
+  return assetPreviewChunkReply(reply, bytes);
+}
+
+function assetPreviewChunkReply(
+  reply: Extract<StudioReplyEnvelope, { method: "asset.preview.read" }>,
+  bytes: Uint8Array,
+): StudioAssetPreviewChunkReply {
+  return {
+    ...reply,
+    result: {
+      handle: reply.result.handle,
+      sequence: reply.result.sequence,
+      byte_length: reply.result.byte_length,
+      cumulative_bytes: reply.result.cumulative_bytes,
+      cumulative_sha256: reply.result.cumulative_sha256,
+      eof: reply.result.eof,
+      bytes: new Uint8Array(bytes),
+    },
+  };
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  return left.every((value, index) => value === right[index]);
 }
 
 function validateJobCreateReply(
@@ -1309,6 +1668,13 @@ function validateChangesetId(value: unknown): string {
 function validateSha256(value: unknown, context: string): string {
   if (typeof value !== "string" || !SHA256_PATTERN.test(value)) {
     throw new TypeError(`Studio ${context} is invalid`);
+  }
+  return value;
+}
+
+function validateAssetPreviewHandle(value: unknown): string {
+  if (typeof value !== "string" || !ASSET_PREVIEW_HANDLE_PATTERN.test(value)) {
+    throw new TypeError("Studio asset preview handle is invalid");
   }
   return value;
 }

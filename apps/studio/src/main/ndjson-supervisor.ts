@@ -10,6 +10,12 @@ import type {
   AssetCatalogInspectResponse as StudioAssetCatalogInspectResponse,
   AssetCatalogListRequest as StudioAssetCatalogListRequest,
   AssetCatalogListResponse as StudioAssetCatalogListResponse,
+  AssetPreviewCloseRequest as StudioAssetPreviewCloseRequest,
+  AssetPreviewCloseResponse as StudioAssetPreviewCloseResponse,
+  AssetPreviewOpenRequest as StudioAssetPreviewOpenRequest,
+  AssetPreviewOpenResponse as StudioAssetPreviewOpenResponse,
+  AssetPreviewReadRequest as StudioAssetPreviewReadRequest,
+  AssetPreviewReadResponse as StudioAssetPreviewReadResponse,
   ChangesetApplyRequest as StudioChangesetApplyRequest,
   ChangesetApplyResponse as StudioChangesetApplyResponse,
   ChangesetApproveRequest as StudioChangesetApproveRequest,
@@ -239,9 +245,15 @@ export type StudioRequestParams<M extends StudioMethod> = M extends "job.create"
                       ? StudioAssetCatalogListRequest["params"]
                       : M extends "asset.catalog.inspect"
                         ? StudioAssetCatalogInspectRequest["params"]
-                        : M extends StudioWorkspaceScopedAuthoringMethod
-                          ? StudioWorkspaceScopedParams
-                          : Record<string, unknown>;
+                        : M extends "asset.preview.open"
+                          ? StudioAssetPreviewOpenRequest["params"]
+                          : M extends "asset.preview.read"
+                            ? StudioAssetPreviewReadRequest["params"]
+                            : M extends "asset.preview.close"
+                              ? StudioAssetPreviewCloseRequest["params"]
+                              : M extends StudioWorkspaceScopedAuthoringMethod
+                                ? StudioWorkspaceScopedParams
+                                : Record<string, unknown>;
 
 export type StudioSuccessForMethod<M extends StudioMethod> = M extends "workspace.overview"
   ? StudioWorkspaceOverviewResponse
@@ -275,7 +287,13 @@ export type StudioSuccessForMethod<M extends StudioMethod> = M extends "workspac
                               ? StudioAssetCatalogListResponse
                               : M extends "asset.catalog.inspect"
                                 ? StudioAssetCatalogInspectResponse
-                                : StudioLegacyResponse;
+                                : M extends "asset.preview.open"
+                                  ? StudioAssetPreviewOpenResponse
+                                  : M extends "asset.preview.read"
+                                    ? StudioAssetPreviewReadResponse
+                                    : M extends "asset.preview.close"
+                                      ? StudioAssetPreviewCloseResponse
+                                      : StudioLegacyResponse;
 
 export type StudioReplyForMethod<M extends StudioMethod> =
   | StudioSuccessForMethod<M>
