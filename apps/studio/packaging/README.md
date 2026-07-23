@@ -12,8 +12,34 @@ python3 scripts/studio_runtime_sources.py
 ```
 
 The validator is stdlib-only and performs no downloads, extraction, process
-execution, or package assembly. Runtime acquisition is deliberately not
-implemented in this slice.
+execution, or package assembly.
+
+## Acquire pinned build inputs
+
+The separate stdlib-only acquisition tool resolves only the exact target
+archives, checksum files, metadata archive, and CPython source archive from the
+validated checked-in contract. Use an absolute cache path outside the
+repository:
+
+```console
+python3 scripts/studio_runtime_inputs.py fetch \
+  --target linux-x64 \
+  --cache-dir /absolute/path/to/studio-runtime-inputs
+python3 scripts/studio_runtime_inputs.py verify \
+  --offline \
+  --target linux-x64 \
+  --cache-dir /absolute/path/to/studio-runtime-inputs
+```
+
+Use `win32-x64` for the Windows inventory. Cache entries live at the fixed
+`target/component/filename` layout. Fetching uses direct HTTPS plus one pinned
+GitHub release-asset redirect, bounded responses, pinned sizes and digests,
+exclusive temporary files, and no-replace publication. Offline verification is
+read-only and never creates a network client. Neither command extracts archives
+or assembles a package.
+
+Both commands report `redistribution_status` as `blocked`. Acquiring every
+technical input does not close, waive, or replace any provenance blocker.
 
 ## Redistribution remains blocked
 
