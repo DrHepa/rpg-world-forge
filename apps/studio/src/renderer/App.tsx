@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 
 import type {
   CodexBridgeStatus,
@@ -19,8 +19,20 @@ import type {
   StudioWorldAnalyzeResult,
   StudioWorldValidateResult,
 } from "../shared/studio-api";
+import { AssetsCockpit } from "./AssetsCockpit";
 import { ChangesetReviewPanel } from "./ChangesetReviewPanel";
 import { NeutralMapCanvas } from "./NeutralMapCanvas";
+import {
+  beginAssetCatalogInspection,
+  beginAssetCatalogList,
+  bindAssetCatalogWorkspace,
+  createInitialAssetCatalogState,
+  receiveAssetCatalogInspection,
+  receiveAssetCatalogList,
+  selectAssetCatalogCategory,
+  type AssetCatalogListMode,
+  type AssetCatalogState,
+} from "./asset-catalog-state";
 import {
   authoringReducer,
   boundedMessage,
@@ -69,11 +81,35 @@ const INITIAL_CODEX_STATUS: CodexBridgeStatus = {
 
 const DOCK_POLL_INTERVAL_MS = 15_000;
 const MAX_VISIBLE_ERRORS = 6;
+const COMPACT_DISCIPLINE_TABS_QUERY = "(max-width: 860px)";
 
 type DockTab = "activity" | "changesets" | "jobs";
+type WorkbenchTab = "world" | "assets" | "game";
 type PendingNavigation =
   | { kind: "workspace"; workspaceId: string }
   | { kind: "source"; document: SourceSummary };
+
+function useMediaQuery(query: string, fallback: boolean): boolean {
+  const [matches, setMatches] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return fallback;
+    }
+    return window.matchMedia(query).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const mediaQuery = window.matchMedia(query);
+    const updateMatch = (): void => setMatches(mediaQuery.matches);
+    mediaQuery.addEventListener("change", updateMatch);
+    updateMatch();
+    return () => mediaQuery.removeEventListener("change", updateMatch);
+  }, [query]);
+
+  return matches;
+}
 
 export function App() {
   const [status, setStatus] = useState<ForgeServiceStatus>(INITIAL_STATUS);
@@ -85,6 +121,11 @@ export function App() {
     undefined,
     createInitialChangesetReviewState,
   );
+  const [activeWorkbench, setActiveWorkbench] = useState<WorkbenchTab>("world");
+  const compactDisciplineTabs = useMediaQuery(COMPACT_DISCIPLINE_TABS_QUERY, false);
+  const [assetCatalog, setAssetCatalog] = useState(createInitialAssetCatalogState);
+  const assetCatalogRef = useRef(assetCatalog);
+  const assetCatalogLazyContextRef = useRef<string | null>(null);
   const generationRef = useRef(0);
   const reviewRequestRef = useRef(0);
   const reviewMutationRef = useRef<number | null>(null);
@@ -122,6 +163,79 @@ export function App() {
   function recordError(message: string): void {
     setErrors((current) => [...current.slice(-(MAX_VISIBLE_ERRORS - 1)), boundedMessage(message)]);
   }
+
+  const commitAssetCatalog = useCallback(
+    (update: (current: AssetCatalogState) => AssetCatalogState): AssetCatalogState => {
+      const next = update(assetCatalogRef.current);
+      assetCatalogRef.current = next;
+      setAssetCatalog(next);
+      return next;
+    },
+    [],
+  );
+
+  const requestAssetCatalogList = useCallback(
+    (mode: AssetCatalogListMode): boolean => {
+      const transition = beginAssetCatalogList(assetCatalogRef.current, mode);
+      if (!transition) return false;
+      commitAssetCatalog(() => transition.state);
+      const { intent } = transition;
+      const page = intent.page;
+      const request = page
+        ? () =>
+            window.forgeStudio.listAssetCatalog(intent.workspaceId, {
+              offset: page.offset,
+              manifestRevision: page.manifestRevision,
+            })
+        : () => window.forgeStudio.listAssetCatalog(intent.workspaceId);
+      void limiterRef.current
+        .run(request)
+        .then((reply) => {
+          commitAssetCatalog((current) =>
+            receiveAssetCatalogList(current, intent, reply),
+          );
+        })
+        .catch(() => {
+          commitAssetCatalog((current) =>
+            receiveAssetCatalogList(current, intent, catalogClientFailure()),
+          );
+        });
+      return true;
+    },
+    [commitAssetCatalog],
+  );
+
+  const requestAssetCatalogInspection = useCallback(
+    (entryId: string): boolean => {
+      const transition = beginAssetCatalogInspection(
+        assetCatalogRef.current,
+        entryId,
+      );
+      if (!transition) return false;
+      commitAssetCatalog(() => transition.state);
+      const { intent } = transition;
+      void limiterRef.current
+        .run(() =>
+          window.forgeStudio.inspectAssetCatalogEntry(
+            intent.workspaceId,
+            intent.manifestRevision,
+            intent.entryId,
+          ),
+        )
+        .then((reply) => {
+          commitAssetCatalog((current) =>
+            receiveAssetCatalogInspection(current, intent, reply),
+          );
+        })
+        .catch(() => {
+          commitAssetCatalog((current) =>
+            receiveAssetCatalogInspection(current, intent, catalogClientFailure()),
+          );
+        });
+      return true;
+    },
+    [commitAssetCatalog],
+  );
 
   async function loadWorkspaceRegistry(): Promise<void> {
     setRegistryPending(true);
@@ -203,6 +317,20 @@ export function App() {
 
   useEffect(() => {
     const workspaceId = authoring.workspaceId;
+    if (activeWorkbench !== "assets" || !workspaceId) return;
+    const context = `${workspaceId}\u0000${String(authoring.generation)}`;
+    if (assetCatalogLazyContextRef.current === context) return;
+    assetCatalogLazyContextRef.current = context;
+    requestAssetCatalogList("initial");
+  }, [
+    activeWorkbench,
+    authoring.generation,
+    authoring.workspaceId,
+    requestAssetCatalogList,
+  ]);
+
+  useEffect(() => {
+    const workspaceId = authoring.workspaceId;
     if (typeof workspaceId !== "string") return undefined;
     const generation = authoring.generation;
     let active = true;
@@ -251,6 +379,36 @@ export function App() {
     };
   }, [authoring.generation, authoring.workspaceId, dockRefresh]);
 
+  function moveWorkbenchTab(
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    current: WorkbenchTab,
+  ): void {
+    const enabledTabs: WorkbenchTab[] = ["world", "assets"];
+    const currentIndex = enabledTabs.indexOf(current);
+    let next: WorkbenchTab | null = null;
+    if (event.key === "Home") next = enabledTabs[0] ?? null;
+    else if (event.key === "End") next = enabledTabs.at(-1) ?? null;
+    else if (
+      (compactDisciplineTabs && event.key === "ArrowRight") ||
+      (!compactDisciplineTabs && event.key === "ArrowDown")
+    ) {
+      next = enabledTabs[(currentIndex + 1) % enabledTabs.length] ?? null;
+    } else if (
+      (compactDisciplineTabs && event.key === "ArrowLeft") ||
+      (!compactDisciplineTabs && event.key === "ArrowUp")
+    ) {
+      next =
+        enabledTabs[(currentIndex - 1 + enabledTabs.length) % enabledTabs.length] ??
+        null;
+    }
+    if (!next) return;
+    event.preventDefault();
+    setActiveWorkbench(next);
+    window.requestAnimationFrame(() =>
+      document.querySelector<HTMLButtonElement>(`#discipline-${next}`)?.focus(),
+    );
+  }
+
   function requestWorkspaceSelection(
     workspaceId: string,
     trigger: HTMLButtonElement,
@@ -267,6 +425,10 @@ export function App() {
   async function loadWorkspace(workspaceId: string): Promise<void> {
     const generation = generationRef.current + 1;
     generationRef.current = generation;
+    assetCatalogLazyContextRef.current = null;
+    commitAssetCatalog((current) =>
+      bindAssetCatalogWorkspace(current, workspaceId, generation),
+    );
     reviewMutationRef.current = null;
     dispatch({ type: "workspace-selected", workspaceId, generation });
     reviewDispatch({ type: "workspace-changed", workspaceId, generation });
@@ -756,8 +918,11 @@ export function App() {
         aria-hidden={review.selectedChangesetId ? true : undefined}
         inert={review.selectedChangesetId !== null}
       >
-        <a className="skip-link" href="#world-workbench">
-        Skip to World workbench
+        <a
+          className="skip-link"
+          href={activeWorkbench === "assets" ? "#assets-workbench" : "#world-workbench"}
+        >
+        Skip to {activeWorkbench === "assets" ? "Assets" : "World"} workbench
         </a>
         <header className="app-header">
         <div className="brand-lockup">
@@ -831,16 +996,60 @@ export function App() {
               </ul>
             )}
           </nav>
-          <nav className="discipline-nav" aria-label="Forge disciplines">
-            <button type="button" className="active" aria-current="page">World</button>
-            <button type="button" disabled aria-describedby="assets-coming-next">Assets</button>
-            <small id="assets-coming-next">Coming next</small>
-            <button type="button" disabled aria-describedby="game-coming-next">Game</button>
-            <small id="game-coming-next">Coming next</small>
-          </nav>
+          <div
+            className="discipline-nav"
+            role="tablist"
+            aria-label="Forge disciplines"
+            aria-orientation={compactDisciplineTabs ? "horizontal" : "vertical"}
+          >
+            <button
+              id="discipline-world"
+              type="button"
+              role="tab"
+              aria-selected={activeWorkbench === "world"}
+              aria-controls="world-workbench"
+              tabIndex={activeWorkbench === "world" ? 0 : -1}
+              onClick={() => setActiveWorkbench("world")}
+              onKeyDown={(event) => moveWorkbenchTab(event, "world")}
+            >
+              World
+            </button>
+            <button
+              id="discipline-assets"
+              type="button"
+              role="tab"
+              aria-selected={activeWorkbench === "assets"}
+              aria-controls="assets-workbench"
+              tabIndex={activeWorkbench === "assets" ? 0 : -1}
+              onClick={() => setActiveWorkbench("assets")}
+              onKeyDown={(event) => moveWorkbenchTab(event, "assets")}
+            >
+              Assets
+            </button>
+            <button
+              id="discipline-game"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="game-workbench"
+              aria-label="Game"
+              tabIndex={-1}
+              disabled
+            >
+              <span>Game</span>
+              <small aria-hidden="true">Coming next</small>
+            </button>
+          </div>
         </aside>
 
-        <main id="world-workbench" className="world-area" tabIndex={-1}>
+        <main
+          id="world-workbench"
+          className="world-area"
+          role="tabpanel"
+          aria-labelledby="discipline-world"
+          tabIndex={-1}
+          hidden={activeWorkbench !== "world"}
+        >
           <ProjectHeader authoring={authoring} />
           <div className="workbench-layout">
             <nav className="source-browser" aria-labelledby="source-browser-heading">
@@ -968,6 +1177,34 @@ export function App() {
             <FindingsInspector authoring={authoring} findings={findings} />
           </div>
         </main>
+
+        <main
+          id="assets-workbench"
+          className="world-area assets-area"
+          role="tabpanel"
+          aria-labelledby="discipline-assets"
+          tabIndex={-1}
+          hidden={activeWorkbench !== "assets"}
+        >
+          <AssetsCockpit
+            state={assetCatalog}
+            active={activeWorkbench === "assets"}
+            onList={requestAssetCatalogList}
+            onInspect={requestAssetCatalogInspection}
+            onCategory={(category) =>
+              commitAssetCatalog((current) =>
+                selectAssetCatalogCategory(current, category),
+              )
+            }
+          />
+        </main>
+
+        <section
+          id="game-workbench"
+          role="tabpanel"
+          aria-labelledby="discipline-game"
+          hidden
+        />
       </div>
 
       <BottomDock
@@ -1453,4 +1690,14 @@ function slug(value: string): string {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? boundedMessage(error.message) : "Unknown Studio error";
+}
+
+function catalogClientFailure() {
+  return {
+    ok: false as const,
+    error: {
+      code: "internal_error" as const,
+      message: "The local asset catalog request failed.",
+    },
+  };
 }

@@ -14,7 +14,12 @@ const SHA_WORLD = "a".repeat(64);
 const SHA_MAP = "b".repeat(64);
 const SHA_PROPOSED = "6cd86327e443282ef8b2e4109125f8fc9c43c64951ba100f47665f62c468577e";
 const SHA_REVIEW = "d".repeat(64);
+const ASSET_REVISION = "e".repeat(64);
+const ASSET_ENTRY_ID = `asset_${"1".repeat(64)}`;
 const UPDATED_WORLD_CONTENT = '{"id":"world_01","title":"A quieter world"}';
+const COMPACT_DISCIPLINE_TABS_QUERY = "(max-width: 860px)";
+
+const originalMatchMediaDescriptor = Object.getOwnPropertyDescriptor(window, "matchMedia");
 
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(canvasContext());
@@ -24,6 +29,11 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  if (originalMatchMediaDescriptor) {
+    Object.defineProperty(window, "matchMedia", originalMatchMediaDescriptor);
+  } else {
+    Reflect.deleteProperty(window, "matchMedia");
+  }
 });
 
 describe("Studio World authoring cockpit", () => {
@@ -46,8 +56,270 @@ describe("Studio World authoring cockpit", () => {
     );
     expect(screen.getByText("foundation")).toBeInTheDocument();
     expect(screen.getByText("Release validation passed · 7 objects")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Assets" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Game" })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "Assets" })).toBeEnabled();
+    expect(screen.getByRole("tab", { name: "Game" })).toBeDisabled();
+  });
+
+  it("uses roving tabs, lazy-loads Assets, and preserves the exact dirty World draft", async () => {
+    const { api, mocks } = createApi();
+    installApi(api);
+    render(<App />);
+    expect(mocks.listAssetCatalog).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    const editor = await screen.findByLabelText("In-memory source draft");
+    fireEvent.change(editor, { target: { value: UPDATED_WORLD_CONTENT } });
+    expect(mocks.listAssetCatalog).not.toHaveBeenCalled();
+
+    const worldTab = screen.getByRole("tab", { name: "World" });
+    const assetsTab = screen.getByRole("tab", { name: "Assets" });
+    const gameTab = screen.getByRole("tab", { name: "Game" });
+    expect(worldTab).toHaveAttribute("tabindex", "0");
+    expect(assetsTab).toHaveAttribute("tabindex", "-1");
+    expect(gameTab).toHaveAttribute("tabindex", "-1");
+    worldTab.focus();
+    fireEvent.keyDown(worldTab, { key: "End" });
+    await waitFor(() => expect(assetsTab).toHaveFocus());
+    expect(assetsTab).toHaveAttribute("aria-selected", "true");
+    expect(gameTab).toBeDisabled();
+    await waitFor(() =>
+      expect(mocks.listAssetCatalog).toHaveBeenCalledWith("workspace_01"),
+    );
+    expect(mocks.listAssetCatalog).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("heading", { name: "Verified asset catalog" })).toBeInTheDocument();
+    expect(document.querySelector("#world-workbench")).toHaveAttribute("hidden");
+    expect(document.querySelector("#assets-workbench")).not.toHaveAttribute("hidden");
+    expect(document.querySelector<HTMLTextAreaElement>("#source-draft")).toHaveValue(
+      UPDATED_WORLD_CONTENT,
+    );
+    expect(screen.getByRole("link", { name: "Skip to Assets workbench" })).toHaveAttribute(
+      "href",
+      "#assets-workbench",
+    );
+
+    expect(screen.getByRole("tablist", { name: "Forge disciplines" })).toHaveAttribute(
+      "aria-orientation",
+      "vertical",
+    );
+    expect(fireEvent.keyDown(assetsTab, { key: "ArrowRight" })).toBe(true);
+    expect(assetsTab).toHaveFocus();
+    expect(assetsTab).toHaveAttribute("aria-selected", "true");
+
+    expect(fireEvent.keyDown(assetsTab, { key: "ArrowDown" })).toBe(false);
+    await waitFor(() => expect(worldTab).toHaveFocus());
+    expect(document.querySelector("#assets-workbench")).toHaveAttribute("hidden");
+    expect(document.querySelector<HTMLTextAreaElement>("#source-draft")).toHaveValue(
+      UPDATED_WORLD_CONTENT,
+    );
+    expect(mocks.getWorkspaceOverview).toHaveBeenCalledTimes(1);
+    expect(mocks.listSourceDocuments).toHaveBeenCalledTimes(1);
+    expect(mocks.readSourceDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses horizontal arrow keys at the compact breakpoint and skips disabled Game", async () => {
+    const media = installMatchMedia(true);
+    const { api } = createApi();
+    installApi(api);
+    const view = render(<App />);
+
+    const tablist = screen.getByRole("tablist", { name: "Forge disciplines" });
+    const worldTab = screen.getByRole("tab", { name: "World" });
+    const assetsTab = screen.getByRole("tab", { name: "Assets" });
+    const gameTab = screen.getByRole("tab", { name: "Game" });
+    expect(tablist).toHaveAttribute("aria-orientation", "horizontal");
+    expect(gameTab).toBeDisabled();
+
+    worldTab.focus();
+    expect(fireEvent.keyDown(worldTab, { key: "ArrowDown" })).toBe(true);
+    expect(worldTab).toHaveFocus();
+    expect(worldTab).toHaveAttribute("aria-selected", "true");
+
+    expect(fireEvent.keyDown(worldTab, { key: "ArrowRight" })).toBe(false);
+    await waitFor(() => expect(assetsTab).toHaveFocus());
+    expect(assetsTab).toHaveAttribute("aria-selected", "true");
+
+    expect(fireEvent.keyDown(assetsTab, { key: "ArrowRight" })).toBe(false);
+    await waitFor(() => expect(worldTab).toHaveFocus());
+    expect(worldTab).toHaveAttribute("aria-selected", "true");
+    expect(gameTab).toHaveAttribute("tabindex", "-1");
+
+    act(() => media.setMatches(false));
+    expect(tablist).toHaveAttribute("aria-orientation", "vertical");
+    view.unmount();
+    expect(media.removeEventListener).toHaveBeenCalledWith(
+      "change",
+      media.changeListener,
+    );
+  });
+
+  it("uses exact revision-bound list and inspect API calls with page replacement", async () => {
+    const secondEntryId = `asset_${"2".repeat(64)}`;
+    const listAssetCatalog = vi
+      .fn()
+      .mockResolvedValueOnce(
+        assetCatalogListResponse({ entries: [assetEntry()], nextOffset: 64 }),
+      )
+      .mockResolvedValueOnce(
+        assetCatalogListResponse({
+          offset: 64,
+          entries: [
+            assetEntry({
+              entry_id: secondEntryId,
+              asset_id: "asset_02",
+              category: "qa",
+              path: "assets/qa.json",
+              media_type: "application/json",
+            }),
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        assetCatalogListResponse({ entries: [assetEntry()], nextOffset: 64 }),
+      )
+      .mockResolvedValueOnce(
+        assetCatalogListResponse({
+          revision: "9".repeat(64),
+          entries: [],
+        }),
+      );
+    const inspectAssetCatalogEntry = vi.fn().mockResolvedValue(
+      assetCatalogInspectResponse({
+        entry: assetEntry({
+          entry_id: secondEntryId,
+          asset_id: "asset_02",
+          category: "qa",
+          path: "assets/qa.json",
+          media_type: "application/json",
+        }),
+        inspection: {
+          kind: "json",
+          encoding: "utf-8",
+          content: '{"valid":true}',
+          value: { valid: true },
+        },
+      }),
+    );
+    const { api } = createApi({ listAssetCatalog, inspectAssetCatalogEntry });
+    installApi(api);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
+    await waitFor(() => expect(listAssetCatalog).toHaveBeenNthCalledWith(1, "workspace_01"));
+    expect(await screen.findByRole("button", { name: /asset_01/u })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    await waitFor(() =>
+      expect(listAssetCatalog).toHaveBeenNthCalledWith(2, "workspace_01", {
+        offset: 64,
+        manifestRevision: ASSET_REVISION,
+      }),
+    );
+    expect(await screen.findByRole("button", { name: /asset_02/u })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /asset_01/u })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /asset_02/u }));
+    await waitFor(() =>
+      expect(inspectAssetCatalogEntry).toHaveBeenCalledWith(
+        "workspace_01",
+        ASSET_REVISION,
+        secondEntryId,
+      ),
+    );
+    expect(await screen.findByRole("heading", { name: "Semantic JSON tree" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous page" }));
+    await waitFor(() =>
+      expect(listAssetCatalog).toHaveBeenNthCalledWith(3, "workspace_01", {
+        offset: 0,
+        manifestRevision: ASSET_REVISION,
+      }),
+    );
+    expect(await screen.findByRole("button", { name: /asset_01/u })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /asset_02/u })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh revision snapshot" }));
+    await waitFor(() => expect(listAssetCatalog).toHaveBeenCalledTimes(4));
+    expect(listAssetCatalog.mock.calls[3]).toEqual(["workspace_01"]);
+    expect(await screen.findByText("0 entries on current page")).toBeInTheDocument();
+  });
+
+  it("fails closed on a catalog conflict and refreshes without exposing diagnostics", async () => {
+    const listAssetCatalog = vi
+      .fn()
+      .mockResolvedValueOnce(
+        assetCatalogListResponse({ entries: [assetEntry()], nextOffset: 64 }),
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          protocol: "rpg-world-forge.studio_protocol",
+          protocol_version: 1,
+          kind: "error",
+          request_id: "catalog-conflict",
+          error: {
+            code: "conflict",
+            message: "SECRET /home/private/catalog.json",
+            details: { absolute_root: "/home/private" },
+          },
+        },
+      })
+      .mockResolvedValueOnce(
+        assetCatalogListResponse({
+          revision: "8".repeat(64),
+          entries: [assetEntry({ category: "runtime_output" })],
+        }),
+      );
+    const { api } = createApi({ listAssetCatalog });
+    installApi(api);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
+    await screen.findByRole("button", { name: /asset_01/u });
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/revision conflicted/u);
+    expect(screen.queryByRole("button", { name: /asset_01/u })).not.toBeInTheDocument();
+    expect(screen.queryByText(/SECRET|\/home\/private/u)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh revision snapshot" }));
+    await waitFor(() => expect(listAssetCatalog.mock.calls[2]).toEqual(["workspace_01"]));
+    expect(await screen.findByRole("button", { name: /asset_01/u })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Runtime output/u })).toBeInTheDocument();
+  });
+
+  it("keeps dirty-workspace confirmation active when selection starts from Assets", async () => {
+    const { api, mocks } = createApi({
+      listWorkspaces: vi.fn().mockResolvedValue(
+        legacyResponse("workspace.list", {
+          workspaces: [
+            { workspace_id: "workspace_01" },
+            { workspace_id: "workspace_02" },
+          ],
+        }),
+      ),
+    });
+    installApi(api);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    fireEvent.change(await screen.findByLabelText("In-memory source draft"), {
+      target: { value: UPDATED_WORLD_CONTENT },
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
+    await waitFor(() => expect(mocks.listAssetCatalog).toHaveBeenCalledWith("workspace_01"));
+
+    const workspaceTwo = screen.getByRole("button", { name: /workspace_02/u });
+    fireEvent.click(workspaceTwo);
+    expect(
+      screen.getByRole("dialog", { name: /Discard this in-memory draft/u }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
+    await waitFor(() => expect(workspaceTwo).toHaveFocus());
+    expect(screen.getByRole("tab", { name: "Assets" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(document.querySelector<HTMLTextAreaElement>("#source-draft")).toHaveValue(
+      UPDATED_WORLD_CONTENT,
+    );
   });
 
   it("reports JSON syntax and confirms dirty source navigation with focus restoration", async () => {
@@ -428,6 +700,24 @@ function createApi(overrides: Partial<ForgeStudioApi> = {}) {
       }),
     ),
   );
+  const listAssetCatalog = vi.fn().mockResolvedValue(
+    assetCatalogListResponse({
+      entries: [assetEntry()],
+      nextOffset: 64,
+    }),
+  );
+  const inspectAssetCatalogEntry = vi.fn().mockResolvedValue(
+    assetCatalogInspectResponse({
+      inspection: {
+        kind: "png",
+        width: 64,
+        height: 32,
+        bit_depth: 8,
+        color_type: 6,
+        interlaced: false,
+      },
+    }),
+  );
   const validateWorld = vi.fn().mockResolvedValue(
     namedResponse("world.validate", { validation: VALIDATION }),
   );
@@ -497,8 +787,8 @@ function createApi(overrides: Partial<ForgeStudioApi> = {}) {
     getWorkspaceOverview,
     listSourceDocuments,
     readSourceDocument,
-    listAssetCatalog: unavailable,
-    inspectAssetCatalogEntry: unavailable,
+    listAssetCatalog,
+    inspectAssetCatalogEntry,
     stageSourceDocument,
     getChangeset,
     readChangesetDiff,
@@ -539,6 +829,8 @@ function createApi(overrides: Partial<ForgeStudioApi> = {}) {
       getWorkspaceOverview,
       listSourceDocuments,
       readSourceDocument,
+      listAssetCatalog,
+      inspectAssetCatalogEntry,
       validateWorld,
       analyzeWorld,
       bindCodexWorkspace,
@@ -597,6 +889,87 @@ function sourceListResponse(worldSha: string) {
       { path: "source/maps/garden.json", kind: "maps", size: 120, sha256: SHA_MAP },
     ],
   });
+}
+
+function assetCatalogListResponse({
+  revision = ASSET_REVISION,
+  offset = 0,
+  entries = [assetEntry()],
+  nextOffset = null,
+}: {
+  revision?: string;
+  offset?: number;
+  entries?: ReturnType<typeof assetEntry>[];
+  nextOffset?: number | null;
+} = {}) {
+  return namedResponse("asset.catalog.list", {
+    manifest_revision: revision,
+    offset,
+    limit: 64,
+    entries,
+    next_offset: nextOffset,
+  });
+}
+
+function assetCatalogInspectResponse({
+  revision = ASSET_REVISION,
+  entry = assetEntry(),
+  inspection = {
+    kind: "unavailable" as const,
+    reason: "identity_only" as const,
+  },
+}: {
+  revision?: string;
+  entry?: ReturnType<typeof assetEntry>;
+  inspection?: Record<string, unknown>;
+} = {}) {
+  return namedResponse("asset.catalog.inspect", {
+    manifest_revision: revision,
+    entry,
+    inspection,
+  });
+}
+
+function assetEntry(
+  overrides: Partial<{
+    entry_id: string;
+    asset_id: string | null;
+    category:
+      | "manifest"
+      | "target"
+      | "visual_bible"
+      | "audio_bible"
+      | "inventory"
+      | "specification"
+      | "production_receipt"
+      | "production_request"
+      | "production_output"
+      | "processing_receipt"
+      | "processing_recipe"
+      | "processing_output"
+      | "license"
+      | "qa"
+      | "runtime_output";
+    role: string | null;
+    path: string | null;
+    sha256: string;
+    media_type: string | null;
+    selected: boolean;
+    inspectable: boolean;
+  }> = {},
+) {
+  return {
+    entry_id: ASSET_ENTRY_ID,
+    asset_id: "asset_01",
+    category: "visual_bible" as const,
+    role: "concept",
+    path: "assets/concept.png",
+    sha256: "f".repeat(64),
+    media_type: "image/png",
+    selected: false,
+    inspectable: true,
+    ...overrides,
+  };
 }
 
 const OVERVIEW = {
@@ -736,6 +1109,58 @@ const V1_DIFF = {
   review_sha256: null,
   operations: [] as const,
 };
+
+function installMatchMedia(initialMatches: boolean): {
+  setMatches: (matches: boolean) => void;
+  removeEventListener: ReturnType<typeof vi.fn>;
+  readonly changeListener: EventListenerOrEventListenerObject | null;
+} {
+  let matches = initialMatches;
+  let changeListener: EventListenerOrEventListenerObject | null = null;
+  const addEventListener = vi.fn(
+    (type: string, listener: EventListenerOrEventListenerObject): void => {
+      if (type === "change") changeListener = listener;
+    },
+  );
+  const removeEventListener = vi.fn();
+  const mediaQueryList = {
+    get matches() {
+      return matches;
+    },
+    media: COMPACT_DISCIPLINE_TABS_QUERY,
+    onchange: null,
+    addEventListener,
+    removeEventListener,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  } as unknown as MediaQueryList;
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn((query: string) => {
+      expect(query).toBe(COMPACT_DISCIPLINE_TABS_QUERY);
+      return mediaQueryList;
+    }),
+  });
+  return {
+    setMatches(nextMatches: boolean): void {
+      matches = nextMatches;
+      const event = Object.assign(new Event("change"), {
+        matches,
+        media: COMPACT_DISCIPLINE_TABS_QUERY,
+      }) as MediaQueryListEvent;
+      if (typeof changeListener === "function") {
+        changeListener(event);
+      } else {
+        changeListener?.handleEvent(event);
+      }
+    },
+    removeEventListener,
+    get changeListener() {
+      return changeListener;
+    },
+  };
+}
 
 function installApi(api: ForgeStudioApi): void {
   Object.defineProperty(window, "forgeStudio", { configurable: true, value: api });

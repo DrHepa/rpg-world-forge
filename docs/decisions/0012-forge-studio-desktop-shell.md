@@ -68,7 +68,12 @@ cookie encryption, embedded ASAR integrity, and OnlyLoadAppFromAsar. The
 self-contained Python/Codex resources, signed installers, provider brokers,
 watchers, asset production, and native game visualization remain separate later
 changes. The renderer may project verified World/lore reads into an in-memory
-draft cockpit and neutral non-authoritative Canvas preview.
+draft cockpit and neutral non-authoritative Canvas preview. It may also project
+the named asset catalog reads into a read-only Assets cockpit: one lazy
+revision snapshot, revision-bound replacement pages, page-local category
+filters, and bounded text or verified metadata inspection. The Assets cockpit
+does not construct media objects, reconstruct filesystem paths, play content,
+or render asset files.
 
 ## Consequences
 
@@ -81,7 +86,11 @@ draft cockpit and neutral non-authoritative Canvas preview.
   no autosave, arbitrary filesystem operation, or generic repository write path.
 - The named asset catalog boundary lists and inspects only manifest-authorized
   entries under an exact revision. The renderer cannot choose paths, media
-  types, categories, cursors, page bounds, or binary payloads.
+  types, categories, cursors, page bounds, or binary payloads. World and Assets
+  use an accessible roving tablist and remain mounted while inactive, so
+  switching disciplines preserves in-memory drafts without triggering new
+  authoring reads. Asset pagination replaces the current page and keeps every
+  continuation and inspection bound to the accepted manifest revision.
 - A compromised renderer cannot name IPC channels or directly reach files,
   commands, providers, local ports, or project roots.
 - Development requires one explicit interpreter setting; packaged builds are

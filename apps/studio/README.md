@@ -16,8 +16,13 @@ stage an explicit dirty syntax-valid draft, open bounded immutable v2 text and
 JSON Pointer evidence, and require separate human confirmations for approval,
 rejection, and apply. Approval never auto-applies; v1 reviews remain readable
 but cannot be freshly approved or applied without exact evidence. Asset
-production, previews, Modly, Blender, file watching, and native playtests remain
-later batches.
+catalog reads are presented in an accessible read-only Assets cockpit. It
+lazy-loads the first 64-entry revision snapshot, replaces pages under
+revision-bound next/previous controls, keeps category filters page-local, and
+renders bounded semantic JSON, escaped GLSL, or verified PNG/WAV/font/GLB
+metadata. The cockpit never reconstructs paths or creates image, audio, font,
+WebGL, or 3D runtime previews. Asset production, Modly, Blender, file watching,
+the Game cockpit, and native playtests remain later batches.
 
 ## Development
 

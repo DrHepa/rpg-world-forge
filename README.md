@@ -169,8 +169,12 @@ the returned immutable v2 text and JSON Pointer diff, requires separate approve
 and apply confirmations, and refreshes verified sources only after apply
 succeeds. Legacy v1 records remain readable with exact diff unavailable; the
 desktop does not offer fresh v1 approval or apply. The Assets and Game cockpit
-panels remain labeled future work; the catalog boundary is not presented as a
-finished visual tool.
+tabs share an accessible keyboard tablist, but only Assets is now enabled.
+The read-only Assets cockpit lazily loads one revision snapshot, replaces pages
+under exact revision-bound next/previous controls, filters categories only
+within the current page, and displays bounded JSON/GLSL or verified
+PNG/WAV/font/GLB metadata. It does not reconstruct paths, load media, play
+audio, render 3D, or expose binary payloads. Game remains labeled future work.
 
 Changesets edit only UTF-8 files beneath a registered world's `source/`
 directory. New v2 records retain the exact base and proposed snapshots in
