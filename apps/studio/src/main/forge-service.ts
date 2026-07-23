@@ -55,6 +55,9 @@ export class ForgeServiceSupervisor implements ForgeServiceClient {
     pid: null,
   };
   #startPromise: Promise<StudioReplyEnvelope> | null = null;
+  #stopPromise: Promise<void> | null = null;
+  #stopping = false;
+  #stopped = false;
 
   public constructor(spec: FixedSpawnSpec) {
     this.#transport = new NdjsonSupervisor(spec);
@@ -71,6 +74,9 @@ export class ForgeServiceSupervisor implements ForgeServiceClient {
   }
 
   public async initialize(): Promise<StudioReplyEnvelope> {
+    if (this.#stopping || this.#stopped) {
+      throw new Error("Forge Studio service is stopping");
+    }
     if (this.#status.state === "ready") {
       return await this.#transport.request(
         randomUUID(),
@@ -93,6 +99,9 @@ export class ForgeServiceSupervisor implements ForgeServiceClient {
     params: Record<string, unknown>,
     timeoutMs: number,
   ): Promise<StudioReplyEnvelope> {
+    if (this.#stopping || this.#stopped) {
+      throw new Error("Forge Studio service is stopping");
+    }
     if (this.#status.state !== "ready") {
       await this.initialize();
     }
@@ -112,13 +121,36 @@ export class ForgeServiceSupervisor implements ForgeServiceClient {
     return parseWorkspaceBinding(reply.result, workspaceId);
   }
 
-  public async stop(): Promise<void> {
-    await this.#transport.stop();
-    this.#setStatus({
-      state: "stopped",
-      message: "Forge Studio service is stopped",
-      pid: null,
-    });
+  public stop(): Promise<void> {
+    if (this.#stopPromise) {
+      return this.#stopPromise;
+    }
+    this.#stopping = true;
+    const stopping = this.#transport.stop().then(
+      () => {
+        this.#stopped = true;
+        this.#stopping = false;
+        this.#setStatus({
+          state: "stopped",
+          message: "Forge Studio service is stopped",
+          pid: null,
+        });
+      },
+      (error: unknown) => {
+        this.#stopping = false;
+        if (this.#stopPromise === stopping) {
+          this.#stopPromise = null;
+        }
+        this.#setStatus({
+          state: "crashed",
+          message: describeError(error),
+          pid: this.#transport.pid,
+        });
+        throw error;
+      },
+    );
+    this.#stopPromise = stopping;
+    return stopping;
   }
 
   async #startAndHandshake(): Promise<StudioReplyEnvelope> {
@@ -139,6 +171,9 @@ export class ForgeServiceSupervisor implements ForgeServiceClient {
         throw new Error(`Forge Studio handshake failed: ${reply.error.message}`);
       }
       assertInitializationResult(reply.result);
+      if (this.#stopping || this.#stopped) {
+        throw new Error("Forge Studio service stopped during startup");
+      }
       this.#setStatus({
         state: "ready",
         message: "Forge Studio service is ready",
@@ -146,6 +181,9 @@ export class ForgeServiceSupervisor implements ForgeServiceClient {
       });
       return reply;
     } catch (error) {
+      if (this.#stopping || this.#stopped) {
+        throw error;
+      }
       const message = describeError(error);
       this.#setStatus({ state: "unavailable", message, pid: this.#transport.pid });
       await this.#transport.stop().catch(() => undefined);
@@ -162,7 +200,7 @@ export class ForgeServiceSupervisor implements ForgeServiceClient {
       this.#emit({ type: "service-stderr", text: event.text });
       return;
     }
-    if (event.state === "crashed") {
+    if (event.state === "crashed" && !this.#stopping && !this.#stopped) {
       this.#setStatus({ state: "crashed", message: event.message, pid: null });
     }
   }

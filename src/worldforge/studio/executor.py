@@ -256,24 +256,49 @@ class JobScheduler:
         self._ready = threading.Event()
         self._thread = threading.Thread(target=self._run, name="studio-job-scheduler")
         self._startup_error: BaseException | None = None
+        self._lifecycle_lock = threading.Lock()
+        self._started = False
+        self._shutdown = False
 
     def start(self) -> None:
-        self._thread.start()
+        with self._lifecycle_lock:
+            if self._shutdown:
+                raise StudioError(
+                    "invalid_state", "Studio job scheduler cannot start after shutdown"
+                )
+            if self._started:
+                raise StudioError("invalid_state", "Studio job scheduler can start only once")
+            self._started = True
+            try:
+                self._thread.start()
+            except BaseException as exc:
+                self._shutdown = True
+                raise StudioError("internal_error", "Studio job scheduler could not start") from exc
+        startup_error: StudioError | None = None
         if not self._ready.wait(timeout=5.0):
-            self._stop.set()
-            raise StudioError("internal_error", "Studio job scheduler did not start")
-        if self._startup_error is not None:
-            raise StudioError(
-                "internal_error", "Studio job scheduler could not start"
-            ) from self._startup_error
+            startup_error = StudioError("internal_error", "Studio job scheduler did not start")
+        elif self._startup_error is not None:
+            startup_error = StudioError("internal_error", "Studio job scheduler could not start")
+        if startup_error is not None:
+            try:
+                self.shutdown()
+            except StudioError as exc:
+                raise exc from startup_error
+            raise startup_error from self._startup_error
 
     def notify(self) -> None:
+        with self._lifecycle_lock:
+            if self._shutdown:
+                return
         self._wake.set()
 
     def shutdown(self) -> None:
+        with self._lifecycle_lock:
+            self._shutdown = True
+            started = self._started
         self._stop.set()
         self._wake.set()
-        if self._thread.ident is not None:
+        if started and self._thread.ident is not None:
             self._thread.join(timeout=10.0)
         if self._thread.is_alive():
             raise StudioError("internal_error", "Studio job scheduler did not stop cleanly")

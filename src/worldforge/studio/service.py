@@ -13,7 +13,12 @@ from worldforge.studio.contracts import (
     STUDIO_VERSION,
     validate_studio_protocol_envelope,
 )
-from worldforge.studio.errors import StudioContractError, StudioError, invalid_request
+from worldforge.studio.errors import (
+    StudioContractError,
+    StudioError,
+    invalid_request,
+    invalid_state,
+)
 from worldforge.studio.executor import JobScheduler
 from worldforge.studio.jobs import JobManager
 from worldforge.studio.jsonio import (
@@ -42,6 +47,7 @@ class StudioService:
     def __init__(self, store: StudioStore, scheduler: JobScheduler | None = None) -> None:
         self.store = store
         self.scheduler = scheduler
+        self._closed = False
         self.workspaces = WorkspaceManager(store)
         self.assets = AssetCatalogManager(self.workspaces)
         self.authoring = AuthoringManager(self.workspaces)
@@ -75,6 +81,8 @@ class StudioService:
         }
 
     def handle(self, envelope: object) -> dict[str, Any]:
+        if self._closed:
+            raise invalid_state("Studio service is closed")
         try:
             request = validate_studio_protocol_envelope(envelope)
         except StudioContractError as exc:
@@ -96,6 +104,9 @@ class StudioService:
             raise StudioError(
                 "internal_error", "Studio method produced an invalid response"
             ) from exc
+
+    def close(self) -> None:
+        self._closed = True
 
     @staticmethod
     def _initialize(params: dict[str, Any]) -> dict[str, Any]:
@@ -300,24 +311,49 @@ def _write(output: BinaryIO, envelope: dict[str, Any]) -> None:
     output.flush()
 
 
+def _sanitized_error(error: BaseException, fallback: str) -> StudioError:
+    if isinstance(error, StudioError):
+        return error
+    return StudioError("internal_error", fallback)
+
+
+def _close_runtime(
+    service: StudioService | None,
+    scheduler: JobScheduler | None,
+    store: StudioStore | None,
+) -> StudioError | None:
+    first_error: StudioError | None = None
+    stages = (
+        (service, "close"),
+        (scheduler, "shutdown"),
+        (store, "close"),
+    )
+    for owner, method_name in stages:
+        if owner is None:
+            continue
+        try:
+            getattr(owner, method_name)()
+        except BaseException as exc:
+            if first_error is None:
+                first_error = _sanitized_error(exc, "Studio service shutdown failed")
+    return first_error
+
+
 def serve(input_stream: BinaryIO, output_stream: BinaryIO, *, data_dir: str | Path) -> int:
     store: StudioStore | None = None
     scheduler: JobScheduler | None = None
+    service: StudioService | None = None
     try:
         store = StudioStore(data_dir)
         scheduler = JobScheduler(data_dir)
         scheduler.start()
         service = StudioService(store, scheduler)
-    except StudioError as exc:
-        if scheduler is not None:
-            try:
-                scheduler.shutdown()
-            except StudioError:
-                pass
-        if store is not None:
-            store.close()
-        _write(output_stream, _error_envelope(None, exc))
+    except BaseException as exc:
+        startup_error = _sanitized_error(exc, "Studio service could not start")
+        _close_runtime(service, scheduler, store)
+        _write(output_stream, _error_envelope(None, startup_error))
         return 1
+    assert service is not None
     shutdown_error: StudioError | None = None
     try:
         while True:
@@ -339,12 +375,7 @@ def serve(input_stream: BinaryIO, output_stream: BinaryIO, *, data_dir: str | Pa
                 )
             _write(output_stream, response)
     finally:
-        try:
-            scheduler.shutdown()
-        except StudioError as exc:
-            shutdown_error = exc
-        finally:
-            store.close()
+        shutdown_error = _close_runtime(service, scheduler, store)
     if shutdown_error is not None:
         _write(output_stream, _error_envelope(None, shutdown_error))
         return 1

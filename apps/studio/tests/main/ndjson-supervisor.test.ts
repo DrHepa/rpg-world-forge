@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   NdjsonSupervisor,
+  planProcessTreeTermination,
   StudioProtocolError,
   StudioOverloadError,
   StudioRequestCancelledError,
@@ -32,11 +33,15 @@ afterEach(async () => {
   );
 });
 
-function create(mode: string, options: ConstructorParameters<typeof NdjsonSupervisor>[1] = {}) {
+function create(
+  mode: string,
+  options: ConstructorParameters<typeof NdjsonSupervisor>[1] = {},
+  fixtureArgs: readonly string[] = [],
+) {
   const supervisor = new NdjsonSupervisor(
     {
       executable: python,
-      args: [fixture, mode],
+      args: [fixture, mode, ...fixtureArgs],
       cwd: path.dirname(fixture),
       env: { LANG: "C.UTF-8" },
     },
@@ -304,6 +309,173 @@ describe("NdjsonSupervisor", () => {
     expect(response.request_id).toBe("recovered-1");
   });
 
+  it("drains stdin through EOF before reporting a clean stop", async () => {
+    const supervisor = create("eof");
+    const states: string[] = [];
+    supervisor.subscribe((event) => {
+      if (event.type === "state") {
+        states.push(event.state);
+      }
+    });
+    await supervisor.start();
+
+    const stop = supervisor.stop();
+
+    expect(supervisor.state).toBe("stopping");
+    await stop;
+    expect(supervisor.state).toBe("stopped");
+    expect(supervisor.pid).toBeNull();
+    expect(supervisor.stderrTail).toContain("fixture.eof");
+    expect(states).toEqual(["starting", "running", "stopping", "stopped"]);
+  });
+
+  it("shares one stop promise and rejects pending work exactly once", async () => {
+    const supervisor = create("delayed");
+    await supervisor.start();
+    let rejectionCount = 0;
+    const pending = supervisor
+      .request("drain-1", "service.initialize", {}, 2_000)
+      .catch((error: unknown) => {
+        rejectionCount += 1;
+        throw error;
+      });
+
+    const firstStop = supervisor.stop();
+    const secondStop = supervisor.stop();
+
+    expect(secondStop).toBe(firstStop);
+    await expect(pending).rejects.toBeInstanceOf(StudioTransportError);
+    await firstStop;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(rejectionCount).toBe(1);
+    expect(supervisor.state).toBe("stopped");
+    expect(supervisor.stderrTail).toContain("fixture.eof");
+  });
+
+  it("shares the stop promise with reentrant state subscribers", async () => {
+    const supervisor = create("eof");
+    await supervisor.start();
+    let entered = false;
+    let reentrantStop: Promise<void> | null = null;
+    supervisor.subscribe((event) => {
+      if (event.type === "state" && event.state === "stopping" && !entered) {
+        entered = true;
+        reentrantStop = supervisor.stop();
+      }
+    });
+
+    const firstStop = supervisor.stop();
+
+    expect(reentrantStop).toBe(firstStop);
+    await firstStop;
+  });
+
+  it("bounds EOF, terminate, and force-kill escalation for a stuck child", async () => {
+    const supervisor = create("hang-after-eof", {
+      gracefulStopTimeoutMs: 300,
+      terminateStopTimeoutMs: 300,
+      killStopTimeoutMs: 300,
+    });
+    await supervisor.start();
+    const startedAt = Date.now();
+
+    await supervisor.stop();
+
+    expect(Date.now() - startedAt).toBeLessThan(4_000);
+    expect(supervisor.stderrTail).toContain("fixture.eof");
+    expect(supervisor.pid).toBeNull();
+    expect(supervisor.state).toBe("stopped");
+  });
+
+  it("stops safely during spawn and can restart after a clean drain", async () => {
+    const supervisor = create("eof");
+    const starting = supervisor.start();
+    const rejectedStart = expect(starting).rejects.toBeInstanceOf(StudioTransportError);
+
+    await supervisor.stop();
+    await rejectedStart;
+    expect(supervisor.state).toBe("stopped");
+
+    await supervisor.start();
+    const reply = await supervisor.request(
+      "restart-after-stop",
+      "service.initialize",
+      {},
+      2_000,
+    );
+    expect(reply.request_id).toBe("restart-after-stop");
+    await supervisor.stop();
+    expect(supervisor.state).toBe("stopped");
+  });
+
+  it.each([
+    ["descendant-after-eof", "terminate"],
+    ["descendant-ignore-term-after-eof", "kill"],
+  ])(
+    "retains tree ownership after root exit until inherited stdio closes in %s",
+    async (mode, expectedPosixStage) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), "rwf-tree-release-"));
+      temporaryRoots.push(root);
+      const releasePath = path.join(root, "release");
+      const supervisor = create(mode, {
+        gracefulStopTimeoutMs: 2_000,
+        terminateStopTimeoutMs: 200,
+        killStopTimeoutMs: 300,
+      }, [releasePath]);
+      await supervisor.start();
+      const rootPid = supervisor.pid;
+      expect(rootPid).toBeGreaterThan(0);
+      const startedAt = Date.now();
+      const stopping = supervisor.stop();
+      const outcome = stopping.then(
+        () => ({ ok: true as const }),
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      try {
+        await expect
+          .poll(() => supervisor.diagnostics.rootExited, { timeout: 1_500 })
+          .toBe(true);
+        await expect
+          .poll(
+            () => supervisor.stderrTail.includes("fixture.descendant-ready"),
+            { timeout: 1_500 },
+          )
+          .toBe(true);
+        expect(Date.now() - startedAt).toBeLessThan(1_750);
+
+        const result = await outcome;
+        expect(Date.now() - startedAt).toBeLessThan(3_000);
+        if (process.platform === "win32") {
+          expect(result.ok).toBe(false);
+          if (!result.ok) {
+            expect(result.error).toBeInstanceOf(StudioTransportError);
+          }
+          expect(supervisor.state).toBe("crashed");
+          expect(supervisor.pid).toBe(rootPid);
+          expect(supervisor.diagnostics.terminationStage).toBe("kill");
+        } else {
+          expect(result.ok).toBe(true);
+          expect(supervisor.state).toBe("stopped");
+          expect(supervisor.pid).toBeNull();
+          expect(supervisor.diagnostics.terminationStage).toBe(
+            expectedPosixStage,
+          );
+        }
+        expect(supervisor.stderrTail).toContain("fixture.root-exited");
+        expect(supervisor.stderrTail).toContain("fixture.descendant-ready");
+      } finally {
+        await writeFile(releasePath, "release", "utf8");
+        await expect.poll(() => supervisor.pid, { timeout: 3_000 }).toBeNull();
+      }
+    },
+  );
+
+  it("plans root-exited process trees without risking PID reuse", () => {
+    expect(planProcessTreeTermination("linux", true)).toBe("posix-process-group");
+    expect(planProcessTreeTermination("win32", false)).toBe("windows-taskkill");
+    expect(planProcessTreeTermination("win32", true)).toBe("fail-closed");
+  });
+
   it("rejects relative executables instead of consulting PATH", () => {
     expect(
       () =>
@@ -313,5 +485,14 @@ describe("NdjsonSupervisor", () => {
           env: {},
         }),
     ).toThrow(/absolute path/u);
+  });
+
+  it("rejects shutdown deadlines outside the bounded policy", () => {
+    expect(
+      () =>
+        create("normal", {
+          gracefulStopTimeoutMs: 60_001,
+        }),
+    ).toThrow(/gracefulStopTimeoutMs must be an integer from 1 to 60000/u);
   });
 });

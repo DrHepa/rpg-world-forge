@@ -1,4 +1,8 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  spawn,
+  type ChildProcess,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
 import path from "node:path";
 
 import type {
@@ -45,6 +49,9 @@ export const DEFAULT_MAX_STDERR_BYTES = 64 * 1024;
 export const DEFAULT_MAX_PENDING_REQUESTS = 128;
 export const DEFAULT_MAX_OUTSTANDING_REQUEST_BYTES = 8 * 1024 * 1024;
 export const DEFAULT_MAX_IGNORED_REQUEST_IDS = 1024;
+export const DEFAULT_GRACEFUL_STOP_TIMEOUT_MS = 12_000;
+export const DEFAULT_TERMINATE_STOP_TIMEOUT_MS = 2_000;
+export const DEFAULT_KILL_STOP_TIMEOUT_MS = 2_000;
 
 const PROTOCOL = "rpg-world-forge.studio_protocol" as const;
 const PROTOCOL_VERSION = 1 as const;
@@ -56,7 +63,25 @@ export interface FixedSpawnSpec {
   env: Readonly<Record<string, string>>;
 }
 
-export type TransportState = "stopped" | "starting" | "running" | "crashed";
+export type TransportState =
+  | "stopped"
+  | "starting"
+  | "running"
+  | "stopping"
+  | "crashed";
+
+type ProcessTreeTerminationPlan =
+  | "posix-process-group"
+  | "windows-taskkill"
+  | "fail-closed";
+type ProcessTreeTerminationStage = "none" | "terminate" | "kill";
+
+interface OwnedProcessTree {
+  generation: number;
+  pid: number;
+  processGroupId: number | null;
+  platform: NodeJS.Platform;
+}
 
 export type TransportEvent =
   | { type: "state"; state: TransportState; pid: number | null; message: string }
@@ -263,6 +288,9 @@ export interface NdjsonSupervisorOptions {
   maxPendingRequests?: number;
   maxOutstandingRequestBytes?: number;
   maxIgnoredRequestIds?: number;
+  gracefulStopTimeoutMs?: number;
+  terminateStopTimeoutMs?: number;
+  killStopTimeoutMs?: number;
 }
 
 export interface TransportDiagnostics {
@@ -271,6 +299,8 @@ export interface TransportDiagnostics {
   queuedWrites: number;
   backpressureWaits: number;
   ignoredReplyIds: number;
+  rootExited: boolean;
+  terminationStage: ProcessTreeTerminationStage;
 }
 
 export class NdjsonSupervisor {
@@ -280,6 +310,9 @@ export class NdjsonSupervisor {
   readonly #maxPendingRequests: number;
   readonly #maxOutstandingRequestBytes: number;
   readonly #maxIgnoredRequestIds: number;
+  readonly #gracefulStopTimeoutMs: number;
+  readonly #terminateStopTimeoutMs: number;
+  readonly #killStopTimeoutMs: number;
   readonly #stderr: BoundedTextTail;
   readonly #listeners = new Set<(event: TransportEvent) => void>();
   readonly #pending = new Map<string, PendingRequest>();
@@ -294,6 +327,10 @@ export class NdjsonSupervisor {
   #outstandingRequestBytes = 0;
   #backpressureWaits = 0;
   #generation = 0;
+  #stopPromise: Promise<void> | null = null;
+  #treeOwner: OwnedProcessTree | null = null;
+  #rootExitedGeneration: number | null = null;
+  #terminationStage: ProcessTreeTerminationStage = "none";
 
   public constructor(spec: FixedSpawnSpec, options: NdjsonSupervisorOptions = {}) {
     assertFixedSpawnSpec(spec);
@@ -311,12 +348,21 @@ export class NdjsonSupervisor {
       options.maxOutstandingRequestBytes ?? DEFAULT_MAX_OUTSTANDING_REQUEST_BYTES;
     this.#maxIgnoredRequestIds =
       options.maxIgnoredRequestIds ?? DEFAULT_MAX_IGNORED_REQUEST_IDS;
+    this.#gracefulStopTimeoutMs =
+      options.gracefulStopTimeoutMs ?? DEFAULT_GRACEFUL_STOP_TIMEOUT_MS;
+    this.#terminateStopTimeoutMs =
+      options.terminateStopTimeoutMs ?? DEFAULT_TERMINATE_STOP_TIMEOUT_MS;
+    this.#killStopTimeoutMs =
+      options.killStopTimeoutMs ?? DEFAULT_KILL_STOP_TIMEOUT_MS;
     assertPositiveLimit(this.#maxPendingRequests, "maxPendingRequests");
     assertPositiveLimit(
       this.#maxOutstandingRequestBytes,
       "maxOutstandingRequestBytes",
     );
     assertPositiveLimit(this.#maxIgnoredRequestIds, "maxIgnoredRequestIds");
+    assertBoundedStopTimeout(this.#gracefulStopTimeoutMs, "gracefulStopTimeoutMs");
+    assertBoundedStopTimeout(this.#terminateStopTimeoutMs, "terminateStopTimeoutMs");
+    assertBoundedStopTimeout(this.#killStopTimeoutMs, "killStopTimeoutMs");
     this.#stderr = new BoundedTextTail(options.maxStderrBytes ?? DEFAULT_MAX_STDERR_BYTES);
     this.#decoder = new BoundedLineDecoder(this.#maxLineBytes);
   }
@@ -340,6 +386,10 @@ export class NdjsonSupervisor {
       queuedWrites: this.#writeQueue.length + (this.#writing ? 1 : 0),
       backpressureWaits: this.#backpressureWaits,
       ignoredReplyIds: this.#ignoredRequestIds.size,
+      rootExited:
+        this.#child !== null &&
+        this.#rootExitedGeneration === this.#generation,
+      terminationStage: this.#terminationStage,
     };
   }
 
@@ -352,13 +402,16 @@ export class NdjsonSupervisor {
     if (this.#state === "running") {
       return;
     }
-    if (this.#child) {
+    if (this.#child || this.#stopPromise) {
       throw new StudioTransportError("Studio child is already starting or stopping");
     }
     this.#expectedStop = false;
     this.#protocolFailed = false;
     this.#ignoredRequestIds.clear();
     this.#generation += 1;
+    this.#treeOwner = null;
+    this.#rootExitedGeneration = null;
+    this.#terminationStage = "none";
     this.#writing = false;
     this.#decoder = new BoundedLineDecoder(this.#maxLineBytes);
     this.#setState("starting", "Starting Forge Studio service");
@@ -381,17 +434,27 @@ export class NdjsonSupervisor {
       throw failure;
     }
     this.#child = child;
+    this.#captureTreeOwner(child);
     this.#attachChild(child);
 
     await new Promise<void>((resolve, reject) => {
       const onSpawn = (): void => {
         cleanup();
+        this.#captureTreeOwner(child);
+        if (this.#child !== child || this.#expectedStop || this.#state === "stopping") {
+          reject(new StudioTransportError("Forge Studio service stopped during startup"));
+          return;
+        }
         this.#setState("running", "Forge Studio service is running");
         resolve();
       };
       const onError = (error: Error): void => {
         cleanup();
-        reject(error);
+        reject(
+          new StudioTransportError(
+            `Failed to spawn Forge Studio service: ${describeError(error)}`,
+          ),
+        );
       };
       const cleanup = (): void => {
         child.off("spawn", onSpawn);
@@ -399,6 +462,23 @@ export class NdjsonSupervisor {
       };
       child.once("spawn", onSpawn);
       child.once("error", onError);
+    });
+  }
+
+  #captureTreeOwner(child: ChildProcessWithoutNullStreams): void {
+    const pid = child.pid;
+    if (!pid || this.#child !== child) {
+      return;
+    }
+    const current = this.#treeOwner;
+    if (current?.generation === this.#generation && current.pid === pid) {
+      return;
+    }
+    this.#treeOwner = Object.freeze({
+      generation: this.#generation,
+      pid,
+      processGroupId: process.platform === "win32" ? null : pid,
+      platform: process.platform,
     });
   }
 
@@ -473,22 +553,135 @@ export class NdjsonSupervisor {
     return this.#abandonRequest(requestId, new StudioRequestCancelledError(requestId));
   }
 
-  public async stop(): Promise<void> {
+  public stop(): Promise<void> {
+    if (this.#stopPromise) {
+      return this.#stopPromise;
+    }
     const child = this.#child;
+    let resolveStop!: () => void;
+    let rejectStop!: (error: unknown) => void;
+    const operation = new Promise<void>((resolve, reject) => {
+      resolveStop = resolve;
+      rejectStop = reject;
+    });
+    const stopping = operation.finally(() => {
+      if (this.#stopPromise === stopping) {
+        this.#stopPromise = null;
+      }
+    });
+    this.#stopPromise = stopping;
     if (!child) {
       this.#setState("stopped", "Forge Studio service is stopped");
+      resolveStop();
+      return stopping;
+    }
+    const generation = this.#generation;
+    void this.#stopChild(child, generation).then(resolveStop, rejectStop);
+    return stopping;
+  }
+
+  async #stopChild(
+    child: ChildProcessWithoutNullStreams,
+    generation: number,
+  ): Promise<void> {
+    this.#expectedStop = true;
+    this.#setState("stopping", "Stopping Forge Studio service");
+    this.#rejectAll(new StudioTransportError("Forge Studio service is stopping"));
+    this.#endInput(child);
+
+    if (await this.#waitForRelease(child, generation, this.#gracefulStopTimeoutMs)) {
       return;
     }
-    this.#expectedStop = true;
-    this.#rejectAll(new StudioTransportError("Forge Studio service stopped"));
-    await terminateChildTree(child, false);
-    if (child.exitCode === null && child.signalCode === null) {
-      const exited = await waitForExit(child, 1_000);
-      if (!exited) {
-        await terminateChildTree(child, true);
-        await waitForExit(child, 1_000);
-      }
+    if (
+      await this.#terminateAndWait(
+        child,
+        generation,
+        false,
+        this.#terminateStopTimeoutMs,
+      )
+    ) {
+      return;
     }
+    if (
+      await this.#terminateAndWait(
+        child,
+        generation,
+        true,
+        this.#killStopTimeoutMs,
+      )
+    ) {
+      return;
+    }
+
+    if (this.#child === child && this.#generation === generation) {
+      this.#expectedStop = false;
+      const failure = new StudioTransportError(
+        "Complete Forge Studio process-tree release could not be proven within the bounded shutdown deadline",
+      );
+      this.#setState("crashed", failure.message);
+      throw failure;
+    }
+  }
+
+  #endInput(child: ChildProcessWithoutNullStreams): void {
+    if (this.#child !== child || child.stdin.destroyed || child.stdin.writableEnded) {
+      return;
+    }
+    try {
+      child.stdin.end();
+    } catch {
+      // The bounded process escalation below owns recovery from a failed half-close.
+    }
+  }
+
+  async #terminateAndWait(
+    child: ChildProcessWithoutNullStreams,
+    generation: number,
+    force: boolean,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    if (this.#child !== child || this.#generation !== generation) {
+      return true;
+    }
+    const deadline = performance.now() + timeoutMs;
+    const owner = this.#treeOwner;
+    try {
+      if (
+        !owner ||
+        owner.generation !== generation ||
+        owner.pid !== child.pid
+      ) {
+        throw new StudioTransportError(
+          "Forge Studio process-tree ownership is unavailable",
+        );
+      }
+      this.#terminationStage = force ? "kill" : "terminate";
+      await terminateChildTree(
+        child,
+        owner,
+        force,
+        remainingTimeout(deadline),
+      );
+    } catch {
+      // Continue to the next bounded escalation stage unless the child closes.
+    }
+    return await this.#waitForRelease(
+      child,
+      generation,
+      remainingTimeout(deadline),
+    );
+  }
+
+  async #waitForRelease(
+    child: ChildProcessWithoutNullStreams,
+    generation: number,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    if (this.#child !== child || this.#generation !== generation) {
+      return true;
+    }
+    await waitForClose(child, timeoutMs);
+    return this.#child !== child || this.#generation !== generation;
   }
 
   #pumpWrites(): void {
@@ -536,7 +729,15 @@ export class NdjsonSupervisor {
         const current = this.#takePending(requestId);
         current?.reject(failure);
         this.#rejectAll(failure);
-        void terminateChildTree(child, true).catch(() => child.kill());
+        const owner = this.#treeOwner;
+        if (owner?.generation === generation && owner.pid === child.pid) {
+          void terminateChildTree(
+            child,
+            owner,
+            true,
+            DEFAULT_KILL_STOP_TIMEOUT_MS,
+          ).catch(() => undefined);
+        }
       })
       .finally(() => {
         if (this.#generation !== generation) {
@@ -601,6 +802,7 @@ export class NdjsonSupervisor {
   }
 
   #attachChild(child: ChildProcessWithoutNullStreams): void {
+    const generation = this.#generation;
     child.stdin.on("error", (error) => {
       if (this.#expectedStop || this.#child !== child) {
         return;
@@ -612,30 +814,53 @@ export class NdjsonSupervisor {
       );
     });
     child.stdout.on("data", (chunk: Buffer) => {
+      if (this.#child !== child) {
+        return;
+      }
       try {
         for (const line of this.#decoder.push(chunk)) {
           this.#handleLine(line);
         }
       } catch (error) {
-        this.#failProtocol(error);
+        this.#handleOutputFailure(error);
       }
     });
     child.stdout.on("end", () => {
+      if (this.#child !== child) {
+        return;
+      }
       try {
         for (const line of this.#decoder.finish()) {
           this.#handleLine(line);
         }
       } catch (error) {
-        this.#failProtocol(error);
+        this.#handleOutputFailure(error);
       }
     });
     child.stderr.on("data", (chunk: Buffer) => {
+      if (this.#child !== child) {
+        return;
+      }
       this.#emit({ type: "stderr", text: this.#stderr.append(chunk) });
     });
-    child.once("error", (error) => this.#finalizeChild(child, `spawn error: ${error.message}`));
-    child.once("exit", (code, signal) => {
-      const detail = signal ? `signal ${signal}` : `exit code ${String(code)}`;
-      this.#finalizeChild(child, detail);
+    child.once("error", (error) => {
+      if (!child.pid) {
+        this.#finalizeChild(child, `spawn error: ${error.message}`);
+        return;
+      }
+      if (this.#expectedStop || this.#child !== child) {
+        return;
+      }
+      this.#failProtocol(
+        new StudioTransportError(
+          `Forge Studio service process failed: ${describeError(error)}`,
+        ),
+      );
+    });
+    child.once("exit", () => {
+      if (this.#child === child && this.#generation === generation) {
+        this.#rootExitedGeneration = generation;
+      }
     });
     child.once("close", (code, signal) => {
       const detail = signal ? `signal ${signal}` : `close code ${String(code)}`;
@@ -648,6 +873,8 @@ export class NdjsonSupervisor {
       return;
     }
     this.#child = null;
+    this.#treeOwner = null;
+    this.#rootExitedGeneration = null;
     this.#generation += 1;
     this.#writing = false;
     this.#ignoredRequestIds.clear();
@@ -666,6 +893,9 @@ export class NdjsonSupervisor {
   }
 
   #handleLine(line: string): void {
+    if (this.#expectedStop || this.#state === "stopping") {
+      return;
+    }
     let value: unknown;
     try {
       value = JSON.parse(line);
@@ -706,8 +936,15 @@ export class NdjsonSupervisor {
     pending.resolve(value);
   }
 
+  #handleOutputFailure(error: unknown): void {
+    if (this.#expectedStop || this.#state === "stopping") {
+      return;
+    }
+    this.#failProtocol(error);
+  }
+
   #failProtocol(error: unknown): void {
-    if (this.#protocolFailed) {
+    if (this.#protocolFailed || this.#expectedStop || this.#state === "stopping") {
       return;
     }
     this.#protocolFailed = true;
@@ -718,8 +955,18 @@ export class NdjsonSupervisor {
     this.#rejectAll(failure);
     this.#setState("crashed", failure.message);
     const child = this.#child;
-    if (child) {
-      void terminateChildTree(child, true).catch(() => child.kill());
+    const owner = this.#treeOwner;
+    if (
+      child &&
+      owner?.generation === this.#generation &&
+      owner.pid === child.pid
+    ) {
+      void terminateChildTree(
+        child,
+        owner,
+        true,
+        DEFAULT_KILL_STOP_TIMEOUT_MS,
+      ).catch(() => undefined);
     }
   }
 
@@ -828,42 +1075,55 @@ function assertPositiveLimit(value: number, name: string): void {
   }
 }
 
+function assertBoundedStopTimeout(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 60_000) {
+    throw new TypeError(`${name} must be an integer from 1 to 60000`);
+  }
+}
+
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : "unknown process error";
 }
 
-async function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return true;
+async function waitForClose(child: ChildProcess, timeoutMs: number): Promise<void> {
+  if (timeoutMs <= 0) {
+    return;
   }
-  return await new Promise<boolean>((resolve) => {
+  await new Promise<void>((resolve) => {
     const timer = setTimeout(() => {
       cleanup();
-      resolve(false);
+      resolve();
     }, timeoutMs);
-    const onExit = (): void => {
+    timer.unref();
+    const onClose = (): void => {
       cleanup();
-      resolve(true);
+      resolve();
     };
     const cleanup = (): void => {
       clearTimeout(timer);
-      child.off("exit", onExit);
+      child.off("close", onClose);
     };
-    child.once("exit", onExit);
+    child.once("close", onClose);
   });
 }
 
 async function terminateChildTree(
   child: ChildProcessWithoutNullStreams,
+  owner: OwnedProcessTree,
   force: boolean,
+  timeoutMs: number,
 ): Promise<void> {
-  const pid = child.pid;
-  if (!pid || child.exitCode !== null || child.signalCode !== null) {
-    return;
-  }
-  if (process.platform !== "win32") {
+  const rootExited = child.exitCode !== null || child.signalCode !== null;
+  const plan = planProcessTreeTermination(owner.platform, rootExited);
+  if (plan === "posix-process-group") {
+    const processGroupId = owner.processGroupId;
+    if (!processGroupId) {
+      throw new StudioTransportError(
+        "Forge Studio process-group ownership is unavailable",
+      );
+    }
     try {
-      process.kill(-pid, force ? "SIGKILL" : "SIGTERM");
+      process.kill(-processGroupId, force ? "SIGKILL" : "SIGTERM");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
         throw error;
@@ -871,23 +1131,74 @@ async function terminateChildTree(
     }
     return;
   }
+  if (plan === "fail-closed") {
+    throw new StudioTransportError(
+      "Windows Forge Studio tree release could not be proven after the root process exited",
+    );
+  }
 
   const systemRoot = process.env.SystemRoot ?? process.env.WINDIR;
   if (!systemRoot || !path.win32.isAbsolute(systemRoot)) {
-    child.kill();
-    return;
+    throw new StudioTransportError(
+      "Windows process-tree termination is unavailable without SystemRoot",
+    );
   }
   const taskkill = path.win32.join(systemRoot, "System32", "taskkill.exe");
-  await new Promise<void>((resolve) => {
-    const killer = spawn(taskkill, ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const killer = spawn(taskkill, ["/PID", String(owner.pid), "/T", ...(force ? ["/F"] : [])], {
       shell: false,
       stdio: "ignore",
       windowsHide: true,
     });
-    killer.once("error", () => {
-      child.kill();
-      resolve();
+    killer.unref();
+    const finish = (error?: Error): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      killer.removeAllListeners();
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
+    const timer = setTimeout(() => {
+      killer.kill();
+      finish(new StudioTransportError("Windows process-tree termination timed out"));
+    }, Math.max(1, timeoutMs));
+    timer.unref();
+    killer.once("error", (error) => {
+      finish(
+        new StudioTransportError(
+          `Windows process-tree termination failed: ${describeError(error)}`,
+        ),
+      );
     });
-    killer.once("exit", () => resolve());
+    killer.once("exit", (code) => {
+      finish(
+        code === 0
+          ? undefined
+          : new StudioTransportError(
+              `Windows process-tree termination exited with code ${String(code)}`,
+            ),
+      );
+    });
   });
+}
+
+export function planProcessTreeTermination(
+  platform: NodeJS.Platform,
+  rootExited: boolean,
+): ProcessTreeTerminationPlan {
+  if (platform !== "win32") {
+    return "posix-process-group";
+  }
+  return rootExited ? "fail-closed" : "windows-taskkill";
+}
+
+function remainingTimeout(deadline: number): number {
+  return Math.max(0, Math.ceil(deadline - performance.now()));
 }

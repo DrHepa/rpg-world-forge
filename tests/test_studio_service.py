@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from worldforge.repository_boundary import FORGE_ROOT
 from worldforge.scaffold import create_world_project
@@ -57,6 +58,164 @@ class StudioServiceTests(unittest.TestCase):
                 (json.dumps(malformed, separators=(",", ":")) + "\n").encode("utf-8")
             )
             self.assertEqual("invalid_request", responses[0]["error"]["code"])
+
+    def test_service_close_is_idempotent_and_rejects_post_close_requests(self) -> None:
+        request = {
+            "protocol": "rpg-world-forge.studio_protocol",
+            "protocol_version": 1,
+            "kind": "request",
+            "request_id": "closed",
+            "method": "service.initialize",
+            "params": {},
+        }
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            StudioStore(Path(directory) / "data") as store,
+        ):
+            service = StudioService(store)
+            service.close()
+            service.close()
+            with self.assertRaises(StudioError) as raised:
+                service.handle(request)
+        self.assertEqual("invalid_state", raised.exception.code)
+
+    def test_eof_closes_service_scheduler_and_store_once_in_reverse_order(self) -> None:
+        events: list[str] = []
+
+        class Store:
+            def __init__(self, _data_dir: object) -> None:
+                events.append("store.open")
+
+            def close(self) -> None:
+                events.append("store.close")
+
+        class Scheduler:
+            def __init__(self, _data_dir: object) -> None:
+                events.append("scheduler.open")
+
+            def start(self) -> None:
+                events.append("scheduler.start")
+
+            def shutdown(self) -> None:
+                events.append("scheduler.close")
+
+        class Service:
+            def __init__(self, _store: object, _scheduler: object) -> None:
+                events.append("service.open")
+
+            def close(self) -> None:
+                events.append("service.close")
+
+        output = io.BytesIO()
+        with (
+            patch("worldforge.studio.service.StudioStore", Store),
+            patch("worldforge.studio.service.JobScheduler", Scheduler),
+            patch("worldforge.studio.service.StudioService", Service),
+        ):
+            exit_code = serve(io.BytesIO(), output, data_dir="unused")
+        self.assertEqual(0, exit_code)
+        self.assertEqual(b"", output.getvalue())
+        self.assertEqual(
+            [
+                "store.open",
+                "scheduler.open",
+                "scheduler.start",
+                "service.open",
+                "service.close",
+                "scheduler.close",
+                "store.close",
+            ],
+            events,
+        )
+
+    def test_shutdown_attempts_every_stage_and_preserves_first_error(self) -> None:
+        events: list[str] = []
+
+        class Store:
+            def __init__(self, _data_dir: object) -> None:
+                pass
+
+            def close(self) -> None:
+                events.append("store.close")
+                raise OSError("private store detail")
+
+        class Scheduler:
+            def __init__(self, _data_dir: object) -> None:
+                pass
+
+            def start(self) -> None:
+                pass
+
+            def shutdown(self) -> None:
+                events.append("scheduler.close")
+                raise StudioError("internal_error", "scheduler close failed")
+
+        class Service:
+            def __init__(self, _store: object, _scheduler: object) -> None:
+                pass
+
+            def close(self) -> None:
+                events.append("service.close")
+                raise StudioError("conflict", "service close failed")
+
+        output = io.BytesIO()
+        with (
+            patch("worldforge.studio.service.StudioStore", Store),
+            patch("worldforge.studio.service.JobScheduler", Scheduler),
+            patch("worldforge.studio.service.StudioService", Service),
+        ):
+            exit_code = serve(io.BytesIO(), output, data_dir="unused")
+        response = json.loads(output.getvalue())
+        self.assertEqual(1, exit_code)
+        self.assertEqual(["service.close", "scheduler.close", "store.close"], events)
+        self.assertEqual("conflict", response["error"]["code"])
+        self.assertEqual("service close failed", response["error"]["message"])
+        self.assertNotIn("private store detail", json.dumps(response))
+
+    def test_startup_failure_rolls_back_started_scheduler_and_store(self) -> None:
+        events: list[str] = []
+
+        class Store:
+            def __init__(self, _data_dir: object) -> None:
+                events.append("store.open")
+
+            def close(self) -> None:
+                events.append("store.close")
+
+        class Scheduler:
+            def __init__(self, _data_dir: object) -> None:
+                events.append("scheduler.open")
+
+            def start(self) -> None:
+                events.append("scheduler.start")
+
+            def shutdown(self) -> None:
+                events.append("scheduler.close")
+
+        class Service:
+            def __init__(self, _store: object, _scheduler: object) -> None:
+                events.append("service.open")
+                raise StudioError("internal_error", "service startup failed")
+
+        output = io.BytesIO()
+        with (
+            patch("worldforge.studio.service.StudioStore", Store),
+            patch("worldforge.studio.service.JobScheduler", Scheduler),
+            patch("worldforge.studio.service.StudioService", Service),
+        ):
+            exit_code = serve(io.BytesIO(), output, data_dir="unused")
+        self.assertEqual(1, exit_code)
+        self.assertEqual(
+            [
+                "store.open",
+                "scheduler.open",
+                "scheduler.start",
+                "service.open",
+                "scheduler.close",
+                "store.close",
+            ],
+            events,
+        )
 
     def test_malformed_ndjson_is_rejected_and_stream_continues(self) -> None:
         self.assertEqual(1.25, decode_ndjson_object(b'{"value":1.25}')["value"])

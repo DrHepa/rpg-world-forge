@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import signal
+import subprocess
 import sys
 import time
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else "normal"
+RELEASE_PATH = sys.argv[2] if len(sys.argv) > 2 else ""
 
 if MODE == "backpressure":
     time.sleep(0.25)
@@ -84,3 +87,33 @@ for raw_line in sys.stdin.buffer:
     if MODE == "delayed":
         time.sleep(0.4)
     write_bytes(response)
+
+
+if MODE in {"eof", "delayed", "hang-after-eof"}:
+    sys.stderr.write("fixture.eof\n")
+    sys.stderr.flush()
+
+if MODE in {"descendant-after-eof", "descendant-ignore-term-after-eof"}:
+    ignore_term = MODE == "descendant-ignore-term-after-eof"
+    release_loop = (
+        "while not release.exists() and time.monotonic() < deadline:\n    time.sleep(0.05)"
+    )
+    descendant = (
+        "import pathlib,signal,sys,time;"
+        + (
+            "signal.signal(signal.SIGTERM,signal.SIG_IGN);"
+            if ignore_term and hasattr(signal, "SIGTERM")
+            else ""
+        )
+        + "sys.stderr.write('fixture.descendant-ready\\n');sys.stderr.flush();"
+        + f"release=pathlib.Path({RELEASE_PATH!r});deadline=time.monotonic()+30;"
+        + f"exec({release_loop!r})"
+    )
+    subprocess.Popen([sys.executable, "-c", descendant])
+    sys.stderr.write("fixture.root-exited\n")
+    sys.stderr.flush()
+
+if MODE == "hang-after-eof":
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    time.sleep(60)

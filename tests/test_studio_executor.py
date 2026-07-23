@@ -162,6 +162,28 @@ class StudioExecutorTests(unittest.TestCase):
         ]
         self.assertEqual(1, len(transitions))
 
+    def test_scheduler_start_and_shutdown_are_one_shot_and_idempotent(self) -> None:
+        scheduler = JobScheduler(self.data_dir)
+        scheduler.start()
+        scheduler.shutdown()
+        scheduler.shutdown()
+        with self.assertRaisesRegex(Exception, "cannot start after shutdown"):
+            scheduler.start()
+
+    def test_scheduler_start_failure_reaps_before_idempotent_shutdown(self) -> None:
+        scheduler = JobScheduler(self.data_dir)
+        with (
+            patch(
+                "worldforge.studio.executor.StudioStore",
+                side_effect=OSError("injected startup failure"),
+            ),
+            self.assertRaisesRegex(Exception, "could not start"),
+        ):
+            scheduler.start()
+        scheduler.shutdown()
+        scheduler.shutdown()
+        self.assertFalse(scheduler._thread.is_alive())
+
     def test_queued_and_running_cancellation_are_durable(self) -> None:
         queued = self._create("runtime.headless", {"worldpack": "build/worldpack.json", "ticks": 0})
         canceled = JobManager(self.store).cancel(queued["job_id"])

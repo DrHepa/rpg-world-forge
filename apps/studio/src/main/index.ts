@@ -17,6 +17,10 @@ import {
   WorkspaceCodexBridge,
   type CodexBridgeClient,
 } from "./codex-bridge";
+import {
+  ApplicationLifecycleCoordinator,
+  ApplicationQuitGate,
+} from "./app-lifecycle";
 import { registerStudioIpc } from "./ipc";
 import { resolveCodexRuntime, resolveForgeServiceLaunch } from "./runtime-manifest";
 import {
@@ -46,10 +50,19 @@ app.enableSandbox();
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  void startApplication();
+  const lifecycle = new ApplicationLifecycleCoordinator();
+  const quitGate = new ApplicationQuitGate(lifecycle, () => app.quit());
+  app.on("before-quit", (event) => quitGate.handle(event));
+  app.on("window-all-closed", () => app.quit());
+  void startApplication(lifecycle).catch(async () => {
+    await lifecycle.close();
+    app.exit(1);
+  });
 }
 
-async function startApplication(): Promise<void> {
+async function startApplication(
+  lifecycle: ApplicationLifecycleCoordinator,
+): Promise<void> {
   await app.whenReady();
   installSessionDenials(session.defaultSession);
   registerRendererProtocol();
@@ -57,23 +70,13 @@ async function startApplication(): Promise<void> {
   const dataDir = path.join(app.getPath("userData"), "service");
   await mkdir(dataDir, { recursive: true });
   const service = await createForgeService(dataDir);
+  lifecycle.ownForge(service);
   const codex = await createCodexBridge(service, dataDir);
+  lifecycle.ownCodex(codex);
   const window = createMainWindow();
   const unregisterIpc = registerStudioIpc(ipcMain, window, service, codex);
+  lifecycle.ownIpc(unregisterIpc);
   await window.loadURL(STUDIO_ENTRY_URL);
-
-  let shuttingDown = false;
-  app.on("before-quit", (event) => {
-    if (shuttingDown) {
-      return;
-    }
-    event.preventDefault();
-    shuttingDown = true;
-    unregisterIpc();
-    void Promise.allSettled([codex.stop(), service.stop()]).finally(() => app.quit());
-  });
-
-  app.on("window-all-closed", () => app.quit());
 }
 
 async function createCodexBridge(
