@@ -175,16 +175,43 @@ class StudioService:
         }
 
     def _changeset_approve(self, params: dict[str, Any]) -> dict[str, Any]:
-        _closed_params(params, allowed={"changeset_id"}, required={"changeset_id"})
-        return {"changeset": self.changesets.approve(params["changeset_id"])}
+        _closed_params(
+            params,
+            allowed={"changeset_id", "expected_review_sha256"},
+            required={"changeset_id"},
+        )
+        return {
+            "changeset": self.changesets.approve(
+                params["changeset_id"],
+                expected_review_sha256=params.get("expected_review_sha256"),
+            )
+        }
 
     def _changeset_reject(self, params: dict[str, Any]) -> dict[str, Any]:
-        _closed_params(params, allowed={"changeset_id"}, required={"changeset_id"})
-        return {"changeset": self.changesets.reject(params["changeset_id"])}
+        _closed_params(
+            params,
+            allowed={"changeset_id", "expected_review_sha256"},
+            required={"changeset_id"},
+        )
+        return {
+            "changeset": self.changesets.reject(
+                params["changeset_id"],
+                expected_review_sha256=params.get("expected_review_sha256"),
+            )
+        }
 
     def _changeset_apply(self, params: dict[str, Any]) -> dict[str, Any]:
-        _closed_params(params, allowed={"changeset_id"}, required={"changeset_id"})
-        return {"changeset": self.changesets.apply(params["changeset_id"])}
+        _closed_params(
+            params,
+            allowed={"changeset_id", "expected_review_sha256"},
+            required={"changeset_id"},
+        )
+        return {
+            "changeset": self.changesets.apply(
+                params["changeset_id"],
+                expected_review_sha256=params.get("expected_review_sha256"),
+            )
+        }
 
     def _job_create(self, params: dict[str, Any]) -> dict[str, Any]:
         job = self.jobs.create(params)

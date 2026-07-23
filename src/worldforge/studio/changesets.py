@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
+import hmac
 import os
 import sqlite3
 import stat
@@ -16,6 +17,12 @@ from typing import Any
 from isoworld.content.file_stat import FileStat, descriptor_file_stat, path_file_stat
 from isoworld.content.portability import portable_relative_path
 from worldforge.asset_io import AssetContractError, encoded_json, read_json_object
+from worldforge.studio.changeset_review import (
+    ReviewDiffError,
+    build_changeset_diff,
+    compute_review_sha256,
+    unavailable_v1_diff,
+)
 from worldforge.studio.contracts import studio_source_path, validate_studio_changeset
 from worldforge.studio.errors import (
     StudioContractError,
@@ -34,7 +41,8 @@ MAX_CHANGE_FILE_BYTES = 16 * 1024 * 1024
 MAX_CHANGESET_BYTES = 64 * 1024 * 1024
 MAX_CHANGESET_OPERATIONS = 256
 JOURNAL_FORMAT = "rpg-world-forge.studio_apply_journal"
-JOURNAL_VERSION = 1
+JOURNAL_VERSION = 2
+LEGACY_JOURNAL_VERSION = 1
 _POSIX_PINNED_DIRECTORY_IO = os.name == "posix" and all(
     function in os.supports_dir_fd for function in (os.link, os.open, os.stat, os.unlink)
 )
@@ -761,6 +769,7 @@ class ChangesetManager:
             self.store, params["workspace_id"]
         )
         public_operations: list[dict[str, Any]] = []
+        snapshots: list[tuple[bytes | None, bytes | None]] = []
         seen: set[str] = set()
         total = 0
         try:
@@ -768,21 +777,20 @@ class ChangesetManager:
                 if _identity(path_file_stat(world_root)) != expected_identity:
                     raise conflict("World root identity changed while staging changeset")
                 for index, raw in enumerate(operations):
-                    public, payload = self._capture_operation(world_root, raw, index=index)
+                    public, snapshot = self._capture_operation(world_root, raw, index=index)
                     folded = public["path"].casefold()
                     if folded in seen:
                         raise invalid_request(
                             "Changeset operations contain an NFC/casefold collision"
                         )
                     seen.add(folded)
-                    total += public["size"]
+                    total += public["base_size"] + public["size"]
                     if total > MAX_CHANGESET_BYTES:
                         raise invalid_request(
-                            f"Changeset proposed content exceeds {MAX_CHANGESET_BYTES} bytes"
+                            f"Changeset retained content exceeds {MAX_CHANGESET_BYTES} bytes"
                         )
-                    if payload is not None:
-                        self._store_blob(payload, public["proposed_sha256"])
                     public_operations.append(public)
+                    snapshots.append(snapshot)
         except StudioError:
             raise
         except ValueError as exc:
@@ -790,18 +798,29 @@ class ChangesetManager:
         timestamp = utc_now()
         record = {
             "format": "rpg-world-forge.studio_changeset",
-            "format_version": 1,
+            "format_version": 2,
             "changeset_id": params.get("changeset_id") or uuid.uuid4().hex,
             "workspace_id": workspace["workspace_id"],
             "status": "staged",
             "operations": public_operations,
+            "review_sha256": compute_review_sha256(public_operations),
             "created_at": timestamp,
             "updated_at": timestamp,
         }
         try:
             validate_studio_changeset(record)
+            build_changeset_diff(record, snapshots)
         except StudioContractError as exc:
             raise invalid_request(str(exc)) from exc
+        except ReviewDiffError as exc:
+            raise invalid_request(str(exc)) from exc
+        for public, (base_payload, proposed_payload) in zip(
+            public_operations, snapshots, strict=True
+        ):
+            if base_payload is not None:
+                self._store_blob(base_payload, public["base_sha256"])
+            if proposed_payload is not None:
+                self._store_blob(proposed_payload, public["proposed_sha256"])
         try:
             with self.store.connection:
                 self.store.connection.execute(
@@ -828,7 +847,7 @@ class ChangesetManager:
 
     def _capture_operation(
         self, world_root: Path, raw: object, *, index: int
-    ) -> tuple[dict[str, Any], bytes | None]:
+    ) -> tuple[dict[str, Any], tuple[bytes | None, bytes | None]]:
         if not isinstance(raw, dict):
             raise invalid_request(f"changeset operation {index} must be an object")
         kind = raw.get("operation")
@@ -842,6 +861,7 @@ class ChangesetManager:
         info = _path_info(target)
         if info is not None and (_is_link_or_reparse(info) or not stat.S_ISREG(info.st_mode)):
             raise invalid_request(f"Changeset target is not a regular file: {relative}")
+        base_payload: bytes | None = None
         base: str | None
         if kind == "create":
             if info is not None:
@@ -878,10 +898,11 @@ class ChangesetManager:
                 "path": relative.as_posix(),
                 "operation": kind,
                 "base_sha256": base,
+                "base_size": 0 if base_payload is None else len(base_payload),
                 "proposed_sha256": proposed,
                 "size": 0 if payload is None else len(payload),
             },
-            payload,
+            (base_payload, payload),
         )
 
     def _store_blob(self, payload: bytes, digest: object) -> None:
@@ -938,6 +959,43 @@ class ChangesetManager:
             raise not_found(f"Changeset {changeset_id} was not found")
         return self._validated_row(row)
 
+    def diff(self, changeset_id: object) -> dict[str, Any]:
+        """Return immutable exact review evidence derived only from owned CAS bytes."""
+
+        record = self.get(changeset_id)
+        if record["format_version"] == 1:
+            return unavailable_v1_diff(record)
+        snapshots: list[tuple[bytes | None, bytes | None]] = []
+        for operation in record["operations"]:
+            base = (
+                None
+                if operation["base_sha256"] is None
+                else self._read_blob(operation["base_sha256"], operation["base_size"])
+            )
+            proposed = (
+                None
+                if operation["proposed_sha256"] is None
+                else self._read_blob(operation["proposed_sha256"], operation["size"])
+            )
+            snapshots.append((base, proposed))
+        try:
+            return build_changeset_diff(record, snapshots)
+        except ReviewDiffError as exc:
+            raise conflict(f"Changeset review evidence is invalid: {exc}") from exc
+
+    def _read_blob(self, digest: str, size: int) -> bytes:
+        try:
+            payload, _identity_value = _safe_file_snapshot(
+                self.store.blob_path(digest),
+                context="changeset blob",
+                require_standalone=True,
+            )
+        except StudioError as exc:
+            raise conflict(f"Could not read retained changeset blob: {exc.message}") from exc
+        if len(payload) != size or not hmac.compare_digest(_hash(payload), digest):
+            raise conflict("Retained changeset blob does not match its digest and size")
+        return payload
+
     def list(
         self, *, workspace_id: object = None, status: object = None, limit: object = 100
     ) -> list[dict[str, Any]]:
@@ -945,7 +1003,7 @@ class ChangesetManager:
             WorkspaceManager(self.store).get(workspace_id)
         if status is not None and (
             not isinstance(status, str)
-            or status not in {"staged", "approved", "rejected", "applied"}
+            or status not in {"staged", "approved", "applying", "rejected", "applied"}
         ):
             raise invalid_request("changeset status filter is unknown")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1000:
@@ -965,16 +1023,36 @@ class ChangesetManager:
         ).fetchall()
         return [self._validated_row(row) for row in rows]
 
-    def approve(self, changeset_id: object) -> dict[str, Any]:
-        return self._set_status(changeset_id, expected={"staged"}, status="approved")
+    def approve(
+        self, changeset_id: object, *, expected_review_sha256: object = None
+    ) -> dict[str, Any]:
+        return self._set_status(
+            changeset_id,
+            expected={"staged"},
+            status="approved",
+            expected_review_sha256=expected_review_sha256,
+        )
 
-    def reject(self, changeset_id: object) -> dict[str, Any]:
-        return self._set_status(changeset_id, expected={"staged", "approved"}, status="rejected")
+    def reject(
+        self, changeset_id: object, *, expected_review_sha256: object = None
+    ) -> dict[str, Any]:
+        return self._set_status(
+            changeset_id,
+            expected={"staged", "approved"},
+            status="rejected",
+            expected_review_sha256=expected_review_sha256,
+        )
 
     def _set_status(
-        self, changeset_id: object, *, expected: set[str], status: str
+        self,
+        changeset_id: object,
+        *,
+        expected: set[str],
+        status: str,
+        expected_review_sha256: object,
     ) -> dict[str, Any]:
         record = self.get(changeset_id)
+        self._verify_expected_review(record, expected_review_sha256)
         if record["status"] not in expected:
             raise invalid_state(f"Changeset cannot transition from {record['status']} to {status}")
         updated = {**record, "status": status, "updated_at": utc_now()}
@@ -996,8 +1074,28 @@ class ChangesetManager:
             )
         return updated
 
-    def apply(self, changeset_id: object) -> dict[str, Any]:
+    @staticmethod
+    def _verify_expected_review(record: dict[str, Any], expected_review_sha256: object) -> None:
+        if record["format_version"] == 1:
+            if expected_review_sha256 is not None:
+                raise invalid_request("Legacy changesets do not have expected_review_sha256")
+            return
+        if (
+            not isinstance(expected_review_sha256, str)
+            or len(expected_review_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in expected_review_sha256)
+        ):
+            raise invalid_request(
+                "expected_review_sha256 must be the reviewed lowercase SHA-256 digest"
+            )
+        if not hmac.compare_digest(expected_review_sha256, record["review_sha256"]):
+            raise conflict("Changeset review hash changed before the requested action")
+
+    def apply(
+        self, changeset_id: object, *, expected_review_sha256: object = None
+    ) -> dict[str, Any]:
         record = self.get(changeset_id)
+        self._verify_expected_review(record, expected_review_sha256)
         if record["status"] != "approved":
             raise invalid_state("Only an approved changeset can be applied")
         _workspace, world_root, expected_identity = _verified_world(
@@ -1006,11 +1104,12 @@ class ChangesetManager:
         journal_path = self.store.journals_dir / f"{record['changeset_id']}.json"
         if journal_path.exists() or journal_path.is_symlink():
             raise conflict("Changeset already has a pending apply journal")
+        claimed = self._claim_apply(record)
         try:
             with exclusive_world_lifecycle(world_root, error_type=ValueError):
                 if _identity(path_file_stat(world_root)) != expected_identity:
                     raise conflict("World root identity changed while applying changeset")
-                journal = self._prepare_journal(record, world_root, expected_identity)
+                journal = self._prepare_journal(claimed, world_root, expected_identity)
                 with _pinned_operation_parents(journal, world_root) as parents:
                     try:
                         self._write_journal(journal_path, journal)
@@ -1044,23 +1143,91 @@ class ChangesetManager:
                                 "internal_error",
                                 "Changeset apply failed and durable recovery is required",
                             ) from rollback_exc
-                        with self.store.connection:
-                            self.store.record_event(
-                                workspace_id=record["workspace_id"],
-                                topic="changeset.apply_rolled_back",
-                                entity_type="changeset",
-                                entity_id=record["changeset_id"],
-                                payload={},
-                            )
+                        self._restore_apply_claim(
+                            claimed,
+                            topic="changeset.apply_rolled_back",
+                            payload={"journal_state": journal["state"]},
+                        )
                         if isinstance(exc, StudioError):
                             raise exc
                         raise StudioError(
                             "internal_error", "Changeset apply failed and was rolled back"
                         ) from exc
         except StudioError:
+            if not journal_path.exists() and not journal_path.is_symlink():
+                self._restore_apply_claim(
+                    claimed,
+                    topic="changeset.apply_claim_released",
+                    payload={"reason": "journal_not_published"},
+                )
             raise
         except ValueError as exc:
+            if not journal_path.exists() and not journal_path.is_symlink():
+                self._restore_apply_claim(
+                    claimed,
+                    topic="changeset.apply_claim_released",
+                    payload={"reason": "journal_not_published"},
+                )
             raise conflict(str(exc)) from exc
+        except Exception as exc:
+            if not journal_path.exists() and not journal_path.is_symlink():
+                self._restore_apply_claim(
+                    claimed,
+                    topic="changeset.apply_claim_released",
+                    payload={"reason": "journal_not_published"},
+                )
+            raise StudioError("internal_error", "Changeset apply failed") from exc
+
+    def _claim_apply(self, record: dict[str, Any]) -> dict[str, Any]:
+        updated = {**record, "status": "applying", "updated_at": utc_now()}
+        with self.store.connection:
+            cursor = self.store.connection.execute(
+                "UPDATE changesets SET status = 'applying', record_json = ? "
+                "WHERE changeset_id = ? AND status = 'approved'",
+                (encode_json(updated), record["changeset_id"]),
+            )
+            if cursor.rowcount != 1:
+                raise conflict("Changeset state changed before the apply claim")
+            self.store.record_event(
+                workspace_id=record["workspace_id"],
+                topic="changeset.applying",
+                entity_type="changeset",
+                entity_id=record["changeset_id"],
+                payload={"previous_status": "approved"},
+                created_at=updated["updated_at"],
+            )
+        return updated
+
+    def _restore_apply_claim(
+        self,
+        claimed: dict[str, Any],
+        *,
+        topic: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        current = self.get(claimed["changeset_id"])
+        if current["status"] == "approved":
+            return current
+        if current["status"] != "applying":
+            raise conflict("Changeset apply claim changed before safe release")
+        updated = {**current, "status": "approved", "updated_at": utc_now()}
+        with self.store.connection:
+            cursor = self.store.connection.execute(
+                "UPDATE changesets SET status = 'approved', record_json = ? "
+                "WHERE changeset_id = ? AND status = 'applying'",
+                (encode_json(updated), current["changeset_id"]),
+            )
+            if cursor.rowcount != 1:
+                raise conflict("Changeset apply claim changed before safe release")
+            self.store.record_event(
+                workspace_id=current["workspace_id"],
+                topic=topic,
+                entity_type="changeset",
+                entity_id=current["changeset_id"],
+                payload=payload,
+                created_at=updated["updated_at"],
+            )
+        return updated
 
     def _prepare_journal(
         self,
@@ -1088,7 +1255,9 @@ class ChangesetManager:
                     context=f"changeset base {relative}",
                     require_standalone=True,
                 )
-                if _hash(payload) != public["base_sha256"]:
+                if _hash(payload) != public["base_sha256"] or (
+                    record["format_version"] == 2 and len(payload) != public["base_size"]
+                ):
                     raise conflict(f"Changeset base hash changed: {relative}")
             operations.append(
                 {
@@ -1118,6 +1287,8 @@ class ChangesetManager:
         return {
             "format": JOURNAL_FORMAT,
             "format_version": JOURNAL_VERSION,
+            "changeset_format_version": record["format_version"],
+            "review_sha256": record.get("review_sha256"),
             "changeset_id": record["changeset_id"],
             "workspace_id": record["workspace_id"],
             "world_root": str(world_root),
@@ -1366,10 +1537,10 @@ class ChangesetManager:
                         require_standalone=True,
                         require_utf8=False,
                     )
-                    if stage_identity is not None and (
-                        current_identity != stage_identity
-                        or _hash(payload) != operation["proposed_sha256"]
+                    if (
+                        _hash(payload) != operation["proposed_sha256"]
                         or len(payload) != operation["size"]
+                        or (stage_identity is not None and current_identity != stage_identity)
                     ):
                         raise conflict("Changeset stage changed before cleanup")
                     parent.unlink(stage_name)
@@ -1385,13 +1556,13 @@ class ChangesetManager:
         self._validate_committed(journal, parents)
         _verify_pinned_parents(parents)
         record = self.get(journal["changeset_id"])
-        if record["status"] == "approved":
+        if record["status"] == "applying":
             updated = {**record, "status": "applied", "updated_at": utc_now()}
             with self.store.connection:
                 _verify_pinned_parents(parents)
                 cursor = self.store.connection.execute(
                     "UPDATE changesets SET status = 'applied', record_json = ? "
-                    "WHERE changeset_id = ? AND status = 'approved'",
+                    "WHERE changeset_id = ? AND status = 'applying'",
                     (encode_json(updated), record["changeset_id"]),
                 )
                 if cursor.rowcount != 1:
@@ -1456,16 +1627,19 @@ class ChangesetManager:
                 journal = read_json_object(journal_path, limit=MAX_CHANGESET_BYTES)
             except AssetContractError as exc:
                 raise StudioError("internal_error", "Studio apply journal is invalid") from exc
-            if (
-                journal.get("format") != JOURNAL_FORMAT
-                or journal.get("format_version") != JOURNAL_VERSION
-                or not isinstance(journal.get("changeset_id"), str)
-                or not isinstance(journal.get("workspace_id"), str)
-                or not isinstance(journal.get("operations"), list)
-                or journal.get("state")
-                not in {"preparing", "prepared", "applying", "files_committed"}
-            ):
-                raise StudioError("internal_error", "Studio apply journal has an unsupported shape")
+            record = self._journal_record(journal_path, journal)
+            self._validate_recovery_state(record, journal)
+            if journal["format_version"] == LEGACY_JOURNAL_VERSION:
+                if record["status"] == "approved":
+                    record = self._claim_apply(record)
+                elif record["status"] not in {"applying", "applied"}:
+                    raise StudioError(
+                        "internal_error", "Legacy apply journal has incompatible changeset state"
+                    )
+            elif record["status"] not in {"applying", "applied"}:
+                raise StudioError(
+                    "internal_error", "Apply journal has incompatible changeset state"
+                )
             workspace, world_root, expected = _verified_world(self.store, journal["workspace_id"])
             if journal["world_root"] != str(world_root) or journal["world_identity"] != list(
                 expected
@@ -1490,20 +1664,157 @@ class ChangesetManager:
                         else:
                             self._rollback_journal(journal, parents)
                             self._remove_journal(journal_path)
-                            with self.store.connection:
-                                self.store.record_event(
-                                    workspace_id=workspace["workspace_id"],
-                                    topic="changeset.recovered_rollback",
-                                    entity_type="changeset",
-                                    entity_id=journal["changeset_id"],
-                                    payload={},
-                                )
+                            self._restore_apply_claim(
+                                record,
+                                topic="changeset.recovered_rollback",
+                                payload={"journal_state": journal["state"]},
+                            )
             except StudioError:
                 raise
             except ValueError as exc:
                 raise StudioError(
                     "conflict", f"Could not recover Studio apply journal: {exc}"
                 ) from exc
+        self._recover_orphaned_apply_claims()
+
+    @staticmethod
+    def _validate_recovery_state(record: dict[str, Any], journal: dict[str, Any]) -> None:
+        if record["status"] == "applied" and journal["state"] != "files_committed":
+            raise StudioError(
+                "internal_error", "Applied changeset has an incompatible journal state"
+            )
+
+    def _journal_record(self, journal_path: Path, journal: dict[str, Any]) -> dict[str, Any]:
+        common_fields = {
+            "format",
+            "format_version",
+            "changeset_id",
+            "workspace_id",
+            "world_root",
+            "world_identity",
+            "state",
+            "operations",
+        }
+        version = journal.get("format_version")
+        expected_fields = (
+            common_fields
+            if version == LEGACY_JOURNAL_VERSION
+            else common_fields | {"changeset_format_version", "review_sha256"}
+        )
+        if (
+            journal.get("format") != JOURNAL_FORMAT
+            or version not in {LEGACY_JOURNAL_VERSION, JOURNAL_VERSION}
+            or set(journal) != expected_fields
+            or not isinstance(journal.get("changeset_id"), str)
+            or not isinstance(journal.get("workspace_id"), str)
+            or not isinstance(journal.get("world_root"), str)
+            or not self._journal_identity(journal.get("world_identity"), nullable=False)
+            or not isinstance(journal.get("operations"), list)
+            or journal.get("state") not in {"preparing", "prepared", "applying", "files_committed"}
+        ):
+            raise StudioError("internal_error", "Studio apply journal has an unsupported shape")
+        if journal_path.name != f"{journal['changeset_id']}.json":
+            raise StudioError("internal_error", "Studio apply journal path is inconsistent")
+        record = self.get(journal["changeset_id"])
+        if record["workspace_id"] != journal["workspace_id"]:
+            raise StudioError("internal_error", "Studio apply journal workspace is inconsistent")
+        if version == LEGACY_JOURNAL_VERSION:
+            if record["format_version"] != 1:
+                raise StudioError(
+                    "internal_error", "Legacy apply journal cannot identify this changeset"
+                )
+        elif journal["changeset_format_version"] != record["format_version"] or journal[
+            "review_sha256"
+        ] != record.get("review_sha256"):
+            raise StudioError("internal_error", "Studio apply journal review identity changed")
+        operations = journal["operations"]
+        if len(operations) != len(record["operations"]):
+            raise StudioError("internal_error", "Studio apply journal operations changed")
+        private_fields = {
+            "parent_identity",
+            "base_identity",
+            "stage_name",
+            "stage_identity",
+            "rollback_name",
+            "applied",
+        }
+        for index, (item, public) in enumerate(zip(operations, record["operations"], strict=True)):
+            if not isinstance(item, dict) or set(item) != set(public) | private_fields:
+                raise StudioError("internal_error", "Studio apply journal operation shape changed")
+            if any(item[key] != value for key, value in public.items()):
+                raise StudioError(
+                    "internal_error", "Studio apply journal operation identity changed"
+                )
+            if (
+                not self._journal_identity(item["parent_identity"], nullable=False)
+                or not self._journal_identity(item["base_identity"], nullable=True)
+                or not self._journal_identity(item["stage_identity"], nullable=True)
+                or not isinstance(item["applied"], bool)
+                or not self._journal_temporary_name(
+                    item["stage_name"], journal["changeset_id"], index, "stage"
+                )
+                or not self._journal_temporary_name(
+                    item["rollback_name"], journal["changeset_id"], index, "rollback"
+                )
+            ):
+                raise StudioError(
+                    "internal_error", "Studio apply journal operation state is invalid"
+                )
+            kind = public["operation"]
+            if (
+                (kind == "create" and item["base_identity"] is not None)
+                or (kind != "create" and item["base_identity"] is None)
+                or (kind == "delete" and item["stage_name"] is not None)
+                or (kind != "delete" and item["stage_name"] is None)
+                or (kind == "create" and item["rollback_name"] is not None)
+                or (kind != "create" and item["rollback_name"] is None)
+            ):
+                raise StudioError(
+                    "internal_error", "Studio apply journal operation lifecycle is invalid"
+                )
+        return record
+
+    @staticmethod
+    def _journal_identity(value: object, *, nullable: bool) -> bool:
+        if nullable and value is None:
+            return True
+        return (
+            isinstance(value, list)
+            and len(value) == 2
+            and all(
+                isinstance(part, int) and not isinstance(part, bool) and part >= 0 for part in value
+            )
+        )
+
+    @staticmethod
+    def _journal_temporary_name(value: object, changeset_id: str, index: int, suffix: str) -> bool:
+        if value is None:
+            return True
+        if not isinstance(value, str):
+            return False
+        prefix = f".worldforge-studio-{changeset_id}-{index}-"
+        ending = f".{suffix}"
+        if not value.startswith(prefix) or not value.endswith(ending):
+            return False
+        nonce = value[len(prefix) : -len(ending)]
+        return len(nonce) == 32 and all(character in "0123456789abcdef" for character in nonce)
+
+    def _recover_orphaned_apply_claims(self) -> None:
+        rows = self.store.connection.execute(
+            "SELECT record_json FROM changesets WHERE status = 'applying' ORDER BY changeset_id"
+        ).fetchall()
+        for row in rows:
+            record = self._validated_row(row)
+            journal_path = self.store.journals_dir / f"{record['changeset_id']}.json"
+            if journal_path.exists() or journal_path.is_symlink():
+                raise StudioError(
+                    "internal_error", "Applying changeset retained an unprocessed journal"
+                )
+            self._restore_apply_claim(
+                record,
+                topic="changeset.recovered_orphan_claim",
+                payload={"reason": "journal_not_published"},
+            )
 
     @staticmethod
     def _write_journal(path: Path, journal: dict[str, Any]) -> None:

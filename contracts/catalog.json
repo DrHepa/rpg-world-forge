@@ -856,7 +856,8 @@
       "docs": [
         "README.md",
         "docs/ARCHITECTURE.md",
-        "docs/decisions/0011-forge-studio-application-service.md"
+        "docs/decisions/0011-forge-studio-application-service.md",
+        "docs/decisions/0015-studio-reviewable-changesets.md"
       ],
       "fixtures": [],
       "format": "rpg-world-forge.studio_changeset",
@@ -864,15 +865,18 @@
       "kind": "json-schema",
       "m5_phases": [],
       "python_symbols": [
+        "worldforge.studio.changeset_review:build_changeset_diff",
         "worldforge.studio.contracts:validate_studio_changeset"
       ],
       "schema": "schemas/studio-changeset.schema.json",
       "tests": [
+        "tests/test_studio_changeset_review.py",
         "tests/test_studio_contracts.py",
-        "tests/test_studio_changesets.py"
+        "tests/test_studio_changesets.py",
+        "tests/test_studio_changesets_v2.py"
       ],
-      "title": "Forge Studio staged file changeset v1",
-      "version": 1
+      "title": "Forge Studio reviewable file changeset v2",
+      "version": 2
     },
     {
       "cli_commands": [],

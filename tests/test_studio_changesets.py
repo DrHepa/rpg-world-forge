@@ -55,8 +55,17 @@ class StudioChangesetTests(unittest.TestCase):
                     }
                 )
                 self.assertEqual("staged", staged["status"])
-                self.assertEqual("approved", manager.approve(staged["changeset_id"])["status"])
-                applied = manager.apply(staged["changeset_id"])
+                self.assertEqual(
+                    "approved",
+                    manager.approve(
+                        staged["changeset_id"],
+                        expected_review_sha256=staged["review_sha256"],
+                    )["status"],
+                )
+                applied = manager.apply(
+                    staged["changeset_id"],
+                    expected_review_sha256=staged["review_sha256"],
+                )
 
                 self.assertEqual("applied", applied["status"])
                 self.assertEqual("new\n", (world / "source/new.txt").read_text(encoding="utf-8"))
@@ -216,10 +225,16 @@ class StudioChangesetTests(unittest.TestCase):
                         ],
                     }
                 )
-                manager.approve(conflict["changeset_id"])
+                manager.approve(
+                    conflict["changeset_id"],
+                    expected_review_sha256=conflict["review_sha256"],
+                )
                 first.write_text("external\n", encoding="utf-8")
                 with self.assertRaisesRegex(StudioError, "base"):
-                    manager.apply(conflict["changeset_id"])
+                    manager.apply(
+                        conflict["changeset_id"],
+                        expected_review_sha256=conflict["review_sha256"],
+                    )
                 self.assertEqual("external\n", first.read_text(encoding="utf-8"))
 
                 first.write_text("first\n", encoding="utf-8")
@@ -240,7 +255,10 @@ class StudioChangesetTests(unittest.TestCase):
                         ],
                     }
                 )
-                manager.approve(staged["changeset_id"])
+                manager.approve(
+                    staged["changeset_id"],
+                    expected_review_sha256=staged["review_sha256"],
+                )
                 original_publish = manager._publish_stage
                 calls = 0
 
@@ -253,7 +271,10 @@ class StudioChangesetTests(unittest.TestCase):
 
                 with patch.object(manager, "_publish_stage", side_effect=fail_second):
                     with self.assertRaisesRegex(StudioError, "rolled back"):
-                        manager.apply(staged["changeset_id"])
+                        manager.apply(
+                            staged["changeset_id"],
+                            expected_review_sha256=staged["review_sha256"],
+                        )
                 self.assertEqual("first\n", first.read_text(encoding="utf-8"))
                 self.assertEqual("second\n", second.read_text(encoding="utf-8"))
             finally:
@@ -278,7 +299,11 @@ class StudioChangesetTests(unittest.TestCase):
                     ],
                 }
             )
-            approved = manager.approve(staged["changeset_id"])
+            approved = manager.approve(
+                staged["changeset_id"],
+                expected_review_sha256=staged["review_sha256"],
+            )
+            approved = manager._claim_apply(approved)
             identity = WorkspaceManager(store).root_identity(workspace_id, "world_root")
             assert identity is not None
             journal_path = store.journals_dir / f"{staged['changeset_id']}.json"
@@ -312,7 +337,11 @@ class StudioChangesetTests(unittest.TestCase):
                         ],
                     }
                 )
-                committed = recovered.approve(committed["changeset_id"])
+                committed = recovered.approve(
+                    committed["changeset_id"],
+                    expected_review_sha256=committed["review_sha256"],
+                )
+                committed = recovered._claim_apply(committed)
                 committed_path = reopened.journals_dir / f"{committed['changeset_id']}.json"
                 with exclusive_world_lifecycle(world):
                     journal = recovered._prepare_journal(committed, world, identity)
@@ -350,7 +379,10 @@ class StudioChangesetTests(unittest.TestCase):
                         ],
                     }
                 )
-                manager.approve(staged["changeset_id"])
+                manager.approve(
+                    staged["changeset_id"],
+                    expected_review_sha256=staged["review_sha256"],
+                )
                 original_write = manager._write_journal
 
                 def fail_after_stage(path: Path, journal: dict[str, object]) -> None:
@@ -365,7 +397,10 @@ class StudioChangesetTests(unittest.TestCase):
 
                 with patch.object(manager, "_write_journal", side_effect=fail_after_stage):
                     with self.assertRaisesRegex(StudioError, "rolled back"):
-                        manager.apply(staged["changeset_id"])
+                        manager.apply(
+                            staged["changeset_id"],
+                            expected_review_sha256=staged["review_sha256"],
+                        )
                 self.assertFalse((world / "source/new.txt").exists())
                 self.assertEqual([], list((world / "source").glob(".worldforge-studio-*")))
                 self.assertEqual([], list(store.journals_dir.glob("*.json")))
@@ -394,7 +429,10 @@ class StudioChangesetTests(unittest.TestCase):
                         ],
                     }
                 )
-                manager.approve(staged["changeset_id"])
+                manager.approve(
+                    staged["changeset_id"],
+                    expected_review_sha256=staged["review_sha256"],
+                )
                 real_open = os.open
                 replaced = False
 
@@ -416,7 +454,10 @@ class StudioChangesetTests(unittest.TestCase):
 
                 with patch("worldforge.studio.changesets.os.open", side_effect=replace_before_open):
                     with self.assertRaisesRegex(StudioError, "directory identity changed"):
-                        manager.apply(staged["changeset_id"])
+                        manager.apply(
+                            staged["changeset_id"],
+                            expected_review_sha256=staged["review_sha256"],
+                        )
 
                 self.assertTrue(replaced)
                 self.assertFalse((parent / "new.txt").exists())
@@ -444,7 +485,10 @@ class StudioChangesetTests(unittest.TestCase):
                         ],
                     }
                 )
-                manager.approve(staged["changeset_id"])
+                manager.approve(
+                    staged["changeset_id"],
+                    expected_review_sha256=staged["review_sha256"],
+                )
                 original_finalize = manager._finalize_committed
 
                 def assert_locked(*args: object, **kwargs: object) -> dict[str, object]:
@@ -452,7 +496,10 @@ class StudioChangesetTests(unittest.TestCase):
                     return original_finalize(*args, **kwargs)
 
                 with patch.object(manager, "_finalize_committed", side_effect=assert_locked):
-                    manager.apply(staged["changeset_id"])
+                    manager.apply(
+                        staged["changeset_id"],
+                        expected_review_sha256=staged["review_sha256"],
+                    )
             finally:
                 store.close()
 

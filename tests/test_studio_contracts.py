@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from worldforge.contract_catalog import audit_contracts, load_contract_catalog
+from worldforge.studio.changeset_review import compute_review_sha256
 from worldforge.studio.contracts import (
     PORTABLE_SOURCE_PATH_FORMAT,
     StudioContractError,
@@ -23,12 +24,23 @@ class StudioContractTests(unittest.TestCase):
     def test_catalog_audits_all_studio_contracts(self) -> None:
         root = Path(__file__).resolve().parents[1]
         result = audit_contracts(root)
-        entries = {entry["id"] for entry in load_contract_catalog(root)["contracts"]}
+        entries = {entry["id"]: entry for entry in load_contract_catalog(root)["contracts"]}
 
         self.assertTrue(
-            {"forge-workspace", "studio-protocol", "studio-changeset", "studio-job"} <= entries
+            {"forge-workspace", "studio-protocol", "studio-changeset", "studio-job"}
+            <= entries.keys()
         )
         self.assertGreaterEqual(result.contracts, 35)
+        changeset = entries["studio-changeset"]
+        self.assertEqual(2, changeset["version"])
+        self.assertEqual("Forge Studio reviewable file changeset v2", changeset["title"])
+        self.assertIn("docs/decisions/0015-studio-reviewable-changesets.md", changeset["docs"])
+        self.assertIn("tests/test_studio_changesets_v2.py", changeset["tests"])
+
+        schema = json.loads((root / changeset["schema"]).read_text(encoding="utf-8"))
+        self.assertEqual([1, 2], schema["properties"]["format_version"]["enum"])
+        self.assertIn("base_size", schema["$defs"]["operation"]["required"])
+        self.assertEqual(2, len(schema["oneOf"]))
 
     def test_workspace_validator_is_closed_and_versioned(self) -> None:
         workspace = {
@@ -72,6 +84,49 @@ class StudioContractTests(unittest.TestCase):
         invalid = {**changeset, "operations": [{**changeset["operations"][0], "size": True}]}
         with self.assertRaisesRegex(StudioContractError, "size"):
             validate_studio_changeset(invalid)
+
+    def test_changeset_validator_reads_v1_and_closes_reviewable_v2(self) -> None:
+        operation = {
+            "path": "source/lore/entry.json",
+            "operation": "replace",
+            "base_sha256": "a" * 64,
+            "base_size": 7,
+            "proposed_sha256": "b" * 64,
+            "size": 9,
+        }
+        changeset = {
+            "format": "rpg-world-forge.studio_changeset",
+            "format_version": 2,
+            "changeset_id": "0123456789abcdef0123456789abcdef",
+            "workspace_id": "workspace_01",
+            "status": "applying",
+            "review_sha256": compute_review_sha256([operation]),
+            "operations": [operation],
+            "created_at": "2026-07-23T12:00:00Z",
+            "updated_at": "2026-07-23T12:00:00Z",
+        }
+
+        self.assertEqual(changeset, validate_studio_changeset(changeset))
+        with self.assertRaisesRegex(StudioContractError, "review_sha256"):
+            validate_studio_changeset({**changeset, "review_sha256": "0" * 64})
+        with self.assertRaisesRegex(StudioContractError, "base_size"):
+            validate_studio_changeset(
+                {
+                    **changeset,
+                    "operations": [
+                        {key: value for key, value in operation.items() if key != "base_size"}
+                    ],
+                }
+            )
+        with self.assertRaisesRegex(StudioContractError, "unknown fields"):
+            validate_studio_changeset({**changeset, "reviewed_by": "assistant"})
+
+        for invalid_version in ([], {}, 2.0, "2", None, True):
+            with (
+                self.subTest(format_version=invalid_version),
+                self.assertRaisesRegex(StudioContractError, "format_version"),
+            ):
+                validate_studio_changeset({**changeset, "format_version": invalid_version})
 
     def test_changeset_validator_matches_every_bounded_schema_relationship(self) -> None:
         operation = {

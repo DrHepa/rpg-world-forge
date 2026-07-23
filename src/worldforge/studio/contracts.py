@@ -7,6 +7,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from isoworld.content.portability import portable_relative_path
+from worldforge.studio.changeset_review import ReviewDiffError, compute_review_sha256
 from worldforge.studio.errors import ERROR_CODES, StudioContractError
 
 WORKSPACE_FORMAT = "rpg-world-forge.forge_workspace"
@@ -26,7 +27,7 @@ TIMESTAMP_PATTERN = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$"
 )
 
-CHANGESET_STATES = frozenset({"staged", "approved", "rejected", "applied"})
+CHANGESET_STATES = frozenset({"staged", "approved", "applying", "rejected", "applied"})
 JOB_STATES = frozenset(
     {
         "queued",
@@ -593,7 +594,7 @@ def validate_forge_workspace(value: object) -> dict[str, Any]:
 
 def validate_studio_changeset(value: object) -> dict[str, Any]:
     changeset = _object(value, "changeset")
-    required = {
+    common = {
         "format",
         "format_version",
         "changeset_id",
@@ -603,11 +604,13 @@ def validate_studio_changeset(value: object) -> dict[str, Any]:
         "created_at",
         "updated_at",
     }
+    version = changeset.get("format_version")
+    if isinstance(version, bool) or not isinstance(version, int) or version not in {1, 2}:
+        raise StudioContractError("changeset format_version must be 1 or 2")
+    required = common | ({"review_sha256"} if version == 2 else set())
     _closed(changeset, required, "changeset")
     if changeset["format"] != CHANGESET_FORMAT:
         raise StudioContractError("changeset format is unsupported")
-    if isinstance(changeset["format_version"], bool) or changeset["format_version"] != 1:
-        raise StudioContractError("changeset format_version must be 1")
     _identifier(changeset["changeset_id"], "changeset/changeset_id", ENTITY_ID_PATTERN)
     _identifier(changeset["workspace_id"], "changeset/workspace_id", WORKSPACE_ID_PATTERN)
     if not isinstance(changeset["status"], str) or changeset["status"] not in CHANGESET_STATES:
@@ -624,9 +627,18 @@ def validate_studio_changeset(value: object) -> dict[str, Any]:
     path_keys: set[tuple[str, ...]] = set()
     for index, item in enumerate(operations):
         operation = _object(item, f"changeset/operations/{index}")
+        operation_fields = {
+            "path",
+            "operation",
+            "base_sha256",
+            "proposed_sha256",
+            "size",
+        }
+        if version == 2:
+            operation_fields.add("base_size")
         _closed(
             operation,
-            {"path", "operation", "base_sha256", "proposed_sha256", "size"},
+            operation_fields,
             f"changeset/operations/{index}",
         )
         path_value = _string(operation["path"], f"changeset/operations/{index}/path")
@@ -644,10 +656,23 @@ def validate_studio_changeset(value: object) -> dict[str, Any]:
             raise StudioContractError(f"changeset/operations/{index}/operation is unknown")
         base = operation["base_sha256"]
         proposed = operation["proposed_sha256"]
+        base_size = operation.get("base_size", 0)
+        if version == 2 and (
+            isinstance(base_size, bool)
+            or not isinstance(base_size, int)
+            or not 0 <= base_size <= MAX_CHANGE_FILE_BYTES
+        ):
+            raise StudioContractError(
+                f"changeset/operations/{index}/base_size must be from 0 to {MAX_CHANGE_FILE_BYTES}"
+            )
         if kind == "create":
             if base is not None:
                 raise StudioContractError(
                     f"changeset/operations/{index}/base_sha256 must be null for create"
+                )
+            if version == 2 and base_size != 0:
+                raise StudioContractError(
+                    f"changeset/operations/{index}/base_size must be zero for create"
                 )
             _sha256(proposed, f"changeset/operations/{index}/proposed_sha256")
         elif kind == "replace":
@@ -670,6 +695,14 @@ def validate_studio_changeset(value: object) -> dict[str, Any]:
             )
         if kind == "delete" and size != 0:
             raise StudioContractError(f"changeset/operations/{index}/size must be zero for delete")
+    if version == 2:
+        review_sha256 = _sha256(changeset["review_sha256"], "changeset/review_sha256")
+        try:
+            expected_review_sha256 = compute_review_sha256(operations)
+        except ReviewDiffError as exc:  # pragma: no cover - operations were validated above
+            raise StudioContractError("changeset/review_sha256 could not be computed") from exc
+        if review_sha256 != expected_review_sha256:
+            raise StudioContractError("changeset/review_sha256 does not match operations")
     _timestamp(changeset["created_at"], "changeset/created_at")
     _timestamp(changeset["updated_at"], "changeset/updated_at")
     return changeset

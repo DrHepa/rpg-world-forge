@@ -8,8 +8,10 @@ from pathlib import Path
 
 from worldforge.repository_boundary import FORGE_ROOT
 from worldforge.scaffold import create_world_project
+from worldforge.studio.errors import StudioError
 from worldforge.studio.jsonio import MAX_NDJSON_LINE_BYTES, decode_ndjson_object
-from worldforge.studio.service import serve
+from worldforge.studio.service import StudioService, serve
+from worldforge.studio.storage import StudioStore
 
 
 class StudioServiceTests(unittest.TestCase):
@@ -176,6 +178,67 @@ class StudioServiceTests(unittest.TestCase):
                 self.assertEqual("error", responses[index]["kind"])
                 self.assertEqual("invalid_request", responses[index]["error"]["code"])
                 self.assertNotIn("Traceback", json.dumps(responses[index]))
+
+    def test_changeset_actions_forward_the_reviewed_v2_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            world = temp / "world"
+            create_world_project(world, world_id="studio_world", title="Studio", language="en")
+            with StudioStore(temp / "data") as store:
+                service = StudioService(store)
+
+                def request(
+                    request_id: str, method: str, params: dict[str, object]
+                ) -> dict[str, object]:
+                    return service.handle(
+                        {
+                            "protocol": "rpg-world-forge.studio_protocol",
+                            "protocol_version": 1,
+                            "kind": "request",
+                            "request_id": request_id,
+                            "method": method,
+                            "params": params,
+                        }
+                    )
+
+                request(
+                    "register",
+                    "workspace.register",
+                    {
+                        "workspace_id": "workspace_01",
+                        "forge_root": str(FORGE_ROOT),
+                        "world_root": str(world),
+                    },
+                )
+                created = request(
+                    "create",
+                    "changeset.create",
+                    {
+                        "workspace_id": "workspace_01",
+                        "operations": [
+                            {
+                                "path": "source/new.txt",
+                                "operation": "create",
+                                "content": "new\n",
+                            }
+                        ],
+                    },
+                )["result"]["changeset"]
+                with self.assertRaisesRegex(StudioError, "expected_review_sha256"):
+                    request(
+                        "missing-review",
+                        "changeset.approve",
+                        {"changeset_id": created["changeset_id"]},
+                    )
+                approved = request(
+                    "approve",
+                    "changeset.approve",
+                    {
+                        "changeset_id": created["changeset_id"],
+                        "expected_review_sha256": created["review_sha256"],
+                    },
+                )["result"]["changeset"]
+                self.assertEqual("approved", approved["status"])
 
 
 if __name__ == "__main__":

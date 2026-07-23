@@ -79,20 +79,33 @@ repository. Optional game and bundle roots must pass their existing standalone
 boundary inspectors. Symlinked roots, repeated filesystem identities,
 casefold/NFC aliases, and nested or overlapping responsibilities are rejected.
 
-Studio changesets are not arbitrary filesystem patches. Version 1 permits
-creation, replacement, or deletion of standalone UTF-8 regular files only
-beneath `source/`, with portable paths and existing parent directories. Each
-operation captures the exact base SHA-256 or absence and stores proposed bytes
-by SHA-256 outside the repository. Approval and apply are separate state
-transitions. Apply rechecks roots, parents, link counts, identities, hashes, and
-base state while holding the existing world lifecycle lock. The public path
+Studio changesets are not arbitrary filesystem patches. New version 2 records
+permit creation, replacement, or deletion of standalone UTF-8 regular files
+only beneath `source/`, with portable paths and existing parent directories.
+Each operation retains exact base and proposed snapshots, when present, by
+SHA-256 outside the repository. A canonical review hash commits to the ordered
+path, operation, hashes, and byte sizes. Exact bounded text hunks and optional
+strict-JSON Pointer changes are reconstructed only from those owned snapshots;
+they never reopen the mutable workspace. Version 1 records remain readable and
+actionable, but expose a typed unavailable review because their base bytes were
+not retained.
+
+Approval and apply are separate state transitions. Every v2 action must echo
+the exact reviewed hash. Apply atomically claims the durable `applying` state
+before publishing a journal or touching source files, which blocks rejection
+and concurrent application. Apply rechecks roots, parents, link counts,
+identities, hashes, sizes, and base state while holding the existing world
+lifecycle lock. The public path
 schema names the `rpg-world-forge-portable-source-path` format and carries the
 NFC, traversal, reserved-name, trailing-dot/space, and UTF-8 component limit
 policy consumed by the shared Python validator. POSIX mutations are relative to
 a verified directory-descriptor chain; Windows holds no-delete handles for the
 entire directory chain. Visible identities are rechecked through the durable
-file and SQLite commit. Journal intent,
-including every reserved stage name, is durable before a stage is created.
+file and SQLite commit. Version 2 journal intent binds the changeset version,
+review hash, and ordered operations; every reserved stage name is durable before
+a stage is created. Startup validates that identity before recovery and releases
+an orphaned `applying` claim only when no journal was published, the point before
+which source mutation is impossible.
 Same-directory exclusive link/unlink publication and the identity/hash journal
 provide crash recovery and rollback. POSIX flushes file and directory metadata;
 Windows uses write-through journal replacement plus `FlushFileBuffers` on the

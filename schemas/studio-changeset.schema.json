@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rpg-world-forge.local/schemas/studio-changeset.schema.json",
-  "title": "Forge Studio staged file changeset v1",
+  "title": "Forge Studio reviewable file changeset v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,19 +16,35 @@
   ],
   "properties": {
     "format": {"const": "rpg-world-forge.studio_changeset"},
-    "format_version": {"const": 1},
+    "format_version": {"enum": [1, 2]},
     "changeset_id": {"$ref": "#/$defs/entityId"},
     "workspace_id": {"$ref": "#/$defs/workspaceId"},
-    "status": {"enum": ["staged", "approved", "rejected", "applied"]},
+    "status": {"enum": ["staged", "approved", "applying", "rejected", "applied"]},
     "operations": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 256,
-      "items": {"$ref": "#/$defs/operation"}
+      "maxItems": 256
     },
+    "review_sha256": {"$ref": "#/$defs/sha256"},
     "created_at": {"$ref": "#/$defs/timestamp"},
     "updated_at": {"$ref": "#/$defs/timestamp"}
   },
+  "oneOf": [
+    {
+      "properties": {
+        "format_version": {"const": 1},
+        "operations": {"items": {"$ref": "#/$defs/operationV1"}}
+      },
+      "not": {"required": ["review_sha256"]}
+    },
+    {
+      "required": ["review_sha256"],
+      "properties": {
+        "format_version": {"const": 2},
+        "operations": {"items": {"$ref": "#/$defs/operation"}}
+      }
+    }
+  ],
   "$defs": {
     "workspaceId": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
     "entityId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"},
@@ -37,7 +53,7 @@
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
     },
-    "operation": {
+    "operationV1": {
       "type": "object",
       "additionalProperties": false,
       "required": ["path", "operation", "base_sha256", "proposed_sha256", "size"],
@@ -68,6 +84,71 @@
           "then": {
             "properties": {
               "base_sha256": {"type": "null"},
+              "proposed_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"operation": {"const": "replace"}}},
+          "then": {
+            "properties": {
+              "base_sha256": {"$ref": "#/$defs/sha256"},
+              "proposed_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"operation": {"const": "delete"}}},
+          "then": {
+            "properties": {
+              "base_sha256": {"$ref": "#/$defs/sha256"},
+              "proposed_sha256": {"type": "null"},
+              "size": {"const": 0}
+            }
+          }
+        }
+      ]
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "operation",
+        "base_sha256",
+        "base_size",
+        "proposed_sha256",
+        "size"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "format": "rpg-world-forge-portable-source-path",
+          "x-worldforge-path-policy": {
+            "root": "source/",
+            "separator": "/",
+            "normalization": "NFC",
+            "reject_traversal_segments": true,
+            "reject_windows_reserved_names": true,
+            "reject_trailing_dot_or_space": true,
+            "max_component_utf8_bytes": 255,
+            "collision_key": "NFC-casefold"
+          },
+          "pattern": "^source/[^/\\\\\\u0000-\\u001f<>:\\u0022|?*]+(?:/[^/\\\\\\u0000-\\u001f<>:\\u0022|?*]+)*$"
+        },
+        "operation": {"enum": ["create", "replace", "delete"]},
+        "base_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "base_size": {"type": "integer", "minimum": 0, "maximum": 16777216},
+        "proposed_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "size": {"type": "integer", "minimum": 0, "maximum": 16777216}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"operation": {"const": "create"}}},
+          "then": {
+            "properties": {
+              "base_sha256": {"type": "null"},
+              "base_size": {"const": 0},
               "proposed_sha256": {"$ref": "#/$defs/sha256"}
             }
           }

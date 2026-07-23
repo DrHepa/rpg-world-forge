@@ -159,19 +159,26 @@ checks JSON syntax, and renders bounded neutral map previews on Canvas. Drafts
 are explicitly not staged, never autosaved, and never written to a repository.
 Assets and Game remain labeled future work rather than simulated capabilities.
 
-Changesets initially edit only UTF-8 files beneath a registered world's
-`source/` directory. Proposed bytes are content-addressed under the external
-data directory. Applying them requires explicit approval, rechecks every base
-hash and filesystem identity under the world lifecycle lock, and uses a durable
-journal so an interrupted multi-file apply is completed or rolled back without
-claiming cross-filesystem atomicity.
+Changesets edit only UTF-8 files beneath a registered world's `source/`
+directory. New v2 records retain the exact base and proposed snapshots in
+content-addressed storage under the external data directory and bind their
+ordered operation descriptors with `review_sha256`. Exact bounded text hunks,
+with a strict-JSON Pointer supplement when applicable, are derived only from
+those retained bytes. A v2 approve, reject, or apply must echo the reviewed
+hash. Apply durably claims `applying` before any repository mutation, rechecks
+every base hash and filesystem identity under the world lifecycle lock, and
+uses a review-bound journal so an interrupted multi-file apply is completed or
+rolled back without claiming cross-filesystem atomicity. Existing v1 records
+remain actionable but report that exact base review bytes were not retained.
 
 The public contracts are
 [`forge-workspace`](schemas/forge-workspace.schema.json),
 [`studio-protocol`](schemas/studio-protocol.schema.json),
 [`studio-changeset`](schemas/studio-changeset.schema.json), and
 [`studio-job`](schemas/studio-job.schema.json). The application boundary is
-recorded in [ADR-0011](docs/decisions/0011-forge-studio-application-service.md).
+recorded in [ADR-0011](docs/decisions/0011-forge-studio-application-service.md),
+with immutable review evidence and apply claiming specified by
+[ADR-0015](docs/decisions/0015-studio-reviewable-changesets.md).
 
 The desktop shell lives in [`apps/studio`](apps/studio). It is a sandboxed
 Electron client that loads only `rwf-studio://app`, exposes named typed preload
