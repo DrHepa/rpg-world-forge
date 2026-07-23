@@ -3,13 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import stat
 import tempfile
 import unittest
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from pathlib import Path
 from unittest import mock
 
 import worldforge.studio.assets as studio_assets
+from isoworld.content.file_stat import WindowsFileStat
 from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.repository_boundary import FORGE_ROOT
 from worldforge.scaffold import create_world_project
@@ -501,6 +503,119 @@ class StudioAssetCatalogTests(unittest.TestCase):
             result["inspection"],
         )
         self.assertNotIn("bytes", json.dumps(result))
+
+    def test_preview_authority_is_exact_immutable_and_limited_to_png_or_wav_outputs(
+        self,
+    ) -> None:
+        revision, entries = self._all_entries()
+        for media_type in ("image/png", "audio/wav"):
+            with self.subTest(media_type=media_type):
+                entry = next(
+                    item
+                    for item in entries
+                    if item["category"] == "runtime_output" and item["media_type"] == media_type
+                )
+                authority = self.catalog.resolve_preview_authority(
+                    "workspace_01",
+                    revision,
+                    entry["entry_id"],
+                )
+                self.assertIsInstance(authority, studio_assets.ResolvedPreviewAuthority)
+                self.assertEqual(entry["entry_id"], authority.entry_id)
+                self.assertEqual(media_type, authority.media_type)
+                self.assertEqual(entry["sha256"], authority.sha256)
+                self.assertEqual(
+                    (self.world / str(entry["path"])).stat().st_size,
+                    authority.byte_length,
+                )
+                self.assertEqual(revision, authority.guard.manifest_revision)
+                self.assertEqual(13, authority.guard.workflow_revision)
+                self.assertNotIn(str(self.world), repr(authority))
+                self.catalog.assert_current(authority.guard)
+                with self.assertRaises(FrozenInstanceError):
+                    authority.byte_length = 0  # type: ignore[misc]
+
+        manifest = self._entry(entries, "manifest")
+        font = next(
+            item
+            for item in entries
+            if item["category"] == "runtime_output"
+            and item["media_type"] in {"font/ttf", "font/otf"}
+        )
+        for rejected in (manifest, font):
+            with (
+                self.subTest(category=rejected["category"]),
+                self.assertRaisesRegex(StudioError, "not previewable"),
+            ):
+                self.catalog.resolve_preview_authority(
+                    "workspace_01",
+                    revision,
+                    rejected["entry_id"],
+                )
+
+    def test_preview_revision_guard_rejects_exact_byte_replacement_and_state_drift(
+        self,
+    ) -> None:
+        revision, entries = self._all_entries()
+        entry = next(
+            item
+            for item in entries
+            if item["category"] == "runtime_output" and item["media_type"] == "image/png"
+        )
+        guarded_paths = (
+            self.world / ".worldforge/status.json",
+            self.asset_root / "manifest.json",
+            self.world / str(entry["path"]),
+        )
+        for guarded in guarded_paths:
+            with self.subTest(path=guarded.name):
+                authority = self.catalog.resolve_preview_authority(
+                    "workspace_01",
+                    revision,
+                    entry["entry_id"],
+                )
+                payload = guarded.read_bytes()
+                replacement = guarded.with_name(f"{guarded.name}.replacement")
+                guarded.rename(replacement)
+                guarded.write_bytes(payload)
+                try:
+                    with self.assertRaisesRegex(StudioError, "authority changed"):
+                        self.catalog.assert_current(authority.guard)
+                finally:
+                    guarded.unlink()
+                    replacement.rename(guarded)
+
+    def test_preview_guard_uses_windows_file_identity_and_rejects_reparse_points(
+        self,
+    ) -> None:
+        target = self.world / ".worldforge/status.json"
+        current = target.stat()
+
+        def windows_state(attributes: int) -> WindowsFileStat:
+            return WindowsFileStat(
+                st_mode=stat.S_IFREG | stat.S_IREAD,
+                st_dev=current.st_dev,
+                st_ino=current.st_ino,
+                st_nlink=1,
+                st_size=current.st_size,
+                st_mtime_ns=current.st_mtime_ns,
+                st_ctime_ns=current.st_ctime_ns,
+                st_file_attributes=attributes,
+            )
+
+        readonly = windows_state(stat.FILE_ATTRIBUTE_READONLY)
+        with mock.patch.object(studio_assets, "path_file_stat", return_value=readonly):
+            captured = studio_assets._stable_file_state(target)
+        self.assertEqual(readonly.st_dev, captured.device)
+        self.assertEqual(readonly.st_ino, captured.inode)
+        self.assertEqual(readonly.st_file_attributes, captured.attributes)
+
+        reparse = windows_state(stat.FILE_ATTRIBUTE_READONLY | stat.FILE_ATTRIBUTE_REPARSE_POINT)
+        with (
+            mock.patch.object(studio_assets, "path_file_stat", return_value=reparse),
+            self.assertRaisesRegex(OSError, "independent regular file"),
+        ):
+            studio_assets._stable_file_state(target)
 
     def test_service_exposes_only_the_two_closed_asset_catalog_methods(self) -> None:
         self.assertEqual(

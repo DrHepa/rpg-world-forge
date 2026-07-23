@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import struct
 import tempfile
 import wave
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from isoworld.content.file_stat import FileStat, path_file_stat
 from isoworld.content.media import (
     MAX_MEDIA_BYTES,
     MediaValidationError,
@@ -61,6 +63,51 @@ _VALIDATED_UNSUPPORTED_MEDIA = frozenset(
 _PROJECT = PurePosixPath(".worldforge/project.json")
 _STATUS = PurePosixPath(".worldforge/status.json")
 _WORLD = PurePosixPath("source/world.json")
+_PREVIEW_MEDIA_TYPES = frozenset({"audio/wav", "image/png"})
+_PREVIEW_OUTPUT_CATEGORIES = frozenset({"processing_output", "production_output", "runtime_output"})
+
+
+@dataclass(frozen=True, slots=True)
+class _StableFileState:
+    device: int
+    inode: int
+    mode: int
+    link_count: int
+    size: int
+    modified_ns: int
+    changed_ns: int
+    attributes: int
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class AssetRevisionGuard:
+    workspace_id: str
+    world_root: Path
+    world_identity: tuple[int, int]
+    world_id: str
+    workflow_revision: int
+    status_sha256: str
+    status_state: _StableFileState
+    manifest_relative: PurePosixPath
+    manifest_sha256: str
+    manifest_content_hash: str
+    manifest_state: _StableFileState
+    manifest_revision: str
+    source_relative: PurePosixPath
+    source_sha256: str
+    source_state: _StableFileState
+    media_type: str
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class ResolvedPreviewAuthority:
+    guard: AssetRevisionGuard
+    entry_id: str
+    world_root: Path
+    relative: PurePosixPath
+    media_type: str
+    byte_length: int
+    sha256: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,9 +118,11 @@ class _Authority:
     world_id: str
     workflow_revision: int
     status_payload: bytes
+    status_state: _StableFileState
     manifest_relative: PurePosixPath
     asset_root_relative: PurePosixPath
     manifest_payload: bytes
+    manifest_state: _StableFileState
     manifest: dict[str, Any]
     manifest_revision: str
 
@@ -117,6 +166,29 @@ def _strict_bytes(value: object) -> bytes:
 
 def _sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def _stable_file_state(path: Path) -> _StableFileState:
+    info: FileStat = path_file_stat(path)
+    attributes = int(getattr(info, "st_file_attributes", 0))
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        or not stat.S_ISREG(info.st_mode)
+        or info.st_nlink != 1
+        or info.st_size < 0
+    ):
+        raise OSError("not an independent regular file")
+    return _StableFileState(
+        device=info.st_dev,
+        inode=info.st_ino,
+        mode=info.st_mode,
+        link_count=info.st_nlink,
+        size=info.st_size,
+        modified_ns=info.st_mtime_ns,
+        changed_ns=info.st_ctime_ns,
+        attributes=attributes,
+    )
 
 
 def _bounded(result: dict[str, Any]) -> dict[str, Any]:
@@ -283,6 +355,119 @@ class AssetCatalogManager:
         self._recheck(authority)
         return _bounded(result)
 
+    def resolve_preview_authority(
+        self,
+        workspace_id: object,
+        manifest_revision: object,
+        entry_id: object,
+    ) -> ResolvedPreviewAuthority:
+        requested = self._requested_entry_id(entry_id)
+        expected = self._expected_revision(manifest_revision, required=True)
+        assert expected is not None
+        authority = self._authority(workspace_id)
+        self._require_revision(authority, expected)
+        entry = next(
+            (item for item in self._entries(authority) if item.entry_id == requested),
+            None,
+        )
+        if entry is None:
+            self._recheck(authority)
+            raise not_found("Asset catalog entry was not found")
+        if (
+            entry.category not in _PREVIEW_OUTPUT_CATEGORIES
+            or entry.media_type not in _PREVIEW_MEDIA_TYPES
+            or entry.relative is None
+            or entry.identity_only
+        ):
+            self._recheck(authority)
+            raise invalid_request("Asset catalog entry is not previewable")
+
+        target = authority.world_root.joinpath(*entry.relative.parts)
+        try:
+            before = _stable_file_state(target)
+            resource = read_validated_resource(
+                authority.world_root,
+                entry.relative,
+                entry.media_type,
+                limit=MAX_MEDIA_BYTES,
+            )
+            after = _stable_file_state(target)
+        except (MediaValidationError, OSError) as exc:
+            raise conflict("Preview asset authority changed or is invalid") from exc
+        if before != after or before.size <= 0:
+            raise conflict("Preview asset authority changed while it was resolved")
+        self._require_resource_hash(resource.sha256, entry.sha256)
+        self._recheck(authority)
+
+        manifest_content_hash = authority.manifest.get("content_hash")
+        if not isinstance(manifest_content_hash, str):
+            raise conflict("Canonical asset manifest has no content hash")
+        guard = AssetRevisionGuard(
+            workspace_id=authority.workspace_id,
+            world_root=authority.world_root,
+            world_identity=authority.world_identity,
+            world_id=authority.world_id,
+            workflow_revision=authority.workflow_revision,
+            status_sha256=_sha256(authority.status_payload),
+            status_state=authority.status_state,
+            manifest_relative=authority.manifest_relative,
+            manifest_sha256=_sha256(authority.manifest_payload),
+            manifest_content_hash=manifest_content_hash,
+            manifest_state=authority.manifest_state,
+            manifest_revision=authority.manifest_revision,
+            source_relative=entry.relative,
+            source_sha256=entry.sha256,
+            source_state=before,
+            media_type=entry.media_type,
+        )
+        resolved = ResolvedPreviewAuthority(
+            guard=guard,
+            entry_id=entry.entry_id,
+            world_root=authority.world_root,
+            relative=entry.relative,
+            media_type=entry.media_type,
+            byte_length=before.size,
+            sha256=entry.sha256,
+        )
+        self.assert_current(guard)
+        return resolved
+
+    def assert_current(self, guard: AssetRevisionGuard) -> None:
+        if not isinstance(guard, AssetRevisionGuard):
+            raise StudioError("internal_error", "Asset preview revision guard is invalid")
+        verified = self.workspaces.verified_root(guard.workspace_id, "world_root")
+        if verified is None or verified != (guard.world_root, guard.world_identity):
+            raise conflict("Asset preview authority changed")
+        try:
+            status, status_state = self._read_stable(
+                guard.world_root,
+                guard.world_identity,
+                _STATUS,
+                limit=_CONTROL_BYTES,
+            )
+            manifest, manifest_state = self._read_stable(
+                guard.world_root,
+                guard.world_identity,
+                guard.manifest_relative,
+                limit=MAX_CONTRACT_BYTES,
+            )
+            source_state = _stable_file_state(
+                guard.world_root.joinpath(*guard.source_relative.parts)
+            )
+        except (OSError, StudioError) as exc:
+            raise conflict("Asset preview authority changed") from exc
+        if (
+            _sha256(status) != guard.status_sha256
+            or status_state != guard.status_state
+            or _sha256(manifest) != guard.manifest_sha256
+            or manifest_state != guard.manifest_state
+            or source_state != guard.source_state
+        ):
+            raise conflict("Asset preview authority changed")
+        verified = self.workspaces.verified_root(guard.workspace_id, "world_root")
+        if verified is None or verified != (guard.world_root, guard.world_identity):
+            raise conflict("Asset preview authority changed")
+
     @staticmethod
     def _page(offset: object, limit: object) -> tuple[int, int]:
         if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
@@ -332,7 +517,12 @@ class AssetCatalogManager:
         world_root, world_identity = verified
         try:
             project_payload = self._read(world_root, world_identity, _PROJECT, limit=_CONTROL_BYTES)
-            status_payload = self._read(world_root, world_identity, _STATUS, limit=_CONTROL_BYTES)
+            status_payload, status_state = self._read_stable(
+                world_root,
+                world_identity,
+                _STATUS,
+                limit=_CONTROL_BYTES,
+            )
             world_payload = self._read(world_root, world_identity, _WORLD, limit=_CONTROL_BYTES)
             project = decode_json_object(project_payload, source=_PROJECT.as_posix())
             status = decode_json_object(status_payload, source=_STATUS.as_posix())
@@ -352,7 +542,7 @@ class AssetCatalogManager:
             raise invalid_state("Registered world has no canonical asset manifest")
         manifest_relative = _portable(manifest_value, context="asset manifest path")
         asset_root_relative = manifest_relative.parent
-        manifest_payload = self._read(
+        manifest_payload, manifest_state = self._read_stable(
             world_root,
             world_identity,
             manifest_relative,
@@ -385,13 +575,13 @@ class AssetCatalogManager:
             raise conflict("Canonical asset manifest validation failed")
 
         self._require_status_globals(status, manifest, asset_root_relative)
-        repeated_manifest = self._read(
+        repeated_manifest, repeated_manifest_state = self._read_stable(
             world_root,
             world_identity,
             manifest_relative,
             limit=MAX_CONTRACT_BYTES,
         )
-        if repeated_manifest != manifest_payload:
+        if repeated_manifest != manifest_payload or repeated_manifest_state != manifest_state:
             raise conflict("Canonical asset manifest changed while it was validated")
         manifest_content_hash = manifest.get("content_hash")
         if not isinstance(manifest_content_hash, str):
@@ -415,9 +605,11 @@ class AssetCatalogManager:
             world_id=inspection.world_id,
             workflow_revision=inspection.revision,
             status_payload=status_payload,
+            status_state=status_state,
             manifest_relative=manifest_relative,
             asset_root_relative=asset_root_relative,
             manifest_payload=manifest_payload,
+            manifest_state=manifest_state,
             manifest=manifest,
             manifest_revision=revision,
         )
@@ -455,19 +647,24 @@ class AssetCatalogManager:
         verified = self.workspaces.verified_root(authority.workspace_id, "world_root")
         if verified is None or verified != (authority.world_root, authority.world_identity):
             raise conflict("Registered world root identity changed")
-        status = self._read(
+        status, status_state = self._read_stable(
             authority.world_root,
             authority.world_identity,
             _STATUS,
             limit=_CONTROL_BYTES,
         )
-        manifest = self._read(
+        manifest, manifest_state = self._read_stable(
             authority.world_root,
             authority.world_identity,
             authority.manifest_relative,
             limit=MAX_CONTRACT_BYTES,
         )
-        if status != authority.status_payload or manifest != authority.manifest_payload:
+        if (
+            status != authority.status_payload
+            or status_state != authority.status_state
+            or manifest != authority.manifest_payload
+            or manifest_state != authority.manifest_state
+        ):
             raise conflict("Asset catalog authority changed during the request")
         verified = self.workspaces.verified_root(authority.workspace_id, "world_root")
         if verified is None or verified != (authority.world_root, authority.world_identity):
@@ -491,6 +688,31 @@ class AssetCatalogManager:
             )
         except StudioError as exc:
             raise conflict("Asset authority file is unavailable or changed") from exc
+
+    @classmethod
+    def _read_stable(
+        cls,
+        world_root: Path,
+        world_identity: tuple[int, int],
+        relative: PurePosixPath,
+        *,
+        limit: int,
+    ) -> tuple[bytes, _StableFileState]:
+        target = world_root.joinpath(*relative.parts)
+        try:
+            before = _stable_file_state(target)
+            payload = cls._read(
+                world_root,
+                world_identity,
+                relative,
+                limit=limit,
+            )
+            after = _stable_file_state(target)
+        except (OSError, StudioError) as exc:
+            raise conflict("Asset authority changed while it was read") from exc
+        if before != after or before.size != len(payload):
+            raise conflict("Asset authority changed while it was read")
+        return payload, before
 
     def _json_reference(
         self,
