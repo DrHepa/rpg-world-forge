@@ -40,6 +40,29 @@ export function AssetsCockpit({
         : state.entries,
     [state.entries, state.selectedCategory],
   );
+  const previewContext = useMemo(
+    () => ({
+      active,
+      catalogCurrent:
+        state.consistency === "current" &&
+        state.listRequest === null &&
+        state.inspectRequest === null &&
+        state.error === null,
+      workspaceId: state.workspaceId,
+      generation: state.generation,
+      manifestRevision: state.manifestRevision,
+    }),
+    [
+      active,
+      state.consistency,
+      state.error,
+      state.generation,
+      state.inspectRequest,
+      state.listRequest,
+      state.manifestRevision,
+      state.workspaceId,
+    ],
+  );
 
   useEffect(() => {
     if (!active) {
@@ -255,6 +278,7 @@ export function AssetsCockpit({
                 entry={state.selectedEntry}
                 inspection={state.inspection}
                 pending={state.inspectRequest !== null}
+                previewContext={previewContext}
               />
             </div>
           ) : null}

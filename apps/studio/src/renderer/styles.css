@@ -782,6 +782,66 @@ small {
   line-height: 1.45;
 }
 
+.asset-binary-preview {
+  display: grid;
+  gap: 9px;
+  margin-top: 11px;
+}
+
+.asset-preview-status,
+.asset-preview-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.asset-preview-status {
+  color: #b9d9d3;
+  background: rgb(71 118 109 / 16%);
+}
+
+.asset-preview-error {
+  border: 1px solid #76524d;
+  color: #ffd0c8;
+  background: rgb(112 63 56 / 18%);
+}
+
+.asset-png-preview {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 420px;
+  margin-inline: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  object-fit: contain;
+  background:
+    linear-gradient(45deg, #182127 25%, transparent 25%),
+    linear-gradient(-45deg, #182127 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #182127 75%),
+    linear-gradient(-45deg, transparent 75%, #182127 75%),
+    #0d151b;
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+  background-size: 16px 16px;
+}
+
+.asset-wav-preview {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+}
+
+.asset-preview-retry {
+  justify-self: start;
+}
+
 .inspection-list {
   margin-top: 11px;
 }

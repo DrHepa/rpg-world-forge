@@ -6,6 +6,8 @@ import {
   ASSET_CATALOG_CATEGORY_LABELS,
   ASSET_INSPECTION_KIND_LABELS,
 } from "./asset-catalog-state";
+import { AssetBinaryPreview } from "./AssetBinaryPreview";
+import type { AssetBinaryPreviewContext } from "./asset-binary-preview-state";
 
 const JSON_RENDER_MAX_NODES = 2_000;
 const JSON_RENDER_MAX_DEPTH = 12;
@@ -14,16 +16,18 @@ export function AssetInspection({
   entry,
   inspection,
   pending,
+  previewContext,
 }: {
   entry: StudioAssetCatalogEntry | null;
   inspection: StudioAssetInspection | null;
   pending: boolean;
+  previewContext?: AssetBinaryPreviewContext;
 }) {
   return (
     <aside className="asset-detail" aria-labelledby="asset-detail-heading">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Verified metadata only</p>
+          <p className="eyebrow">Verified metadata and bounded preview</p>
           <h2 id="asset-detail-heading">Asset inspection</h2>
         </div>
         {inspection ? (
@@ -57,14 +61,28 @@ export function AssetInspection({
               Inspection metadata has not been loaded for this entry.
             </p>
           ) : null}
-          {inspection ? <InspectionBody inspection={inspection} /> : null}
+          {inspection ? (
+            <InspectionBody
+              entry={entry}
+              inspection={inspection}
+              previewContext={previewContext}
+            />
+          ) : null}
         </>
       )}
     </aside>
   );
 }
 
-function InspectionBody({ inspection }: { inspection: StudioAssetInspection }) {
+function InspectionBody({
+  entry,
+  inspection,
+  previewContext,
+}: {
+  entry: StudioAssetCatalogEntry;
+  inspection: StudioAssetInspection;
+  previewContext: AssetBinaryPreviewContext | undefined;
+}) {
   switch (inspection.kind) {
     case "json":
       return (
@@ -97,9 +115,11 @@ function InspectionBody({ inspection }: { inspection: StudioAssetInspection }) {
             <Metric label="Color type" value={String(inspection.color_type)} />
             <Metric label="Interlaced" value={inspection.interlaced ? "Yes" : "No"} />
           </dl>
-          <UnavailablePreview>
-            Image preview is unavailable in this metadata-only cockpit.
-          </UnavailablePreview>
+          <AssetBinaryPreview
+            context={previewContext}
+            entry={entry}
+            inspection={inspection}
+          />
         </section>
       );
     case "wav":
@@ -113,9 +133,11 @@ function InspectionBody({ inspection }: { inspection: StudioAssetInspection }) {
             <Metric label="Frames" value={inspection.frame_count.toLocaleString("en-US")} />
             <Metric label="Duration" value={`${String(inspection.duration_ms)} ms`} />
           </dl>
-          <UnavailablePreview>
-            Audio playback is unavailable in this metadata-only cockpit.
-          </UnavailablePreview>
+          <AssetBinaryPreview
+            context={previewContext}
+            entry={entry}
+            inspection={inspection}
+          />
         </section>
       );
     case "font":
