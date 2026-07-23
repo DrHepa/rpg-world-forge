@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from isoworld.content.media import media_signature_matches
@@ -253,6 +255,139 @@ _BLENDER_PARENT_OUTPUT_ROLES = {
     "model": frozenset({"authoring_source", "model"}),
     "skeleton": frozenset({"authoring_source", "model", "skeleton"}),
 }
+
+
+@dataclass(frozen=True)
+class ResolvedProductionReceipt:
+    manifest_index: int
+    path: Path
+    content_hash: str
+
+
+@dataclass(frozen=True)
+class _ProductionReceiptAuthority:
+    path: Path
+    content_hash: str
+    reference_items: tuple[tuple[str, object], ...]
+
+
+class ProductionReceiptIndex:
+    """Closed authority over production receipts referenced by one asset."""
+
+    __slots__ = ("_by_hash", "_by_path", "_root")
+
+    def __init__(
+        self,
+        root: Path,
+        by_hash: dict[str, _ProductionReceiptAuthority],
+        by_path: dict[Path, _ProductionReceiptAuthority],
+    ) -> None:
+        self._root = root
+        self._by_hash = MappingProxyType(dict(by_hash))
+        self._by_path = MappingProxyType(dict(by_path))
+
+    @classmethod
+    def from_manifest_references(
+        cls,
+        asset_root: str | Path,
+        references: list[object],
+        *,
+        context: str = "production_receipts",
+    ) -> tuple[
+        ProductionReceiptIndex,
+        tuple[ResolvedProductionReceipt, ...],
+        list[ContractIssue],
+    ]:
+        root = Path(asset_root).resolve()
+        by_hash: dict[str, _ProductionReceiptAuthority] = {}
+        by_path: dict[Path, _ProductionReceiptAuthority] = {}
+        resolved: list[ResolvedProductionReceipt] = []
+        issues: list[ContractIssue] = []
+        for manifest_index, reference in enumerate(references):
+            issue_path = str(manifest_index)
+            try:
+                path = verify_artifact_reference(
+                    root,
+                    reference,
+                    context=f"{context}/{manifest_index}",
+                )
+                receipt = read_json_object(path)
+                require_content_hash(receipt, context="production receipt")
+            except AssetContractError as exc:
+                issues.append(_issue(issue_path, str(exc)))
+                continue
+            content_hash = receipt["content_hash"]
+            assert isinstance(content_hash, str)
+            assert isinstance(reference, dict)
+            authority = _ProductionReceiptAuthority(
+                path=path,
+                content_hash=content_hash,
+                reference_items=tuple(sorted(reference.items())),
+            )
+            prior_path = by_path.get(path)
+            if prior_path is not None:
+                if prior_path.reference_items == authority.reference_items:
+                    message = "duplicate production receipt reference"
+                else:
+                    message = "conflicting production receipt references for the same path"
+                issues.append(_issue(issue_path, message))
+                continue
+            if content_hash in by_hash:
+                issues.append(
+                    _issue(
+                        issue_path,
+                        "duplicate receipt content hash across conflicting production "
+                        "receipt references",
+                    )
+                )
+                continue
+            by_hash[content_hash] = authority
+            by_path[path] = authority
+            resolved.append(
+                ResolvedProductionReceipt(
+                    manifest_index=manifest_index,
+                    path=path,
+                    content_hash=content_hash,
+                )
+            )
+        return cls(root, by_hash, by_path), tuple(resolved), issues
+
+    def authorizes(self, content_hash: str) -> bool:
+        return content_hash in self._by_hash
+
+    def read(self, content_hash: str) -> dict[str, Any]:
+        authority = self._by_hash.get(content_hash)
+        if authority is None:
+            raise AssetContractError(
+                f"Production receipt content hash is not authorized: {content_hash}"
+            )
+        return self._read_authority(authority)
+
+    def read_path(self, path: str | Path) -> tuple[str, dict[str, Any]]:
+        candidate = Path(path)
+        authority = self._by_path.get(candidate)
+        if authority is None:
+            raise AssetContractError(f"Production receipt path is not authorized: {candidate}")
+        return authority.content_hash, self._read_authority(authority)
+
+    def _read_authority(
+        self,
+        authority: _ProductionReceiptAuthority,
+    ) -> dict[str, Any]:
+        path = verify_artifact_reference(
+            self._root,
+            dict(authority.reference_items),
+            context="authorized production receipt",
+        )
+        if path != authority.path:
+            raise AssetContractError("Authorized production receipt path was rebound")
+        receipt = read_json_object(path)
+        require_content_hash(receipt, context="authorized production receipt")
+        if receipt.get("content_hash") != authority.content_hash:
+            raise AssetContractError(
+                "Authorized production receipt content hash does not match its index key"
+            )
+        return receipt
 
 
 def _sorted_unique_hashes(value: object) -> bool:
@@ -565,13 +700,42 @@ def _parent_receipts_by_hash(
     root: Path,
     hashes: list[str],
     *,
+    receipt_index: ProductionReceiptIndex | None = None,
     lineage_stack: frozenset[str] = frozenset(),
-) -> dict[str, dict[str, Any]]:
+) -> tuple[dict[str, dict[str, Any]], list[ContractIssue]]:
     wanted = set(hashes)
     found: dict[str, dict[str, Any]] = {}
+    issues: list[ContractIssue] = []
+    if receipt_index is not None:
+        for content_hash in sorted(wanted):
+            if content_hash in lineage_stack or not receipt_index.authorizes(content_hash):
+                continue
+            try:
+                candidate = receipt_index.read(content_hash)
+            except AssetContractError as exc:
+                issues.append(
+                    _issue(
+                        "parent_receipt_hashes",
+                        f"authorized parent receipt {content_hash} is invalid: {exc}",
+                    )
+                )
+                continue
+            if (
+                candidate.get("format") != "rpg-world-forge.asset_production_receipt"
+                or candidate.get("format_version") != 1
+            ):
+                issues.append(
+                    _issue(
+                        "parent_receipt_hashes",
+                        f"authorized parent receipt {content_hash} has an invalid contract",
+                    )
+                )
+                continue
+            found[content_hash] = candidate
+        return found, issues
     receipts_root = root / "receipts"
     if not wanted or not receipts_root.is_dir() or receipts_root.is_symlink():
-        return found
+        return found, issues
     for path in sorted(receipts_root.rglob("*.json")):
         if path.is_symlink():
             continue
@@ -595,7 +759,7 @@ def _parent_receipts_by_hash(
             ):
                 continue
             found[content_hash] = candidate
-    return found
+    return found, issues
 
 
 def _blender_parent_lineage_issues(
@@ -878,8 +1042,11 @@ def create_production_request(
     elif reviewed_script_file is not None:
         raise AssetContractError("reviewed_script_file is only valid for Blender MCP")
     if executor == "blender_mcp":
-        parent_receipts = _parent_receipts_by_hash(root, parent_hashes)
-        lineage_issues = _blender_parent_lineage_issues(body, parent_receipts)
+        parent_receipts, resolution_issues = _parent_receipts_by_hash(root, parent_hashes)
+        lineage_issues = resolution_issues + _blender_parent_lineage_issues(
+            body,
+            parent_receipts,
+        )
         if lineage_issues:
             raise AssetContractError("; ".join(str(issue) for issue in lineage_issues))
     request = bind_content_hash(body)
@@ -891,6 +1058,7 @@ def validate_production_request(
     path: str | Path,
     *,
     asset_root: str | Path | None = None,
+    receipt_index: ProductionReceiptIndex | None = None,
     _lineage_stack: frozenset[str] = frozenset(),
 ) -> list[ContractIssue]:
     try:
@@ -1031,11 +1199,13 @@ def validate_production_request(
                 if isinstance(parents, list)
                 else []
             )
-            parent_receipts = _parent_receipts_by_hash(
+            parent_receipts, resolution_issues = _parent_receipts_by_hash(
                 root,
                 parent_hashes,
+                receipt_index=receipt_index,
                 lineage_stack=_lineage_stack,
             )
+            issues.extend(resolution_issues)
             issues.extend(_blender_parent_lineage_issues(raw, parent_receipts))
     parameters = raw.get("parameters")
     if not isinstance(parameters, dict):
@@ -1221,12 +1391,19 @@ def validate_production_receipt(
     path: str | Path,
     *,
     asset_root: str | Path,
+    receipt_index: ProductionReceiptIndex | None = None,
     _lineage_stack: frozenset[str] = frozenset(),
 ) -> list[ContractIssue]:
-    try:
-        raw = read_json_object(path)
-    except AssetContractError as exc:
-        return [_issue("receipt", str(exc))]
+    if receipt_index is None:
+        try:
+            raw = read_json_object(path)
+        except AssetContractError as exc:
+            return [_issue("receipt", str(exc))]
+    else:
+        try:
+            _, raw = receipt_index.read_path(path)
+        except AssetContractError as exc:
+            return [_issue("receipt", str(exc))]
     issues = _base_contract_issues(
         raw,
         expected_format="rpg-world-forge.asset_production_receipt",
@@ -1262,6 +1439,7 @@ def validate_production_receipt(
         request_issues = validate_production_request(
             request_path,
             asset_root=root,
+            receipt_index=receipt_index,
             _lineage_stack=current_lineage,
         )
         issues.extend(_issue(f"request/{item.path}", item.message) for item in request_issues)

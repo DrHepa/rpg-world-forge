@@ -38,7 +38,10 @@ from worldforge.asset_io import (
     verify_artifact_reference,
     write_json_atomic,
 )
-from worldforge.asset_production import validate_production_receipt
+from worldforge.asset_production import (
+    ProductionReceiptIndex,
+    validate_production_receipt,
+)
 from worldforge.validation import ID_PATTERN, PLACEHOLDER_PATTERN
 
 ASSET_PHASES = {"art_direction", "production", "release"}
@@ -798,31 +801,39 @@ def validate_asset_manifest_v3(
             )
         receipt_parents: dict[str, list[str]] = {}
         production_candidate_keys: set[tuple[str, str]] = set()
-        for receipt_index, reference in enumerate(receipts):
-            try:
-                receipt_path = verify_artifact_reference(
-                    root,
-                    reference,
-                    context=f"{context}/production_receipts/{receipt_index}",
-                )
-            except AssetContractError as exc:
-                issues.append(_issue(f"{context}/production_receipts/{receipt_index}", str(exc)))
-                continue
-            receipt_issues = validate_production_receipt(receipt_path, asset_root=root)
+        receipt_authority, resolved_receipts, authority_issues = (
+            ProductionReceiptIndex.from_manifest_references(
+                root,
+                receipts,
+                context=f"{context}/production_receipts",
+            )
+        )
+        issues.extend(
+            _issue(
+                f"{context}/production_receipts/{item.path}",
+                item.message,
+            )
+            for item in authority_issues
+        )
+        for resolved_receipt in resolved_receipts:
+            receipt_index = resolved_receipt.manifest_index
+            receipt_path = resolved_receipt.path
+            receipt_issues = validate_production_receipt(
+                receipt_path,
+                asset_root=root,
+                receipt_index=receipt_authority,
+            )
             issues.extend(
                 _issue(f"{context}/production_receipts/{receipt_index}/{item.path}", item.message)
                 for item in receipt_issues
             )
-            receipt = read_json_object(receipt_path)
+            try:
+                receipt = receipt_authority.read(resolved_receipt.content_hash)
+            except AssetContractError as exc:
+                issues.append(_issue(f"{context}/production_receipts/{receipt_index}", str(exc)))
+                continue
             receipt_hash = receipt.get("content_hash")
             if isinstance(receipt_hash, str):
-                if receipt_hash in receipt_parents:
-                    issues.append(
-                        _issue(
-                            f"{context}/production_receipts/{receipt_index}",
-                            "duplicate receipt content hash",
-                        )
-                    )
                 receipt_parents[receipt_hash] = [
                     value
                     for value in receipt.get("parent_receipt_hashes", [])

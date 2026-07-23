@@ -939,6 +939,149 @@ class GLBInspectorTests(unittest.TestCase):
 
 
 class AssetPackTests(unittest.TestCase):
+    def test_manifest_receipt_lineage_never_discovers_filesystem_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = _fixture(Path(directory))
+
+            with (
+                patch.object(
+                    Path,
+                    "rglob",
+                    side_effect=AssertionError("receipt lineage must not call Path.rglob"),
+                ),
+                patch.object(
+                    Path,
+                    "glob",
+                    side_effect=AssertionError("receipt lineage must not call Path.glob"),
+                ),
+                patch(
+                    "os.scandir",
+                    side_effect=AssertionError("receipt lineage must not call os.scandir"),
+                ),
+            ):
+                issues = validate_asset_manifest(
+                    fixture["manifest"],
+                    profile="build",
+                    worldpack_path=fixture["worldpack"],
+                )
+
+            self.assertEqual([], issues)
+
+    def test_manifest_receipt_lineage_rejects_an_unlisted_parent_without_discovery(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = _fixture(Path(directory))
+            manifest = json.loads(fixture["manifest"].read_text(encoding="utf-8"))
+            references = manifest["assets"][0]["production_receipts"]
+            omitted_reference = references.pop(0)
+            omitted_receipt = json.loads(
+                (fixture["authoring"] / omitted_reference["file"]).read_text(encoding="utf-8")
+            )
+            _rewrite_hashed(fixture["manifest"], manifest)
+
+            with (
+                patch.object(
+                    Path,
+                    "rglob",
+                    side_effect=AssertionError("receipt lineage must not call Path.rglob"),
+                ),
+                patch.object(
+                    Path,
+                    "glob",
+                    side_effect=AssertionError("receipt lineage must not call Path.glob"),
+                ),
+                patch(
+                    "os.scandir",
+                    side_effect=AssertionError("receipt lineage must not call os.scandir"),
+                ),
+            ):
+                issues = validate_asset_manifest(
+                    fixture["manifest"],
+                    profile="build",
+                    worldpack_path=fixture["worldpack"],
+                )
+
+            messages = [str(issue) for issue in issues]
+            self.assertTrue(
+                any(
+                    f"cannot resolve parent receipt {omitted_receipt['content_hash']}" in message
+                    for message in messages
+                ),
+                messages,
+            )
+            self.assertTrue(
+                any(
+                    f"unknown parent {omitted_receipt['content_hash']}" in message
+                    for message in messages
+                ),
+                messages,
+            )
+
+    def test_manifest_rejects_duplicate_and_conflicting_receipt_authority(self) -> None:
+        mutations = (
+            "duplicate-reference",
+            "conflicting-reference",
+            "duplicate-content-hash",
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                fixture = _fixture(Path(directory))
+                manifest = json.loads(fixture["manifest"].read_text(encoding="utf-8"))
+                references = manifest["assets"][0]["production_receipts"]
+                if mutation == "duplicate-reference":
+                    references.append(copy.deepcopy(references[0]))
+                    expected = "duplicate production receipt reference"
+                elif mutation == "conflicting-reference":
+                    conflicting = copy.deepcopy(references[0])
+                    conflicting["size"] = (
+                        (fixture["authoring"] / conflicting["file"]).stat().st_size
+                    )
+                    references.append(conflicting)
+                    expected = "conflicting production receipt references for the same path"
+                else:
+                    source = fixture["authoring"] / references[0]["file"]
+                    copy_path = fixture["authoring"] / "receipts/reference-copy.json"
+                    copy_path.write_bytes(source.read_bytes())
+                    references.append(_reference(fixture["authoring"], copy_path))
+                    expected = (
+                        "duplicate receipt content hash across conflicting production "
+                        "receipt references"
+                    )
+                _rewrite_hashed(fixture["manifest"], manifest)
+
+                issues = validate_asset_manifest(
+                    fixture["manifest"],
+                    profile="build",
+                    worldpack_path=fixture["worldpack"],
+                )
+
+                messages = [str(issue) for issue in issues]
+                self.assertTrue(
+                    any(expected in message for message in messages),
+                    messages,
+                )
+
+    def test_closed_receipt_index_rejects_authorized_path_rebinding(self) -> None:
+        from worldforge.asset_production import ProductionReceiptIndex
+
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = _fixture(Path(directory))
+            manifest = json.loads(fixture["manifest"].read_text(encoding="utf-8"))
+            references = manifest["assets"][0]["production_receipts"]
+            receipt_index, resolved, issues = ProductionReceiptIndex.from_manifest_references(
+                fixture["authoring"],
+                references,
+            )
+            self.assertEqual([], issues)
+            self.assertEqual(3, len(resolved))
+
+            first = resolved[0]
+            first.path.write_bytes(first.path.read_bytes() + b"\n")
+
+            with self.assertRaisesRegex(AssetContractError, "SHA-256 does not match"):
+                receipt_index.read(first.content_hash)
+
     def test_publishers_reject_parent_replaced_after_identity_capture(self) -> None:
         for publisher in ("runtime", "json"):
             with self.subTest(publisher=publisher), tempfile.TemporaryDirectory() as directory:
