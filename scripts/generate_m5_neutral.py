@@ -396,32 +396,6 @@ def recipe(root: Path, path: str, operation: str, body: dict[str, Any]) -> dict[
     )
 
 
-def processing_receipt(
-    root: Path,
-    out_dir: Path,
-    operation: str,
-    recipe_path: Path,
-    inputs: list[dict[str, Any]],
-    outputs: list[dict[str, Any]],
-    toolchain: dict[str, Any],
-) -> dict[str, Any]:
-    return write_json(
-        out_dir / "processing.receipt.json",
-        {
-            "format": "rpg-world-forge.asset_processing_receipt",
-            "format_version": 1,
-            "operation": operation,
-            "recipe": {
-                "content_hash": json.loads(recipe_path.read_text())["content_hash"],
-                "sha256": sha(recipe_path),
-            },
-            "inputs": inputs,
-            "outputs": outputs,
-            "toolchain": toolchain,
-        },
-    )
-
-
 def target(root: Path, world: dict[str, Any], target_id: str, dimension: str) -> dict[str, Any]:
 
     if dimension == "2_5d":

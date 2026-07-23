@@ -1,7 +1,7 @@
 {
-  "content_hash": "e63944da327930372c34203ecc98cdaa3ad6e38189746ae14b2195f91c13a973",
+  "content_hash": "b6680c3f2505741dd71ea41a20f1b6e3f5a4f0f9500646d3158f7c312730b4c3",
   "format": "rpg-world-forge.asset_processing_receipt",
-  "format_version": 1,
+  "format_version": 2,
   "inputs": [
     {
       "artifact": {
@@ -49,8 +49,9 @@
       "role": "model"
     }
   ],
-  "recipe": {
+  "recipe_ref": {
     "content_hash": "f718340d867890909f33c78fbc06e0ebb436be8c6c3792cdbf9663d29c73066b",
+    "file": "recipes/neutral_actor_3d.json",
     "sha256": "9270a75c4430f50861ab905299430e35db935b35d9cc3205e665d6c5f673600b"
   },
   "toolchain": {

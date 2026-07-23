@@ -75,7 +75,9 @@
   sanitized receipts, explicit candidate selection, and no provider SDK in the
   Forge or runtime.
 - [x] Canonicalize PNGs, build deterministic atlases/clipsets, and process PCM
-  WAV audio through finite recipes with independently verifiable receipts.
+  WAV audio through finite recipe v1 contracts with independently verifiable
+  receipt v2 records bound to the exact asset-root-relative recipe; preserve
+  identity-only receipt v1 read compatibility.
 - [x] Extend the provider-neutral contract to 3D targets, strict GLB inspection,
   structural budgets, semantic bindings, and runtime-only `assetpack_v1`.
 - [x] Enforce two-step publication: validate a complete `production` manifest

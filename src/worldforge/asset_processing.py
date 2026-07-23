@@ -26,12 +26,14 @@ from worldforge.asset_formats.gltf import (
 )
 from worldforge.asset_image_inspection import IMAGE_FORMAT_MEDIA_TYPES
 from worldforge.asset_io import (
+    MAX_CONTRACT_BYTES,
     AssetContractError,
     artifact_reference,
     bind_content_hash,
     normalized_relative_path,
     read_json_object,
     require_content_hash,
+    resolve_artifact,
     sha256_file,
     verify_artifact_reference,
     write_json_atomic,
@@ -39,7 +41,9 @@ from worldforge.asset_io import (
 
 RECIPE_FORMAT = "rpg-world-forge.asset_processing_recipe"
 RECEIPT_FORMAT = "rpg-world-forge.asset_processing_receipt"
-FORMAT_VERSION = 1
+RECIPE_FORMAT_VERSION = 1
+LEGACY_RECEIPT_FORMAT_VERSION = 1
+LATEST_RECEIPT_FORMAT_VERSION = 2
 RECEIPT_NAME = "processing.receipt.json"
 
 _OPERATIONS = frozenset({"atlas", "file_validate", "glb_validate", "png_canonical", "wav_pcm"})
@@ -86,6 +90,20 @@ _MAX_PCM_FRAMES = 32 * 1024 * 1024
 _MAX_PCM_BYTES = 64 * 1024 * 1024
 _MAX_RESAMPLE_RATIO = 24
 _PCM_CHUNK_FRAMES = 65536
+_GLB_BUDGET_MAXIMUMS = {
+    "max_animations": 2_147_483_647,
+    "max_bones": 2_147_483_647,
+    "max_external_uris": 0,
+    "max_influences": 16,
+    "max_materials": 2_147_483_647,
+    "max_meshes": 2_147_483_647,
+    "max_nodes": 2_147_483_647,
+    "max_skins": 2_147_483_647,
+    "max_textures": 2_147_483_647,
+    "max_texture_size": 32_768,
+    "max_triangles": 2_147_483_647,
+    "max_vertices": 2_147_483_647,
+}
 
 
 def _exact_keys(value: object, expected: frozenset[str], context: str) -> dict[str, Any]:
@@ -1018,13 +1036,306 @@ def _process_file(
 
 
 def _validate_recipe_header(recipe: dict[str, Any]) -> str:
-    if recipe.get("format") != RECIPE_FORMAT or recipe.get("format_version") != FORMAT_VERSION:
+    version = recipe.get("format_version")
+    if (
+        recipe.get("format") != RECIPE_FORMAT
+        or isinstance(version, bool)
+        or version != RECIPE_FORMAT_VERSION
+    ):
         raise AssetContractError("Unsupported asset-processing recipe format")
     operation = recipe.get("operation")
     if not isinstance(operation, str) or operation not in _OPERATIONS:
         raise AssetContractError(f"Unsupported asset-processing operation: {operation!r}")
     require_content_hash(recipe, context="asset-processing recipe")
     return operation
+
+
+def _safe_asset_root(asset_root: str | Path) -> Path:
+    supplied = Path(asset_root)
+    root = supplied.resolve()
+    if supplied.is_symlink() or not root.is_dir():
+        raise AssetContractError(f"asset_root is not a safe directory: {asset_root}")
+    return root
+
+
+def _recipe_relative_path(recipe_path: str | Path, root: Path) -> str:
+    source = Path(os.path.abspath(Path(recipe_path)))
+    try:
+        relative = source.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise AssetContractError(f"Processing recipe must live under asset_root {root}") from exc
+    if normalized_relative_path(relative) is None:
+        raise AssetContractError(f"Processing recipe has an unsafe asset-root path: {relative!r}")
+    return relative
+
+
+def _validate_png_recipe_contract(recipe: dict[str, Any], root: Path) -> None:
+    _exact_keys(
+        recipe,
+        frozenset(
+            {"format", "format_version", "operation", "input", "output", "options", "content_hash"}
+        ),
+        "png_canonical recipe",
+    )
+    verify_artifact_reference(root, recipe["input"], context="input")
+    output = _exact_keys(recipe["output"], frozenset({"file"}), "output")
+    output_file = _safe_output_file(output["file"], "output/file")
+    _require_output_extension(output_file, frozenset({".png"}), "output/file")
+    options = recipe["options"]
+    if not isinstance(options, dict):
+        raise AssetContractError("options must be an object")
+    unknown = set(options) - {"crop", "matte_alpha_key", "pad", "resize"}
+    if unknown:
+        raise AssetContractError(f"options contains unknown fields: {', '.join(sorted(unknown))}")
+    if "matte_alpha_key" in options:
+        matte = _exact_keys(
+            options["matte_alpha_key"],
+            frozenset({"rgb", "tolerance"}),
+            "options/matte_alpha_key",
+        )
+        _rgb(matte["rgb"], "options/matte_alpha_key/rgb")
+        _integer(
+            matte["tolerance"],
+            "options/matte_alpha_key/tolerance",
+            minimum=0,
+            maximum=255,
+        )
+    if "crop" in options:
+        crop = _exact_keys(
+            options["crop"],
+            frozenset({"bottom", "left", "right", "top"}),
+            "options/crop",
+        )
+        left = _integer(crop["left"], "options/crop/left", minimum=0, maximum=_MAX_IMAGE_EDGE - 1)
+        top = _integer(crop["top"], "options/crop/top", minimum=0, maximum=_MAX_IMAGE_EDGE - 1)
+        right = _integer(crop["right"], "options/crop/right", minimum=1, maximum=_MAX_IMAGE_EDGE)
+        bottom = _integer(crop["bottom"], "options/crop/bottom", minimum=1, maximum=_MAX_IMAGE_EDGE)
+        if left >= right or top >= bottom:
+            raise AssetContractError("options/crop must have positive width and height")
+    if "resize" in options:
+        resize = _exact_keys(
+            options["resize"],
+            frozenset({"height", "width"}),
+            "options/resize",
+        )
+        _image_size(
+            _integer(resize["width"], "options/resize/width", minimum=1),
+            _integer(resize["height"], "options/resize/height", minimum=1),
+            "resized PNG",
+        )
+    if "pad" in options:
+        pad = _exact_keys(
+            options["pad"],
+            frozenset({"bottom", "color", "left", "right", "top"}),
+            "options/pad",
+        )
+        for side in ("bottom", "left", "right", "top"):
+            _integer(
+                pad[side],
+                f"options/pad/{side}",
+                minimum=0,
+                maximum=_MAX_IMAGE_EDGE,
+            )
+        _rgba(pad["color"], "options/pad/color")
+
+
+def _validate_atlas_recipe_contract(recipe: dict[str, Any], root: Path) -> None:
+    _exact_keys(
+        recipe,
+        frozenset(
+            {"format", "format_version", "operation", "inputs", "output", "options", "content_hash"}
+        ),
+        "atlas recipe",
+    )
+    raw_inputs = recipe["inputs"]
+    if not isinstance(raw_inputs, list) or not raw_inputs:
+        raise AssetContractError("inputs must be a non-empty list")
+    if len(raw_inputs) > 100_000:
+        raise AssetContractError("inputs must contain at most 100000 entries")
+    parsed = [_atlas_input(value, root, index)[0] for index, value in enumerate(raw_inputs)]
+    parsed.sort(key=lambda value: value["id"])
+    frame_ids = [item["id"] for item in parsed]
+    if len(frame_ids) != len(set(frame_ids)):
+        raise AssetContractError("atlas frame IDs must be unique")
+    clip_contracts: dict[str, tuple[tuple[int, int], bool]] = {}
+    for item in parsed:
+        contract = (tuple(item["pivot"]), item["loop"])
+        previous = clip_contracts.setdefault(item["clip_id"], contract)
+        if previous != contract:
+            raise AssetContractError(
+                f"clip {item['clip_id']} has inconsistent pivot or loop values"
+            )
+    options = _exact_keys(
+        recipe["options"],
+        frozenset({"cell_height", "cell_width", "columns"}),
+        "options",
+    )
+    cell_width = _integer(
+        options["cell_width"],
+        "options/cell_width",
+        minimum=1,
+        maximum=_MAX_IMAGE_EDGE,
+    )
+    cell_height = _integer(
+        options["cell_height"],
+        "options/cell_height",
+        minimum=1,
+        maximum=_MAX_IMAGE_EDGE,
+    )
+    columns = _integer(
+        options["columns"],
+        "options/columns",
+        minimum=1,
+        maximum=100_000,
+    )
+    rows = (len(parsed) + columns - 1) // columns
+    _image_size(cell_width * columns, cell_height * rows, "atlas")
+    output = _exact_keys(
+        recipe["output"],
+        frozenset({"clipset_file", "texture_file"}),
+        "output",
+    )
+    texture_file = _safe_output_file(output["texture_file"], "output/texture_file")
+    clipset_file = _safe_output_file(output["clipset_file"], "output/clipset_file")
+    _require_output_extension(texture_file, frozenset({".png"}), "output/texture_file")
+    _require_output_extension(clipset_file, frozenset({".json"}), "output/clipset_file")
+    if texture_file == clipset_file:
+        raise AssetContractError("atlas outputs must use distinct files")
+
+
+def _validate_wav_recipe_contract(recipe: dict[str, Any], root: Path) -> None:
+    _exact_keys(
+        recipe,
+        frozenset(
+            {"format", "format_version", "operation", "input", "output", "options", "content_hash"}
+        ),
+        "wav_pcm recipe",
+    )
+    verify_artifact_reference(root, recipe["input"], context="input")
+    output = _exact_keys(recipe["output"], frozenset({"file"}), "output")
+    output_file = _safe_output_file(output["file"], "output/file")
+    _require_output_extension(output_file, frozenset({".wav"}), "output/file")
+    options = _exact_keys(
+        recipe["options"],
+        frozenset({"channel_mode", "peak", "sample_rate", "trim_threshold"}),
+        "options",
+    )
+    if options["channel_mode"] not in {"mono", "stereo"}:
+        raise AssetContractError("options/channel_mode must be mono or stereo")
+    _integer(
+        options["sample_rate"],
+        "options/sample_rate",
+        minimum=_MIN_SAMPLE_RATE,
+        maximum=_MAX_SAMPLE_RATE,
+    )
+    _integer(
+        options["trim_threshold"],
+        "options/trim_threshold",
+        minimum=0,
+        maximum=32767,
+    )
+    _integer(options["peak"], "options/peak", minimum=1, maximum=32767)
+
+
+def _validate_glb_recipe_contract(recipe: dict[str, Any], root: Path) -> None:
+    _exact_keys(
+        recipe,
+        frozenset(
+            {"format", "format_version", "operation", "input", "output", "options", "content_hash"}
+        ),
+        "glb_validate recipe",
+    )
+    verify_artifact_reference(root, recipe["input"], context="input")
+    output = _exact_keys(recipe["output"], frozenset({"file", "role"}), "output")
+    output_file = _safe_output_file(output["file"], "output/file")
+    _require_output_extension(output_file, frozenset({".glb"}), "output/file")
+    if output["role"] not in _GLB_ROLES:
+        raise AssetContractError("output/role must be animation, collision, model, or skeleton")
+    options = _exact_keys(recipe["options"], frozenset({"budgets", "max_bytes"}), "options")
+    _integer(options["max_bytes"], "options/max_bytes", minimum=1, maximum=MAX_GLB_BYTES)
+    budgets = options["budgets"]
+    if not isinstance(budgets, dict):
+        raise AssetContractError("options/budgets must be an object")
+    unknown = set(budgets) - _GLB_BUDGET_MAXIMUMS.keys()
+    if unknown:
+        raise AssetContractError(
+            f"options/budgets contains unknown fields: {', '.join(sorted(unknown))}"
+        )
+    for name, value in budgets.items():
+        _integer(
+            value,
+            f"options/budgets/{name}",
+            minimum=1 if name == "max_texture_size" else 0,
+            maximum=_GLB_BUDGET_MAXIMUMS[name],
+        )
+
+
+def _validate_file_recipe_contract(recipe: dict[str, Any], root: Path) -> None:
+    _exact_keys(
+        recipe,
+        frozenset(
+            {"format", "format_version", "operation", "input", "output", "options", "content_hash"}
+        ),
+        "file_validate recipe",
+    )
+    verify_artifact_reference(root, recipe["input"], context="input")
+    output = _exact_keys(
+        recipe["output"],
+        frozenset({"file", "media_type", "role"}),
+        "output",
+    )
+    output_file = _safe_output_file(output["file"], "output/file")
+    _validate_file_contract(output_file, output["role"], output["media_type"])
+    _exact_keys(recipe["options"], frozenset(), "options")
+
+
+def _validate_recipe_contract(recipe: dict[str, Any], root: Path, operation: str) -> None:
+    validators = {
+        "atlas": _validate_atlas_recipe_contract,
+        "file_validate": _validate_file_recipe_contract,
+        "glb_validate": _validate_glb_recipe_contract,
+        "png_canonical": _validate_png_recipe_contract,
+        "wav_pcm": _validate_wav_recipe_contract,
+    }
+    validators[operation](recipe, root)
+
+
+def _validated_recipe_snapshot(
+    recipe_path: str | Path,
+    *,
+    asset_root: str | Path,
+) -> tuple[dict[str, Any], str, str, Path]:
+    root = _safe_asset_root(asset_root)
+    relative = _recipe_relative_path(recipe_path, root)
+    source = resolve_artifact(root, relative, max_bytes=MAX_CONTRACT_BYTES)
+    assert source is not None
+    before = source.lstat()
+    before_hash = sha256_file(source)
+    recipe = read_json_object(source)
+    after_hash = sha256_file(source)
+    current = resolve_artifact(root, relative, max_bytes=MAX_CONTRACT_BYTES)
+    assert current is not None
+    after = current.lstat()
+    if (before.st_dev, before.st_ino, before.st_size) != (
+        after.st_dev,
+        after.st_ino,
+        after.st_size,
+    ) or before_hash != after_hash:
+        raise AssetContractError("Processing recipe changed while it was being validated")
+    operation = _validate_recipe_header(recipe)
+    _validate_recipe_contract(recipe, root, operation)
+    return recipe, relative, after_hash, root
+
+
+def validate_processing_recipe(
+    recipe_path: str | Path,
+    *,
+    asset_root: str | Path,
+) -> dict[str, Any]:
+    """Validate one recipe and its hash-bound inputs without executing processing."""
+
+    recipe, _, _, _ = _validated_recipe_snapshot(recipe_path, asset_root=asset_root)
+    return recipe
 
 
 def _destination(output_directory: str | Path) -> Path:
@@ -1151,6 +1462,92 @@ def _publish_directory_noreplace(source: Path, destination: Path) -> None:
         _publish_directory_fallback(source, destination)
 
 
+def _owned_receipt_matches(
+    path: Path,
+    identity: tuple[int, int],
+    expected_sha256: str,
+) -> bool:
+    try:
+        before = path.lstat()
+        if (
+            path.is_symlink()
+            or not stat.S_ISREG(before.st_mode)
+            or before.st_nlink != 1
+            or (before.st_dev, before.st_ino) != identity
+        ):
+            return False
+        actual_sha256 = sha256_file(path)
+        after = path.lstat()
+    except OSError:
+        return False
+    return (
+        stat.S_ISREG(after.st_mode)
+        and after.st_nlink == 1
+        and (after.st_dev, after.st_ino, after.st_size)
+        == (before.st_dev, before.st_ino, before.st_size)
+        and actual_sha256 == expected_sha256
+    )
+
+
+def _remove_published_receipt_if_owned(
+    path: Path,
+    identity: tuple[int, int],
+    expected_sha256: str,
+) -> bool:
+    if not _owned_receipt_matches(path, identity, expected_sha256):
+        return False
+    _remove_owned_file(path, identity)
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
+def _verify_published_processing_receipt(
+    receipt_path: Path,
+    *,
+    receipt: dict[str, Any],
+    receipt_identity: tuple[int, int],
+    receipt_sha256: str,
+    recipe_path: str | Path,
+    recipe: dict[str, Any],
+    recipe_relative: str,
+    recipe_sha256: str,
+    asset_root: Path,
+) -> None:
+    if not _owned_receipt_matches(receipt_path, receipt_identity, receipt_sha256):
+        raise AssetContractError("Published processing receipt identity or bytes changed")
+    current_recipe, current_relative, current_sha256, _ = _validated_recipe_snapshot(
+        recipe_path,
+        asset_root=asset_root,
+    )
+    if (
+        current_recipe != recipe
+        or current_relative != recipe_relative
+        or current_sha256 != recipe_sha256
+    ):
+        raise AssetContractError("Processing recipe changed during receipt publication")
+    if verify_processing_receipt(receipt_path, asset_root=asset_root) != receipt:
+        raise AssetContractError(
+            "Published processing receipt does not match the generated receipt"
+        )
+    current_recipe, current_relative, current_sha256, _ = _validated_recipe_snapshot(
+        recipe_path,
+        asset_root=asset_root,
+    )
+    if (
+        current_recipe != recipe
+        or current_relative != recipe_relative
+        or current_sha256 != recipe_sha256
+    ):
+        raise AssetContractError("Processing recipe changed during receipt verification")
+    if not _owned_receipt_matches(receipt_path, receipt_identity, receipt_sha256):
+        raise AssetContractError("Published processing receipt identity or bytes changed")
+
+
 def process_asset_recipe(
     recipe_path: str | Path,
     output_directory: str | Path,
@@ -1159,15 +1556,10 @@ def process_asset_recipe(
 ) -> dict[str, Any]:
     """Process one allowlisted offline recipe and publish without replacement."""
 
-    source = Path(recipe_path)
-    root = Path(asset_root).resolve()
-    if not root.is_dir() or Path(asset_root).is_symlink():
-        raise AssetContractError(f"asset_root is not a safe directory: {asset_root}")
-    try:
-        source.resolve().relative_to(root)
-    except ValueError as exc:
-        raise AssetContractError(f"Processing recipe must live under asset_root {root}") from exc
-    recipe = read_json_object(source)
+    recipe, recipe_relative, recipe_sha256, root = _validated_recipe_snapshot(
+        recipe_path,
+        asset_root=asset_root,
+    )
     operation = _validate_recipe_header(recipe)
     destination = _destination(output_directory)
     try:
@@ -1186,22 +1578,69 @@ def process_asset_recipe(
             inputs, outputs, toolchain = _process_glb(recipe, root, stage)
         else:
             inputs, outputs, toolchain = _process_file(recipe, root, stage)
+        current_recipe, current_relative, current_sha256, _ = _validated_recipe_snapshot(
+            recipe_path,
+            asset_root=root,
+        )
+        if (
+            current_recipe != recipe
+            or current_relative != recipe_relative
+            or current_sha256 != recipe_sha256
+        ):
+            raise AssetContractError("Processing recipe changed during processing")
         receipt = bind_content_hash(
             {
                 "format": RECEIPT_FORMAT,
-                "format_version": FORMAT_VERSION,
+                "format_version": LATEST_RECEIPT_FORMAT_VERSION,
                 "inputs": inputs,
                 "operation": operation,
                 "outputs": outputs,
-                "recipe": {
+                "recipe_ref": {
+                    "file": recipe_relative,
                     "content_hash": recipe["content_hash"],
-                    "sha256": sha256_file(source),
+                    "sha256": recipe_sha256,
                 },
                 "toolchain": toolchain,
             }
         )
-        write_json_atomic(stage / RECEIPT_NAME, receipt)
+        staged_receipt = stage / RECEIPT_NAME
+        write_json_atomic(staged_receipt, receipt)
+        staged_info = staged_receipt.lstat()
+        receipt_identity = (staged_info.st_dev, staged_info.st_ino)
+        receipt_sha256 = sha256_file(staged_receipt)
         _publish_directory_noreplace(stage, destination)
+        published_receipt = destination / RECEIPT_NAME
+        try:
+            _verify_published_processing_receipt(
+                published_receipt,
+                receipt=receipt,
+                receipt_identity=receipt_identity,
+                receipt_sha256=receipt_sha256,
+                recipe_path=recipe_path,
+                recipe=recipe,
+                recipe_relative=recipe_relative,
+                recipe_sha256=recipe_sha256,
+                asset_root=root,
+            )
+        except Exception as exc:
+            removed = _remove_published_receipt_if_owned(
+                published_receipt,
+                receipt_identity,
+                receipt_sha256,
+            )
+            if removed:
+                recovery = (
+                    "owned receipt removed; published outputs preserved for recovery "
+                    f"at {destination}"
+                )
+            else:
+                recovery = (
+                    "receipt preserved because ownership could not be proven; "
+                    f"recovery required at {destination}"
+                )
+            raise AssetContractError(
+                f"Processing receipt failed post-publication validation: {exc}; {recovery}"
+            ) from exc
     finally:
         shutil.rmtree(stage, ignore_errors=True)
     return receipt
@@ -1336,11 +1775,148 @@ def _verify_receipt_inputs(value: object) -> None:
         raise AssetContractError("receipt input IDs are not canonical")
 
 
-def verify_processing_receipt(receipt_path: str | Path) -> dict[str, Any]:
+def _recipe_input_lineage(recipe: dict[str, Any]) -> list[tuple[str, str, str]]:
+    if recipe["operation"] == "atlas":
+        return sorted(
+            (
+                item["id"],
+                item["artifact"]["file"],
+                item["artifact"]["sha256"],
+            )
+            for item in recipe["inputs"]
+        )
+    return [
+        (
+            "source",
+            recipe["input"]["file"],
+            recipe["input"]["sha256"],
+        )
+    ]
+
+
+def _receipt_input_lineage(value: list[Any]) -> list[tuple[str, str, str]]:
+    return [
+        (
+            item["id"],
+            item["artifact"]["file"],
+            item["artifact"]["sha256"],
+        )
+        for item in value
+    ]
+
+
+def _recipe_output_lineage(recipe: dict[str, Any]) -> list[tuple[str, str, str]]:
+    operation = recipe["operation"]
+    if operation == "atlas":
+        return [
+            ("texture", "image/png", recipe["output"]["texture_file"]),
+            ("clipset", "application/json", recipe["output"]["clipset_file"]),
+        ]
+    if operation == "png_canonical":
+        return [("texture", "image/png", recipe["output"]["file"])]
+    if operation == "wav_pcm":
+        return [("audio", "audio/wav", recipe["output"]["file"])]
+    if operation == "glb_validate":
+        return [
+            (
+                recipe["output"]["role"],
+                "model/gltf-binary",
+                recipe["output"]["file"],
+            )
+        ]
+    return [
+        (
+            recipe["output"]["role"],
+            recipe["output"]["media_type"],
+            recipe["output"]["file"],
+        )
+    ]
+
+
+def _receipt_output_lineage(value: object) -> list[tuple[object, object, object]]:
+    if not isinstance(value, list) or not value:
+        raise AssetContractError("receipt outputs must be a non-empty list")
+    lineage: list[tuple[object, object, object]] = []
+    for item in value:
+        artifact = item.get("artifact") if isinstance(item, dict) else None
+        lineage.append(
+            (
+                item.get("role") if isinstance(item, dict) else None,
+                item.get("media_type") if isinstance(item, dict) else None,
+                artifact.get("file") if isinstance(artifact, dict) else None,
+            )
+        )
+    return lineage
+
+
+def _verify_v2_recipe_binding(
+    receipt: dict[str, Any],
+    *,
+    asset_root: str | Path,
+) -> None:
+    reference = _exact_keys(
+        receipt["recipe_ref"],
+        frozenset({"content_hash", "file", "sha256"}),
+        "recipe_ref",
+    )
+    if normalized_relative_path(reference["file"]) is None:
+        raise AssetContractError("recipe_ref/file is unsafe")
+    _digest(reference["sha256"], "recipe_ref/sha256")
+    _digest(reference["content_hash"], "recipe_ref/content_hash")
+    root = _safe_asset_root(asset_root)
+    recipe_path = verify_artifact_reference(
+        root,
+        reference,
+        context="recipe_ref",
+        allowed_extra=frozenset({"content_hash"}),
+    )
+    recipe, relative, raw_sha256, _ = _validated_recipe_snapshot(
+        recipe_path,
+        asset_root=root,
+    )
+    if relative != reference["file"] or raw_sha256 != reference["sha256"]:
+        raise AssetContractError("recipe_ref does not bind the exact recipe file")
+    if recipe["content_hash"] != reference["content_hash"]:
+        raise AssetContractError("recipe_ref content hash does not match the recipe")
+    if receipt["operation"] != recipe["operation"]:
+        raise AssetContractError("processing receipt operation does not match recipe")
+    expected_inputs = _recipe_input_lineage(recipe)
+    actual_inputs = _receipt_input_lineage(receipt["inputs"])
+    if actual_inputs != expected_inputs:
+        raise AssetContractError("processing receipt inputs do not match recipe")
+    for index, item in enumerate(receipt["inputs"]):
+        verify_artifact_reference(
+            root,
+            item["artifact"],
+            context=f"inputs/{index}/artifact",
+        )
+    if _receipt_output_lineage(receipt["outputs"]) != _recipe_output_lineage(recipe):
+        raise AssetContractError("processing receipt outputs do not match recipe")
+
+
+def verify_processing_receipt(
+    receipt_path: str | Path,
+    *,
+    asset_root: str | Path | None = None,
+) -> dict[str, Any]:
     """Verify a processing receipt and every output byte it binds."""
 
     path = Path(receipt_path)
     receipt = read_json_object(path)
+    if path.name != RECEIPT_NAME:
+        raise AssetContractError(f"Processing receipt must be named {RECEIPT_NAME}")
+    version = receipt.get("format_version")
+    if (
+        receipt.get("format") != RECEIPT_FORMAT
+        or isinstance(version, bool)
+        or version
+        not in {
+            LEGACY_RECEIPT_FORMAT_VERSION,
+            LATEST_RECEIPT_FORMAT_VERSION,
+        }
+    ):
+        raise AssetContractError("Unsupported processing receipt format")
+    recipe_field = "recipe" if version == LEGACY_RECEIPT_FORMAT_VERSION else "recipe_ref"
     _exact_keys(
         receipt,
         frozenset(
@@ -1351,22 +1927,28 @@ def verify_processing_receipt(receipt_path: str | Path) -> dict[str, Any]:
                 "inputs",
                 "operation",
                 "outputs",
-                "recipe",
+                recipe_field,
                 "toolchain",
             }
         ),
         "processing receipt",
     )
-    if path.name != RECEIPT_NAME:
-        raise AssetContractError(f"Processing receipt must be named {RECEIPT_NAME}")
-    if receipt["format"] != RECEIPT_FORMAT or receipt["format_version"] != FORMAT_VERSION:
-        raise AssetContractError("Unsupported processing receipt format")
-    if receipt["operation"] not in _OPERATIONS:
+    if not isinstance(receipt["operation"], str) or receipt["operation"] not in _OPERATIONS:
         raise AssetContractError("Processing receipt has an unsupported operation")
     require_content_hash(receipt, context="processing receipt")
-    recipe = _exact_keys(receipt["recipe"], frozenset({"content_hash", "sha256"}), "recipe")
-    _digest(recipe["content_hash"], "recipe/content_hash")
-    _digest(recipe["sha256"], "recipe/sha256")
+    _verify_receipt_inputs(receipt["inputs"])
+    if version == LEGACY_RECEIPT_FORMAT_VERSION:
+        recipe = _exact_keys(
+            receipt["recipe"],
+            frozenset({"content_hash", "sha256"}),
+            "recipe",
+        )
+        _digest(recipe["content_hash"], "recipe/content_hash")
+        _digest(recipe["sha256"], "recipe/sha256")
+    else:
+        if asset_root is None:
+            raise AssetContractError("asset_root is required for processing receipt v2")
+        _verify_v2_recipe_binding(receipt, asset_root=asset_root)
     if not isinstance(receipt["toolchain"], dict) or not receipt["toolchain"]:
         raise AssetContractError("toolchain must be a non-empty object")
     operation = receipt["operation"]
@@ -1431,8 +2013,6 @@ def verify_processing_receipt(receipt_path: str | Path) -> dict[str, Any]:
             or not file_toolchain["python_version"]
         ):
             raise AssetContractError("file_validate toolchain is invalid")
-    _verify_receipt_inputs(receipt["inputs"])
-
     outputs = receipt["outputs"]
     if not isinstance(outputs, list) or not outputs:
         raise AssetContractError("receipt outputs must be a non-empty list")

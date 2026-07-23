@@ -1,7 +1,7 @@
 {
-  "content_hash": "9b269d14df1b4f3e14b304487034b827b6f4801e945e09c0a7688e2e0da4964c",
+  "content_hash": "34e8e8a304934ab24e7887fc54ed964d8d0f2228f7afabe56159ea81d3808b8c",
   "format": "rpg-world-forge.asset_processing_receipt",
-  "format_version": 1,
+  "format_version": 2,
   "inputs": [
     {
       "artifact": {
@@ -25,8 +25,9 @@
       "role": "font"
     }
   ],
-  "recipe": {
+  "recipe_ref": {
     "content_hash": "a9f9357411e839a55ac28969b704db3d223e755c032cc53ba8e0021d851259e8",
+    "file": "recipes/neutral_font.json",
     "sha256": "98c40e870f35f919c6876a8cc4f3057e6704bc8a5b60a2a2064f0363f4e3d8b7"
   },
   "toolchain": {

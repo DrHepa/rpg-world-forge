@@ -1,7 +1,7 @@
 {
-  "content_hash": "07b6dc9549081aa9fab2bd083baa2b1c790831d71cdaa674c306fb846e17d62a",
+  "content_hash": "b92a72e25d0afb26de6d489db40a9afbe84565fe6cd7c616882cf673e5001f76",
   "format": "rpg-world-forge.asset_processing_receipt",
-  "format_version": 1,
+  "format_version": 2,
   "inputs": [
     {
       "artifact": {
@@ -46,8 +46,9 @@
       "role": "clipset"
     }
   ],
-  "recipe": {
+  "recipe_ref": {
     "content_hash": "4cd1594395c23b24228e840b25541b2f31955a4c591f427ed661650074ec4e21",
+    "file": "recipes/neutral_sheet_atlas.json",
     "sha256": "e76ca29193f0df462c7cc49e00243c8d27aa972abffddcafaf32f1b879fbec9b"
   },
   "toolchain": {

@@ -38,3 +38,9 @@ M5 manifest v3 and the engine-neutral 3D assetpack handoff extend this
 renderpack decision in
 [ADR-0010](0010-m5-asset-production-and-m6-3d-runtime-boundary.md). The current
 pyray runtime and immutable game bundle remain renderpack-only.
+
+Processing recipes remain v1. Processing receipt v2 closes a previous
+authorization gap by naming the exact recipe beneath an explicit asset root and
+binding its raw and canonical hashes plus operation/input/output lineage.
+Receipt v1 stays readable as identity-only history; validators never scan for
+or infer a recipe path.

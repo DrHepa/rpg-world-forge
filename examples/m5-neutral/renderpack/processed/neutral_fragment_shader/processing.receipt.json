@@ -1,7 +1,7 @@
 {
-  "content_hash": "986e0f36d66c45b981da4040043310aec461431bb3e9c742a14940617eb53995",
+  "content_hash": "440ee9eb4b61ef60372f9520ab5d7e790a8af7d983fcc608b51ef945543e2db7",
   "format": "rpg-world-forge.asset_processing_receipt",
-  "format_version": 1,
+  "format_version": 2,
   "inputs": [
     {
       "artifact": {
@@ -25,8 +25,9 @@
       "role": "fragment_shader"
     }
   ],
-  "recipe": {
+  "recipe_ref": {
     "content_hash": "b25ab3db6a12fb11f6664732612b722d2c5346dfec0752dbaf94bfb58a78cfab",
+    "file": "recipes/neutral_fragment_shader.json",
     "sha256": "2eb7c5f29e68b12dec09ed2e3ee58fbbaa7d3f3fa6f1f93145994fcf15f5b639"
   },
   "toolchain": {

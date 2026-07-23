@@ -49,6 +49,32 @@ class ContractCatalogTests(unittest.TestCase):
         self.assertTrue(entries["asset-manifest"]["fixtures"])
         self.assertTrue(entries["asset-processing-recipe"]["fixtures"])
 
+    def test_processing_catalog_uses_exact_formats_versions_and_public_symbols(self) -> None:
+        catalog = load_contract_catalog(ROOT)
+        entries = {entry["id"]: entry for entry in catalog["contracts"]}
+        recipe = entries["asset-processing-recipe"]
+        receipt = entries["asset-processing-receipt"]
+
+        self.assertEqual("rpg-world-forge.asset_processing_recipe", recipe["format"])
+        self.assertEqual(1, recipe["version"])
+        self.assertEqual(
+            [
+                "worldforge.asset_processing:process_asset_recipe",
+                "worldforge.asset_processing:validate_processing_recipe",
+            ],
+            recipe["python_symbols"],
+        )
+        self.assertEqual(2, receipt["version"])
+        self.assertIn("v1 read compatibility", receipt["title"])
+        recipe_schema = json.loads((ROOT / recipe["schema"]).read_text(encoding="utf-8"))
+        receipt_schema = json.loads((ROOT / receipt["schema"]).read_text(encoding="utf-8"))
+        for sample_rate in (
+            recipe_schema["$defs"]["wav_options"]["properties"]["sample_rate"],
+            receipt_schema["$defs"]["wav_details"]["properties"]["sample_rate"],
+        ):
+            self.assertEqual(8000, sample_rate["minimum"])
+            self.assertEqual(192000, sample_rate["maximum"])
+
     def test_modly_discovery_entry_points_to_its_operational_validator(self) -> None:
         catalog = load_contract_catalog(ROOT)
         entries = {entry["id"]: entry for entry in catalog["contracts"]}

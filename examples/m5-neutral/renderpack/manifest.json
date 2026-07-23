@@ -18,7 +18,7 @@
       ],
       "processing_receipt": {
         "file": "processed/neutral_font/processing.receipt.json",
-        "sha256": "b41e8b0677e9f044b922a155afccb93780d8d13d828cc40b25298cc5016ff52c"
+        "sha256": "6d02d5afaa72514bc6c228226356c8aaeda71c4c11609e820fa25a001b851221"
       },
       "production_receipts": [
         {
@@ -63,7 +63,7 @@
       ],
       "processing_receipt": {
         "file": "processed/neutral_fragment_shader/processing.receipt.json",
-        "sha256": "4fdf61f8b79382a12a36db35c49fadfc609760971c03e86b7c4474e0f9b54ef0"
+        "sha256": "c73ac0f236a473fb934914b614327086f9a7b7906a65fe8636f7b49936fe88a4"
       },
       "production_receipts": [
         {
@@ -108,7 +108,7 @@
       ],
       "processing_receipt": {
         "file": "processed/neutral_sfx/processing.receipt.json",
-        "sha256": "226f1251d35bfaf091b0898d449dc1a28489a95d9017b53e4f9b5cadc0209cf7"
+        "sha256": "54a6f1ee40aea2f241993cebcff1f2af642a60e8020fa508edf8c85f485ef1c9"
       },
       "production_receipts": [
         {
@@ -160,7 +160,7 @@
       ],
       "processing_receipt": {
         "file": "processed/neutral_sheet/processing.receipt.json",
-        "sha256": "a058871d794e4a94538f2295ff07cbd2719c1d66db3597c75064e91748a21d46"
+        "sha256": "79ec2e129167ae06f5113d738b5d518422fc6f9bbf4c57f143f01580e6307704"
       },
       "production_receipts": [
         {
@@ -214,7 +214,7 @@
       ],
       "processing_receipt": {
         "file": "processed/neutral_vertex_shader/processing.receipt.json",
-        "sha256": "d5b716f68ba922f571ef046440840d8eb9b9fea0c4ab8788da7ac57fcda8b5d4"
+        "sha256": "1d4272e404ee65f08482a68f13696ca94859960bb88c498c3db4ba6defc35ebf"
       },
       "production_receipts": [
         {
@@ -277,7 +277,7 @@
       "slot": "ui:font"
     }
   ],
-  "content_hash": "b4c2812bc19e58775fea702f8ba3f58662001e34c7c681ef3263bc028b1861fe",
+  "content_hash": "71fb25849836cf9b1a05f6d9ac4cd7cb3fb883156d67a92dcc9fe08a8444b63f",
   "format": "rpg-world-forge.asset_manifest",
   "format_version": 3,
   "generation_policy": {

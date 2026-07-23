@@ -266,6 +266,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="re-verify a deterministic processing receipt and output bytes",
     )
     verify_processing.add_argument("receipt", type=Path)
+    verify_processing.add_argument(
+        "--asset-root",
+        type=Path,
+        help="authoritative asset root required by processing receipt v2",
+    )
 
     validate_assets = commands.add_parser(
         "validate-assets",
@@ -619,7 +624,7 @@ def main() -> int:
             return 0
 
         if args.command == "verify-processing":
-            receipt = verify_processing_receipt(args.receipt)
+            receipt = verify_processing_receipt(args.receipt, asset_root=args.asset_root)
             print(
                 f"OK receipt={args.receipt} operation={receipt['operation']} "
                 f"hash={receipt['content_hash']}"

@@ -1,20 +1,33 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rpg-world-forge.local/schemas/asset-processing-receipt.schema.json",
-  "title": "Executable deterministic asset-processing receipt v1",
+  "title": "Executable deterministic asset-processing receipt v2 with v1 read compatibility",
   "type": "object",
   "additionalProperties": false,
-  "required": ["format", "format_version", "inputs", "operation", "outputs", "recipe", "toolchain", "content_hash"],
+  "required": ["format", "format_version", "inputs", "operation", "outputs", "toolchain", "content_hash"],
   "properties": {
     "format": {"const": "rpg-world-forge.asset_processing_receipt"},
-    "format_version": {"const": 1},
+    "format_version": {"enum": [1, 2]},
     "inputs": {"type": "array", "minItems": 1, "maxItems": 100000, "items": {"$ref": "#/$defs/input"}},
     "operation": {"enum": ["atlas", "file_validate", "glb_validate", "png_canonical", "wav_pcm"]},
     "outputs": {"type": "array", "minItems": 1, "maxItems": 2},
-    "recipe": {"$ref": "#/$defs/recipe_ref"},
+    "recipe": {"$ref": "#/$defs/legacy_recipe_ref"},
+    "recipe_ref": {"$ref": "#/$defs/recipe_ref"},
     "toolchain": {"type": "object", "minProperties": 1},
     "content_hash": {"$ref": "#/$defs/sha256"}
   },
+  "oneOf": [
+    {
+      "properties": {"format_version": {"const": 1}},
+      "required": ["recipe"],
+      "not": {"required": ["recipe_ref"]}
+    },
+    {
+      "properties": {"format_version": {"const": 2}},
+      "required": ["recipe_ref"],
+      "not": {"required": ["recipe"]}
+    }
+  ],
   "allOf": [
     {
       "if": {"properties": {"operation": {"const": "png_canonical"}}},
@@ -115,12 +128,22 @@
         "id": {"$ref": "#/$defs/id"}
       }
     },
-    "recipe_ref": {
+    "legacy_recipe_ref": {
       "type": "object",
       "additionalProperties": false,
       "required": ["content_hash", "sha256"],
       "properties": {
         "content_hash": {"$ref": "#/$defs/sha256"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "recipe_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content_hash", "file", "sha256"],
+      "properties": {
+        "content_hash": {"$ref": "#/$defs/sha256"},
+        "file": {"$ref": "#/$defs/project_path"},
         "sha256": {"$ref": "#/$defs/sha256"}
       }
     },
@@ -151,7 +174,7 @@
         "channels": {"enum": [1, 2]},
         "frames": {"type": "integer", "minimum": 0, "maximum": 2147483647},
         "peak": {"type": "integer", "minimum": 0, "maximum": 32767},
-        "sample_rate": {"type": "integer", "minimum": 1, "maximum": 384000},
+        "sample_rate": {"type": "integer", "minimum": 8000, "maximum": 192000},
         "sample_width": {"const": 2}
       }
     },

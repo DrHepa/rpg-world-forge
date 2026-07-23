@@ -1,7 +1,7 @@
 {
-  "content_hash": "e586d8a1094b55db6d5c5697669afa58baab5ec366ff1118b5827096d78066f9",
+  "content_hash": "c40302f122871b27c8f2e96622de872d5f149bcc6ac6177eb5c38150e35f9f73",
   "format": "rpg-world-forge.asset_processing_receipt",
-  "format_version": 1,
+  "format_version": 2,
   "inputs": [
     {
       "artifact": {
@@ -29,8 +29,9 @@
       "role": "audio"
     }
   ],
-  "recipe": {
+  "recipe_ref": {
     "content_hash": "7a7d8f1518e07f186ba2e6187e6bc825143a218c78594c72e2719eebe488dde7",
+    "file": "recipes/neutral_sfx.json",
     "sha256": "4a30969b32cf39af80c9ca631df0f2671995512fb231adc01487978a912257c7"
   },
   "toolchain": {

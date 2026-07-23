@@ -196,7 +196,7 @@
       "properties": {
         "channel_mode": {"enum": ["mono", "stereo"]},
         "peak": {"type": "integer", "minimum": 1, "maximum": 32767},
-        "sample_rate": {"type": "integer", "minimum": 1, "maximum": 384000},
+        "sample_rate": {"type": "integer", "minimum": 8000, "maximum": 192000},
         "trim_threshold": {"type": "integer", "minimum": 0, "maximum": 32767}
       }
     },

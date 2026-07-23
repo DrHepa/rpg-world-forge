@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
+import os
 import struct
 import tempfile
 import unittest
@@ -11,12 +14,14 @@ from typing import Any
 from unittest.mock import patch
 
 import worldforge.asset_processing as asset_processing_module
+from worldforge.__main__ import main
 from worldforge.asset_formats.gltf import inspect_glb
 from worldforge.asset_io import AssetContractError, artifact_reference
 from worldforge.asset_processing import (
     RECEIPT_NAME,
     RECIPE_FORMAT,
     process_asset_recipe,
+    validate_processing_recipe,
     verify_processing_receipt,
 )
 from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
@@ -37,8 +42,17 @@ def _write_recipe(path: Path, value: dict[str, object]) -> Path:
         **value,
     }
     payload["content_hash"] = canonical_payload_hash(payload)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(canonical_json_bytes(payload))
     return path
+
+
+def _rewrite_receipt(path: Path, mutate: object) -> dict[str, object]:
+    receipt = json.loads(path.read_text(encoding="utf-8"))
+    mutate(receipt)
+    receipt["content_hash"] = canonical_payload_hash(receipt)
+    path.write_bytes(canonical_json_bytes(receipt))
+    return receipt
 
 
 def _write_color_png(path: Path, color: tuple[int, int, int, int], size: tuple[int, int]) -> None:
@@ -133,6 +147,524 @@ def _write_sfnt(path: Path, signature: bytes) -> None:
 
 
 class DeterministicAssetProcessingTests(unittest.TestCase):
+    def test_verify_processing_cli_requires_asset_root_only_for_v2(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source = root / "source.vert"
+            source.write_text("#version 330 core\nvoid main() {}\n", encoding="utf-8")
+            recipe = _write_recipe(
+                root / "recipe.json",
+                {
+                    "operation": "file_validate",
+                    "input": artifact_reference(root, "source.vert"),
+                    "output": {
+                        "file": "source.vert",
+                        "media_type": "text/x-glsl",
+                        "role": "vertex_shader",
+                    },
+                    "options": {},
+                },
+            )
+            output = root / "output"
+            process_asset_recipe(recipe, output, asset_root=root)
+            receipt_path = output / RECEIPT_NAME
+
+            stdout = io.StringIO()
+            with (
+                patch("sys.argv", ["worldforge", "verify-processing", str(receipt_path)]),
+                contextlib.redirect_stdout(stdout),
+            ):
+                self.assertEqual(1, main())
+            self.assertIn("asset_root is required", stdout.getvalue())
+
+            stdout = io.StringIO()
+            with (
+                patch(
+                    "sys.argv",
+                    [
+                        "worldforge",
+                        "verify-processing",
+                        str(receipt_path),
+                        "--asset-root",
+                        str(root),
+                    ],
+                ),
+                contextlib.redirect_stdout(stdout),
+            ):
+                self.assertEqual(0, main())
+            self.assertIn("OK receipt=", stdout.getvalue())
+
+            _rewrite_receipt(
+                receipt_path,
+                lambda value: (
+                    value.__setitem__("format_version", 1),
+                    value.__setitem__(
+                        "recipe",
+                        {
+                            "content_hash": value["recipe_ref"]["content_hash"],
+                            "sha256": value["recipe_ref"]["sha256"],
+                        },
+                    ),
+                    value.pop("recipe_ref"),
+                ),
+            )
+            recipe.unlink()
+            stdout = io.StringIO()
+            with (
+                patch("sys.argv", ["worldforge", "verify-processing", str(receipt_path)]),
+                contextlib.redirect_stdout(stdout),
+            ):
+                self.assertEqual(0, main())
+            self.assertIn("OK receipt=", stdout.getvalue())
+
+    def test_new_receipt_v2_binds_exact_nested_recipe_and_requires_asset_root(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source = root / "generated/source.vert"
+            source.parent.mkdir()
+            source.write_text("#version 330 core\nvoid main() {}\n", encoding="utf-8")
+            recipe = _write_recipe(
+                root / "recipes/nested/source.json",
+                {
+                    "operation": "file_validate",
+                    "input": artifact_reference(root, "generated/source.vert"),
+                    "output": {
+                        "file": "shaders/source.vert",
+                        "media_type": "text/x-glsl",
+                        "role": "vertex_shader",
+                    },
+                    "options": {},
+                },
+            )
+            output = root / "processed/source"
+
+            receipt = process_asset_recipe(recipe, output, asset_root=root)
+
+            expected_recipe_ref = {
+                **artifact_reference(root, "recipes/nested/source.json"),
+                "content_hash": json.loads(recipe.read_text(encoding="utf-8"))["content_hash"],
+            }
+            self.assertEqual(2, receipt["format_version"])
+            self.assertEqual(expected_recipe_ref, receipt["recipe_ref"])
+            self.assertNotIn("recipe", receipt)
+            with self.assertRaisesRegex(AssetContractError, "asset_root is required"):
+                verify_processing_receipt(output / RECEIPT_NAME)
+            self.assertEqual(
+                receipt,
+                verify_processing_receipt(output / RECEIPT_NAME, asset_root=root),
+            )
+
+    def test_legacy_v1_receipt_remains_identity_only(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source = root / "source.vert"
+            source.write_text("#version 330 core\nvoid main() {}\n", encoding="utf-8")
+            recipe = _write_recipe(
+                root / "recipe.json",
+                {
+                    "operation": "file_validate",
+                    "input": artifact_reference(root, "source.vert"),
+                    "output": {
+                        "file": "source.vert",
+                        "media_type": "text/x-glsl",
+                        "role": "vertex_shader",
+                    },
+                    "options": {},
+                },
+            )
+            output = root / "output"
+            process_asset_recipe(recipe, output, asset_root=root)
+            receipt_path = output / RECEIPT_NAME
+
+            legacy = _rewrite_receipt(
+                receipt_path,
+                lambda value: (
+                    value.__setitem__("format_version", 1),
+                    value.__setitem__(
+                        "recipe",
+                        {
+                            "content_hash": value["recipe_ref"]["content_hash"],
+                            "sha256": value["recipe_ref"]["sha256"],
+                        },
+                    ),
+                    value.pop("recipe_ref"),
+                ),
+            )
+            recipe.unlink()
+
+            self.assertEqual(legacy, verify_processing_receipt(receipt_path))
+            self.assertEqual(legacy, verify_processing_receipt(receipt_path, asset_root=root))
+            _rewrite_receipt(
+                receipt_path,
+                lambda value: value.__setitem__("operation", []),
+            )
+            with self.assertRaisesRegex(AssetContractError, "unsupported operation"):
+                verify_processing_receipt(receipt_path)
+
+    def test_validate_processing_recipe_is_pure_and_has_no_output_side_effects(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source = root / "candidate.glb"
+            source.write_bytes(b"not decoded by pure validation")
+            recipe = _write_recipe(
+                root / "recipes/candidate.json",
+                {
+                    "operation": "glb_validate",
+                    "input": artifact_reference(root, "candidate.glb"),
+                    "output": {"file": "runtime/candidate.glb", "role": "model"},
+                    "options": {"budgets": {"max_vertices": 10}, "max_bytes": 1_048_576},
+                },
+            )
+            output = root / "processed/candidate"
+
+            with (
+                patch.object(
+                    asset_processing_module,
+                    "inspect_glb",
+                    side_effect=AssertionError("pure validation decoded a GLB"),
+                ),
+                patch.object(
+                    asset_processing_module,
+                    "_open_rgba",
+                    side_effect=AssertionError("pure validation decoded an image"),
+                ),
+                patch.object(
+                    asset_processing_module,
+                    "_read_pcm16",
+                    side_effect=AssertionError("pure validation decoded audio"),
+                ),
+                patch.object(
+                    asset_processing_module,
+                    "_inspect_validated_file",
+                    side_effect=AssertionError("pure validation executed file inspection"),
+                ),
+                patch.object(
+                    asset_processing_module.tempfile,
+                    "mkdtemp",
+                    side_effect=AssertionError("pure validation created a stage"),
+                ),
+            ):
+                validated = validate_processing_recipe(recipe, asset_root=root)
+
+            self.assertEqual("glb_validate", validated["operation"])
+            self.assertFalse(output.exists())
+            self.assertEqual([], list(root.glob("**/.candidate.stage-*")))
+
+    def test_recipe_validation_rejects_bad_root_path_hash_content_and_file_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            root = base / "assets"
+            root.mkdir()
+            source = root / "source.vert"
+            source.write_text("#version 330 core\nvoid main() {}\n", encoding="utf-8")
+
+            def recipe_payload(**overrides: object) -> dict[str, object]:
+                return {
+                    "operation": "file_validate",
+                    "input": artifact_reference(root, "source.vert"),
+                    "output": {
+                        "file": "source.vert",
+                        "media_type": "text/x-glsl",
+                        "role": "vertex_shader",
+                    },
+                    "options": {},
+                    **overrides,
+                }
+
+            with (
+                self.subTest("unsafe asset root"),
+                self.assertRaisesRegex(AssetContractError, "asset_root"),
+            ):
+                validate_processing_recipe(
+                    _write_recipe(root / "root.json", recipe_payload()),
+                    asset_root=root / "missing",
+                )
+
+            outside = _write_recipe(base / "outside.json", recipe_payload())
+            with (
+                self.subTest("recipe outside root"),
+                self.assertRaisesRegex(AssetContractError, "must live under asset_root"),
+            ):
+                validate_processing_recipe(outside, asset_root=root)
+
+            bad_hash = _write_recipe(
+                root / "bad-hash.json",
+                recipe_payload(
+                    input={
+                        **artifact_reference(root, "source.vert"),
+                        "sha256": "0" * 64,
+                    }
+                ),
+            )
+            with self.subTest("input hash"), self.assertRaisesRegex(AssetContractError, "SHA-256"):
+                validate_processing_recipe(bad_hash, asset_root=root)
+
+            bad_content = _write_recipe(root / "bad-content.json", recipe_payload())
+            value = json.loads(bad_content.read_text(encoding="utf-8"))
+            value["content_hash"] = "0" * 64
+            bad_content.write_bytes(canonical_json_bytes(value))
+            with (
+                self.subTest("content hash"),
+                self.assertRaisesRegex(AssetContractError, "content hash"),
+            ):
+                validate_processing_recipe(bad_content, asset_root=root)
+
+            typed_version = _write_recipe(
+                root / "typed-version.json",
+                recipe_payload(format_version=True),
+            )
+            with (
+                self.subTest("typed version"),
+                self.assertRaisesRegex(AssetContractError, "format"),
+            ):
+                validate_processing_recipe(typed_version, asset_root=root)
+
+            target = _write_recipe(root / "target.json", recipe_payload())
+            symlink = root / "linked.json"
+            symlink.symlink_to(target.name)
+            with (
+                self.subTest("symlink"),
+                self.assertRaisesRegex(AssetContractError, "standalone regular file"),
+            ):
+                validate_processing_recipe(symlink, asset_root=root)
+
+            hardlink_target = _write_recipe(root / "hardlink-target.json", recipe_payload())
+            hardlink = root / "hardlink.json"
+            os.link(hardlink_target, hardlink)
+            with (
+                self.subTest("hardlink"),
+                self.assertRaisesRegex(AssetContractError, "standalone regular file"),
+            ):
+                validate_processing_recipe(hardlink, asset_root=root)
+
+    def test_v2_receipt_rejects_recipe_reference_and_exact_lineage_tampering(self) -> None:
+        mutations = {
+            "recipe path": (
+                lambda value: value["recipe_ref"].__setitem__("file", "../recipe.json"),
+                "recipe_ref/file",
+            ),
+            "recipe sha": (
+                lambda value: value["recipe_ref"].__setitem__("sha256", "0" * 64),
+                "SHA-256",
+            ),
+            "recipe content": (
+                lambda value: value["recipe_ref"].__setitem__("content_hash", "0" * 64),
+                "content hash",
+            ),
+            "operation": (
+                lambda value: value.__setitem__("operation", "png_canonical"),
+                "does not match recipe",
+            ),
+            "input id": (
+                lambda value: value["inputs"][0].__setitem__("id", "other"),
+                "inputs do not match recipe",
+            ),
+            "input file": (
+                lambda value: value["inputs"][0]["artifact"].__setitem__(
+                    "file", "generated/other.vert"
+                ),
+                "inputs do not match recipe",
+            ),
+            "input sha": (
+                lambda value: value["inputs"][0]["artifact"].__setitem__("sha256", "0" * 64),
+                "inputs do not match recipe",
+            ),
+            "output file": (
+                lambda value: value["outputs"][0]["artifact"].__setitem__("file", "other.vert"),
+                "outputs do not match recipe",
+            ),
+            "output role": (
+                lambda value: value["outputs"][0].__setitem__("role", "fragment_shader"),
+                "outputs do not match recipe",
+            ),
+            "output media": (
+                lambda value: value["outputs"][0].__setitem__("media_type", "font/ttf"),
+                "outputs do not match recipe",
+            ),
+        }
+        for label, (mutate, message) in mutations.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as name:
+                root = Path(name)
+                source = root / "generated/source.vert"
+                source.parent.mkdir()
+                source.write_text("#version 330 core\nvoid main() {}\n", encoding="utf-8")
+                recipe = _write_recipe(
+                    root / "recipes/source.json",
+                    {
+                        "operation": "file_validate",
+                        "input": artifact_reference(root, "generated/source.vert"),
+                        "output": {
+                            "file": "source.vert",
+                            "media_type": "text/x-glsl",
+                            "role": "vertex_shader",
+                        },
+                        "options": {},
+                    },
+                )
+                output = root / "processed/source"
+                process_asset_recipe(recipe, output, asset_root=root)
+                receipt_path = output / RECEIPT_NAME
+                _rewrite_receipt(receipt_path, mutate)
+
+                with self.assertRaisesRegex(AssetContractError, message):
+                    verify_processing_receipt(receipt_path, asset_root=root)
+
+    def test_v2_receipt_rejects_linked_recipe_file(self) -> None:
+        for link_kind in ("symlink", "hardlink"):
+            with self.subTest(link_kind=link_kind), tempfile.TemporaryDirectory() as name:
+                root = Path(name)
+                source = root / "source.vert"
+                source.write_text("#version 330 core\nvoid main() {}\n", encoding="utf-8")
+                recipe = _write_recipe(
+                    root / "recipe.json",
+                    {
+                        "operation": "file_validate",
+                        "input": artifact_reference(root, "source.vert"),
+                        "output": {
+                            "file": "source.vert",
+                            "media_type": "text/x-glsl",
+                            "role": "vertex_shader",
+                        },
+                        "options": {},
+                    },
+                )
+                output = root / "output"
+                process_asset_recipe(recipe, output, asset_root=root)
+                if link_kind == "symlink":
+                    moved = root / "moved-recipe.json"
+                    recipe.rename(moved)
+                    recipe.symlink_to(moved.name)
+                else:
+                    os.link(recipe, root / "recipe-hardlink.json")
+
+                with self.assertRaisesRegex(AssetContractError, "standalone regular file"):
+                    verify_processing_receipt(output / RECEIPT_NAME, asset_root=root)
+
+    def test_recipe_is_rechecked_before_receipt_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            _write_color_png(root / "source.png", (20, 40, 60, 255), (2, 2))
+            recipe = _write_recipe(
+                root / "recipe.json",
+                {
+                    "operation": "png_canonical",
+                    "input": artifact_reference(root, "source.png"),
+                    "output": {"file": "result.png"},
+                    "options": {},
+                },
+            )
+            output = root / "output"
+            original = asset_processing_module._process_png
+
+            def mutate_recipe_after_processing(
+                value: dict[str, object],
+                recipe_root: Path,
+                stage: Path,
+            ) -> object:
+                result = original(value, recipe_root, stage)
+                changed = json.loads(recipe.read_text(encoding="utf-8"))
+                changed["output"] = {"file": "changed.png"}
+                changed["content_hash"] = canonical_payload_hash(changed)
+                recipe.write_bytes(canonical_json_bytes(changed))
+                return result
+
+            with (
+                patch.object(
+                    asset_processing_module,
+                    "_process_png",
+                    side_effect=mutate_recipe_after_processing,
+                ),
+                self.assertRaisesRegex(AssetContractError, "changed during processing"),
+            ):
+                process_asset_recipe(recipe, output, asset_root=root)
+
+            self.assertFalse(output.exists())
+            self.assertEqual([], list(root.glob(".output.stage-*")))
+
+    def test_recipe_is_rechecked_after_receipt_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            _write_color_png(root / "source.png", (20, 40, 60, 255), (2, 2))
+            recipe = _write_recipe(
+                root / "recipe.json",
+                {
+                    "operation": "png_canonical",
+                    "input": artifact_reference(root, "source.png"),
+                    "output": {"file": "result.png"},
+                    "options": {},
+                },
+            )
+            output = root / "output"
+            original_publish = asset_processing_module._publish_directory_noreplace
+
+            def publish_then_mutate_recipe(source: Path, destination: Path) -> None:
+                original_publish(source, destination)
+                changed = json.loads(recipe.read_text(encoding="utf-8"))
+                changed["output"] = {"file": "changed.png"}
+                changed["content_hash"] = canonical_payload_hash(changed)
+                recipe.write_bytes(canonical_json_bytes(changed))
+
+            with (
+                patch.object(
+                    asset_processing_module,
+                    "_publish_directory_noreplace",
+                    side_effect=publish_then_mutate_recipe,
+                ),
+                self.assertRaisesRegex(
+                    AssetContractError,
+                    "post-publication validation",
+                ),
+            ):
+                process_asset_recipe(recipe, output, asset_root=root)
+
+            self.assertTrue((output / "result.png").is_file())
+            self.assertFalse((output / RECEIPT_NAME).exists())
+            self.assertEqual([], list(root.glob(".output.stage-*")))
+
+    def test_post_publication_cleanup_preserves_an_unowned_receipt_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            _write_color_png(root / "source.png", (20, 40, 60, 255), (2, 2))
+            recipe = _write_recipe(
+                root / "recipe.json",
+                {
+                    "operation": "png_canonical",
+                    "input": artifact_reference(root, "source.png"),
+                    "output": {"file": "result.png"},
+                    "options": {},
+                },
+            )
+            output = root / "output"
+            foreign = b"foreign recovery evidence\n"
+
+            def replace_receipt_then_fail(
+                receipt_path: str | Path,
+                *,
+                asset_root: str | Path | None = None,
+            ) -> dict[str, object]:
+                del asset_root
+                replacement = root / "foreign-receipt"
+                replacement.write_bytes(foreign)
+                os.replace(replacement, receipt_path)
+                raise AssetContractError("forced post-publication verification failure")
+
+            with (
+                patch.object(
+                    asset_processing_module,
+                    "verify_processing_receipt",
+                    side_effect=replace_receipt_then_fail,
+                ),
+                self.assertRaisesRegex(
+                    AssetContractError,
+                    "ownership could not be proven",
+                ),
+            ):
+                process_asset_recipe(recipe, output, asset_root=root)
+
+            self.assertEqual(foreign, (output / RECEIPT_NAME).read_bytes())
+            self.assertTrue((output / "result.png").is_file())
+            self.assertEqual([], list(root.glob(".output.stage-*")))
+
     def test_publication_does_not_replace_concurrently_created_directory(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             root = Path(name)
@@ -260,7 +792,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         receipt,
-                        verify_processing_receipt(output / RECEIPT_NAME),
+                        verify_processing_receipt(output / RECEIPT_NAME, asset_root=root),
                     )
 
             shaders = (
@@ -305,7 +837,10 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                         shader_payload,
                         (root / f"processed/{filename}-first/shaders/{filename}").read_bytes(),
                     )
-                    verify_processing_receipt(root / f"processed/{filename}-first/{RECEIPT_NAME}")
+                    verify_processing_receipt(
+                        root / f"processed/{filename}-first/{RECEIPT_NAME}",
+                        asset_root=root,
+                    )
 
     def test_file_validate_rejects_bad_headers_unsafe_glsl_pairs_and_extensions(self) -> None:
         with tempfile.TemporaryDirectory() as name:
@@ -456,7 +991,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
 
             with self.assertRaisesRegex(AssetContractError, "provider"):
-                verify_processing_receipt(receipt_path)
+                verify_processing_receipt(receipt_path, asset_root=root)
 
     def test_existing_processing_outputs_require_format_extensions(self) -> None:
         with tempfile.TemporaryDirectory() as name:
@@ -554,7 +1089,10 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
             self.assertEqual(1, first["outputs"][0]["details"]["metrics"]["meshes"])
             self.assertEqual(
                 first,
-                verify_processing_receipt(root / f"first/{RECEIPT_NAME}"),
+                verify_processing_receipt(
+                    root / f"first/{RECEIPT_NAME}",
+                    asset_root=root,
+                ),
             )
 
     def test_glb_validation_rejects_external_resources_and_tampered_metrics(self) -> None:
@@ -590,7 +1128,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
             receipt["content_hash"] = canonical_payload_hash(receipt)
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             with self.assertRaisesRegex(AssetContractError, "GLB inspection"):
-                verify_processing_receipt(receipt_path)
+                verify_processing_receipt(receipt_path, asset_root=root)
 
     def test_glb_receipt_reverification_enforces_role_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as name:
@@ -630,7 +1168,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
 
             with self.assertRaisesRegex(AssetContractError, "requires at least one meshes"):
-                verify_processing_receipt(receipt_path)
+                verify_processing_receipt(receipt_path, asset_root=root)
 
     def test_png_canonical_is_byte_identical_and_strips_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as name:
@@ -677,7 +1215,10 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
             )
             self.assertEqual(
                 first,
-                verify_processing_receipt(root / f"first/{RECEIPT_NAME}"),
+                verify_processing_receipt(
+                    root / f"first/{RECEIPT_NAME}",
+                    asset_root=root,
+                ),
             )
             with image_module.open(root / "first/canonical.png") as output:
                 self.assertEqual("RGBA", output.mode)
@@ -707,7 +1248,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                     )
                     destination = root / f"output-{suffix}"
                     process_asset_recipe(recipe, destination, asset_root=root)
-                    verify_processing_receipt(destination / RECEIPT_NAME)
+                    verify_processing_receipt(destination / RECEIPT_NAME, asset_root=root)
 
             first_frame = image_module.new("RGBA", (2, 2), (20, 40, 60, 255))
             second_frame = image_module.new("RGBA", (2, 2), (60, 40, 20, 255))
@@ -773,7 +1314,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
             receipt["content_hash"] = canonical_payload_hash(receipt)
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             with self.assertRaisesRegex(AssetContractError, "not a decoded PNG"):
-                verify_processing_receipt(receipt_path)
+                verify_processing_receipt(receipt_path, asset_root=root)
 
     def test_png_dimensions_are_rejected_before_full_decode(self) -> None:
         with tempfile.TemporaryDirectory() as name:
@@ -808,12 +1349,12 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
             )
             process_asset_recipe(recipe, root / "output", asset_root=root)
             receipt = root / f"output/{RECEIPT_NAME}"
-            verify_processing_receipt(receipt)
+            verify_processing_receipt(receipt, asset_root=root)
 
             output = root / "output/result.png"
             output.write_bytes(output.read_bytes() + b"tamper")
             with self.assertRaisesRegex(AssetContractError, "SHA-256"):
-                verify_processing_receipt(receipt)
+                verify_processing_receipt(receipt, asset_root=root)
 
             process_asset_recipe(recipe, root / "document-tamper", asset_root=root)
             changed_receipt = root / f"document-tamper/{RECEIPT_NAME}"
@@ -821,7 +1362,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
             changed["operation"] = "wav_pcm"
             changed_receipt.write_text(json.dumps(changed), encoding="utf-8")
             with self.assertRaisesRegex(AssetContractError, "content hash"):
-                verify_processing_receipt(changed_receipt)
+                verify_processing_receipt(changed_receipt, asset_root=root)
 
     def test_invalid_operation_paths_and_hashes_fail_without_publication(self) -> None:
         with tempfile.TemporaryDirectory() as name:
@@ -929,7 +1470,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                 },
             )
             receipt = process_asset_recipe(recipe, root / "output", asset_root=root)
-            verify_processing_receipt(root / f"output/{RECEIPT_NAME}")
+            verify_processing_receipt(root / f"output/{RECEIPT_NAME}", asset_root=root)
 
             self.assertEqual(
                 ["a_frame", "m_frame", "z_frame"],
@@ -984,7 +1525,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                 (root / f"first/{RECEIPT_NAME}").read_bytes(),
                 (root / f"second/{RECEIPT_NAME}").read_bytes(),
             )
-            verify_processing_receipt(root / f"first/{RECEIPT_NAME}")
+            verify_processing_receipt(root / f"first/{RECEIPT_NAME}", asset_root=root)
 
             with wave.open(str(root / "first/normalized.wav"), "rb") as result:
                 self.assertEqual(1, result.getnchannels())
@@ -1011,7 +1552,7 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
                 receipt_path.write_text(json.dumps(changed), encoding="utf-8")
                 try:
                     with self.assertRaisesRegex(AssetContractError, message):
-                        verify_processing_receipt(receipt_path)
+                        verify_processing_receipt(receipt_path, asset_root=root)
                 finally:
                     receipt_path.write_text(json.dumps(original), encoding="utf-8")
 

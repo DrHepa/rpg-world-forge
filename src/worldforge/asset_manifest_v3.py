@@ -939,7 +939,7 @@ def validate_asset_manifest_v3(
                     require_content_hash(processing_raw, context="processing receipt")
                     from worldforge.asset_processing import verify_processing_receipt
 
-                    verify_processing_receipt(processing_path)
+                    verify_processing_receipt(processing_path, asset_root=root)
                 except AssetContractError as exc:
                     issues.append(_issue(f"{context}/processing_receipt", str(exc)))
                 else:

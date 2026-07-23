@@ -16,6 +16,7 @@ from worldforge.asset_manifest_v3 import finalize_asset_release
 from worldforge.assetpack import build_assetpack, verify_assetpack
 from worldforge.assets import validate_asset_manifest
 from worldforge.contract_catalog import audit_contracts
+from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.renderpack import build_renderpack
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -124,6 +125,39 @@ def _decode_accessor(
 
 
 class M5NeutralFixtureTests(unittest.TestCase):
+    def test_committed_processing_receipts_are_canonical_v2_with_exact_recipe_refs(
+        self,
+    ) -> None:
+        receipt_paths = sorted(FIXTURE.glob("*pack/processed/*/processing.receipt.json"))
+        self.assertTrue(receipt_paths)
+        for receipt_path in receipt_paths:
+            with self.subTest(path=receipt_path.relative_to(FIXTURE).as_posix()):
+                asset_root = receipt_path.parents[2]
+                receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                self.assertEqual(2, receipt["format_version"])
+                self.assertNotIn("recipe", receipt)
+                self.assertEqual(
+                    receipt_path.read_bytes(),
+                    canonical_json_bytes(receipt),
+                )
+                self.assertEqual(
+                    receipt["content_hash"],
+                    canonical_payload_hash(receipt),
+                )
+                reference = receipt["recipe_ref"]
+                self.assertEqual(
+                    {"content_hash", "file", "sha256"},
+                    set(reference),
+                )
+                recipe_path = asset_root / reference["file"]
+                recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
+                self.assertEqual(reference["sha256"], _sha256(recipe_path))
+                self.assertEqual(reference["content_hash"], recipe["content_hash"])
+                self.assertEqual(
+                    recipe["content_hash"],
+                    canonical_payload_hash(recipe),
+                )
+
     def test_committed_fixture_lock_is_self_consistent_and_regeneration_is_stable(self) -> None:
         lock = json.loads((FIXTURE / "fixture.lock.json").read_text(encoding="utf-8"))
         locked = _lock_map(lock)

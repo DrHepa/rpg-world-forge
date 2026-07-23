@@ -350,6 +350,65 @@ def _fixture(root: Path) -> dict[str, Path]:
 
 
 class M5RenderPackReleaseTests(unittest.TestCase):
+    def test_manifest_accepts_v1_and_v2_processing_receipts_and_rejects_recipe_tamper(
+        self,
+    ) -> None:
+        with self.subTest("v2 exact recipe binding"), tempfile.TemporaryDirectory() as directory:
+            fixture = _fixture(Path(directory))
+            self.assertEqual(
+                [],
+                validate_asset_manifest(
+                    fixture["manifest"],
+                    profile="build",
+                    worldpack_path=WORLDPACK,
+                ),
+            )
+            authoring = fixture["authoring"]
+            recipe_path = authoring / "neutral_portrait.recipe.json"
+            recipe = json.loads(recipe_path.read_text(encoding="utf-8"))
+            recipe["output"] = {"file": "tampered.png"}
+            recipe["content_hash"] = canonical_payload_hash(recipe)
+            recipe_path.write_bytes(canonical_json_bytes(recipe))
+
+            issues = validate_asset_manifest(
+                fixture["manifest"],
+                profile="build",
+                worldpack_path=WORLDPACK,
+            )
+
+            self.assertTrue(
+                any("recipe_ref SHA-256" in str(issue) for issue in issues),
+                issues,
+            )
+
+        with self.subTest("v1 identity compatibility"), tempfile.TemporaryDirectory() as directory:
+            fixture = _fixture(Path(directory))
+            authoring = fixture["authoring"]
+            receipt_path = authoring / "processed/neutral_portrait/processing.receipt.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["format_version"] = 1
+            receipt["recipe"] = {
+                "content_hash": receipt["recipe_ref"]["content_hash"],
+                "sha256": receipt["recipe_ref"]["sha256"],
+            }
+            del receipt["recipe_ref"]
+            receipt_path.write_bytes(canonical_json_bytes(bind_content_hash(receipt)))
+            manifest = json.loads(fixture["manifest"].read_text(encoding="utf-8"))
+            manifest["assets"][0]["processing_receipt"] = _reference(
+                authoring,
+                receipt_path,
+            )
+            fixture["manifest"].write_bytes(canonical_json_bytes(bind_content_hash(manifest)))
+
+            self.assertEqual(
+                [],
+                validate_asset_manifest(
+                    fixture["manifest"],
+                    profile="build",
+                    worldpack_path=WORLDPACK,
+                ),
+            )
+
     def test_manifest_rejects_non_png_or_duplicate_final_2d_outputs(self) -> None:
         mutations = {
             "non-png": lambda asset: asset["outputs"][0].__setitem__("media_type", "image/webp"),

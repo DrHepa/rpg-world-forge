@@ -28,7 +28,11 @@ compiles it into a static worldpack consumed by the runtime.
   Blender MCP, and capability-discovered Modly extensions; GPT remains the
   orchestrator and provider tooling stays outside Forge and runtime code.
 - Deterministic PNG canonicalization, atlas/clipset assembly, PCM WAV
-  processing, strict TTF/OTF/GLSL validation, and receipt re-verification.
+  processing, strict TTF/OTF/GLSL validation, and recipe-bound receipt
+  re-verification. Processing recipes remain v1; newly produced receipts are v2
+  and bind the exact asset-root-relative recipe file, raw SHA-256, canonical
+  content hash, inputs, operation, and output contract. Legacy v1 receipts
+  remain identity-only readable.
 - Provider-neutral GLB inspection and runtime-only `assetpack_v1` handoff for
   3D targets, plus a two-step build/hash-seal release lifecycle. The pyray
   reference runtime and current immutable game bundle remain explicitly
@@ -314,6 +318,14 @@ worldforge derive-asset-inventory \
   --visual-bible ../my-world/assets/bibles/visual.json \
   --audio-bible ../my-world/assets/bibles/audio.json \
   --output ../my-world/assets/inventory/assets.json
+
+# Execute one reviewed recipe, then re-verify its exact recipe and outputs.
+worldforge process-asset ../my-world/assets/recipes/portrait.json \
+  --asset-root ../my-world/assets \
+  --output-directory ../my-world/assets/processed/portrait
+worldforge verify-processing \
+  ../my-world/assets/processed/portrait/processing.receipt.json \
+  --asset-root ../my-world/assets
 
 # After every required asset has complete production, processing, license, and
 # QA evidence, the builder validates the manifest's production/build profile:

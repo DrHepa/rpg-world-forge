@@ -18,7 +18,7 @@
       ],
       "processing_receipt": {
         "file": "processed/neutral_actor_3d/processing.receipt.json",
-        "sha256": "b04b541c5c8933583d13286c038782c0add2495f60e794282ef1d5d4ca57e8e4"
+        "sha256": "ccec2cee8bfb26cd922d3ba89fb8cfd6d0a6484e0c41a73bce09b3ab67c27316"
       },
       "production_receipts": [
         {
@@ -69,7 +69,7 @@
       "slot": "actor:neutral"
     }
   ],
-  "content_hash": "f4eee6f695a76b62bb6a96f5a13c7047c220e4942fc8605f3969633c716bc5ba",
+  "content_hash": "e5a901d3912b38a4c4ffd27539d61051374af6a9e1c6461c396bcf467781e6ef",
   "format": "rpg-world-forge.asset_manifest",
   "format_version": 3,
   "generation_policy": {

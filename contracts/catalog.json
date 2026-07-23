@@ -119,8 +119,8 @@
       "tests": [
         "tests/test_m5_processing.py"
       ],
-      "title": "Executable deterministic asset-processing receipt v1",
-      "version": 1
+      "title": "Executable deterministic asset-processing receipt v2 with v1 read compatibility",
+      "version": 2
     },
     {
       "cli_commands": [
@@ -136,14 +136,15 @@
         "examples/m5-neutral/assetpack/recipes/neutral_actor_3d.json",
         "examples/m5-neutral/renderpack/recipes/neutral_sheet_atlas.json"
       ],
-      "format": "asset-processing-recipe",
+      "format": "rpg-world-forge.asset_processing_recipe",
       "id": "asset-processing-recipe",
       "kind": "json-schema",
       "m5_phases": [
         "M5"
       ],
       "python_symbols": [
-        "worldforge.asset_processing:process_asset_recipe"
+        "worldforge.asset_processing:process_asset_recipe",
+        "worldforge.asset_processing:validate_processing_recipe"
       ],
       "schema": "schemas/asset-processing-recipe.schema.json",
       "tests": [

@@ -201,6 +201,15 @@ shaders, SFX, and music. The asset-production manifest is never loaded by the
 game because it may contain recipes, model identifiers, extension workflows,
 references, and licensing evidence.
 
+Processing recipes remain format v1. The pure recipe validator resolves only
+the explicitly supplied recipe beneath an authoritative asset root, verifies
+its hash-bound inputs and closed operation contract, and performs no media
+decode, processing, or writes. New processing receipts use format v2 and bind
+that exact recipe path, raw SHA-256, canonical content hash, operation, input
+IDs/files/hashes, and output filename/role/media lineage. Manifest validation
+passes its own asset root explicitly. Receipt v1 remains readable as an
+identity-only legacy record; it never gains inferred recipe authorization.
+
 ## Creative-process control plane
 
 Every generated **world-authoring repository** contains `.worldforge/` and a
