@@ -126,6 +126,10 @@ The milestone will:
 - [x] Define and implement an immutable composed-runtime bundle that preserves
   exact M5 bytes, recomputes compatibility evidence, resolves only a static
   adapter registry, and makes no adapter-execution or release-readiness claim.
+- [x] Prove a bounded pyray GLB load/animation/draw lifecycle on Linux x86_64
+  with deterministic render-state planning and separate Windows ABI-only
+  evidence. The adapter proves `animation_gltf` only and remains incompatible
+  with every current 3D profile because collision is not implemented.
 - Select and pin at least one explicit 3D game runtime/engine contract outside
   the Forge, including platform, renderer, physics, animation, packaging, and
   performance budgets.
@@ -148,8 +152,10 @@ an engine choice. Exit gate: a separate game repository imports a verified 3D
 bundle, runs without Forge or network access, and passes boundary, native-smoke,
 determinism, performance, and packaging checks.
 
-The completed contract and bundle items are not M6 runtime readiness. The
-neutral checked-in adapter is deliberately declared and its report is
-incompatible; tests create verified temporary declarations only to exercise
-the bundle boundary. Adapter execution, native 3D proof, game integration, and
-release gates remain open.
+The completed contract, bundle, and bounded animation proof are not M6 runtime
+readiness. The neutral contract adapter remains deliberately declared and its
+report incompatible. The separate verified `pyray_3d_v1` declaration omits
+collision, assetpack consumption, world presentation, packaging, and
+performance capabilities, so it cannot satisfy a 3D composition. Game
+integration, collision, representative performance, packaging, and release
+gates remain open.

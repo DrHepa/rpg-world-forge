@@ -207,6 +207,12 @@ _ROOT_DIRECTORIES_CASEFOLD = frozenset(
     value.casefold() for value in FORBIDDEN_GAME_ROOT_DIRECTORIES
 )
 _FILENAMES_CASEFOLD = frozenset(value.casefold() for value in FORBIDDEN_GAME_FILENAMES)
+_ALLOWED_PYRAY_SOURCE_PATHS = frozenset(
+    {
+        Path("isoworld/core/app.py"),
+        Path("isoworld/render/pyray_3d.py"),
+    }
+)
 
 
 class GameBoundaryError(ValueError):
@@ -304,19 +310,41 @@ def _python_import_findings(base: Path, blocked_roots: set[Path]) -> list[GameBo
     for path in sorted(base.rglob("*.py")):
         if not path.is_file() or any(blocked in path.parents for blocked in blocked_roots):
             continue
+        relative = path.relative_to(base)
+        try:
+            source_relative = relative.relative_to("src")
+        except ValueError:
+            source_relative = None
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            for module in imported_modules(node):
+            modules = imported_modules(node)
+            for module in modules:
                 if _is_forbidden_import(module):
                     findings.append(
                         GameBoundaryFinding(
-                            path=path.relative_to(base),
+                            path=relative,
                             line=node.lineno,
                             rule="forbidden_game_import",
                             detail=module,
                         )
                     )
                     break
+            if (
+                source_relative is not None
+                and source_relative not in _ALLOWED_PYRAY_SOURCE_PATHS
+                and any(module.split(".", 1)[0] == "pyray" for module in modules)
+            ):
+                findings.append(
+                    GameBoundaryFinding(
+                        path=relative,
+                        line=node.lineno,
+                        rule="forbidden_game_import",
+                        detail=(
+                            "pyray import outside a game presentation adapter: "
+                            f"{source_relative.as_posix()}"
+                        ),
+                    )
+                )
     return findings
 
 

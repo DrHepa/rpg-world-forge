@@ -1,0 +1,51 @@
+{
+  "budgets": {
+    "max_assets": 1,
+    "max_bindings": 1,
+    "max_draw_calls": 1,
+    "max_loaded_bytes": 1048576,
+    "max_triangles": 1,
+    "target_frame_milliseconds": 1000
+  },
+  "capability_ids": [
+    "animation_gltf"
+  ],
+  "components": {
+    "animation": {
+      "id": "pyray_3d_animation",
+      "version": "0.1.0"
+    },
+    "engine": {
+      "id": "pyray_3d_session",
+      "version": "0.1.0"
+    },
+    "packager": {
+      "id": "not_provided",
+      "version": "0.0.0"
+    },
+    "physics": {
+      "id": "not_provided",
+      "version": "0.0.0"
+    },
+    "renderer": {
+      "id": "pyray_3d_renderer",
+      "version": "0.1.0"
+    }
+  },
+  "content_hash": "08d0452babc5f7f14975d346065c54e9a8335a71d9914261f6ef377c987872c8",
+  "format": "rpg-world-forge.runtime_adapter",
+  "format_version": 1,
+  "id": "pyray_3d_v1",
+  "platforms": [
+    "linux_x86_64"
+  ],
+  "presentation_modes": [
+    "3d"
+  ],
+  "runtime_api": {
+    "maximum_exclusive": "0.6.0",
+    "minimum": "0.5.0"
+  },
+  "state": "verified",
+  "version": "0.1.0"
+}

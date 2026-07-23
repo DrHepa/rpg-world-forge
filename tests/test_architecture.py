@@ -118,8 +118,8 @@ class ArchitectureTests(unittest.TestCase):
     def test_clean_game_repository_has_no_authoring_control_plane(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "src/game").mkdir(parents=True)
-            (root / "src/game/app.py").write_text(
+            (root / "src/isoworld/core").mkdir(parents=True)
+            (root / "src/isoworld/core/app.py").write_text(
                 "from __future__ import annotations\n\nimport pyray as pr\n",
                 encoding="utf-8",
             )

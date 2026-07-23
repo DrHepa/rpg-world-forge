@@ -216,6 +216,40 @@ physics, animation, playability, performance, packaging, or M6 release
 readiness. [ADR-0017](decisions/0017-immutable-composed-runtime-bundle.md)
 records the ownership and publication boundary.
 
+### Bounded pyray GLB proof
+
+The first code-owned M6 adapter is deliberately narrower than every committed
+3D presentation profile. `pyray_3d_v1` accepts one exact snapshot-relative
+skinned GLB, one `actor:<id>` binding, one named animation, one uniform scale,
+and one presentation layer. Pure functions map the immutable `RenderState`
+grid, select animation frames from `RenderState.tick`, transform finite local
+bounds, and return an admitted picked cell. They never dispatch an action,
+reduce `WorldState`, or treat model bounds as collision or navigation data.
+
+The native session resolves only a portable payload path through the owner of a
+private bundle snapshot. It verifies the declared size, SHA-256, triangle and
+loaded-byte budgets before opening a hidden window, then uses path-only
+`load_model`, the CFFI animation-count pointer, exactly one animation name and
+positive compatible skeleton/keyframes. The pointer is the binding's audited
+signed `int *`, and the synthetic one-second animation's two source samples
+become exactly 61 binding keyframes at raylib's 60 Hz glTF sampling rate.
+Cleanup unloads the complete animation array before the model and closes the
+window last. The resolver remains owned until cleanup succeeds.
+
+The declaration proves only `animation_gltf`, only on Linux x86_64, and omits
+assetpack consumption, 3D/mixed world presentation, collision, packaging, UI,
+audio, and performance claims. All current 3D/mixed profiles require
+`collision_gltf`, so they remain incompatible. The pinned Python distribution
+is exactly `raylib==6.0.1.0`; ABI inspection records that its bundled constants
+identify the header as `6.1-dev` and RLGL as `6.0` rather than relabeling that
+observation as stable raylib 6.0.
+
+Ubuntu x86_64 CI must execute the synthetic skinned-GLB hidden-window smoke.
+Windows CI records distribution/header/RLGL/function-surface evidence only and
+explicitly does not claim native 3D verification. This slice is not a playable
+3D game, a standalone package, a composed-bundle consumer, or M6 readiness.
+[ADR-0018](decisions/0018-bounded-pyray-3d-proof.md) records these limits.
+
 ## State flow
 
 The runtime uses a small reactive-style flow:

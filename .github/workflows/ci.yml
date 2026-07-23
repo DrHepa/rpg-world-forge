@@ -88,6 +88,8 @@ jobs:
           sudo apt-get install --yes --no-install-recommends xvfb xauth
       - name: Exercise graphical raylib runtime under Xvfb
         run: xvfb-run -a python tests/raylib_smoke.py
+      - name: Exercise bounded pyray GLB animation proof under Xvfb
+        run: xvfb-run -a python tests/pyray_3d_native_smoke.py
 
   windows-raylib-cpu-media-smoke:
     name: Raylib CPU/media smoke (Windows Server 2022)
@@ -110,6 +112,8 @@ jobs:
           python -m pip check
       - name: Exercise raylib CPU image encode and decode on Windows
         run: python tests/raylib_cpu_media_smoke.py
+      - name: Verify pyray 3D ABI without claiming native graphics
+        run: python tests/pyray_3d_abi_smoke.py
 
   dependency-audit:
     name: Dependency audit

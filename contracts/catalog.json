@@ -938,10 +938,13 @@
       "docs": [
         "contracts/README.md",
         "docs/ARCHITECTURE.md",
-        "docs/decisions/0016-runtime-composition-contracts.md"
+        "docs/PYRAY_RUNTIME_GUIDE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md",
+        "docs/decisions/0018-bounded-pyray-3d-proof.md"
       ],
       "fixtures": [
-        "examples/m6-contracts/adapter.declared.json"
+        "examples/m6-contracts/adapter.declared.json",
+        "examples/m6-contracts/adapters/pyray_3d_v1.json"
       ],
       "format": "rpg-world-forge.runtime_adapter",
       "id": "runtime-adapter",
@@ -950,11 +953,13 @@
         "M6"
       ],
       "python_symbols": [
+        "isoworld.render.pyray_3d:PYRAY_3D_V1_REGISTRY",
         "worldforge.runtime_composition:validate_runtime_adapter"
       ],
       "schema": "schemas/runtime-adapter.schema.json",
       "tests": [
-        "tests/test_m6_runtime_composition_contracts.py"
+        "tests/test_m6_runtime_composition_contracts.py",
+        "tests/test_m6_pyray_3d.py"
       ],
       "title": "RPG World Forge runtime adapter declaration v1",
       "version": 1

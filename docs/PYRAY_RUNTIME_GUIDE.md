@@ -32,6 +32,13 @@ The baseline was verified against primary sources on 2026-07-19:
   older `pyraylib` project. See the binding's
   [installation and API guidance](https://electronstudio.github.io/raylib-python-cffi/README.html#how-to-use).
 
+The exact installed distribution version and the bundled header constants are
+separate facts. The audited `raylib==6.0.1.0` wheel currently reports
+`RAYLIB_VERSION=6.1-dev`, components `6.1.0`, and `RLGL_VERSION=6.0`. The
+bounded 3D proof verifies all of those values and does not relabel the observed
+development header as stable native raylib 6.0. A binding or bundled-ABI change
+must fail the proof and follow the platform-migration process.
+
 Generated games should use an explicit import:
 
 ```python
@@ -379,6 +386,53 @@ useful only with a pinned platform/backend and explicit tolerance; they do not
 replace semantic render-plan tests. Raylib 6.0's memory/software backends are
 promising for future headless rendering, but the standard Python wheel's
 supported path must be proven before making them a CI requirement.
+
+### Bounded GLB animation proof
+
+`isoworld.render.pyray_3d` is an M6 evidence adapter, not the generated game's
+3D renderer. Its declaration is limited to Linux x86_64 and
+`animation_gltf`. It accepts exactly one portable payload-relative GLB plan
+with exact SHA-256, byte size, triangle count, animation name, and keyframe
+count, plus exactly one `actor:<id>` binding. The payload resolver is retained
+through native unload so a private bundle snapshot cannot be released while
+raylib still owns model resources.
+
+The pure surface:
+
+- maps grid cell origins to X/Z and applies half-open floor semantics in the
+  inverse;
+- intersects an explicit ray with the grid plane and returns only a tile
+  already present in the frozen `RenderState`;
+- derives animation frames only from non-negative `RenderState.tick`;
+- builds actor instances in deterministic layer/position/ID order; and
+- transforms finite local bounds for presentation only.
+
+The native boundary verifies bytes and budgets before window creation, then
+uses `load_model(path)`, `load_model_animations(path, int-pointer)`,
+`is_model_valid`, `is_model_animation_valid`, `update_model_animation`, and
+`draw_model`. It requires the exact signed `int *` count ABI, exactly one named
+animation, positive model and animation bones, exactly 61 binding
+`keyframeCount` entries for the synthetic one-second/two-source-sample
+animation, and finite ordered local bounds. It unloads the whole animation
+array with `unload_model_animations` before the model and closes the window
+last. It does not use model-from-memory, arbitrary glTF node selection,
+per-animation unload, bone-update shortcuts, dynamic modules, entry points,
+commands, or caller-supplied implementation locators.
+
+`tests/pyray_3d_native_smoke.py` creates an embedded neutral one-triangle,
+one-joint, two-source-sample GLB in a temporary directory, validates it with the
+bounded GLB inspector, and must load/animate/draw/close under Xvfb on Ubuntu
+x86_64 CI. `tests/pyray_3d_abi_smoke.py` checks the exact binding and function
+surface on Windows but prints `native_3d_verified: false`. It is not a
+substitute for Windows graphics evidence.
+
+This proof deliberately does not claim `collision_gltf`,
+`content_assetpack_v1`, `presentation_world_3d`,
+`presentation_world_mixed`, `packaging_standalone`, native Windows graphics,
+performance, playability, or M6 release readiness. Consequently it is
+incompatible with every current 3D/mixed profile. The declaration's required
+`target_frame_milliseconds: 1000` value is only the schema-bounded smoke
+ceiling; no measured frame-time or representative performance claim follows.
 
 ## Packaging and platform policy
 

@@ -422,7 +422,7 @@ def _update_game_runtime_snapshot_locked(
         raise GameScaffoldError("The current runtime snapshot hash differs from the expected hash")
 
     staging = Path(tempfile.mkdtemp(prefix=".runtime-update-", dir=root))
-    backup = root / "src/.isoworld-backup"
+    backup = root / ".isoworld-backup"
     previous_manifest = manifest_path.read_bytes()
     if backup.exists() or backup.is_symlink():
         shutil.rmtree(staging, ignore_errors=True)

@@ -426,12 +426,11 @@ def verify_source_boundary() -> None:
         except ValueError:
             relative = None
         if "pyray" in roots and relative is not None:
-            locked_runtime_adapter = relative == "isoworld/core/app.py"
-            game_presentation = relative in {"game/__main__.py", "game/app.py"} or any(
-                relative.startswith(prefix)
-                for prefix in ("game/adapters/", "game/presentation/", "game/ui/")
-            )
-            if not locked_runtime_adapter and not game_presentation:
+            locked_runtime_adapter = relative in {
+                "isoworld/core/app.py",
+                "isoworld/render/pyray_3d.py",
+            }
+            if not locked_runtime_adapter:
                 raise VerificationError(
                     f"pyray import outside a game presentation adapter: {relative}"
                 )
