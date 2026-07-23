@@ -1503,6 +1503,29 @@ describe("Studio named authoring and job IPC routing", () => {
     }
   });
 
+  it("rejects cross-workspace same-operation job.create replies without exposing a job", async () => {
+    const harness = createIpcHarness();
+    for (const testCase of jobCapabilityCases()) {
+      harness.request.mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createManagedJobResponse(
+            requestId,
+            testCase.operation,
+            testCase.input,
+            "workspace_02",
+          ),
+        ),
+      );
+      const result = await harness.invoke(testCase.channel, testCase.argument);
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "service_unavailable" },
+      });
+      expect(result).not.toHaveProperty("value");
+      expect(JSON.stringify(result)).not.toContain('"job"');
+    }
+  });
+
   it("rejects same-operation replies whose inputs do not match the requested job", async () => {
     const harness = createIpcHarness();
     const mismatchedInputs = [
@@ -1921,6 +1944,7 @@ function createManagedJobResponse(
   requestId: string,
   operation: string,
   input: Readonly<Record<string, unknown>>,
+  workspaceId = "workspace_01",
 ) {
   return {
     protocol: "rpg-world-forge.studio_protocol",
@@ -1933,7 +1957,7 @@ function createManagedJobResponse(
         format: "rpg-world-forge.studio_job",
         format_version: 2,
         job_id: "job_01",
-        workspace_id: "workspace_01",
+        workspace_id: workspaceId,
         operation,
         state: "queued",
         input,

@@ -1124,7 +1124,9 @@ async function requestJobCreate(
         { workspace_id: workspaceId, operation, input },
         DEFAULT_REQUEST_TIMEOUT_MS,
       )
-      .then((reply) => validateJobCreateReply(reply, requestId, operation, input)),
+      .then((reply) =>
+        validateJobCreateReply(reply, requestId, workspaceId, operation, input),
+      ),
   );
 }
 
@@ -1415,6 +1417,7 @@ function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
 function validateJobCreateReply(
   value: unknown,
   requestId: string,
+  workspaceId: string,
   operation: NamedJobOperation,
   input: Readonly<Record<string, unknown>>,
 ): StudioReplyEnvelope {
@@ -1428,6 +1431,7 @@ function validateJobCreateReply(
   const { job } = reply.result;
   if (
     job.format_version !== 2 ||
+    job.workspace_id !== workspaceId ||
     job.operation !== operation ||
     !hasExactScalarFields(job.input, input)
   ) {
