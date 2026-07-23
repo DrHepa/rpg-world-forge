@@ -1417,14 +1417,19 @@ def _audit_game_data_root(
     game_root: Path,
     releases: list[dict[str, Any]],
     shared_assets: list[dict[str, Any]],
+    *,
+    has_composed_releases: bool,
 ) -> None:
     game_data = game_root / "game_data"
     _assert_game_path_component(game_data, directory=True)
-    expected = {"shared.lock.json", "worlds.lock.json"}
+    expected = {"compositions.lock.json", "shared.lock.json", "worlds.lock.json"}
     if releases:
         expected.add("worlds")
     if shared_assets:
         expected.add("shared")
+    if has_composed_releases:
+        expected.add("compositions")
+        expected.add("compositions.d")
     actual: set[str] = set()
     for entry in game_data.iterdir():
         info = entry.lstat()
@@ -1439,6 +1444,13 @@ def _audit_game_data_root(
 
 
 def _load_verified_catalog(game_root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    from isoworld.content.composed_catalog import (
+        ComposedCatalogError,
+        load_composed_catalog,
+        validate_cross_catalog_world_hashes,
+        verify_composed_release,
+    )
+
     shared_assets = _verify_shared_assets(game_root)
     catalog_path = game_root / WORLD_CATALOG
     _assert_game_path_component(catalog_path, directory=False)
@@ -1455,7 +1467,20 @@ def _load_verified_catalog(game_root: Path) -> tuple[dict[str, Any], list[dict[s
         if catalog_path.read_bytes() != _pretty_json(catalog):
             raise BundleError("World catalog is not canonically serialized")
     _audit_catalog_storage(game_root, releases)
-    _audit_game_data_root(game_root, releases, shared_assets)
+    try:
+        composed_releases = load_composed_catalog(game_root)
+        for composed in composed_releases:
+            with verify_composed_release(composed, game_root):
+                pass
+        validate_cross_catalog_world_hashes(tuple(releases), composed_releases)
+    except ComposedCatalogError as exc:
+        raise BundleError(str(exc)) from exc
+    _audit_game_data_root(
+        game_root,
+        releases,
+        shared_assets,
+        has_composed_releases=bool(composed_releases),
+    )
     for release in releases:
         with verify_runtime_bundle(
             game_root / PurePosixPath(release["path"]),

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,7 @@ from unittest.mock import patch
 
 import worldforge.game_scaffold as game_scaffold_module
 from isoworld import __version__ as ISOWORLD_VERSION
+from isoworld.content.composed_catalog import ComposedCatalogError
 from isoworld.content.loader import load_worldpack
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
 from worldforge.bundle import (
@@ -31,6 +33,7 @@ from worldforge.game_scaffold import (
     update_game_runtime_snapshot,
 )
 from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
+from worldforge.repository_boundary import RepositoryBoundaryError
 from worldforge.scaffold import ScaffoldError, create_world_project
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -108,6 +111,117 @@ def _write_fixture(
 
 
 class GameScaffoldTests(unittest.TestCase):
+    def test_external_target_preserves_programmer_value_error_identity(self) -> None:
+        primary = ValueError("target programmer error")
+        with (
+            patch.object(
+                game_scaffold_module,
+                "assert_new_repository_target",
+                side_effect=primary,
+            ),
+            self.assertRaises(ValueError) as raised,
+        ):
+            game_scaffold_module._assert_external_target(Path("target"))  # noqa: SLF001
+        self.assertIs(primary, raised.exception)
+
+    def test_external_target_normalizes_repository_contract_error(self) -> None:
+        malformed = RepositoryBoundaryError("target violates repository boundary")
+        with (
+            patch.object(
+                game_scaffold_module,
+                "assert_new_repository_target",
+                side_effect=malformed,
+            ),
+            self.assertRaises(GameScaffoldError) as raised,
+        ):
+            game_scaffold_module._assert_external_target(Path("target"))  # noqa: SLF001
+        self.assertIs(malformed, raised.exception.__cause__)
+        self.assertNotIn("Traceback", str(raised.exception))
+
+    def test_runtime_update_root_preserves_programmer_value_error_identity(self) -> None:
+        primary = ValueError("game-root programmer error")
+        with (
+            patch.object(
+                game_scaffold_module,
+                "require_standalone_game_root",
+                side_effect=primary,
+            ),
+            self.assertRaises(ValueError) as raised,
+        ):
+            update_game_runtime_snapshot(
+                "game",
+                expected_content_hash="0" * 64,
+            )
+        self.assertIs(primary, raised.exception)
+
+    def test_runtime_update_root_normalizes_repository_contract_error(self) -> None:
+        malformed = RepositoryBoundaryError("malformed standalone game root")
+        with (
+            patch.object(
+                game_scaffold_module,
+                "require_standalone_game_root",
+                side_effect=malformed,
+            ),
+            self.assertRaises(GameScaffoldError) as raised,
+        ):
+            update_game_runtime_snapshot(
+                "game",
+                expected_content_hash="0" * 64,
+            )
+        self.assertIs(malformed, raised.exception.__cause__)
+        self.assertNotIn("Traceback", str(raised.exception))
+
+    def test_installed_catalog_check_preserves_programmer_value_error_identity(self) -> None:
+        primary = ValueError("catalog verifier programmer error")
+        with (
+            patch(
+                "worldforge.bundle.verify_game_catalog_compatibility",
+                side_effect=primary,
+            ),
+            self.assertRaises(ValueError) as raised,
+        ):
+            game_scaffold_module._verify_catalog_for_runtime(  # noqa: SLF001
+                Path("game"),
+                runtime_api_version=RUNTIME_API_VERSION,
+                runtime_features=[],
+            )
+        self.assertIs(primary, raised.exception)
+
+    def test_installed_catalog_check_normalizes_bundle_contract_error(self) -> None:
+        malformed = BundleError("malformed installed world catalog")
+        with (
+            patch(
+                "worldforge.bundle.verify_game_catalog_compatibility",
+                side_effect=malformed,
+            ),
+            self.assertRaises(GameScaffoldError) as raised,
+        ):
+            game_scaffold_module._verify_catalog_for_runtime(  # noqa: SLF001
+                Path("game"),
+                runtime_api_version=RUNTIME_API_VERSION,
+                runtime_features=[],
+            )
+        self.assertIs(malformed, raised.exception.__cause__)
+        self.assertNotIn("Traceback", str(raised.exception))
+
+    def test_installed_catalog_check_normalizes_composed_contract_error(self) -> None:
+        malformed = ComposedCatalogError("malformed installed composed catalog")
+        with (
+            patch("worldforge.bundle.verify_game_catalog_compatibility"),
+            patch(
+                "isoworld.content.composed_catalog.load_composed_catalog",
+                side_effect=malformed,
+            ),
+            self.assertRaises(GameScaffoldError) as raised,
+        ):
+            game_scaffold_module._verify_catalog_for_runtime(  # noqa: SLF001
+                Path("game"),
+                runtime_api_version=RUNTIME_API_VERSION,
+                runtime_features=[],
+            )
+        self.assertIs(malformed, raised.exception.__cause__)
+        self.assertNotIn("Traceback", str(raised.exception))
+
     def test_canonical_lock_templates_bypass_windows_newline_translation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             game = Path(directory) / "game"
@@ -405,8 +519,12 @@ class GameScaffoldTests(unittest.TestCase):
             create_game_project(game, game_id="linked_game", title="Linked Game")
             outside_data.mkdir()
             original_lock = (game / "game_data/shared.lock.json").read_bytes()
+            original_compositions = (game / "game_data/compositions.lock.json").read_bytes()
             (game / "game_data/shared.lock.json").replace(outside_data / "shared.lock.json")
             (game / "game_data/worlds.lock.json").replace(outside_data / "worlds.lock.json")
+            (game / "game_data/compositions.lock.json").replace(
+                outside_data / "compositions.lock.json"
+            )
             (game / "game_data").rmdir()
             try:
                 os.symlink(outside_data, game / "game_data", target_is_directory=True)
@@ -420,6 +538,10 @@ class GameScaffoldTests(unittest.TestCase):
             self.assertNotEqual(0, result.returncode)
             self.assertIn("game data root must be a real directory", result.stderr)
             self.assertEqual(original_lock, (outside_data / "shared.lock.json").read_bytes())
+            self.assertEqual(
+                original_compositions,
+                (outside_data / "compositions.lock.json").read_bytes(),
+            )
             self.assertEqual([], list(outside_data.glob(".shared.lock.json.*")))
 
     def test_scaffold_rejects_mixed_or_ambiguous_targets(self) -> None:
@@ -960,6 +1082,42 @@ class GameScaffoldTests(unittest.TestCase):
                     game,
                     expected_content_hash=updated["content_hash"],
                 )
+
+    def test_runtime_update_keeps_replaced_migration_control_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game"
+            create_game_project(
+                game,
+                game_id="migration_identity",
+                title="Migration Identity",
+            )
+            runtime = json.loads((game / "runtime.lock.json").read_bytes())
+            compositions = game / "game_data/compositions.lock.json"
+            compositions.unlink()
+            foreign = canonical_json_bytes({"foreign": True})
+            replacement: dict[str, int] = {}
+
+            def replace_created_control(_root: Path):
+                compositions.unlink()
+                compositions.write_bytes(foreign)
+                compositions.chmod(0o640)
+                replacement["mode"] = stat.S_IMODE(compositions.stat().st_mode)
+                return ["injected boundary failure"]
+
+            with (
+                patch.object(
+                    game_scaffold_module,
+                    "audit_game_repository",
+                    side_effect=replace_created_control,
+                ),
+                self.assertRaisesRegex(GameScaffoldError, "boundary-invalid"),
+            ):
+                update_game_runtime_snapshot(
+                    game,
+                    expected_content_hash=runtime["content_hash"],
+                )
+            self.assertEqual(foreign, compositions.read_bytes())
+            self.assertEqual(replacement["mode"], stat.S_IMODE(compositions.stat().st_mode))
 
     def test_imported_bundle_verifies_and_runs_without_forge_on_pythonpath(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

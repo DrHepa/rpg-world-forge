@@ -223,10 +223,20 @@ def file_identity(info: FileStat) -> tuple[int, int]:
     return info.st_dev, info.st_ino
 
 
+def is_link_or_reparse(info: FileStat) -> bool:
+    """Return whether one non-following file state denotes a link-like object."""
+
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0)
+        & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", _FILE_ATTRIBUTE_REPARSE_POINT)
+    )
+
+
 __all__ = [
     "FileStat",
     "WindowsFileStat",
     "descriptor_file_stat",
     "file_identity",
+    "is_link_or_reparse",
     "path_file_stat",
 ]

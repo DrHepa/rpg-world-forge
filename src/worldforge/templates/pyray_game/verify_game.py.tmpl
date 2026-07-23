@@ -636,6 +636,51 @@ def verify_dependencies(identity: dict[str, str] | None = None) -> dict[str, Any
     return platform
 
 
+def _verify_repository_contracts() -> tuple[dict[str, str], dict[str, Any]]:
+    try:
+        identity = read_game_identity()
+        runtime = verify_runtime_snapshot()
+        verify_runtime_contract(runtime)
+        verify_source_boundary()
+        verify_dependencies(identity)
+        return identity, runtime
+    except VerificationError:
+        raise
+    except (OSError, SyntaxError) as exc:
+        raise VerificationError(f"repository verification failed: {exc}") from exc
+
+
+def _verify_catalog_contracts() -> tuple[int, int, str]:
+    from isoworld.content.catalog import CatalogError, verify_catalog
+
+    from isoworld.content.composed_catalog import (
+        ComposedCatalogError,
+        load_composed_catalog,
+        load_composed_catalog_state,
+        validate_cross_catalog_world_hashes,
+        verify_composed_release,
+    )
+
+    try:
+        bundles = verify_catalog(PROJECT_ROOT)
+        composed_entries = load_composed_catalog(PROJECT_ROOT)
+        composed_state = load_composed_catalog_state(PROJECT_ROOT)
+        if composed_state.entries != composed_entries:
+            raise VerificationError(
+                "composed catalog head changed during standalone verification"
+            )
+        validate_cross_catalog_world_hashes(
+            tuple(bundle.release for bundle in bundles),
+            composed_entries,
+        )
+        for entry in composed_entries:
+            with verify_composed_release(entry, PROJECT_ROOT):
+                pass
+    except (CatalogError, ComposedCatalogError) as exc:
+        raise VerificationError(str(exc)) from exc
+    return len(bundles), len(composed_entries), composed_state.head_hash
+
+
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Verify the standalone game repository")
     parser.add_argument(
@@ -645,19 +690,17 @@ def main(arguments: list[str] | None = None) -> int:
     )
     args = parser.parse_args(arguments)
     try:
-        identity = read_game_identity()
-        runtime = verify_runtime_snapshot()
-        verify_runtime_contract(runtime)
-        verify_source_boundary()
-        verify_dependencies(identity)
-        from isoworld.content.catalog import verify_catalog
-
-        bundles = verify_catalog(PROJECT_ROOT)
-    except (OSError, SyntaxError, ValueError) as exc:
+        identity, runtime = _verify_repository_contracts()
+        bundles, composed_bundles, composed_catalog_hash = (
+            _verify_catalog_contracts()
+        )
+    except VerificationError as exc:
         print(f"ERROR {exc}", file=sys.stderr)
         return 1
     report = {
-        "bundles": len(bundles),
+        "bundles": bundles,
+        "composed_catalog_hash": composed_catalog_hash,
+        "composed_bundles": composed_bundles,
         "game_id": identity["game_id"],
         "game_version": identity["version"],
         "runtime_hash": runtime["content_hash"],
@@ -665,7 +708,10 @@ def main(arguments: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(report, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     else:
-        print(f"verification=pass runtime={runtime['content_hash']} bundles={len(bundles)}")
+        print(
+            f"verification=pass runtime={runtime['content_hash']} bundles={bundles} "
+            f"composed_bundles={composed_bundles}"
+        )
     return 0
 
 

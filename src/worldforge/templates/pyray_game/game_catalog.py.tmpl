@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from isoworld.content.composed_catalog import (
+    ComposedCatalogError,
+    ComposedCatalogRelease,
+    load_composed_catalog,
+    validate_cross_catalog_world_hashes,
+)
 from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.media import media_signature_matches
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
@@ -536,14 +542,18 @@ def _audit_game_data_root(
     root: Path,
     releases: tuple[CatalogRelease, ...],
     shared_assets: tuple[SharedAsset, ...],
+    composed_releases: tuple[ComposedCatalogRelease, ...],
 ) -> None:
     game_data = root / "game_data"
     _real_directory(game_data, "game data root")
-    expected = {"shared.lock.json", "worlds.lock.json"}
+    expected = {"compositions.lock.json", "shared.lock.json", "worlds.lock.json"}
     if releases:
         expected.add("worlds")
     if shared_assets:
         expected.add("shared")
+    if composed_releases:
+        expected.add("compositions")
+        expected.add("compositions.d")
     actual: set[str] = set()
     for entry in game_data.iterdir():
         info = entry.lstat()
@@ -560,6 +570,10 @@ def _audit_game_data_root(
 def load_catalog(project_root: str | Path | None = None) -> tuple[CatalogRelease, ...]:
     root = Path(project_root).resolve() if project_root is not None else PROJECT_ROOT
     shared_assets = load_shared_assets(root)
+    try:
+        composed_releases = load_composed_catalog(root)
+    except ComposedCatalogError as exc:
+        raise CatalogError(str(exc)) from exc
     document, data = _read_object(root / CATALOG_RELATIVE_PATH, limit=MAX_MANIFEST_BYTES)
     _require_exact_keys(document, {"format", "format_version", "releases"}, "catalog")
     if document["format"] != "isoworld.world_catalog" or document["format_version"] != 1:
@@ -580,7 +594,11 @@ def load_catalog(project_root: str | Path | None = None) -> tuple[CatalogRelease
     if data != expected_bytes:
         raise CatalogError("world catalog bytes are not in canonical form")
     _audit_catalog_storage(root, releases)
-    _audit_game_data_root(root, releases, shared_assets)
+    try:
+        validate_cross_catalog_world_hashes(releases, composed_releases)
+    except ComposedCatalogError as exc:
+        raise CatalogError(str(exc)) from exc
+    _audit_game_data_root(root, releases, shared_assets, composed_releases)
     return releases
 
 

@@ -1107,6 +1107,37 @@
     },
     {
       "cli_commands": [
+        "import-composed-bundle"
+      ],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0020-composed-release-game-consumer.md"
+      ],
+      "fixtures": [
+        "src/worldforge/templates/pyray_game/compositions.lock.json.tmpl"
+      ],
+      "format": "isoworld.composed_runtime_catalog",
+      "id": "composed-runtime-catalog",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "isoworld.content.composed_catalog:load_composed_catalog",
+        "isoworld.content.composed_catalog:verify_composed_release",
+        "worldforge.composed_game:import_composed_bundle"
+      ],
+      "schema": "schemas/composed-runtime-catalog.schema.json",
+      "tests": [
+        "tests/test_m6_game_consumer.py"
+      ],
+      "title": "IsoWorld composed runtime catalog",
+      "version": 1
+    },
+    {
+      "cli_commands": [
         "audit-contracts"
       ],
       "docs": [

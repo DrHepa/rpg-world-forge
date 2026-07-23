@@ -347,6 +347,7 @@ _BUDGET_KEYS = frozenset(
         "target_frame_milliseconds",
     }
 )
+_TARGET_FRAME_MILLISECONDS_MAX = 1000
 _PROFILE_REF_KEYS = frozenset({"id", "content_hash"})
 _ADAPTER_REF_KEYS = frozenset({"id", "version", "content_hash"})
 _PACK_REF_KEYS = frozenset({"path", "format", "format_version", "content_hash"})
@@ -513,6 +514,27 @@ def _semver_key(value: str) -> tuple[int, int, int]:
     if match is None:  # pragma: no cover - callers validate
         raise ValueError(value)
     return tuple(int(part) for part in match.groups())  # type: ignore[return-value]
+
+
+def _positive_bounded_number(
+    value: object,
+    context: str,
+    *,
+    maximum: int,
+) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise RuntimeCompositionError(f"{context} must be finite and positive at most {maximum}")
+    if isinstance(value, int) and not 0 < value <= maximum:
+        raise RuntimeCompositionError(f"{context} must be finite and positive at most {maximum}")
+    try:
+        number = float(value)
+    except OverflowError as exc:
+        raise RuntimeCompositionError(
+            f"{context} must be finite and positive at most {maximum}"
+        ) from exc
+    if not math.isfinite(number) or not 0 < number <= maximum:
+        raise RuntimeCompositionError(f"{context} must be finite and positive at most {maximum}")
+    return number
 
 
 def _portable_path(value: object, context: str) -> str:
@@ -733,16 +755,11 @@ def validate_runtime_adapter(value: object) -> dict[str, Any]:
             raise RuntimeCompositionError(
                 f"runtime adapter.budgets.{field} must be a positive bounded integer"
             )
-    frame = budgets.get("target_frame_milliseconds")
-    if (
-        isinstance(frame, bool)
-        or not isinstance(frame, int | float)
-        or not math.isfinite(float(frame))
-        or not 0 < float(frame) <= 1000
-    ):
-        raise RuntimeCompositionError(
-            "runtime adapter.budgets.target_frame_milliseconds must be finite and positive"
-        )
+    _positive_bounded_number(
+        budgets.get("target_frame_milliseconds"),
+        "runtime adapter.budgets.target_frame_milliseconds",
+        maximum=_TARGET_FRAME_MILLISECONDS_MAX,
+    )
     return copy.deepcopy(adapter)
 
 

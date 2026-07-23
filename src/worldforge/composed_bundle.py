@@ -32,6 +32,12 @@ from isoworld.content.resource_snapshot import (
     MaterializedResource,
     ResourceSnapshotError,
     ResourceSnapshotOwner,
+    note_cleanup_failure,
+)
+from isoworld.render.composition_plan import (
+    CompositionPlanError,
+    PackSlotBinding,
+    validate_composition_slot_ownership,
 )
 from isoworld.runtime_adapter import StaticRuntimeAdapterRegistry
 from isoworld.runtime_io import RuntimeIOError, decode_json_object
@@ -50,6 +56,7 @@ from worldforge.game_boundary import (
 from worldforge.game_boundary_policy import validate_lexical_directory_root
 from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.repository_boundary import (
+    RepositoryBoundaryError,
     assert_new_repository_target,
     require_standalone_composed_bundle_root,
 )
@@ -218,6 +225,15 @@ class ComposedBundleError(ValueError):
     """Raised when an immutable M6 composed bundle cannot be trusted."""
 
 
+def _close_descriptor(descriptor: int, *, context: str) -> None:
+    primary = sys.exception()
+    try:
+        os.close(descriptor)
+    except OSError as cleanup_error:
+        if not note_cleanup_failure(primary, cleanup_error, context=context):
+            raise ComposedBundleError(f"{context} failed: {cleanup_error}") from cleanup_error
+
+
 class _PublicationOutcome(Enum):
     STAGE_OWNED = "stage_owned"
     DESTINATION_OWNED = "destination_owned"
@@ -293,9 +309,12 @@ class LoadedComposedRuntimeBundle(Generic[T]):
         try:
             self.close()
         except ComposedBundleError as cleanup_error:
-            if exc is not None:
-                raise cleanup_error from exc
-            raise
+            if not note_cleanup_failure(
+                exc,
+                cleanup_error,
+                context="composed bundle snapshot cleanup",
+            ):
+                raise
 
     def __del__(self) -> None:
         if getattr(self, "_closed", True):
@@ -312,29 +331,25 @@ class LoadedComposedRuntimeBundle(Generic[T]):
     def close(self) -> None:
         if self._closed:
             return
-        render_error: BaseException | None = None
-        if self.renderpack is not None:
-            try:
-                self.renderpack.close()
-            except BaseException as exc:
-                render_error = exc
-        owner_error: BaseException | None = None
         try:
-            self._owner.close()
-        except BaseException as exc:
-            owner_error = exc
-        if render_error is not None or owner_error is not None:
-            details = "; ".join(
-                f"{name}: {error}"
-                for name, error in (
-                    ("renderpack cleanup", render_error),
-                    ("outer snapshot cleanup", owner_error),
-                )
-                if error is not None
-            )
-            primary = render_error if render_error is not None else owner_error
-            assert primary is not None
-            raise ComposedBundleError(details) from primary
+            try:
+                if self.renderpack is not None:
+                    self.renderpack.close()
+            finally:
+                primary = sys.exception()
+                try:
+                    self._owner.close()
+                except ResourceSnapshotError as cleanup_error:
+                    if not note_cleanup_failure(
+                        primary,
+                        cleanup_error,
+                        context="outer composed snapshot cleanup",
+                    ):
+                        raise
+        except (RenderPackError, ResourceSnapshotError) as cleanup_error:
+            raise ComposedBundleError(
+                f"could not close composed bundle snapshot: {cleanup_error}"
+            ) from cleanup_error
         object.__setattr__(self, "_closed", True)
 
 
@@ -747,7 +762,7 @@ def _read_bounded(path: Path, *, limit: int, context: str) -> bytes:
         raise ComposedBundleError(f"Could not read {context}: {exc}") from exc
     finally:
         if descriptor is not None:
-            os.close(descriptor)
+            _close_descriptor(descriptor, context=f"{context} descriptor cleanup")
     if len(payload) > limit:
         raise ComposedBundleError(f"{context} exceeds the {limit}-byte limit")
     return payload
@@ -783,7 +798,7 @@ def _fsync_directory(path: Path) -> None:
     try:
         os.fsync(descriptor)
     finally:
-        os.close(descriptor)
+        _close_descriptor(descriptor, context="directory fsync descriptor cleanup")
 
 
 def _fsync_tree_directories(root: Path) -> None:
@@ -882,9 +897,11 @@ def _close_owner_after_failure(
     try:
         owner.close()
     except ResourceSnapshotError as cleanup_error:
-        raise ComposedBundleError(
-            f"{original}; additionally could not clean private bundle snapshot: {cleanup_error}"
-        ) from original
+        note_cleanup_failure(
+            original,
+            cleanup_error,
+            context="private composed bundle snapshot cleanup",
+        )
 
 
 def _snapshot_bundle_root(
@@ -1184,6 +1201,7 @@ def _load_from_snapshot(
 
     renderpack: RenderPack | None = None
     assetpack_bytes: bytes | None = None
+    binding_evidence: list[PackSlotBinding] = []
     try:
         if manifest["packs"]["renderpack"] is not None:
             renderpack_document = documents[RENDERPACK_PATH]
@@ -1207,6 +1225,17 @@ def _load_from_snapshot(
                 raise ComposedBundleError(
                     "manifest/composition renderpack references disagree with the pack"
                 )
+            render_asset_kinds = {asset.id: asset.kind for asset in renderpack.assets}
+            binding_evidence.extend(
+                PackSlotBinding(
+                    "renderpack",
+                    binding.slot,
+                    binding.asset_id,
+                    render_asset_kinds[binding.asset_id],
+                    None,
+                )
+                for binding in renderpack.bindings
+            )
         if manifest["packs"]["assetpack"] is not None:
             assetpack_document = documents[ASSETPACK_PATH]
             _exact_pack_inventory(
@@ -1229,25 +1258,52 @@ def _load_from_snapshot(
                 raise ComposedBundleError(
                     "manifest/composition assetpack references disagree with the pack"
                 )
+            asset_by_id = {asset["id"]: asset for asset in verified_assetpack["assets"]}
+            binding_evidence.extend(
+                PackSlotBinding(
+                    "assetpack",
+                    binding["slot"],
+                    binding["asset_id"],
+                    asset_by_id[binding["asset_id"]]["kind"],
+                    binding["representation"],
+                )
+                for binding in verified_assetpack["bindings"]
+            )
             assetpack_bytes = _read_bounded(
                 owner.resolve_file(PurePosixPath(ASSETPACK_PATH)),
                 limit=MAX_MANIFEST_BYTES,
                 context="bundled assetpack",
             )
-    except (AssetPackError, RenderPackError, OSError) as exc:
+        validate_composition_slot_ownership(
+            profile["layers"],
+            composition["slot_owners"],
+            binding_evidence,
+        )
+    except (AssetPackError, CompositionPlanError, RenderPackError, OSError) as exc:
         if renderpack is not None:
             try:
                 renderpack.close()
             except RenderPackError as cleanup_error:
-                raise ComposedBundleError(
-                    f"{exc}; additionally could not clean renderpack snapshot: {cleanup_error}"
-                ) from exc
+                note_cleanup_failure(
+                    exc,
+                    cleanup_error,
+                    context="renderpack snapshot cleanup",
+                )
         if isinstance(exc, ComposedBundleError):
             raise
+        if isinstance(exc, CompositionPlanError):
+            raise ComposedBundleError(f"Bundled slot ownership is invalid: {exc}") from exc
         raise ComposedBundleError(f"Bundled content pack is invalid: {exc}") from exc
-    except BaseException:
+    except BaseException as original:
         if renderpack is not None:
-            renderpack.close()
+            try:
+                renderpack.close()
+            except RenderPackError as cleanup:
+                note_cleanup_failure(
+                    original,
+                    cleanup,
+                    context="renderpack snapshot cleanup",
+                )
         raise
 
     try:
@@ -1258,9 +1314,11 @@ def _load_from_snapshot(
             try:
                 renderpack.close()
             except RenderPackError as cleanup_error:
-                raise ComposedBundleError(
-                    f"{original}; additionally could not clean renderpack snapshot: {cleanup_error}"
-                ) from original
+                note_cleanup_failure(
+                    original,
+                    cleanup_error,
+                    context="renderpack snapshot cleanup",
+                )
         raise
     manifest_bytes = canonical_json_bytes(manifest)
     return LoadedComposedRuntimeBundle(
@@ -1289,7 +1347,7 @@ def load_composed_runtime_bundle(
     _semver(runtime_api_version, "runtime_api_version")
     try:
         root = require_standalone_composed_bundle_root(path)
-    except ValueError as exc:
+    except RepositoryBoundaryError as exc:
         raise ComposedBundleError(str(exc)) from exc
     owner, manifest, records = _snapshot_bundle_root(
         root,
@@ -1326,6 +1384,78 @@ def verify_composed_runtime_bundle(
         runtime_api_version=runtime_api_version,
         registry=registry,
     )
+
+
+def verify_installed_composed_runtime_bundle(
+    path: str | Path,
+    *,
+    expected_directory_identity: DirectoryIdentity,
+    expected_bundle_hash: str,
+    platform: str,
+    runtime_api_version: str,
+    registry: StaticRuntimeAdapterRegistry[T],
+) -> LoadedComposedRuntimeBundle[T]:
+    """Verify an already-published bundle while retaining its exact directory identity."""
+
+    if platform not in PLATFORMS:
+        raise ComposedBundleError("platform is unsupported")
+    _semver(runtime_api_version, "runtime_api_version")
+    root_input = Path(path)
+    if root_input.is_symlink():
+        raise ComposedBundleError("installed composed bundle root cannot be a symbolic link")
+    try:
+        root = root_input.resolve(strict=True)
+    except OSError as exc:
+        raise ComposedBundleError(str(exc)) from exc
+    if root != root_input.absolute():
+        raise ComposedBundleError("installed composed bundle path cannot contain symbolic links")
+    try:
+        before_identity = directory_identity(
+            root,
+            context="installed composed bundle",
+        )
+    except (DirectoryPublishError, OSError) as exc:
+        raise ComposedBundleError(str(exc)) from exc
+    if before_identity != expected_directory_identity:
+        raise ComposedBundleError("installed composed bundle directory identity changed")
+    owner, manifest, records = _snapshot_bundle_root(
+        root,
+        expected_bundle_hash=expected_bundle_hash,
+    )
+    try:
+        loaded = _load_from_snapshot(
+            owner,
+            manifest,
+            records,
+            platform=platform,
+            runtime_api_version=runtime_api_version,
+            registry=registry,
+        )
+    except BaseException as original:
+        _close_owner_after_failure(owner, original)
+        raise
+    try:
+        after_identity = directory_identity(
+            root,
+            context="installed composed bundle after snapshot",
+        )
+        if after_identity != expected_directory_identity:
+            raise ComposedBundleError(
+                "installed composed bundle directory identity changed during verification"
+            )
+    except (ComposedBundleError, DirectoryPublishError, OSError) as original:
+        try:
+            loaded.close()
+        except ComposedBundleError as cleanup:
+            note_cleanup_failure(
+                original,
+                cleanup,
+                context="installed composed bundle cleanup",
+            )
+        if isinstance(original, ComposedBundleError):
+            raise
+        raise ComposedBundleError(str(original)) from original
+    return loaded
 
 
 def _identity_document(identity: DirectoryIdentity) -> dict[str, int]:
@@ -1399,7 +1529,10 @@ def _destination_lock(destination: Path) -> Iterator[None]:
         raise ComposedBundleError(f"Could not acquire composed bundle lock: {exc}") from exc
     finally:
         if "descriptor" in locals():
-            os.close(descriptor)
+            _close_descriptor(
+                descriptor,
+                context="composed bundle lock descriptor cleanup",
+            )
 
 
 def _journal_document(
@@ -1497,7 +1630,10 @@ def _write_journal(
             os.fsync(descriptor)
             identity = (info.st_dev, info.st_ino)
         finally:
-            os.close(descriptor)
+            _close_descriptor(
+                descriptor,
+                context="composed bundle journal descriptor cleanup",
+            )
         _fsync_directory(path.parent)
         return identity
 
@@ -1786,7 +1922,10 @@ def _copy_captured_to_stage(
         raise ComposedBundleError(f"Could not stage {destination_relative}: {exc}") from exc
     finally:
         if descriptor is not None:
-            os.close(descriptor)
+            _close_descriptor(
+                descriptor,
+                context="staged payload descriptor cleanup",
+            )
 
 
 def _capture_source(
@@ -1908,7 +2047,10 @@ def _write_new_stage_file(stage: Path, relative: str, payload: bytes) -> None:
         ):
             raise ComposedBundleError(f"new staged file changed while writing: {path}")
     finally:
-        os.close(descriptor)
+        _close_descriptor(
+            descriptor,
+            context="new staged file descriptor cleanup",
+        )
 
 
 def _file_record(path: Path, relative: str, media_type: str) -> dict[str, Any]:
@@ -2098,7 +2240,7 @@ def build_composed_runtime_bundle(
                 destination_absolute,
                 repository_type="composed bundle",
             )
-        except ValueError as exc:
+        except RepositoryBoundaryError as exc:
             raise ComposedBundleError(str(exc)) from exc
 
         operation_id = uuid.uuid4().hex
@@ -2476,17 +2618,17 @@ def build_composed_runtime_bundle(
             if capture_owner is not None:
                 try:
                     capture_owner.close()
-                except BaseException as exc:
+                except ResourceSnapshotError as exc:
                     cleanup_errors.append(f"source snapshot cleanup: {exc}")
             if verified_stage is not None:
                 try:
                     verified_stage.close()
-                except BaseException as exc:
+                except ComposedBundleError as exc:
                     cleanup_errors.append(f"verified stage cleanup: {exc}")
             if published_bundle is not None:
                 try:
                     published_bundle.close()
-                except BaseException as exc:
+                except ComposedBundleError as exc:
                     cleanup_errors.append(f"published snapshot cleanup: {exc}")
             cleanup_owned_stage = True
             if publication_started:
@@ -2515,7 +2657,7 @@ def build_composed_runtime_bundle(
                         runtime_api_version=runtime_api_version,
                         registry=registry,
                     )
-                except BaseException as exc:
+                except (ComposedBundleError, OSError) as exc:
                     cleanup_errors.append(f"stage cleanup: {exc}")
                 else:
                     if stage_removed and journal_identity is not None:
@@ -2536,12 +2678,14 @@ def build_composed_runtime_bundle(
                                     "publication paths changed after cleanup; preserving journal"
                                 )
                             _remove_owned_journal(journal_path, journal_identity)
-                        except BaseException as exc:
+                        except (ComposedBundleError, OSError) as exc:
                             cleanup_errors.append(f"journal cleanup: {exc}")
             if cleanup_errors:
-                raise ComposedBundleError(
-                    f"{original}; additionally cleanup failed: {'; '.join(cleanup_errors)}"
-                ) from original
+                note_cleanup_failure(
+                    original,
+                    ComposedBundleError("; ".join(cleanup_errors)),
+                    context="composed bundle cleanup",
+                )
             if isinstance(original, ComposedBundleError):
                 raise
             if isinstance(
@@ -2569,4 +2713,5 @@ __all__ = [
     "load_composed_runtime_bundle",
     "validate_composed_runtime_bundle_manifest",
     "verify_composed_runtime_bundle",
+    "verify_installed_composed_runtime_bundle",
 ]

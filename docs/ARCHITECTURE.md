@@ -417,3 +417,12 @@ its lock, exact dependency, CI, notices, and native evidence together.
   bundles and processed assets.
 - Runtime bundles likewise use standalone external roots; neither export nor
   import accepts a bundle nested in Forge, world, bundle, or game storage.
+# Composed game releases
+
+M6 adds an additive composed-release catalog beside the unchanged legacy world
+catalog. Generated games independently verify immutable composed bundle
+inventories and correlations before using their worldpack for deterministic
+headless simulation, saves, or replays. Native dispatch is a narrower
+code-owned authorization: the current release permits only the exact legacy
+2.5D adapter on Linux x86_64. See
+`docs/decisions/0020-composed-release-game-consumer.md`.

@@ -5,6 +5,7 @@ import json
 import math
 import os
 import re
+import sys
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from pathlib import Path, PurePosixPath
@@ -16,7 +17,11 @@ from isoworld.content.media import (
 )
 from isoworld.content.models import WorldPack
 from isoworld.content.portability import portable_path_key, portable_relative_path
-from isoworld.content.resource_snapshot import ResourceSnapshotError, ResourceSnapshotOwner
+from isoworld.content.resource_snapshot import (
+    ResourceSnapshotError,
+    ResourceSnapshotOwner,
+    note_cleanup_failure,
+)
 from isoworld.runtime_io import RuntimeIOError, decode_json_object, read_json_object
 
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
@@ -171,12 +176,16 @@ class RenderPack:
         return self
 
     def __exit__(self, exc_type: object, exc: BaseException | None, traceback: object) -> None:
+        del exc_type, traceback
         try:
             self.close()
         except RenderPackError as cleanup_error:
-            if exc is not None:
-                raise cleanup_error from exc
-            raise
+            if not note_cleanup_failure(
+                exc,
+                cleanup_error,
+                context="renderpack snapshot cleanup",
+            ):
+                raise
 
     def __copy__(self) -> RenderPack:
         return self
@@ -327,22 +336,31 @@ def load_renderpack(path: str | Path, worldpack: WorldPack) -> RenderPack:
         owner = ResourceSnapshotOwner()
     except ResourceSnapshotError as exc:
         raise RenderPackError(f"Could not create private renderpack snapshot: {exc}") from exc
+    completed = False
     try:
-        return _load_renderpack_snapshot(
+        result = _load_renderpack_snapshot(
             raw,
             worldpack,
             supplied_hash,
             source_root,
             owner,
         )
-    except Exception as original:
-        try:
-            owner.close()
-        except ResourceSnapshotError as cleanup_error:
-            raise RenderPackError(
-                f"Renderpack validation failed and snapshot cleanup failed: {cleanup_error}"
-            ) from original
-        raise
+        completed = True
+        return result
+    finally:
+        if not completed:
+            primary = sys.exception()
+            try:
+                owner.close()
+            except ResourceSnapshotError as cleanup_error:
+                if not note_cleanup_failure(
+                    primary,
+                    cleanup_error,
+                    context="renderpack snapshot cleanup",
+                ):
+                    raise RenderPackError(
+                        f"Could not close failed renderpack snapshot: {cleanup_error}"
+                    ) from cleanup_error
 
 
 def _load_renderpack_snapshot(

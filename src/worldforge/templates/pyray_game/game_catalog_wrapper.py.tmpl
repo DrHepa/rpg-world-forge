@@ -9,6 +9,24 @@ from isoworld.content.catalog import select_release as select_release
 from isoworld.content.catalog import verify_catalog as _verify_catalog
 from isoworld.content.catalog import verify_release as _verify_release
 
+from isoworld.content.composed_catalog import ComposedCatalogError as ComposedCatalogError
+from isoworld.content.composed_catalog import (
+    ComposedCatalogRelease,
+    VerifiedComposedBundle,
+)
+from isoworld.content.composed_catalog import (
+    load_composed_catalog as _load_composed_catalog,
+)
+from isoworld.content.composed_catalog import (
+    select_composed_release as select_composed_release,
+)
+from isoworld.content.composed_catalog import (
+    validate_cross_catalog_world_hashes as validate_cross_catalog_world_hashes,
+)
+from isoworld.content.composed_catalog import (
+    verify_composed_release as _verify_composed_release,
+)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -30,3 +48,19 @@ def verify_catalog(
     project_root: str | Path | None = None,
 ) -> tuple[VerifiedBundle, ...]:
     return _verify_catalog(PROJECT_ROOT if project_root is None else project_root)
+
+
+def load_composed_catalog(
+    project_root: str | Path | None = None,
+) -> tuple[ComposedCatalogRelease, ...]:
+    return _load_composed_catalog(PROJECT_ROOT if project_root is None else project_root)
+
+
+def verify_composed_release(
+    release: ComposedCatalogRelease,
+    project_root: str | Path | None = None,
+) -> VerifiedComposedBundle:
+    return _verify_composed_release(
+        release,
+        PROJECT_ROOT if project_root is None else project_root,
+    )

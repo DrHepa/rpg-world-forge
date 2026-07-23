@@ -43,6 +43,26 @@ class ResourceSnapshotError(RuntimeError):
     """Raised when a private runtime resource snapshot loses safe ownership."""
 
 
+def note_cleanup_failure(
+    primary: BaseException | None,
+    cleanup: BaseException,
+    *,
+    context: str,
+) -> bool:
+    """Attach bounded cleanup context without replacing an active exception."""
+
+    if primary is None:
+        return False
+    safe_context = " ".join(context.split())[:160] or "cleanup"
+    safe_detail = " ".join(str(cleanup).split())[:512]
+    cleanup_type = type(cleanup).__name__
+    note = f"{safe_context} failed ({cleanup_type})"
+    if safe_detail:
+        note += f": {safe_detail}"
+    primary.add_note(note)
+    return True
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceSnapshotChunk:
     """One fixed-size sequential read from an owned resource snapshot."""
@@ -1110,13 +1130,23 @@ class ResourceSnapshotOwner:
             raise ResourceSnapshotError("Snapshot owner is already closed")
         return self
 
-    def __exit__(self, exc_type: object, exc: BaseException | None, traceback: object) -> None:
+    def __exit__(
+        self,
+        exc_type: object,
+        exc: BaseException | None,
+        traceback: object,
+    ) -> bool:
+        del exc_type, traceback
         try:
             self.close()
         except ResourceSnapshotError as cleanup_error:
-            if exc is not None:
-                raise cleanup_error from exc
-            raise
+            if not note_cleanup_failure(
+                exc,
+                cleanup_error,
+                context="runtime resource snapshot cleanup",
+            ):
+                raise
+        return False
 
     def __del__(self) -> None:
         if getattr(self, "_closed", True):

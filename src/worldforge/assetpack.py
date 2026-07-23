@@ -10,6 +10,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from isoworld.content.assetpack import (
+    AssetPackError as RuntimeAssetPackError,
+)
+from isoworld.content.assetpack import (
+    load_assetpack,
+)
 from isoworld.content.file_stat import FileStat, descriptor_file_stat, path_file_stat
 from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.media import media_signature_matches
@@ -1142,101 +1148,12 @@ def verify_assetpack(
 ) -> dict[str, Any]:
     """Verify assetpack structure, files, media, GLB metrics, and hashes."""
 
-    assetpack_path = Path(path)
     try:
-        payload = read_json_object(assetpack_path)
-        require_content_hash(payload, context="assetpack")
-    except AssetContractError as exc:
+        worldpack = _load_worldpack(Path(worldpack_path)) if worldpack_path is not None else None
+        with load_assetpack(path, worldpack) as loaded:
+            return loaded.document
+    except RuntimeAssetPackError as exc:
         raise AssetPackError(str(exc)) from exc
-    _expect_exact_keys(payload, _TOP_LEVEL_KEYS, "assetpack")
-    if payload.get("format") != ASSETPACK_FORMAT or payload.get("format_version") != 1:
-        raise AssetPackError("unsupported assetpack format or version")
-    world_id = _valid_id(payload.get("world_id"), context="assetpack.world_id")
-    world_hash = _valid_sha256(
-        payload.get("world_content_hash"),
-        context="assetpack.world_content_hash",
-    )
-    if worldpack_path is not None:
-        worldpack = _load_worldpack(Path(worldpack_path))
-        if worldpack.world_id != world_id or worldpack.content_hash != world_hash:
-            raise AssetPackError("assetpack does not match the verified worldpack")
-    _valid_id(payload.get("target_id"), context="assetpack.target_id")
-    _valid_sha256(payload.get("target_hash"), context="assetpack.target_hash")
-    if payload.get("dimension") != "3d" or payload.get("delivery_profile") != "assetpack_v1":
-        raise AssetPackError("assetpack is not an engine-neutral 3D handoff")
-    _coordinate_system(payload.get("coordinate_system"), context="assetpack.coordinate_system")
-
-    assets = payload.get("assets")
-    if not isinstance(assets, list) or not assets:
-        raise AssetPackError("assetpack.assets must be a non-empty list")
-    root = assetpack_path.parent.resolve()
-    representations: dict[str, str] = {}
-    model_found = False
-    seen_path_keys: set[tuple[str, ...]] = set()
-    glb_files: dict[str, list[tuple[str, Path]]] = {}
-    canonical_assets: list[dict[str, Any]] = []
-    for asset_index, asset in enumerate(assets):
-        context = f"assetpack.assets[{asset_index}]"
-        if not isinstance(asset, dict):
-            raise AssetPackError(f"{context} must be an object")
-        _expect_exact_keys(asset, _ASSET_KEYS, context)
-        asset_id = _valid_id(asset.get("id"), context=f"{context}.id")
-        if asset_id in representations:
-            raise AssetPackError(f"duplicate asset ID: {asset_id}")
-        if asset.get("kind") not in _KINDS:
-            raise AssetPackError(f"{context}.kind is invalid")
-        representation = asset.get("representation")
-        if representation not in _REPRESENTATIONS:
-            raise AssetPackError(f"{context}.representation is invalid")
-        _validate_kind_representation(asset["kind"], representation, context=context)
-        representations[asset_id] = representation
-        files = asset.get("files")
-        if not isinstance(files, list) or not files:
-            raise AssetPackError(f"{context}.files must be a non-empty list")
-        inspections: list[dict[str, int]] = []
-        role_values: list[str] = []
-        for file_index, file in enumerate(files):
-            entry, metrics, source = _verify_runtime_file(
-                root,
-                asset_id,
-                file,
-                context=f"{context}.files[{file_index}]",
-            )
-            normalized_path = normalized_relative_path(entry["path"])
-            assert normalized_path is not None
-            path_key = portable_path_key(normalized_path)
-            if path_key in seen_path_keys:
-                raise AssetPackError(f"assetpack path collides under NFC/casefold: {entry['path']}")
-            seen_path_keys.add(path_key)
-            role_values.append(entry["role"])
-            model_found = model_found or (
-                entry["role"] == "model" and entry["media_type"] == "model/gltf-binary"
-            )
-            inspections.append(metrics)
-            if entry["role"] in _GLB_ROLES:
-                glb_files.setdefault(asset_id, []).append((entry["role"], source))
-        if files != sorted(files, key=lambda item: (item["role"], item["path"])):
-            raise AssetPackError(f"{context}.files are not in canonical role/path order")
-        _validate_output_roles(
-            asset["kind"],
-            representation,
-            role_values,
-            context=context,
-        )
-        declared_metrics = _verified_metrics(asset.get("metrics"), context=f"{context}.metrics")
-        if declared_metrics != _sum_metrics(inspections):
-            raise AssetPackError(f"{context}.metrics do not match its packaged files")
-        canonical_assets.append(asset)
-    if not model_found:
-        raise AssetPackError("assetpack requires a primary model/gltf-binary output")
-    if canonical_assets != sorted(canonical_assets, key=lambda item: item["id"]):
-        raise AssetPackError("assetpack.assets are not in canonical ID order")
-
-    bindings = _verify_bindings(payload.get("bindings"), representations)
-    if bindings != payload["bindings"]:
-        raise AssetPackError("assetpack.bindings are not in canonical slot order")
-    _validate_3d_entrypoints(bindings, glb_files)
-    return payload
 
 
 __all__ = [

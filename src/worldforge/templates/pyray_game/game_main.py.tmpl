@@ -10,12 +10,19 @@ from pathlib import Path
 from game import GAME_ID, GAME_TITLE
 from game.catalog import (
     PROJECT_ROOT,
-    CatalogRelease,
     CatalogError,
+    CatalogRelease,
+    ComposedCatalogError,
+    ComposedCatalogRelease,
     load_catalog,
+    load_composed_catalog,
+    select_composed_release,
     select_release,
+    validate_cross_catalog_world_hashes,
+    verify_composed_release,
     verify_release,
 )
+
 from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES, WorldPack
 from isoworld.content.renderpack import RenderPack, RenderPackError, load_renderpack
@@ -28,13 +35,10 @@ from isoworld.persistence import (
     state_digest,
     write_replay,
 )
+from isoworld.render.pyray_2_5d import PYRAY_2_5D_ADAPTER, Pyray25DError
 from isoworld.render.resources import ResourceError
 
 SLOT_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
-
-
-class _GameCleanupError(ResourceError):
-    """Carries owned renderpack cleanup behind the primary game error."""
 
 
 def _absolute_environment_root(name: str, fallback: Path) -> Path:
@@ -82,7 +86,7 @@ def _slot_path(
     if slot is None:
         return None
     if SLOT_PATTERN.fullmatch(slot) is None:
-        raise ValueError("slot names must satisfy the safe slot policy")
+        raise CatalogError("slot names must satisfy the safe slot policy")
     return root / category / world_id / release_id / f"{slot}.json"
 
 
@@ -105,9 +109,14 @@ def _replay_path(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=f"Run {GAME_TITLE}")
+    parser = argparse.ArgumentParser(description=f"Run {GAME_TITLE}", allow_abbrev=False)
     parser.add_argument("--world", help="installed world ID")
     parser.add_argument("--release", help="installed release ID")
+    parser.add_argument("--profile", help="installed composed presentation profile ID")
+    parser.add_argument("--adapter-id", help="installed composed adapter ID")
+    parser.add_argument("--adapter-version", help="installed composed adapter version")
+    parser.add_argument("--bundle-id", help="installed composed bundle ID")
+    parser.add_argument("--bundle-version", help="installed composed bundle version")
     parser.add_argument("--list-worlds", action="store_true", help="list installed releases")
     parser.add_argument(
         "--headless-ticks",
@@ -166,18 +175,34 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             parser.error(f"--replay-slot cannot be combined with {', '.join(conflicts)}")
     if args.record_replay_slot is not None and args.load_slot is not None:
         parser.error("--record-replay-slot cannot be combined with --load-slot")
+    composed_values = (
+        args.profile,
+        args.adapter_id,
+        args.adapter_version,
+        args.bundle_id,
+        args.bundle_version,
+    )
+    if any(value is not None for value in composed_values):
+        if args.world is None or args.release is None or args.profile is None:
+            parser.error("composed selection requires --world, --release, and --profile")
+        if (args.adapter_id is None) != (args.adapter_version is None):
+            parser.error("--adapter-id and --adapter-version must be provided together")
+        if (args.bundle_id is None) != (args.bundle_version is None):
+            parser.error("--bundle-id and --bundle-version must be provided together")
     return args
 
 
 def _run_loaded(
     args: argparse.Namespace,
-    selected: CatalogRelease,
+    selected: CatalogRelease | ComposedCatalogRelease,
     pack: WorldPack,
-    renderpack: RenderPack,
+    renderpack: RenderPack | None,
+    *,
+    composed_native: bool = False,
 ) -> tuple[int, str]:
     user_data = args.user_data.expanduser().resolve()
     if user_data == PROJECT_ROOT or PROJECT_ROOT in user_data.parents:
-        raise ValueError("--user-data must be outside the installed game tree")
+        raise CatalogError("--user-data must be outside the installed game tree")
     replay_path = _replay_path(
         user_data,
         selected.world_id,
@@ -217,13 +242,25 @@ def _run_loaded(
         args.save_on_exit_slot,
     )
     initial = load_game(load_path, pack) if load_path is not None else None
-    app = GameApp(
-        pack,
-        initial,
-        quick_path,
-        renderpack,
-        replay_recording=record_path is not None,
-    )
+    if composed_native:
+        if renderpack is None:
+            raise Pyray25DError("composed native execution requires a verified renderpack")
+        PYRAY_2_5D_ADAPTER.preflight(pack, renderpack)
+        app = PYRAY_2_5D_ADAPTER.create_app(
+            pack,
+            renderpack,
+            state=initial,
+            quick_save_path=quick_path,
+            replay_recording=record_path is not None,
+        )
+    else:
+        app = GameApp(
+            pack,
+            initial,
+            quick_path,
+            renderpack,
+            replay_recording=record_path is not None,
+        )
     if args.headless_ticks is not None:
         state = app.run_headless(args.headless_ticks)
         result = 0
@@ -244,48 +281,38 @@ def _run_loaded(
 
 def _run_with_owned_renderpack(
     args: argparse.Namespace,
-    selected: CatalogRelease,
+    selected: CatalogRelease | ComposedCatalogRelease,
     pack: WorldPack,
-    renderpack: RenderPack,
+    renderpack: RenderPack | None,
+    *,
+    composed_native: bool = False,
 ) -> tuple[int, str]:
-    primary_error: BaseException | None = None
-    result: tuple[int, str] | None = None
-    try:
-        result = _run_loaded(args, selected, pack, renderpack)
-    except BaseException as exc:
-        primary_error = exc
-
-    cleanup_error: BaseException | None = None
-    try:
-        renderpack.close()
-    except BaseException as exc:
-        cleanup_error = exc
-
-    if primary_error is not None:
-        if cleanup_error is not None:
-            cleanup_parts: list[str] = []
-            if isinstance(primary_error.__cause__, ResourceError) and str(
-                primary_error.__cause__
-            ).startswith("Runtime cleanup failed:"):
-                cleanup_parts.append(str(primary_error.__cause__))
-            cleanup_parts.append(f"renderpack cleanup failed: {cleanup_error}")
-            combined = _GameCleanupError("; ".join(cleanup_parts))
-            primary_error.add_note(str(combined))
-            raise primary_error from combined
-        raise primary_error
-    if cleanup_error is not None:
-        raise cleanup_error
-    assert result is not None
-    return result
+    if renderpack is None:
+        return _run_loaded(
+            args,
+            selected,
+            pack,
+            None,
+            composed_native=composed_native,
+        )
+    with renderpack:
+        return _run_loaded(
+            args,
+            selected,
+            pack,
+            renderpack,
+            composed_native=composed_native,
+        )
 
 
 def _error_detail(exc: BaseException) -> str:
     detail = str(exc)
     cleanup = exc.__cause__
-    if isinstance(cleanup, _GameCleanupError) or (
-        isinstance(cleanup, ResourceError) and str(cleanup).startswith("Runtime cleanup failed:")
-    ):
+    if isinstance(cleanup, ResourceError) and str(cleanup).startswith("Runtime cleanup failed:"):
         detail += f"; {cleanup}"
+    for note in getattr(exc, "__notes__", ()):
+        if "cleanup failed" in note and note not in detail:
+            detail += f"; {note}"
     return detail
 
 
@@ -293,6 +320,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
     args = _parse_args(arguments)
     try:
         releases = load_catalog()
+        composed_releases = load_composed_catalog()
+        validate_cross_catalog_world_hashes(releases, composed_releases)
         if args.list_worlds:
             for release in releases:
                 features = ",".join(release.required_runtime_features) or "-"
@@ -300,9 +329,17 @@ def main(arguments: Sequence[str] | None = None) -> int:
                     f"world={release.world_id} release={release.release_id} "
                     f"bundle={release.bundle_hash} features={features}"
                 )
+            for release in composed_releases:
+                print(
+                    f"world={release.world_id} release={release.release_id} "
+                    f"profile={release.profile_id} adapter={release.adapter_id}@"
+                    f"{release.adapter_version} bundle={release.bundle_id}@"
+                    f"{release.bundle_version}"
+                )
             return 0
         if (
             not releases
+            and not composed_releases
             and args.headless_ticks == 0
             and args.world is None
             and args.release is None
@@ -314,6 +351,48 @@ def main(arguments: Sequence[str] | None = None) -> int:
         ):
             print("world=- release=- tick=0 status=empty_catalog shell=ready")
             return 0
+        if getattr(args, "profile", None) is not None:
+            selected_composed = select_composed_release(
+                composed_releases,
+                world_id=args.world,
+                release_id=args.release,
+                profile_id=args.profile,
+                adapter_id=getattr(args, "adapter_id", None),
+                adapter_version=getattr(args, "adapter_version", None),
+                bundle_id=getattr(args, "bundle_id", None),
+                bundle_version=getattr(args, "bundle_version", None),
+            )
+            with verify_composed_release(selected_composed) as composed:
+                pack = load_worldpack(composed.worldpack_path)
+                compatibility = pack.compatibility_with(
+                    RUNTIME_API_VERSION,
+                    SUPPORTED_RUNTIME_FEATURES,
+                )
+                if not compatibility.compatible:
+                    raise CatalogError("Runtime is incompatible with the selected composed world")
+                if args.headless_ticks is None and args.replay_slot is None:
+                    if not composed.native_compatible:
+                        raise CatalogError(
+                            "selected composed release has no compatible native "
+                            "presentation adapter"
+                        )
+                    if composed.renderpack_path is None:
+                        raise CatalogError(
+                            "selected composed release has no compatible native "
+                            "presentation adapter"
+                        )
+                    composed_renderpack = load_renderpack(composed.renderpack_path, pack)
+                else:
+                    composed_renderpack = None
+                result, success = _run_with_owned_renderpack(
+                    args,
+                    selected_composed,
+                    pack,
+                    composed_renderpack,
+                    composed_native=composed_renderpack is not None,
+                )
+            print(success)
+            return result
         selected = select_release(
             releases,
             world_id=args.world,
@@ -343,12 +422,12 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return result
     except (
         CatalogError,
+        ComposedCatalogError,
         PersistenceError,
+        Pyray25DError,
         RenderPackError,
         ResourceError,
         WorldPackError,
-        OSError,
-        ValueError,
     ) as exc:
         print(f"ERROR {_error_detail(exc)}", file=sys.stderr)
         return 2

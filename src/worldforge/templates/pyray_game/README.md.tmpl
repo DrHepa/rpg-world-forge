@@ -26,6 +26,16 @@ python -m game --world WORLD_ID --release RELEASE_ID
 List installed releases with `python -m game --list-worlds`. Run a selected
 release without graphics with `--headless-ticks N`.
 
+Composed M6 releases are additive. Select one with exact world, release and
+profile identifiers, for example
+`--world WORLD --release 1.0.0 --profile profile_2_5d --headless-ticks 20`.
+Adapter and bundle selector pairs are optional only when the remaining match is
+unique. Headless simulation, saves and replays remain presentation-neutral.
+Native composed presentation currently authorizes only the exact
+`isoworld_raylib_2_5d@0.1.0` adapter on Linux x86_64. Windows can verify and
+simulate Linux-targeted content headlessly but does not claim native
+presentation support. The bounded 3D adapter is not a playable game adapter.
+
 Record deterministic gameplay with `--record-replay-slot SLOT`, then verify and
 reproduce it with `--replay-slot SLOT`. Replay recording always starts from a
 clean initial state and cannot be combined with `--load-slot`. Playback is a
@@ -36,6 +46,8 @@ The process working directory is irrelevant: application data is resolved from
 the installed project, while saves and replays are written only to the explicit
 user-data root outside the game tree. Replays use
 `replays/WORLD_ID/RELEASE_ID/SLOT.json`; saves use the parallel `saves/` tree.
+Representation variants with the same exact world hash intentionally share
+those slots.
 Empty or relative `XDG_DATA_HOME`/`LOCALAPPDATA` values are ignored in favor of
 an absolute home-based platform default. `game_data/worlds.lock.json` is the
 authority for installed releases.
@@ -65,7 +77,7 @@ python scripts/benchmark_scene.py --world WORLD_ID --release RELEASE_ID
 python scripts/package_game.py --output ../releases/__GAME_ID__-0.1.0.zip
 ```
 
-Every package includes its runtime lock, shared-asset lock, bundle catalog,
+Every package includes its runtime lock, shared-asset lock, both bundle catalogs,
 licenses, and a deterministic file manifest. The explicit output must be outside the verified
 source tree and must not already exist. It is an unpack-and-run source
 artifact, not a wheel: extract it and start it with `python run_game.py` so the

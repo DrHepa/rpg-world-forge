@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -21,14 +22,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from isoworld.content.file_stat import descriptor_file_stat, path_file_stat  # noqa: E402
+from isoworld.content.catalog import CatalogError  # noqa: E402
 from verify_game import (  # noqa: E402
+    VerificationError,
     read_game_identity,
     verify_dependencies,
     verify_runtime_contract,
     verify_runtime_snapshot,
     verify_source_boundary,
 )
+
+from isoworld.content.composed_catalog import ComposedCatalogError  # noqa: E402
+from isoworld.content.file_stat import descriptor_file_stat, path_file_stat  # noqa: E402
+from isoworld.content.resource_snapshot import note_cleanup_failure  # noqa: E402
 
 ROOT_FILES = (
     "LICENSE",
@@ -104,6 +110,19 @@ FORBIDDEN_FIXTURE_JSON_FORMATS = {
 }
 
 
+class PackageError(ValueError):
+    """Raised when a deterministic package cannot be verified or published."""
+
+
+def _close_descriptor(descriptor: int, *, context: str) -> None:
+    primary = sys.exception()
+    try:
+        os.close(descriptor)
+    except OSError as cleanup_error:
+        if not note_cleanup_failure(primary, cleanup_error, context=context):
+            raise PackageError(f"{context} failed: {cleanup_error}") from cleanup_error
+
+
 @contextmanager
 def _exclusive_game_mutation() -> Iterator[None]:
     """Share one identity-safe lock with all game mutation operations."""
@@ -112,22 +131,47 @@ def _exclusive_game_mutation() -> Iterator[None]:
     try:
         descriptor = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     except FileExistsError as exc:
-        raise ValueError("Another game mutation is already in progress") from exc
-    identity = descriptor_file_stat(descriptor)
+        raise PackageError("Another game mutation is already in progress") from exc
+    identity = None
     try:
+        identity = descriptor_file_stat(descriptor)
         os.write(descriptor, f"pid={os.getpid()} operation=package\n".encode("ascii"))
         yield
     finally:
-        os.close(descriptor)
-        try:
-            current = path_file_stat(lock_path)
-        except FileNotFoundError:
-            current = None
-        if current is not None and (current.st_dev, current.st_ino) == (
-            identity.st_dev,
-            identity.st_ino,
-        ):
-            lock_path.unlink()
+        primary = sys.exception()
+        _close_descriptor(descriptor, context="package mutation lock descriptor cleanup")
+        if identity is not None:
+            try:
+                current = path_file_stat(lock_path)
+            except FileNotFoundError:
+                current = None
+            except OSError as cleanup_error:
+                if not note_cleanup_failure(
+                    primary,
+                    cleanup_error,
+                    context="package mutation lock identity cleanup",
+                ):
+                    raise PackageError(
+                        f"package mutation lock identity cleanup failed: {cleanup_error}"
+                    ) from cleanup_error
+            else:
+                if current is not None and (current.st_dev, current.st_ino) == (
+                    identity.st_dev,
+                    identity.st_ino,
+                ):
+                    try:
+                        lock_path.unlink()
+                    except FileNotFoundError:
+                        pass
+                    except OSError as cleanup_error:
+                        if not note_cleanup_failure(
+                            primary,
+                            cleanup_error,
+                            context="package mutation lock path cleanup",
+                        ):
+                            raise PackageError(
+                                f"package mutation lock path cleanup failed: {cleanup_error}"
+                            ) from cleanup_error
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -145,7 +189,7 @@ def _sha256_path(path: Path) -> str:
 def _regular_file(path: Path) -> None:
     info = path.lstat()
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-        raise ValueError(f"package input is missing or unsafe: {path}")
+        raise PackageError(f"package input is missing or unsafe: {path}")
 
 
 def _source_files() -> list[Path]:
@@ -163,12 +207,14 @@ def _source_files() -> list[Path]:
         for name in directory_names:
             info = (current_path / name).lstat()
             if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-                raise ValueError(f"source tree contains an unsafe directory: {current_path / name}")
+                raise PackageError(
+                    f"source tree contains an unsafe directory: {current_path / name}"
+                )
         for name in file_names:
             path = current_path / name
             _regular_file(path)
             if path.suffix != ".py":
-                raise ValueError(f"source tree contains a non-Python package input: {path}")
+                raise PackageError(f"source tree contains a non-Python package input: {path}")
             files.append(path)
     return files
 
@@ -177,7 +223,7 @@ def _python_tree_files(relative_root: str) -> list[Path]:
     root = PROJECT_ROOT / relative_root
     info = root.lstat()
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-        raise ValueError(f"{relative_root} must be a real directory")
+        raise PackageError(f"{relative_root} must be a real directory")
     files: list[Path] = []
     for current, directory_names, file_names in os.walk(
         root,
@@ -192,12 +238,12 @@ def _python_tree_files(relative_root: str) -> list[Path]:
             directory = current_path / name
             directory_info = directory.lstat()
             if stat.S_ISLNK(directory_info.st_mode) or not stat.S_ISDIR(directory_info.st_mode):
-                raise ValueError(f"{relative_root} contains an unsafe directory: {directory}")
+                raise PackageError(f"{relative_root} contains an unsafe directory: {directory}")
         for name in file_names:
             path = current_path / name
             _regular_file(path)
             if path.suffix != ".py":
-                raise ValueError(f"{relative_root} contains a non-Python source input: {path}")
+                raise PackageError(f"{relative_root} contains a non-Python source input: {path}")
             files.append(path)
     return files
 
@@ -206,7 +252,7 @@ def _reject_fixture_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, An
     result: dict[str, Any] = {}
     for key, value in pairs:
         if key in result:
-            raise ValueError(f"test fixture contains duplicate JSON key: {key}")
+            raise PackageError(f"test fixture contains duplicate JSON key: {key}")
         result[key] = value
     return result
 
@@ -215,13 +261,13 @@ def _scan_fixture_json(value: Any, context: str) -> None:
     if isinstance(value, dict):
         for key, child in value.items():
             if key.casefold() in FORBIDDEN_FIXTURE_JSON_KEYS:
-                raise ValueError(f"test fixture contains authoring/provider metadata: {context}")
+                raise PackageError(f"test fixture contains authoring/provider metadata: {context}")
             if (
                 key == "format"
                 and isinstance(child, str)
                 and child in FORBIDDEN_FIXTURE_JSON_FORMATS
             ):
-                raise ValueError(f"test fixture contains authoring format: {context}")
+                raise PackageError(f"test fixture contains authoring format: {context}")
             _scan_fixture_json(child, context)
     elif isinstance(value, list):
         for child in value:
@@ -231,7 +277,7 @@ def _scan_fixture_json(value: Any, context: str) -> None:
 def _verify_test_fixture(path: Path, media_type: str) -> None:
     relative = path.relative_to(PROJECT_ROOT).as_posix()
     if path.stat().st_size > MAX_TEST_FIXTURE_BYTES:
-        raise ValueError(f"test fixture is oversized: {relative}")
+        raise PackageError(f"test fixture is oversized: {relative}")
     if media_type == "application/json":
         try:
             value = json.loads(
@@ -239,19 +285,19 @@ def _verify_test_fixture(path: Path, media_type: str) -> None:
                 object_pairs_hook=_reject_fixture_duplicate_keys,
             )
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ValueError(f"test fixture is invalid JSON: {relative}") from exc
+            raise PackageError(f"test fixture is invalid JSON: {relative}") from exc
         _scan_fixture_json(value, relative)
     from isoworld.content.media import media_signature_matches
 
     if not media_signature_matches(path, media_type):
-        raise ValueError(f"test fixture bytes disagree with its extension: {relative}")
+        raise PackageError(f"test fixture bytes disagree with its extension: {relative}")
 
 
 def _test_tree_files() -> list[Path]:
     root = PROJECT_ROOT / "tests"
     info = root.lstat()
     if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-        raise ValueError("tests must be a real directory")
+        raise PackageError("tests must be a real directory")
     files: list[Path] = []
     for current, directory_names, file_names in os.walk(
         root,
@@ -266,7 +312,7 @@ def _test_tree_files() -> list[Path]:
             directory = current_path / name
             directory_info = directory.lstat()
             if stat.S_ISLNK(directory_info.st_mode) or not stat.S_ISDIR(directory_info.st_mode):
-                raise ValueError(f"tests contain an unsafe directory: {directory}")
+                raise PackageError(f"tests contain an unsafe directory: {directory}")
         for name in file_names:
             path = current_path / name
             _regular_file(path)
@@ -275,7 +321,7 @@ def _test_tree_files() -> list[Path]:
                 continue
             media_type = TEST_FIXTURE_MEDIA_TYPES.get(path.suffix.casefold())
             if media_type is None:
-                raise ValueError(f"tests contain an unsupported fixture: {path}")
+                raise PackageError(f"tests contain an unsupported fixture: {path}")
             _verify_test_fixture(path, media_type)
             files.append(path)
     return files
@@ -283,15 +329,22 @@ def _test_tree_files() -> list[Path]:
 
 def _game_data_files(
     bundles: tuple[Any, ...],
+    composed_bundle_roots: tuple[Path, ...],
     shared_assets: tuple[Any, ...],
 ) -> list[Path]:
     game_data = PROJECT_ROOT / "game_data"
     expected = {
         game_data / "shared.lock.json",
         game_data / "worlds.lock.json",
+        game_data / "compositions.lock.json",
     }
     for bundle in bundles:
         expected.update(path for path in bundle.root.rglob("*") if path.is_file())
+    for root in composed_bundle_roots:
+        expected.update(path for path in root.rglob("*") if path.is_file())
+    generations = game_data / "compositions.d"
+    if composed_bundle_roots:
+        expected.update(path for path in generations.rglob("*") if path.is_file())
     expected.update(PROJECT_ROOT / PurePosixPath(asset.path) for asset in shared_assets)
     actual_files: set[Path] = set()
     actual_directories: set[Path] = set()
@@ -307,7 +360,7 @@ def _game_data_files(
             directory = current_path / name
             info = directory.lstat()
             if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
-                raise ValueError(f"game data contains an unsafe directory: {directory}")
+                raise PackageError(f"game data contains an unsafe directory: {directory}")
             actual_directories.add(directory)
         for name in file_names:
             path = current_path / name
@@ -320,28 +373,29 @@ def _game_data_files(
         if parent != game_data and game_data in parent.parents
     }
     if actual_files != expected or actual_directories != expected_directories:
-        raise ValueError("game data differs from the verified package allowlist")
+        raise PackageError("game data differs from the verified package allowlist")
     return sorted(expected, key=lambda path: path.relative_to(PROJECT_ROOT).as_posix())
 
 
 def _input_files(
     bundles: tuple[Any, ...],
+    composed_bundle_roots: tuple[Path, ...],
     shared_assets: tuple[Any, ...],
 ) -> list[Path]:
     paths = [PROJECT_ROOT / name for name in ROOT_FILES]
     paths.extend(_source_files())
     paths.extend(_python_tree_files("scripts"))
     paths.extend(_test_tree_files())
-    paths.extend(_game_data_files(bundles, shared_assets))
+    paths.extend(_game_data_files(bundles, composed_bundle_roots, shared_assets))
     unique = sorted(set(paths), key=lambda path: path.relative_to(PROJECT_ROOT).as_posix())
     if len(unique) > MAX_PACKAGE_FILES:
-        raise ValueError("package exceeds the file-count limit")
+        raise PackageError("package exceeds the file-count limit")
     total = 0
     for path in unique:
         _regular_file(path)
         total += path.stat().st_size
         if total > MAX_PACKAGE_BYTES:
-            raise ValueError("package exceeds the total-byte limit")
+            raise PackageError("package exceeds the total-byte limit")
     _validate_archive_paths(unique)
     return unique
 
@@ -357,7 +411,7 @@ def _validate_archive_paths(paths: list[Path]) -> None:
             or unicodedata.normalize("NFC", relative) != relative
             or len(relative.encode("utf-8")) > MAX_PACKAGE_PATH_BYTES
         ):
-            raise ValueError(f"package path is not portable: {relative!r}")
+            raise PackageError(f"package path is not portable: {relative!r}")
         prefix: list[str] = []
         for component in pure.parts:
             prefix.append(component)
@@ -368,12 +422,12 @@ def _validate_archive_paths(paths: list[Path]) -> None:
                 or any(ord(character) < 32 or character in '<>:"|?*' for character in component)
                 or device_name in WINDOWS_RESERVED_NAMES
             ):
-                raise ValueError(f"package path is not portable: {relative!r}")
+                raise PackageError(f"package path is not portable: {relative!r}")
             exact_prefix = "/".join(prefix)
             folded_prefix = exact_prefix.casefold()
             previous = folded_prefixes.setdefault(folded_prefix, exact_prefix)
             if previous != exact_prefix:
-                raise ValueError(
+                raise PackageError(
                     "package paths collide on a case-insensitive platform: "
                     f"{previous!r} and {exact_prefix!r}"
                 )
@@ -415,7 +469,7 @@ def _snapshot_inputs(inputs: list[Path], snapshot_root: Path) -> dict[str, Path]
             after.st_size,
             after.st_mtime_ns,
         ) or _sha256_path(source) != _sha256_path(destination):
-            raise ValueError(f"package input changed while snapshotting: {relative}")
+            raise PackageError(f"package input changed while snapshotting: {relative}")
         snapshot[relative] = destination
     return snapshot
 
@@ -440,23 +494,36 @@ def _verify_private_snapshot(snapshot_root: Path) -> dict[str, Any]:
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "unknown error"
-        raise ValueError(f"private package snapshot failed verification: {detail}")
+        raise PackageError(f"private package snapshot failed verification: {detail}")
     try:
         report = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
-        raise ValueError("private package snapshot returned an invalid report") from exc
+        raise PackageError("private package snapshot returned an invalid report") from exc
     if (
         not isinstance(report, dict)
-        or set(report) != {"bundles", "game_id", "game_version", "runtime_hash"}
+        or set(report)
+        != {
+            "bundles",
+            "composed_bundles",
+            "composed_catalog_hash",
+            "game_id",
+            "game_version",
+            "runtime_hash",
+        }
         or isinstance(report["bundles"], bool)
         or not isinstance(report["bundles"], int)
         or report["bundles"] < 0
+        or isinstance(report["composed_bundles"], bool)
+        or not isinstance(report["composed_bundles"], int)
+        or report["composed_bundles"] < 0
+        or not isinstance(report["composed_catalog_hash"], str)
+        or re.fullmatch(r"[0-9a-f]{64}", report["composed_catalog_hash"]) is None
         or not all(
             isinstance(report[field], str) and report[field]
             for field in ("game_id", "game_version", "runtime_hash")
         )
     ):
-        raise ValueError("private package snapshot report has an invalid shape")
+        raise PackageError("private package snapshot report has an invalid shape")
     return report
 
 
@@ -470,7 +537,7 @@ def _verify_archive(
         infos = archive.infolist()
         names = [info.filename for info in infos]
         if names != expected_names or len(names) != len(set(names)):
-            raise ValueError("package archive inventory differs from its manifest")
+            raise PackageError("package archive inventory differs from its manifest")
         for info in infos:
             if (
                 info.date_time != FIXED_ZIP_TIME
@@ -478,9 +545,11 @@ def _verify_archive(
                 or info.create_system != 3
                 or info.external_attr != 0o100644 << 16
             ):
-                raise ValueError(f"package archive metadata is not deterministic: {info.filename}")
+                raise PackageError(
+                    f"package archive metadata is not deterministic: {info.filename}"
+                )
         if archive.read("PACKAGE-MANIFEST.json") != manifest_bytes:
-            raise ValueError("package manifest bytes changed while archiving")
+            raise PackageError("package manifest bytes changed while archiving")
         for record in records:
             digest = hashlib.sha256()
             size = 0
@@ -489,14 +558,21 @@ def _verify_archive(
                     digest.update(chunk)
                     size += len(chunk)
             if size != record["size"] or digest.hexdigest() != record["sha256"]:
-                raise ValueError(
+                raise PackageError(
                     f"archived bytes disagree with the package manifest: {record['path']}"
                 )
 
 
 def build_package(output: Path) -> Path:
-    with _exclusive_game_mutation():
-        return _build_package_locked(output)
+    try:
+        with _exclusive_game_mutation():
+            return _build_package_locked(output)
+    except PackageError:
+        raise
+    except (CatalogError, ComposedCatalogError, VerificationError) as exc:
+        raise PackageError(str(exc)) from exc
+    except OSError as exc:
+        raise PackageError(str(exc)) from exc
 
 
 def _build_package_locked(output: Path) -> Path:
@@ -507,15 +583,30 @@ def _build_package_locked(output: Path) -> Path:
     verify_dependencies(identity)
     from isoworld.content.catalog import load_shared_assets, verify_catalog
 
+    from isoworld.content.composed_catalog import (
+        load_composed_catalog,
+        validate_cross_catalog_world_hashes,
+        verify_composed_release,
+    )
+
     bundles = verify_catalog(PROJECT_ROOT)
+    composed_entries = load_composed_catalog(PROJECT_ROOT)
+    validate_cross_catalog_world_hashes(
+        tuple(bundle.release for bundle in bundles),
+        composed_entries,
+    )
+    composed_bundle_roots: list[Path] = []
+    for entry in composed_entries:
+        with verify_composed_release(entry, PROJECT_ROOT) as bundle:
+            composed_bundle_roots.append(bundle.root)
     shared_assets = load_shared_assets(PROJECT_ROOT)
-    inputs = _input_files(bundles, shared_assets)
+    inputs = _input_files(bundles, tuple(composed_bundle_roots), shared_assets)
     requested = output.expanduser()
     output = requested.resolve()
     if output == PROJECT_ROOT or PROJECT_ROOT in output.parents:
-        raise ValueError("package output must be outside the verified game source tree")
+        raise PackageError("package output must be outside the verified game source tree")
     if requested.is_symlink() or output.exists():
-        raise ValueError(f"package output already exists or is unsafe: {requested}")
+        raise PackageError(f"package output already exists or is unsafe: {requested}")
     output.parent.mkdir(parents=True, exist_ok=True)
     snapshot_root = Path(tempfile.mkdtemp(prefix=f".{output.name}.snapshot-", dir=output.parent))
     temporary = output.parent / f".{output.name}.tmp-{uuid.uuid4().hex}"
@@ -523,7 +614,9 @@ def _build_package_locked(output: Path) -> Path:
         inputs_by_name = _snapshot_inputs(inputs, snapshot_root)
         snapshot_report = _verify_private_snapshot(snapshot_root)
         if snapshot_report["bundles"] != len(bundles):
-            raise ValueError("package catalog changed before its private snapshot")
+            raise PackageError("package catalog changed before its private snapshot")
+        if snapshot_report["composed_bundles"] != len(composed_entries):
+            raise PackageError("composed package catalog changed before its private snapshot")
         records = [
             {
                 "path": relative,
@@ -541,6 +634,7 @@ def _build_package_locked(output: Path) -> Path:
             "platform_hash": _sha256_path(inputs_by_name["platform.lock.json"]),
             "shared_assets_lock_hash": _sha256_path(inputs_by_name["game_data/shared.lock.json"]),
             "catalog_hash": _sha256_path(inputs_by_name["game_data/worlds.lock.json"]),
+            "composed_catalog_hash": snapshot_report["composed_catalog_hash"],
             "files": records,
         }
         manifest_bytes = (
@@ -555,9 +649,33 @@ def _build_package_locked(output: Path) -> Path:
         _verify_archive(temporary, manifest_bytes, records)
         os.link(temporary, output)
     finally:
-        shutil.rmtree(snapshot_root, ignore_errors=True)
-        if temporary.exists():
+        primary = sys.exception()
+        try:
+            shutil.rmtree(snapshot_root)
+        except FileNotFoundError:
+            pass
+        except OSError as cleanup_error:
+            if not note_cleanup_failure(
+                primary,
+                cleanup_error,
+                context="private package snapshot cleanup",
+            ):
+                raise PackageError(
+                    f"private package snapshot cleanup failed: {cleanup_error}"
+                ) from cleanup_error
+        try:
             temporary.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as cleanup_error:
+            if not note_cleanup_failure(
+                primary,
+                cleanup_error,
+                context="temporary package archive cleanup",
+            ):
+                raise PackageError(
+                    f"temporary package archive cleanup failed: {cleanup_error}"
+                ) from cleanup_error
     return output
 
 
@@ -572,7 +690,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         output = build_package(args.output)
-    except (OSError, ValueError) as exc:
+    except PackageError as exc:
         print(f"ERROR {exc}", file=sys.stderr)
         return 2
     print(f"package={output} sha256={_sha256_path(output)}")

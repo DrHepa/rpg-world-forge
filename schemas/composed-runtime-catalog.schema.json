@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/composed-runtime-catalog.schema.json",
+  "title": "IsoWorld composed runtime catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "format_version", "entries", "content_hash"],
+  "properties": {
+    "format": {"const": "isoworld.composed_runtime_catalog"},
+    "format_version": {"const": 1},
+    "entries": {
+      "type": "array",
+      "maxItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "world_id",
+          "world_content_hash",
+          "release_id",
+          "profile_id",
+          "profile_hash",
+          "adapter_id",
+          "adapter_version",
+          "adapter_hash",
+          "composition_hash",
+          "bundle_id",
+          "bundle_version",
+          "bundle_hash",
+          "path"
+        ],
+        "properties": {
+          "world_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+          "world_content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "release_id": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          },
+          "profile_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+          "profile_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "adapter_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+          "adapter_version": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          },
+          "adapter_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "composition_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "bundle_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+          "bundle_version": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          },
+          "bundle_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "path": {"type": "string", "minLength": 1, "maxLength": 1024}
+        }
+      }
+    },
+    "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

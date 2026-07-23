@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import worldforge.runtime_composition as runtime_composition_module
 from isoworld.content.loader import load_worldpack
 from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.runtime_composition import (
@@ -207,6 +208,44 @@ class RuntimeCompositionContractTests(unittest.TestCase):
         composition["slot_owners"].append(duplicate)
         with self.assertRaisesRegex(RuntimeCompositionError, "duplicate semantic slot"):
             validate_runtime_composition(_reseal(composition))
+
+    def test_adapter_frame_budget_bounds_integers_before_float_conversion(self) -> None:
+        maximum = _read_fixture("adapter.declared.json")
+        maximum["budgets"]["target_frame_milliseconds"] = 1000
+        validated = validate_runtime_adapter(_reseal(maximum))
+        self.assertEqual(1000, validated["budgets"]["target_frame_milliseconds"])
+
+        one_over = _read_fixture("adapter.declared.json")
+        one_over["budgets"]["target_frame_milliseconds"] = 1001
+        with self.assertRaisesRegex(
+            RuntimeCompositionError,
+            "target_frame_milliseconds.*at most 1000",
+        ):
+            validate_runtime_adapter(_reseal(one_over))
+
+        with self.assertRaisesRegex(
+            RuntimeCompositionError,
+            "target_frame_milliseconds.*at most 1000",
+        ):
+            runtime_composition_module._positive_bounded_number(  # noqa: SLF001
+                10**10000,
+                "runtime adapter.budgets.target_frame_milliseconds",
+                maximum=1000,
+            )
+
+        class OverflowingFloat(float):
+            def __float__(self) -> float:
+                raise OverflowError("injected numeric conversion overflow")
+
+        with self.assertRaisesRegex(
+            RuntimeCompositionError,
+            "target_frame_milliseconds.*at most 1000",
+        ):
+            runtime_composition_module._positive_bounded_number(  # noqa: SLF001
+                OverflowingFloat(1.0),
+                "runtime adapter.budgets.target_frame_milliseconds",
+                maximum=1000,
+            )
 
     def test_profile_schema_and_python_share_the_exact_complete_matrix(self) -> None:
         schema = json.loads(

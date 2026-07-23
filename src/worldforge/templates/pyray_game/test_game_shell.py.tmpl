@@ -17,7 +17,8 @@ from unittest.mock import patch
 
 from game import GAME_ID, GAME_TITLE
 from game import __main__ as game_main
-from game.catalog import PROJECT_ROOT, load_catalog
+from game.catalog import PROJECT_ROOT, load_catalog, load_composed_catalog
+
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
 
 
@@ -34,14 +35,132 @@ class GameShellTests(unittest.TestCase):
         environment["PYTHONPATH"] = str(PROJECT_ROOT / "src")
         return environment
 
+    def _load_package_module(self, name: str):
+        specification = importlib.util.spec_from_file_location(
+            name,
+            PROJECT_ROOT / "scripts/package_game.py",
+        )
+        self.assertIsNotNone(specification)
+        self.assertIsNotNone(specification.loader)
+        module = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(module)
+        return module
+
     def test_identity_and_runtime_contract_are_explicit(self) -> None:
         self.assertEqual(GAME_ID, "__GAME_ID__")
         self.assertEqual(GAME_TITLE, __GAME_TITLE_PY__)
         self.assertRegex(RUNTIME_API_VERSION, r"^\d+\.\d+\.\d+$")
         self.assertIsInstance(SUPPORTED_RUNTIME_FEATURES, frozenset)
 
+    def test_composed_catalog_starts_empty_and_selectors_are_exact(self) -> None:
+        self.assertEqual((), load_composed_catalog())
+        with self.assertRaises(SystemExit):
+            game_main._parse_args(["--profile", "profile_2_5d"])
+        with self.assertRaises(SystemExit):
+            game_main._parse_args(["--prof", "profile_2_5d"])
+
+    def test_composed_native_uses_adapter_preflight_before_create_app(self) -> None:
+        calls: list[str] = []
+        state = SimpleNamespace(
+            tick=0,
+            day=0,
+            minute_of_day=0,
+            active_actor_id="actor",
+        )
+        app = SimpleNamespace(
+            run_headless=lambda _ticks: state,
+            simulation=SimpleNamespace(state=state, action_log=()),
+        )
+
+        class RecordingAdapter:
+            def preflight(self, _pack, _renderpack):
+                calls.append("preflight")
+                return SimpleNamespace()
+
+            def create_app(self, _pack, _renderpack, **_kwargs):
+                calls.append("create_app")
+                return app
+
+        with tempfile.TemporaryDirectory() as temporary:
+            args = SimpleNamespace(
+                user_data=Path(temporary),
+                replay_slot=None,
+                record_replay_slot=None,
+                load_slot=None,
+                quick_save_slot=None,
+                save_on_exit_slot=None,
+                headless_ticks=0,
+            )
+            selected = SimpleNamespace(world_id="test_world", release_id="1.0.0")
+            pack = SimpleNamespace(world_id="test_world")
+            renderpack = object()
+            with (
+                patch.object(game_main, "PYRAY_2_5D_ADAPTER", RecordingAdapter()),
+                patch.object(game_main, "state_digest", return_value="digest"),
+            ):
+                result, _message = game_main._run_loaded(
+                    args,
+                    selected,
+                    pack,
+                    renderpack,
+                    composed_native=True,
+                )
+        self.assertEqual(0, result)
+        self.assertEqual(["preflight", "create_app"], calls)
+
+    def test_composed_native_budget_failure_precedes_app_or_window_creation(self) -> None:
+        created = False
+
+        class RejectingAdapter:
+            def preflight(self, _pack, _renderpack):
+                raise game_main.Pyray25DError("renderpack exceeds verified budget")
+
+            def create_app(self, _pack, _renderpack, **_kwargs):
+                nonlocal created
+                created = True
+                raise AssertionError("create_app must not run after failed preflight")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            args = SimpleNamespace(
+                user_data=Path(temporary),
+                replay_slot=None,
+                record_replay_slot=None,
+                load_slot=None,
+                quick_save_slot=None,
+                save_on_exit_slot=None,
+                headless_ticks=None,
+            )
+            selected = SimpleNamespace(world_id="test_world", release_id="1.0.0")
+            with (
+                patch.object(game_main, "PYRAY_2_5D_ADAPTER", RejectingAdapter()),
+                patch.object(game_main, "GameApp") as direct_app,
+                self.assertRaisesRegex(game_main.Pyray25DError, "verified budget"),
+            ):
+                game_main._run_loaded(
+                    args,
+                    selected,
+                    SimpleNamespace(world_id="test_world"),
+                    object(),
+                    composed_native=True,
+                )
+        self.assertFalse(created)
+        direct_app.assert_not_called()
+
     def test_success_is_not_printed_when_owned_renderpack_close_fails(self) -> None:
         class FailingRenderPack:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, exc, _traceback):
+                try:
+                    self.close()
+                except game_main.RenderPackError as cleanup_error:
+                    if exc is None:
+                        raise
+                    exc.add_note(
+                        f"renderpack snapshot cleanup failed (RenderPackError): {cleanup_error}"
+                    )
+
             def close(self) -> None:
                 raise game_main.RenderPackError("generated renderpack close failed")
 
@@ -90,6 +209,19 @@ class GameShellTests(unittest.TestCase):
         primary = game_main.PersistenceError("generated game body failed")
 
         class FailingRenderPack:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, exc, _traceback):
+                try:
+                    self.close()
+                except game_main.RenderPackError as cleanup_error:
+                    if exc is None:
+                        raise
+                    exc.add_note(
+                        f"renderpack snapshot cleanup failed (RenderPackError): {cleanup_error}"
+                    )
+
             def close(self) -> None:
                 raise game_main.RenderPackError("generated renderpack close failed")
 
@@ -133,7 +265,148 @@ class GameShellTests(unittest.TestCase):
         self.assertIn("generated game body failed", stderr.getvalue())
         self.assertIn("generated renderpack close failed", stderr.getvalue())
         self.assertNotIn("Traceback", stderr.getvalue())
-        self.assertIsInstance(primary.__cause__, game_main._GameCleanupError)
+        self.assertTrue(
+            any(
+                "generated renderpack close failed" in note
+                for note in getattr(primary, "__notes__", ())
+            )
+        )
+
+    def test_composed_body_error_survives_snapshot_cleanup_failure(self) -> None:
+        primary = game_main.CatalogError("generated composed body failed")
+        cleanup = game_main.ComposedCatalogError("generated composed snapshot cleanup failed")
+
+        class FailingVerifiedComposed:
+            worldpack_path = Path("worldpack.json")
+            renderpack_path = None
+            native_compatible = False
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, exc, _traceback):
+                self.assert_primary(exc)
+                exc.add_note(f"composed release snapshot cleanup failed: {cleanup}")
+
+            @staticmethod
+            def assert_primary(exc):
+                if exc is not primary:
+                    raise AssertionError("composed cleanup replaced the body exception")
+
+        args = SimpleNamespace(
+            list_worlds=False,
+            headless_ticks=0,
+            world="test_world",
+            release="1.0.0",
+            profile="profile_3d",
+            adapter_id=None,
+            adapter_version=None,
+            bundle_id=None,
+            bundle_version=None,
+            load_slot=None,
+            quick_save_slot=None,
+            save_on_exit_slot=None,
+            record_replay_slot=None,
+            replay_slot=None,
+        )
+        release = SimpleNamespace(world_id="test_world", release_id="1.0.0")
+        compatibility = SimpleNamespace(compatible=True)
+        pack = SimpleNamespace(compatibility_with=lambda *_: compatibility)
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch.object(game_main, "_parse_args", return_value=args),
+            patch.object(game_main, "load_catalog", return_value=()),
+            patch.object(game_main, "load_composed_catalog", return_value=(release,)),
+            patch.object(game_main, "validate_cross_catalog_world_hashes"),
+            patch.object(game_main, "select_composed_release", return_value=release),
+            patch.object(
+                game_main,
+                "verify_composed_release",
+                return_value=FailingVerifiedComposed(),
+            ),
+            patch.object(game_main, "load_worldpack", return_value=pack),
+            patch.object(game_main, "_run_with_owned_renderpack", side_effect=primary),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = game_main.main([])
+
+        self.assertEqual(2, result)
+        self.assertEqual("", stdout.getvalue())
+        self.assertIn("generated composed body failed", stderr.getvalue())
+        self.assertIn("generated composed snapshot cleanup failed", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
+        self.assertTrue(
+            any(
+                "generated composed snapshot cleanup failed" in note
+                for note in getattr(primary, "__notes__", ())
+            )
+        )
+
+    def test_composed_cleanup_only_is_contractual_and_suppresses_success(self) -> None:
+        cleanup = game_main.ComposedCatalogError("generated composed cleanup-only failure")
+
+        class FailingVerifiedComposed:
+            worldpack_path = Path("worldpack.json")
+            renderpack_path = None
+            native_compatible = False
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, exc, _traceback):
+                if exc is not None:
+                    raise AssertionError("cleanup-only path received a body error")
+                raise cleanup
+
+        args = SimpleNamespace(
+            list_worlds=False,
+            headless_ticks=0,
+            world="test_world",
+            release="1.0.0",
+            profile="profile_3d",
+            adapter_id=None,
+            adapter_version=None,
+            bundle_id=None,
+            bundle_version=None,
+            load_slot=None,
+            quick_save_slot=None,
+            save_on_exit_slot=None,
+            record_replay_slot=None,
+            replay_slot=None,
+        )
+        release = SimpleNamespace(world_id="test_world", release_id="1.0.0")
+        compatibility = SimpleNamespace(compatible=True)
+        pack = SimpleNamespace(compatibility_with=lambda *_: compatibility)
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch.object(game_main, "_parse_args", return_value=args),
+            patch.object(game_main, "load_catalog", return_value=()),
+            patch.object(game_main, "load_composed_catalog", return_value=(release,)),
+            patch.object(game_main, "validate_cross_catalog_world_hashes"),
+            patch.object(game_main, "select_composed_release", return_value=release),
+            patch.object(
+                game_main,
+                "verify_composed_release",
+                return_value=FailingVerifiedComposed(),
+            ),
+            patch.object(game_main, "load_worldpack", return_value=pack),
+            patch.object(
+                game_main,
+                "_run_with_owned_renderpack",
+                return_value=(0, "SUCCESS"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            result = game_main.main([])
+
+        self.assertEqual(2, result)
+        self.assertEqual("", stdout.getvalue())
+        self.assertIn("generated composed cleanup-only failure", stderr.getvalue())
+        self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_platform_user_data_defaults_are_absolute_and_fail_safe(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -536,6 +809,52 @@ class GameShellTests(unittest.TestCase):
         self.assertEqual(manifest["format"], "isoworld.game_package")
         self.assertEqual(manifest["game_id"], GAME_ID)
         self.assertFalse(any("AGENTS" in name or ".agents/" in name for name in names))
+
+    def test_package_descriptor_cleanup_preserves_primary_identity(self) -> None:
+        module = self._load_package_module("game_package_primary_cleanup")
+        primary = module.PackageError("package primary")
+        cleanup = OSError("package close\ncleanup")
+        with tempfile.TemporaryDirectory() as temporary:
+            descriptor = os.open(Path(temporary) / "descriptor", os.O_CREAT | os.O_WRONLY, 0o600)
+            original_close = os.close
+            caught = None
+            try:
+                try:
+                    with patch.object(module.os, "close", side_effect=cleanup):
+                        try:
+                            raise primary
+                        finally:
+                            module._close_descriptor(
+                                descriptor,
+                                context="generated package descriptor cleanup",
+                            )
+                except module.PackageError as exc:
+                    caught = exc
+            finally:
+                original_close(descriptor)
+        self.assertIs(primary, caught)
+        notes = getattr(primary, "__notes__", ())
+        self.assertTrue(any("package close cleanup" in note for note in notes))
+        self.assertTrue(all("\n" not in note for note in notes))
+
+    def test_package_descriptor_cleanup_only_is_package_error(self) -> None:
+        module = self._load_package_module("game_package_cleanup_only")
+        cleanup = OSError("package cleanup-only")
+        with tempfile.TemporaryDirectory() as temporary:
+            descriptor = os.open(Path(temporary) / "descriptor", os.O_CREAT | os.O_WRONLY, 0o600)
+            original_close = os.close
+            try:
+                with (
+                    patch.object(module.os, "close", side_effect=cleanup),
+                    self.assertRaises(module.PackageError) as raised,
+                ):
+                    module._close_descriptor(
+                        descriptor,
+                        context="generated package descriptor cleanup",
+                    )
+            finally:
+                original_close(descriptor)
+        self.assertIs(cleanup, raised.exception.__cause__)
 
     def test_packager_respects_the_shared_game_mutation_lock(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

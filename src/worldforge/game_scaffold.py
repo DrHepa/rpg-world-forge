@@ -15,10 +15,13 @@ from typing import Any
 from isoworld import __version__ as runtime_version
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
 from isoworld.content.portability import is_portable_path_component
+from isoworld.runtime_io import decode_json_object
 from worldforge.game_boundary import audit_game_repository
+from worldforge.game_control_io import write_game_control_json
 from worldforge.game_lock import GameMutationLockError, exclusive_game_mutation
 from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.repository_boundary import (
+    RepositoryBoundaryError,
     assert_new_repository_target,
     require_standalone_game_root,
 )
@@ -49,6 +52,7 @@ _TEMPLATE_OUTPUTS = {
     "lock_shared_assets.py.tmpl": "scripts/lock_shared_assets.py",
     "test_game_shell.py.tmpl": "tests/test_game_shell.py",
     "worlds.lock.json.tmpl": "game_data/worlds.lock.json",
+    "compositions.lock.json.tmpl": "game_data/compositions.lock.json",
     "shared.lock.json.tmpl": "game_data/shared.lock.json",
     "platform.lock.json.tmpl": "platform.lock.json",
     "requirements.lock.tmpl": "requirements.lock",
@@ -279,7 +283,7 @@ def _materialize_runtime(root: Path, *, source_revision: str | None) -> dict[str
 def _assert_external_target(target: Path) -> None:
     try:
         assert_new_repository_target(target, repository_type="game")
-    except ValueError as exc:
+    except RepositoryBoundaryError as exc:
         raise GameScaffoldError(str(exc)) from exc
 
 
@@ -369,7 +373,7 @@ def update_game_runtime_snapshot(
 
     try:
         root = require_standalone_game_root(game_root)
-    except (OSError, ValueError) as exc:
+    except (OSError, RepositoryBoundaryError) as exc:
         raise GameScaffoldError(str(exc)) from exc
     if (
         not isinstance(expected_content_hash, str)
@@ -392,7 +396,12 @@ def _verify_catalog_for_runtime(
     runtime_api_version: str,
     runtime_features: list[str],
 ) -> None:
-    from worldforge.bundle import verify_game_catalog_compatibility
+    from isoworld.content.composed_catalog import (
+        ComposedCatalogError,
+        load_composed_catalog,
+        verify_composed_release,
+    )
+    from worldforge.bundle import BundleError, verify_game_catalog_compatibility
 
     try:
         verify_game_catalog_compatibility(
@@ -400,7 +409,11 @@ def _verify_catalog_for_runtime(
             runtime_api_version,
             runtime_features,
         )
-    except ValueError as exc:
+        entries = load_composed_catalog(root)
+        for entry in entries:
+            with verify_composed_release(entry, root):
+                pass
+    except (BundleError, ComposedCatalogError) as exc:
         raise GameScaffoldError(
             f"Runtime update is incompatible with the installed catalog: {exc}"
         ) from exc
@@ -414,6 +427,26 @@ def _update_game_runtime_snapshot_locked(
 ) -> dict[str, Any]:
     manifest_path = root / "runtime.lock.json"
     runtime_path = root / "src/isoworld"
+    compositions_lock = root / "game_data/compositions.lock.json"
+    if not compositions_lock.exists() and not compositions_lock.is_symlink():
+        game_data_info = (root / "game_data").lstat()
+        if stat.S_ISLNK(game_data_info.st_mode) or not stat.S_ISDIR(game_data_info.st_mode):
+            raise GameScaffoldError("The game data root is unsafe")
+        template = files("worldforge").joinpath(
+            "templates",
+            "pyray_game",
+            "compositions.lock.json.tmpl",
+        )
+        # The empty composed catalog is a forward-only standalone-game
+        # migration. It remains valid even when the runtime update later
+        # fails, so rollback never deletes a mutable pathname.
+        write_game_control_json(
+            compositions_lock,
+            decode_json_object(
+                template.read_bytes(),
+                source="compositions.lock.json.tmpl",
+            ),
+        )
     findings = audit_game_repository(root)
     if findings:
         raise GameScaffoldError(f"Refusing to update a boundary-invalid game: {findings[0]}")

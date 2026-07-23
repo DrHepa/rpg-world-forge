@@ -25,6 +25,7 @@ from worldforge.bundle import (
 )
 from worldforge.claims import validate_claims
 from worldforge.compiler import CompilationError, compile_project
+from worldforge.composed_game import ComposedGameError, import_composed_bundle
 from worldforge.contract_catalog import ContractCatalogError, audit_contracts
 from worldforge.game_boundary import GameBoundaryError, audit_game_repository
 from worldforge.game_scaffold import (
@@ -370,6 +371,14 @@ def build_parser() -> argparse.ArgumentParser:
     import_bundle.add_argument("bundle", type=Path)
     import_bundle.add_argument("game_root", type=Path)
     import_bundle.add_argument("--expected-hash", required=True)
+
+    import_composed = commands.add_parser(
+        "import-composed-bundle",
+        help="atomically import a composed release using the fixed built-in adapter registry",
+    )
+    import_composed.add_argument("bundle", type=Path)
+    import_composed.add_argument("game_root", type=Path)
+    import_composed.add_argument("--expected-hash", required=True)
 
     check_compatibility = commands.add_parser(
         "check-compatibility",
@@ -803,6 +812,15 @@ def main() -> int:
             print(message)
             return 0
 
+        if args.command == "import-composed-bundle":
+            imported = import_composed_bundle(
+                args.bundle,
+                args.game_root,
+                expected_bundle_hash=args.expected_hash,
+            )
+            print(f"OK imported={imported} hash={args.expected_hash}")
+            return 0
+
         if args.command == "check-compatibility":
             pack = load_worldpack(args.worldpack)
             features = (
@@ -874,7 +892,7 @@ def main() -> int:
     except GameBoundaryError as exc:
         print(f"ERROR {exc}")
         return 1
-    except (BundleError, GameScaffoldError, WorldPackError) as exc:
+    except (BundleError, ComposedGameError, GameScaffoldError, WorldPackError) as exc:
         print(f"ERROR {_cli_error_detail(exc)}")
         return 1
     except ValueError as exc:

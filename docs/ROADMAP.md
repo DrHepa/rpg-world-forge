@@ -167,3 +167,10 @@ omits collision, assetpack consumption, world presentation, packaging, and
 performance capabilities, so it cannot satisfy a 3D composition. Game
 integration, collision, representative performance, packaging, and release
 gates remain open.
+# M6 composed game consumption
+
+The first M6 consumer path is additive: generated games can install and verify
+immutable composed releases without changing legacy M5 catalog bytes or
+simulation semantics. Headless/save/replay workflows are representation-neutral.
+Current native presentation remains the exact Linux x86_64 legacy 2.5D adapter;
+the 3D adapter is still a bounded proof, not a playable runtime claim.

@@ -7,6 +7,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from isoworld.content.asset_contracts import (
+    ASSET_KINDS,
+    ASSET_RUNTIME_OUTPUT_CONTRACTS,  # noqa: F401
+    AUDIO_ASSET_KINDS,
+    GLB_OUTPUT_ROLES,  # noqa: F401
+    KIND_REPRESENTATIONS,
+    OUTPUT_ROLE_MEDIA,
+    REPRESENTATIONS,
+    THREE_D_ASSET_KINDS,  # noqa: F401
+    TWO_D_ASSET_KINDS,  # noqa: F401
+    AssetRuntimeOutputContract,  # noqa: F401
+    runtime_output_contract_issue,
+)
 from worldforge.asset_io import (
     AssetContractError,
     read_json_object,
@@ -17,147 +30,8 @@ from worldforge.validation import ID_PATTERN, PLACEHOLDER_PATTERN
 
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 SEMANTIC_SLOT_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$")
-REPRESENTATIONS = {"2d", "2_5d", "3d", "audio"}
 ROUTES = {"openai", "modly"}
 EXECUTORS = {"openai_image", "blender_mcp", "modly_cli_mcp", "human", "procedural"}
-ASSET_KINDS = {
-    "animation_3d",
-    "character_3d",
-    "collision_3d",
-    "environment_3d",
-    "font",
-    "material_set",
-    "model_3d",
-    "music",
-    "portrait",
-    "rig",
-    "sfx",
-    "shader",
-    "sprite",
-    "spritesheet",
-    "tileset",
-    "ui",
-    "vfx",
-    "vfx_3d",
-}
-AUDIO_ASSET_KINDS = {"music", "sfx"}
-THREE_D_ASSET_KINDS = {
-    "animation_3d",
-    "character_3d",
-    "collision_3d",
-    "environment_3d",
-    "material_set",
-    "model_3d",
-    "rig",
-    "vfx_3d",
-}
-TWO_D_ASSET_KINDS = ASSET_KINDS - AUDIO_ASSET_KINDS - THREE_D_ASSET_KINDS
-KIND_REPRESENTATIONS = {
-    **{kind: {"audio"} for kind in AUDIO_ASSET_KINDS},
-    **{kind: {"3d"} for kind in THREE_D_ASSET_KINDS},
-    **{kind: {"2d", "2_5d"} for kind in TWO_D_ASSET_KINDS},
-}
-OUTPUT_ROLE_MEDIA = {
-    "animation": {"model/gltf-binary"},
-    "audio": {"audio/mpeg", "audio/ogg", "audio/wav"},
-    "clipset": {"application/json"},
-    "collision": {"model/gltf-binary"},
-    "font": {"font/otf", "font/ttf"},
-    "fragment_shader": {"text/x-glsl"},
-    "material_metadata": {"application/json"},
-    "model": {"model/gltf-binary"},
-    "model_metadata": {"application/json"},
-    "preview": {"image/jpeg", "image/png", "image/webp"},
-    "skeleton": {"model/gltf-binary"},
-    "texture": {"image/jpeg", "image/png", "image/webp"},
-    "vertex_shader": {"text/x-glsl"},
-}
-
-GLB_OUTPUT_ROLES = frozenset({"animation", "collision", "model", "skeleton"})
-
-
-@dataclass(frozen=True, slots=True)
-class AssetRuntimeOutputContract:
-    representations: frozenset[str]
-    required_roles: frozenset[str]
-    allowed_roles: frozenset[str]
-    min_outputs: int
-    max_outputs: int
-
-
-def _runtime_contract(
-    kind: str,
-    required_roles: set[str],
-    allowed_roles: set[str] | None = None,
-    *,
-    min_outputs: int | None = None,
-) -> AssetRuntimeOutputContract:
-    allowed = frozenset(allowed_roles or required_roles)
-    required = frozenset(required_roles)
-    return AssetRuntimeOutputContract(
-        representations=frozenset(KIND_REPRESENTATIONS[kind]),
-        required_roles=required,
-        allowed_roles=allowed,
-        min_outputs=len(required) if min_outputs is None else min_outputs,
-        max_outputs=len(allowed),
-    )
-
-
-ASSET_RUNTIME_OUTPUT_CONTRACTS = {
-    **{kind: _runtime_contract(kind, {"audio"}) for kind in AUDIO_ASSET_KINDS},
-    "font": _runtime_contract("font", {"font"}),
-    "shader": _runtime_contract(
-        "shader",
-        set(),
-        {"fragment_shader", "vertex_shader"},
-        min_outputs=1,
-    ),
-    **{kind: _runtime_contract(kind, {"texture"}) for kind in {"portrait", "sprite", "ui", "vfx"}},
-    **{
-        kind: _runtime_contract(kind, {"clipset", "texture"}) for kind in {"spritesheet", "tileset"}
-    },
-    **{
-        kind: _runtime_contract(
-            kind,
-            {
-                {
-                    "animation_3d": "animation",
-                    "collision_3d": "collision",
-                    "rig": "skeleton",
-                }.get(kind, "model")
-            },
-            set(GLB_OUTPUT_ROLES),
-        )
-        for kind in THREE_D_ASSET_KINDS
-    },
-}
-
-
-def runtime_output_contract_issue(
-    kind: object,
-    representation: object,
-    roles: list[str],
-) -> str | None:
-    if not isinstance(kind, str) or kind not in ASSET_RUNTIME_OUTPUT_CONTRACTS:
-        return "asset kind has no runtime output contract"
-    contract = ASSET_RUNTIME_OUTPUT_CONTRACTS[kind]
-    if not isinstance(representation, str) or representation not in contract.representations:
-        allowed = ", ".join(sorted(contract.representations))
-        return f"{kind} requires representation in: {allowed}"
-    if not contract.min_outputs <= len(roles) <= contract.max_outputs:
-        return (
-            f"{kind} requires between {contract.min_outputs} and "
-            f"{contract.max_outputs} runtime outputs"
-        )
-    if len(roles) != len(set(roles)):
-        return f"{kind} runtime output roles must be unique"
-    unknown = set(roles) - contract.allowed_roles
-    if unknown:
-        return f"{kind} has forbidden runtime output roles: {', '.join(sorted(unknown))}"
-    missing = contract.required_roles - set(roles)
-    if missing:
-        return f"{kind} is missing runtime output roles: {', '.join(sorted(missing))}"
-    return None
 
 
 PRODUCTION_OPERATIONS = {
