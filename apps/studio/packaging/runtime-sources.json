@@ -1,0 +1,337 @@
+{
+  "schema_id": "https://rpg-world-forge.local/schemas/studio-runtime-sources.schema.json",
+  "format": "rpg-world-forge.studio_runtime_sources",
+  "format_version": 1,
+  "supported_targets": [
+    "linux-x64",
+    "win32-x64"
+  ],
+  "redistribution": {
+    "status": "blocked",
+    "release_ready": false,
+    "open_blocker_codes": [
+      "codex_ripgrep_static_dependency_notice_sbom_incomplete",
+      "linux_bwrap_lgpl_corresponding_source_relink_build_materials_incomplete",
+      "linux_bwrap_musl_provenance_incomplete",
+      "pbs_zlib_ng_license_incomplete",
+      "linux_berkeley_db_dbm_route_unresolved",
+      "windows_vc_runtime_redistribution_authority_unresolved",
+      "github_attestation_trust_root_rfc3161_verification_pending"
+    ]
+  },
+  "codex": {
+    "package": "@openai/codex",
+    "version": "0.144.6",
+    "repository": "https://github.com/openai/codex",
+    "tag": "rust-v0.144.6",
+    "commit": "5d1fbf26c43abc65a203928b2e31561cb039e06d",
+    "workflow": ".github/workflows/rust-release.yml",
+    "release_published_at": "2026-07-18T13:51:52Z",
+    "release_sha256sums": {
+      "filename": "codex-package_SHA256SUMS",
+      "url": "https://github.com/openai/codex/releases/download/rust-v0.144.6/codex-package_SHA256SUMS",
+      "size": 1392,
+      "sha256": "db72a7585c594e141201dea9fea37a3686d2668aaee603b96794712c8e394e0d"
+    },
+    "runtime_layout": {
+      "preserve_complete_payload_root": true,
+      "runtime_downloads_allowed": false
+    },
+    "targets": [
+      {
+        "target_id": "linux-x64",
+        "package_version": "0.144.6-linux-x64",
+        "archive": {
+          "filename": "codex-0.144.6-linux-x64.tgz",
+          "url": "https://registry.npmjs.org/@openai/codex/-/codex-0.144.6-linux-x64.tgz",
+          "size": 131212687,
+          "sha256": "b6752eb2e8c10e6fcc96ac5c1c8ad8342cdb9a74504fb84686addf081a7d2868"
+        },
+        "sri": "sha512-4E7EnzCg0OnBxCyYnwJ+qnZwWHYe0YScr5ucKWbngE9u4+0XrpWELqq2Kn9jl5GZK8MDjU7PrJwFIwusHOHjuw==",
+        "payload_root": "package/vendor/x86_64-unknown-linux-musl",
+        "entrypoint": "bin/codex",
+        "release_archive": {
+          "filename": "codex-package-x86_64-unknown-linux-musl.tar.gz",
+          "url": "https://github.com/openai/codex/releases/download/rust-v0.144.6/codex-package-x86_64-unknown-linux-musl.tar.gz",
+          "size": 128013836,
+          "sha256": "99ae48e4743da6c530ecd998ab2f7e66572c092f4190c88dca8236c07b06ce1d"
+        },
+        "npm_provenance": {
+          "url": "https://registry.npmjs.org/-/npm/v1/attestations/@openai%2fcodex@0.144.6-linux-x64",
+          "predicate_type": "https://slsa.dev/provenance/v1",
+          "subject": "pkg:npm/%40openai/codex@0.144.6-linux-x64",
+          "subject_sha512": "e04ec49f30a0d0e9c1c42c989f027eaa767058761ed1849caf9b9c2966e7804f6ee3ed17ae95842eaab62a7f639791992bc3038d4ecfac9c05230bac1ce1e3bb",
+          "source_commit": "5d1fbf26c43abc65a203928b2e31561cb039e06d",
+          "workflow_ref": "refs/tags/rust-v0.144.6",
+          "workflow_path": ".github/workflows/rust-release.yml"
+        },
+        "inventory": [
+          {
+            "path": "bin/codex",
+            "size": 298516528,
+            "sha256": "a31ae9450a26216eb1e7c53102fd42123dd675974310b0e2ca3aa4cb622a2c15"
+          },
+          {
+            "path": "bin/codex-code-mode-host",
+            "size": 46131096,
+            "sha256": "b3c1b98e0272ed4bff2bf0459574ff5489dee3087149648e43b1b665a76373e1"
+          },
+          {
+            "path": "codex-package.json",
+            "size": 205,
+            "sha256": "4415fcb6e062b567abf79960dbbd38f046ce3c8fbb1170e35fd8129d476126d8"
+          },
+          {
+            "path": "codex-path/rg",
+            "size": 5445512,
+            "sha256": "ebeaf56f8a25e102e9419933423738b3a2a613a444fd749d695e15eba53f71f2"
+          },
+          {
+            "path": "codex-resources/bwrap",
+            "size": 529776,
+            "sha256": "7df960565a0dece99240ea4b9d0e011307817f9f3b73176c7b71fda44fe84765"
+          },
+          {
+            "path": "codex-resources/zsh/bin/zsh",
+            "size": 898480,
+            "sha256": "67faaaa89242c4a332e16e508a1977cffc24bf7fca31d4411cdfd101f3831ef3"
+          }
+        ]
+      },
+      {
+        "target_id": "win32-x64",
+        "package_version": "0.144.6-win32-x64",
+        "archive": {
+          "filename": "codex-0.144.6-win32-x64.tgz",
+          "url": "https://registry.npmjs.org/@openai/codex/-/codex-0.144.6-win32-x64.tgz",
+          "size": 145169047,
+          "sha256": "e04afbe9841be306455d075ad414993a946c94a399e55d7f9ec223f734cd4101"
+        },
+        "sri": "sha512-dN39VnjEthKz5io1RNWwZDtErdSn07nW3pGUgvlA6DMxgm/nuGaIAZO/sG/Hgxq/x5j9HteAENfrFgVkpZ0lFg==",
+        "payload_root": "package/vendor/x86_64-pc-windows-msvc",
+        "entrypoint": "bin/codex.exe",
+        "release_archive": {
+          "filename": "codex-package-x86_64-pc-windows-msvc.tar.gz",
+          "url": "https://github.com/openai/codex/releases/download/rust-v0.144.6/codex-package-x86_64-pc-windows-msvc.tar.gz",
+          "size": 139775975,
+          "sha256": "81948ef44eb00f499f32bcd38ce326f59f5a132ca4cd6ec2559fb5fc7cfd90a7"
+        },
+        "npm_provenance": {
+          "url": "https://registry.npmjs.org/-/npm/v1/attestations/@openai%2fcodex@0.144.6-win32-x64",
+          "predicate_type": "https://slsa.dev/provenance/v1",
+          "subject": "pkg:npm/%40openai/codex@0.144.6-win32-x64",
+          "subject_sha512": "74ddfd5678c4b612b3e62a3544d5b0643b44add4a7d3b9d6de919482f940e83331826fe7b866880193bfb06fc7831abfc798fd1ed78010d7eb160564a59d2516",
+          "source_commit": "5d1fbf26c43abc65a203928b2e31561cb039e06d",
+          "workflow_ref": "refs/tags/rust-v0.144.6",
+          "workflow_path": ".github/workflows/rust-release.yml"
+        },
+        "inventory": [
+          {
+            "path": "bin/codex-code-mode-host.exe",
+            "size": 53594928,
+            "sha256": "8e6dfce22a24dfe09f2e53e02ede1fe12b3efba8b0255fff1357adde98da808a"
+          },
+          {
+            "path": "bin/codex.exe",
+            "size": 341225264,
+            "sha256": "4b76ded066d0239115ca97473d010c92072bc5c5550a45dd7cbebe1e9eb956a7"
+          },
+          {
+            "path": "codex-package.json",
+            "size": 215,
+            "sha256": "67145d1f55da780801444db14878d6567adfd2e29b52d1a9dbe7969d7465df13"
+          },
+          {
+            "path": "codex-path/rg.exe",
+            "size": 4266496,
+            "sha256": "decdd4992f3f1b9a5ef9898f1b40ab16886d579d6516b4efd3d5eaa19364e408"
+          },
+          {
+            "path": "codex-resources/codex-command-runner.exe",
+            "size": 1271088,
+            "sha256": "ac075278a65a0b80ae433eb389a45cbf1431c6c95368efdb326f15f881c0ed2e"
+          },
+          {
+            "path": "codex-resources/codex-windows-sandbox-setup.exe",
+            "size": 8816944,
+            "sha256": "7191d24f6fb4a26cbbce0d2aecd6deb71fa074a8cb5f24a45d2fa2164473885f"
+          }
+        ]
+      }
+    ]
+  },
+  "python": {
+    "distribution": "python-build-standalone",
+    "python_version": "3.12.13",
+    "release": "20260718",
+    "repository": "https://github.com/astral-sh/python-build-standalone",
+    "commit": "0e4d9c24b72d28573e622518f09b16aef4a33be8",
+    "release_published_at": "2026-07-18T20:43:55Z",
+    "release_sha256sums": {
+      "filename": "SHA256SUMS",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260718/SHA256SUMS",
+      "size": 121896,
+      "sha256": "d3634980354a9a30cb30e13a3957780995b423f04b1d29dff537667f36bcd64e"
+    },
+    "release_attestation": {
+      "media_type": "application/vnd.dev.sigstore.bundle.v0.3+json",
+      "predicate_type": "https://in-toto.io/attestation/release/v0.2",
+      "release_database_id": 356187877,
+      "subject_uri": "pkg:github/astral-sh/python-build-standalone@20260718",
+      "subject_commit_sha1": "0e4d9c24b72d28573e622518f09b16aef4a33be8",
+      "bundle_size": 201917,
+      "bundle_sha256": "b05936e385b0ec50f847e30a34bb20b41dd78c45ea864b9c175c309ffe5c0b64",
+      "verification_status": "pending_trust_root_and_rfc3161"
+    },
+    "cpython_source": {
+      "filename": "Python-3.12.13.tar.xz",
+      "url": "https://www.python.org/ftp/python/3.12.13/Python-3.12.13.tar.xz",
+      "size": 20801708,
+      "sha256": "c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684"
+    },
+    "targets": [
+      {
+        "target_id": "linux-x64",
+        "runtime_archive": {
+          "filename": "cpython-3.12.13+20260718-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.12.13%2B20260718-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+          "size": 34199823,
+          "sha256": "5854aa6ec71cad00334d5065633c210b2e7feb40956767a59a91791cadcf0b79"
+        },
+        "metadata_archive": {
+          "filename": "cpython-3.12.13+20260718-x86_64-unknown-linux-gnu-pgo+lto-full.tar.zst",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.12.13%2B20260718-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst",
+          "size": 112247883,
+          "sha256": "a92c3870c2907c2ad9b8d93c2af28626b5fba535c0abf60ddc01492dec697d2f"
+        },
+        "payload_root": "python",
+        "entrypoint": "python/bin/python3",
+        "python_json": {
+          "path": "python/PYTHON.json",
+          "size": 116971,
+          "sha256": "9392b3b8fcc51192e2e174c29e39b1c04a5954f470ab7651a708bb75fe7d00ce"
+        },
+        "license_inventory": {
+          "format": "sha256-tab-size-tab-path-lf",
+          "entry_count": 19,
+          "size": 1999,
+          "sha256": "cbc93e43a66eec5a259fd0bfa0931cc43433cb5e8d6590179875d30e5c9d613e"
+        }
+      },
+      {
+        "target_id": "win32-x64",
+        "runtime_archive": {
+          "filename": "cpython-3.12.13+20260718-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.12.13%2B20260718-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+          "size": 21932298,
+          "sha256": "0d422a1439ec308e03f47df551bc30f5994727c456e414b026d202bcda9b7c1c"
+        },
+        "metadata_archive": {
+          "filename": "cpython-3.12.13+20260718-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+          "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260718/cpython-3.12.13%2B20260718-x86_64-pc-windows-msvc-pgo-full.tar.zst",
+          "size": 43451823,
+          "sha256": "00de77fbc37588bc89d2f47df14f400c35e201afa2a3d7ffb495eab0945da2db"
+        },
+        "payload_root": "python",
+        "entrypoint": "python/python.exe",
+        "python_json": {
+          "path": "python/PYTHON.json",
+          "size": 62407,
+          "sha256": "facf73b63d9e851d25292b063067cb0826dc44e6f291e3ade963a2cb0a46665d"
+        },
+        "license_inventory": {
+          "format": "sha256-tab-size-tab-path-lf",
+          "entry_count": 19,
+          "size": 2000,
+          "sha256": "4fbafee9e54187b96f6210417da89d14c35c2073320469afceb596d46a2ad966"
+        }
+      }
+    ]
+  },
+  "blockers": [
+    {
+      "code": "codex_ripgrep_static_dependency_notice_sbom_incomplete",
+      "status": "open",
+      "target_ids": [
+        "linux-x64",
+        "win32-x64"
+      ],
+      "components": [
+        "Codex",
+        "ripgrep"
+      ],
+      "reason": "Target-specific notices and an SBOM for statically linked dependency corpora are incomplete."
+    },
+    {
+      "code": "linux_bwrap_lgpl_corresponding_source_relink_build_materials_incomplete",
+      "status": "open",
+      "target_ids": [
+        "linux-x64"
+      ],
+      "components": [
+        "bwrap"
+      ],
+      "reason": "LGPL corresponding source, relinkable objects, and exact build materials are incomplete."
+    },
+    {
+      "code": "linux_bwrap_musl_provenance_incomplete",
+      "status": "open",
+      "target_ids": [
+        "linux-x64"
+      ],
+      "components": [
+        "bwrap",
+        "musl"
+      ],
+      "reason": "The static musl linkage provenance for the bundled bwrap helper is incomplete."
+    },
+    {
+      "code": "pbs_zlib_ng_license_incomplete",
+      "status": "open",
+      "target_ids": [
+        "linux-x64"
+      ],
+      "components": [
+        "python-build-standalone",
+        "zlib-ng"
+      ],
+      "reason": "PYTHON.json references a zlib-ng license that is absent from the matching full archive."
+    },
+    {
+      "code": "linux_berkeley_db_dbm_route_unresolved",
+      "status": "open",
+      "target_ids": [
+        "linux-x64"
+      ],
+      "components": [
+        "Berkeley DB",
+        "_dbm"
+      ],
+      "reason": "The Linux Berkeley DB-backed _dbm redistribution route or deterministic pruning decision is unresolved."
+    },
+    {
+      "code": "windows_vc_runtime_redistribution_authority_unresolved",
+      "status": "open",
+      "target_ids": [
+        "win32-x64"
+      ],
+      "components": [
+        "Microsoft Visual C++ Runtime"
+      ],
+      "reason": "Authority to redistribute the exact bundled Windows VC runtime files is unresolved."
+    },
+    {
+      "code": "github_attestation_trust_root_rfc3161_verification_pending",
+      "status": "open",
+      "target_ids": [
+        "linux-x64",
+        "win32-x64"
+      ],
+      "components": [
+        "GitHub release attestation",
+        "RFC3161"
+      ],
+      "reason": "Full trust-root validation and RFC3161 verification of the release attestation are pending."
+    }
+  ]
+}
