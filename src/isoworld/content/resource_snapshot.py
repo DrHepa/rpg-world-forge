@@ -10,6 +10,7 @@ import tempfile
 import warnings
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import NoReturn
 
 from isoworld.content.file_stat import (
     FileStat,
@@ -21,6 +22,7 @@ from isoworld.content.media import ValidatedMedia, read_validated_resource
 
 _SNAPSHOT_PREFIX = "isoworld-renderpack-"
 _DELETE_PREFIX = ".isoworld-delete-"
+_RESOURCE_SNAPSHOT_CHUNK_BYTES = 64 * 1024
 _WINDOWS_LOCAL_SYSTEM_SID = "S-1-5-18"
 _WINDOWS_BUILTIN_ADMINISTRATORS_SID = "S-1-5-32-544"
 _Identity = tuple[int, int]
@@ -38,6 +40,17 @@ _SAFE_POSIX_DIR_FDS = os.name == "posix" and all(
 
 class ResourceSnapshotError(RuntimeError):
     """Raised when a private runtime resource snapshot loses safe ownership."""
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceSnapshotChunk:
+    """One fixed-size sequential read from an owned resource snapshot."""
+
+    sequence: int
+    payload: bytes
+    cumulative_bytes: int
+    cumulative_sha256: str
+    eof: bool
 
 
 def _platform_name() -> str:
@@ -69,6 +82,164 @@ def _file_record(info: FileStat, digest: str) -> _FileRecord:
         mode=stat.S_IMODE(info.st_mode),
         sha256=digest,
     )
+
+
+def _reader_descriptor_matches(info: FileStat, record: _FileRecord) -> bool:
+    return _stat_matches_record(info, record) and not (
+        _platform_name() == "nt" and getattr(info, "st_file_attributes", 0) & 0x400
+    )
+
+
+def _require_reader_descriptor_state(
+    descriptor: int,
+    record: _FileRecord,
+    *,
+    phase: str,
+) -> None:
+    try:
+        info = descriptor_file_stat(descriptor)
+    except OSError as exc:
+        raise ResourceSnapshotError(
+            f"Snapshot reader descriptor became unreadable {phase}: {exc}"
+        ) from exc
+    if not _reader_descriptor_matches(info, record):
+        raise ResourceSnapshotError(f"Snapshot reader descriptor changed {phase}")
+
+
+def _close_reader_descriptor(descriptor: int) -> None:
+    """Close a reader descriptor through a single-attempt test seam."""
+
+    os.close(descriptor)
+
+
+class ResourceSnapshotReader:
+    """Read one sealed snapshot through an owned, forward-only descriptor."""
+
+    __slots__ = (
+        "_closed",
+        "_cumulative_bytes",
+        "_descriptor",
+        "_digest",
+        "_exhausted",
+        "_record",
+        "_sequence",
+    )
+
+    def __init__(self, descriptor: int, record: _FileRecord) -> None:
+        self._descriptor: int | None = descriptor
+        self._record = record
+        self._closed = False
+        self._exhausted = False
+        self._sequence = 0
+        self._cumulative_bytes = 0
+        self._digest = hashlib.sha256()
+
+    @property
+    def size(self) -> int:
+        return self._record.size
+
+    @property
+    def sha256(self) -> str:
+        return self._record.sha256
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def _consume_descriptor(self) -> BaseException | None:
+        if self._closed:
+            return None
+        descriptor = self._descriptor
+        self._descriptor = None
+        self._closed = True
+        if descriptor is None:
+            return None
+        try:
+            _close_reader_descriptor(descriptor)
+        except BaseException as exc:
+            return exc
+        return None
+
+    def _raise_read_failure(self, original: BaseException) -> NoReturn:
+        close_error = self._consume_descriptor()
+        if close_error is not None:
+            raise ResourceSnapshotError(
+                f"{original}; additionally could not close the consumed snapshot "
+                f"reader descriptor: {close_error}"
+            ) from original
+        if isinstance(original, ResourceSnapshotError):
+            raise original
+        raise ResourceSnapshotError(f"Could not read snapshot resource: {original}") from original
+
+    def read_next(self) -> ResourceSnapshotChunk:
+        if self._closed:
+            raise ResourceSnapshotError("Snapshot reader is closed")
+        if self._exhausted:
+            raise ResourceSnapshotError("Snapshot reader is exhausted")
+        descriptor = self._descriptor
+        if descriptor is None:
+            raise ResourceSnapshotError("Snapshot reader descriptor is unavailable")
+
+        try:
+            _require_reader_descriptor_state(
+                descriptor,
+                self._record,
+                phase="before reading",
+            )
+            remaining = self._record.size - self._cumulative_bytes
+            if remaining < 0:
+                raise ResourceSnapshotError(
+                    "Snapshot reader integrity state exceeded the authorized size"
+                )
+            requested = min(_RESOURCE_SNAPSHOT_CHUNK_BYTES, remaining)
+            pieces: list[bytes] = []
+            received = 0
+            while received < requested:
+                piece = os.read(descriptor, requested - received)
+                if not piece:
+                    raise ResourceSnapshotError(
+                        "Snapshot resource ended before its authorized size"
+                    )
+                pieces.append(piece)
+                received += len(piece)
+            payload = b"".join(pieces)
+            cumulative_bytes = self._cumulative_bytes + len(payload)
+            cumulative_digest = self._digest.copy()
+            cumulative_digest.update(payload)
+
+            _require_reader_descriptor_state(
+                descriptor,
+                self._record,
+                phase="after reading",
+            )
+            eof = cumulative_bytes == self._record.size
+            cumulative_sha256 = cumulative_digest.hexdigest()
+            if eof and cumulative_sha256 != self._record.sha256:
+                raise ResourceSnapshotError(
+                    "Snapshot reader integrity did not match the authorized SHA-256"
+                )
+
+            sequence = self._sequence
+            self._sequence += 1
+            self._cumulative_bytes = cumulative_bytes
+            self._digest = cumulative_digest
+            self._exhausted = eof
+            return ResourceSnapshotChunk(
+                sequence=sequence,
+                payload=payload,
+                cumulative_bytes=cumulative_bytes,
+                cumulative_sha256=cumulative_sha256,
+                eof=eof,
+            )
+        except BaseException as exc:
+            self._raise_read_failure(exc)
+
+    def close(self) -> None:
+        close_error = self._consume_descriptor()
+        if close_error is not None:
+            raise ResourceSnapshotError(
+                f"Could not close snapshot reader descriptor: {close_error}"
+            ) from close_error
 
 
 def _windows_attributes(path: Path) -> int:
@@ -519,6 +690,25 @@ def _open_new_file(
     return os.open(parent_path / name, flags, mode)
 
 
+def _open_existing_file(
+    *,
+    parent_descriptor: int | None,
+    parent_path: Path,
+    name: str,
+    flags: int,
+) -> int:
+    platform_name = _platform_name()
+    if platform_name == "posix":
+        if parent_descriptor is None:
+            raise ResourceSnapshotError(
+                "Snapshot reader requires a stable parent directory descriptor"
+            )
+        return os.open(name, flags, dir_fd=parent_descriptor)
+    if platform_name == "nt":
+        return os.open(parent_path / name, flags)
+    raise ResourceSnapshotError("Secure snapshot readers are unsupported on this platform")
+
+
 def _claim_entry(
     *,
     parent_descriptor: int | None,
@@ -577,6 +767,8 @@ class ResourceSnapshotOwner:
         "_parent",
         "_parent_descriptor",
         "_parent_handle",
+        "_reader",
+        "_reader_issued",
         "_root_claimed",
         "_root_removed",
     )
@@ -607,6 +799,8 @@ class ResourceSnapshotOwner:
         self._files: dict[PurePosixPath, _FileRecord] = {}
         self._parent_descriptor: int | None = None
         self._parent_handle: int | None = None
+        self._reader: ResourceSnapshotReader | None = None
+        self._reader_issued = False
 
         self._parent = Path(tempfile.gettempdir())
         root_name = ""
@@ -1491,6 +1685,88 @@ class ResourceSnapshotOwner:
         self._validate_file(relative)
         return self._active_root.joinpath(*relative.parts)
 
+    def open_reader(self, relative: PurePosixPath) -> ResourceSnapshotReader:
+        self._validate_relative(relative)
+        self._check_open()
+        if self._reader_issued:
+            raise ResourceSnapshotError("Snapshot owner already issued its only reader")
+        self._reader_issued = True
+
+        record = self._validate_file(relative)
+        parent_relative = relative.parent
+        if parent_relative == PurePosixPath("."):
+            parent_relative = PurePosixPath(".")
+        target = self._directory_path(parent_relative) / relative.name
+        self._validate_directory(parent_relative)
+        try:
+            before = self._entry_stat(parent_relative, relative.name)
+        except OSError as exc:
+            raise ResourceSnapshotError(
+                f"Snapshot file is missing or unreadable before reader open: {target}: {exc}"
+            ) from exc
+        if stat.S_ISLNK(before.st_mode) or not _stat_matches_record(before, record):
+            raise ResourceSnapshotError(f"Snapshot file changed before reader open: {target}")
+        _validate_file_privacy(target, before)
+
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOINHERIT", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        descriptor: int | None = None
+        try:
+            descriptor = _open_existing_file(
+                parent_descriptor=self._directory_descriptor(parent_relative),
+                parent_path=self._directory_path(parent_relative),
+                name=relative.name,
+                flags=flags,
+            )
+            os.set_inheritable(descriptor, False)
+            if os.get_inheritable(descriptor):
+                raise ResourceSnapshotError("Snapshot reader descriptor is inheritable")
+            _require_reader_descriptor_state(
+                descriptor,
+                record,
+                phase="while opening",
+            )
+
+            current = self._entry_stat(parent_relative, relative.name)
+            if stat.S_ISLNK(current.st_mode) or not _stat_matches_record(current, record):
+                raise ResourceSnapshotError(
+                    f"Snapshot file changed while opening its reader: {target}"
+                )
+            _validate_file_privacy(target, current)
+            self._validate_directory(parent_relative)
+            _require_reader_descriptor_state(
+                descriptor,
+                record,
+                phase="after opening",
+            )
+        except BaseException as original:
+            close_error: BaseException | None = None
+            if descriptor is not None:
+                try:
+                    _close_reader_descriptor(descriptor)
+                except BaseException as exc:
+                    close_error = exc
+            if close_error is not None:
+                raise ResourceSnapshotError(
+                    f"{original}; additionally could not close the consumed snapshot "
+                    f"reader descriptor: {close_error}"
+                ) from original
+            if isinstance(original, ResourceSnapshotError):
+                raise
+            raise ResourceSnapshotError(
+                f"Could not open snapshot reader for {target}: {original}"
+            ) from original
+
+        assert descriptor is not None
+        reader = ResourceSnapshotReader(descriptor, record)
+        self._reader = reader
+        return reader
+
     def _directory_names(self, relative: PurePosixPath) -> set[str]:
         if os.name == "posix":
             return set(os.listdir(self._directory_descriptors[relative]))
@@ -1820,6 +2096,11 @@ class ResourceSnapshotOwner:
     def close(self) -> None:
         if self._closed:
             return
+        reader = getattr(self, "_reader", None)
+        if reader is not None and not reader.closed:
+            raise ResourceSnapshotError(
+                "Snapshot owner cannot close while its reader is still open"
+            )
         root_relative = PurePosixPath(".")
         if not self._root_removed:
             self._check_open()
