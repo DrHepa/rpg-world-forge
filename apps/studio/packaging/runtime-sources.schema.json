@@ -53,7 +53,7 @@
           },
           "sri": "sha512-4E7EnzCg0OnBxCyYnwJ+qnZwWHYe0YScr5ucKWbngE9u4+0XrpWELqq2Kn9jl5GZK8MDjU7PrJwFIwusHOHjuw==",
           "payload_root": "package/vendor/x86_64-unknown-linux-musl",
-          "entrypoint": "bin/codex",
+          "entrypoint": "package/vendor/x86_64-unknown-linux-musl/bin/codex",
           "release_archive": {
             "filename": "codex-package-x86_64-unknown-linux-musl.tar.gz",
             "url": "https://github.com/openai/codex/releases/download/rust-v0.144.6/codex-package-x86_64-unknown-linux-musl.tar.gz",
@@ -113,7 +113,7 @@
           },
           "sri": "sha512-dN39VnjEthKz5io1RNWwZDtErdSn07nW3pGUgvlA6DMxgm/nuGaIAZO/sG/Hgxq/x5j9HteAENfrFgVkpZ0lFg==",
           "payload_root": "package/vendor/x86_64-pc-windows-msvc",
-          "entrypoint": "bin/codex.exe",
+          "entrypoint": "package/vendor/x86_64-pc-windows-msvc/bin/codex.exe",
           "release_archive": {
             "filename": "codex-package-x86_64-pc-windows-msvc.tar.gz",
             "url": "https://github.com/openai/codex/releases/download/rust-v0.144.6/codex-package-x86_64-pc-windows-msvc.tar.gz",

@@ -29,6 +29,7 @@ FORMAT_VERSION = 1
 SCHEMA_ID = "https://rpg-world-forge.local/schemas/studio-runtime-sources.schema.json"
 TARGET_IDS = ("linux-x64", "win32-x64")
 ALLOWED_HTTPS_HOSTS = frozenset({"github.com", "registry.npmjs.org", "www.python.org"})
+MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_JSON_DEPTH = 128
 MAX_JSON_NODES = 100_000
 MAX_JSON_NUMBER_TOKEN_LENGTH = 128
@@ -38,6 +39,7 @@ SHA1_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 VERSION_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 RELEASE_PATTERN = re.compile(r"^[0-9]{8}$")
 BLOCKER_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,127}$")
+JSON_NUMBER_PATTERN = re.compile(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
 PORTABLE_COMPONENT_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+@%-]{0,254}$")
 WINDOWS_RESERVED = {
     "aux",
@@ -181,7 +183,7 @@ EXPECTED_CODEX_TARGETS = {
             "K8MDjU7PrJwFIwusHOHjuw=="
         ),
         "payload_root": "package/vendor/x86_64-unknown-linux-musl",
-        "entrypoint": "bin/codex",
+        "entrypoint": "package/vendor/x86_64-unknown-linux-musl/bin/codex",
         "release_filename": "codex-package-x86_64-unknown-linux-musl.tar.gz",
         "release_url": (
             "https://github.com/openai/codex/releases/download/rust-v0.144.6/"
@@ -209,7 +211,7 @@ EXPECTED_CODEX_TARGETS = {
             "x5j9HteAENfrFgVkpZ0lFg=="
         ),
         "payload_root": "package/vendor/x86_64-pc-windows-msvc",
-        "entrypoint": "bin/codex.exe",
+        "entrypoint": "package/vendor/x86_64-pc-windows-msvc/bin/codex.exe",
         "release_filename": "codex-package-x86_64-pc-windows-msvc.tar.gz",
         "release_url": (
             "https://github.com/openai/codex/releases/download/rust-v0.144.6/"
@@ -374,28 +376,156 @@ def _parse_finite_decimal(value: str) -> Decimal:
     return parsed
 
 
-def _enforce_json_tree_limits(value: Any) -> None:
-    stack: list[tuple[Any, int]] = [(value, 0)]
-    node_count = 0
-    while stack:
-        node, depth = stack.pop()
-        node_count += 1
-        if depth > MAX_JSON_DEPTH or node_count > MAX_JSON_NODES:
-            raise RuntimeSourcesError("invalid_json", "source")
-        if isinstance(node, dict):
-            stack.extend((child, depth + 1) for child in node.values())
-        elif isinstance(node, list):
-            stack.extend((child, depth + 1) for child in node)
+class _StrictJsonBudgetScanner:
+    """Count JSON values before allocation; object keys are grammar, not nodes."""
+
+    def __init__(self, text: str, *, max_depth: int, max_nodes: int) -> None:
+        self.text = text
+        self.max_depth = max_depth
+        self.max_nodes = max_nodes
+        self.index = 0
+        self.nodes = 0
+
+    def scan(self) -> None:
+        self._skip_whitespace()
+        self._scan_value(0)
+        self._skip_whitespace()
+        if self.index != len(self.text):
+            raise ValueError("unexpected data after JSON value")
+
+    def _scan_value(self, depth: int) -> None:
+        self.nodes += 1
+        if depth > self.max_depth or self.nodes > self.max_nodes:
+            raise ValueError("JSON tree limit exceeded")
+        character = self._current()
+        if character == "{":
+            self._scan_object(depth)
+        elif character == "[":
+            self._scan_array(depth)
+        elif character == '"':
+            self._scan_string()
+        elif self.text.startswith("true", self.index):
+            self.index += 4
+        elif self.text.startswith("false", self.index):
+            self.index += 5
+        elif self.text.startswith("null", self.index):
+            self.index += 4
+        else:
+            match = JSON_NUMBER_PATTERN.match(self.text, self.index)
+            if match is None or len(match.group(0)) > MAX_JSON_NUMBER_TOKEN_LENGTH:
+                raise ValueError("invalid JSON number")
+            self.index = match.end()
+
+    def _scan_object(self, depth: int) -> None:
+        self.index += 1
+        self._skip_whitespace()
+        if self._current() == "}":
+            self.index += 1
+            return
+        while True:
+            if self._current() != '"':
+                raise ValueError("JSON object key must be a string")
+            self._scan_string()
+            self._skip_whitespace()
+            if self._current() != ":":
+                raise ValueError("JSON object key must be followed by a colon")
+            self.index += 1
+            self._skip_whitespace()
+            self._scan_value(depth + 1)
+            self._skip_whitespace()
+            separator = self._current()
+            if separator == "}":
+                self.index += 1
+                return
+            if separator != ",":
+                raise ValueError("JSON object members must be comma separated")
+            self.index += 1
+            self._skip_whitespace()
+
+    def _scan_array(self, depth: int) -> None:
+        self.index += 1
+        self._skip_whitespace()
+        if self._current() == "]":
+            self.index += 1
+            return
+        while True:
+            self._scan_value(depth + 1)
+            self._skip_whitespace()
+            separator = self._current()
+            if separator == "]":
+                self.index += 1
+                return
+            if separator != ",":
+                raise ValueError("JSON array items must be comma separated")
+            self.index += 1
+            self._skip_whitespace()
+
+    def _scan_string(self) -> None:
+        self.index += 1
+        while self.index < len(self.text):
+            character = self.text[self.index]
+            if character == '"':
+                self.index += 1
+                return
+            if character == "\\":
+                self.index += 1
+                escaped = self._current()
+                if escaped == "u":
+                    code_point = self.text[self.index + 1 : self.index + 5]
+                    if len(code_point) != 4 or any(
+                        character not in "0123456789abcdefABCDEF" for character in code_point
+                    ):
+                        raise ValueError("invalid JSON Unicode escape")
+                    self.index += 5
+                    continue
+                if escaped not in {'"', "\\", "/", "b", "f", "n", "r", "t"}:
+                    raise ValueError("invalid JSON escape")
+                self.index += 1
+                continue
+            if ord(character) < 0x20:
+                raise ValueError("unescaped JSON control character")
+            self.index += 1
+        raise ValueError("unterminated JSON string")
+
+    def _skip_whitespace(self) -> None:
+        while self._current() in {" ", "\t", "\r", "\n"}:
+            self.index += 1
+
+    def _current(self) -> str:
+        if self.index >= len(self.text):
+            return ""
+        return self.text[self.index]
 
 
-def load_strict_json_bytes(raw: bytes) -> dict[str, Any]:
+def load_strict_json_bytes(
+    raw: bytes,
+    *,
+    max_bytes: int = MAX_JSON_BYTES,
+    max_depth: int = MAX_JSON_DEPTH,
+    max_nodes: int = MAX_JSON_NODES,
+) -> dict[str, Any]:
     """Load a strict UTF-8 JSON object without duplicate or non-finite numbers."""
 
+    if (
+        type(max_bytes) is not int
+        or type(max_depth) is not int
+        or type(max_nodes) is not int
+        or max_bytes < 2
+        or max_depth < 0
+        or max_nodes < 1
+        or len(raw) > max_bytes
+    ):
+        raise RuntimeSourcesError("invalid_json", "source")
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
         raise RuntimeSourcesError("invalid_utf8", "source") from None
     try:
+        _StrictJsonBudgetScanner(
+            text,
+            max_depth=max_depth,
+            max_nodes=max_nodes,
+        ).scan()
         document = json.loads(
             text,
             object_pairs_hook=_pairs_to_object,
@@ -405,7 +535,6 @@ def load_strict_json_bytes(raw: bytes) -> dict[str, Any]:
         )
     except (_DuplicateKeyError, RecursionError, ValueError, json.JSONDecodeError):
         raise RuntimeSourcesError("invalid_json", "source") from None
-    _enforce_json_tree_limits(document)
     if not isinstance(document, dict):
         raise RuntimeSourcesError("root_not_object", "source")
     return document
@@ -418,7 +547,7 @@ def load_strict_json(path: Path = DEFAULT_SOURCE) -> dict[str, Any]:
         raw = path.read_bytes()
     except OSError:
         raise RuntimeSourcesError("source_read_failed", "source") from None
-    if len(raw) > 2 * 1024 * 1024:
+    if len(raw) > MAX_JSON_BYTES:
         raise RuntimeSourcesError("source_too_large", "source")
     return load_strict_json_bytes(raw)
 
@@ -764,6 +893,8 @@ def _validate_codex(value: Any) -> None:
         _portable_path(target["payload_root"], f"{target_path}.payload_root")
         _expect(target["entrypoint"], expected["entrypoint"], f"{target_path}.entrypoint")
         _portable_path(target["entrypoint"], f"{target_path}.entrypoint")
+        if not str(target["entrypoint"]).startswith(f"{target['payload_root']}/"):
+            _fail(f"{target_path}.entrypoint", "must be rooted under payload_root")
         _artifact(
             target["release_archive"],
             f"{target_path}.release_archive",
@@ -860,7 +991,8 @@ def _validate_codex(value: Any) -> None:
             expected_inventory,
             f"{target_path}.inventory",
         )
-        if target["entrypoint"] not in {item[0] for item in actual_inventory}:
+        relative_entrypoint = str(target["entrypoint"]).removeprefix(f"{target['payload_root']}/")
+        if relative_entrypoint not in {item[0] for item in actual_inventory}:
             _fail(f"{target_path}.entrypoint", "must be present in the payload inventory")
     _expect(tuple(actual_ids), TARGET_IDS, f"{path}.targets")
     if len(all_filenames) != len(TARGET_IDS) * 2:

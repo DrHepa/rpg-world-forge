@@ -41,6 +41,87 @@ or assembles a package.
 Both commands report `redistribution_status` as `blocked`. Acquiring every
 technical input does not close, waive, or replace any provenance blocker.
 
+## Deterministic assembly contract
+
+`scripts/studio_runtime_assembly.py` defines the bounded x64-only assembly and
+verification contract for `linux-x64` and `win32-x64`. A real assembly request
+first validates `runtime-sources.json` and calls its redistribution assertion
+before opening an archive or creating an output directory:
+
+```console
+python3 scripts/studio_runtime_assembly.py assemble \
+  --target linux-x64 \
+  --cache-dir /absolute/path/to/studio-runtime-inputs \
+  --output-dir /absolute/path/to/studio-runtime-resources \
+  --source-date-epoch 1784407912
+```
+
+That command currently fails with all seven open blocker codes and leaves both
+cache and output untouched. This is intentional. The same assembly core is
+covered with explicitly synthetic, non-publishable archives. Those tests prove
+closed archive inventories, portable paths, pinned reads, exact Forge source
+installation, output-tree verification, and byte-identical ZIP creation across
+different roots without redistributing real runtime artifacts.
+
+The pinned Linux Python archive is normalized only through
+`runtime-archive-normalization-linux-x64.json`. That canonical, target-scoped
+receipt is bound to the exact archive digest: it materializes its 1,048 bounded
+relative symlinks as regular files at their exact source paths and retains all
+3,474 regular paths. The receipt inventories every resulting source, link,
+resolved target, mode, size, and digest, including eight case-sensitive
+directory pairs and 25 case-sensitive file pairs. The Linux target therefore
+requires a case-sensitive destination filesystem; assembly fails closed before
+archive materialization on Windows and during the pinned private-stage binding
+probe on any filesystem that aliases a required pair. Hardlinks, absolute or
+escaping links, missing targets, cycles, and special-file targets remain
+forbidden.
+
+For that exact PBS source, the same canonical receipt bytes are packaged as the
+inventoried control resource
+`runtime/python/linux-x64/runtime-archive-normalization.json` (1,031,213 bytes,
+SHA-256
+`3c4fea7af2d435c036d412a56d7b762131e780560b339cbffe80e7637416db0e`).
+Python and Studio validate the descriptor-read receipt, its archive identity,
+link graph, counts, collision groups, and all 4,522 Python inventory entries.
+Windows package manifests require `normalization: null` and cannot authorize the
+Linux receipt.
+
+An assembled test tree contains the complete selected Codex vendor root, the
+selected Python payload, pure-Python `isoworld` and `worldforge`, public schemas
+and contracts, Codex protocol material, `runtime-manifest.json`, and the
+canonical `runtime-package-manifest.json`. The package manifest follows
+`runtime-package-manifest.schema.json`, inventories every other file, records
+the source archive identities and target launch paths, and always states
+`release_ready: false`. ARM64 runtimes are neither declared nor accepted.
+
+Existing synthetic trees and deterministic ZIPs can be checked without
+creating or changing artifacts:
+
+```console
+python3 scripts/studio_runtime_assembly.py verify \
+  --output-dir /absolute/path/to/studio-runtime-resources
+python3 scripts/studio_runtime_assembly.py verify-zip \
+  --zip /absolute/path/to/studio-runtime-resources.zip
+```
+
+These verification commands do not make a package publishable.
+
+Assembly creates the destination exclusively. If writing or verification later
+fails, the partial destination is deliberately preserved and the command fails
+closed. The assembler never deletes or changes a pathname after merely checking
+its identity, because another process could have replaced that name. An
+operator may remove a failed synthetic destination only after independently
+confirming its identity and contents.
+
+Creation and publication retain the output ancestry, directories, and files
+through final verification. POSIX walks from `/` with descriptor-relative
+no-follow operations. Windows walks from a retained volume/share root using
+`NtCreateFile` `RootDirectory` handles, creates both directories and files
+relative to those handles, rejects reparse points, writes with `WriteFile`, and
+omits delete sharing until final path binding succeeds.
+Hosts without either complete primitive set report
+`secure_primitive_unavailable` before mutating the destination.
+
 ## Redistribution remains blocked
 
 The checked-in contract is intentionally fail-closed. It records every known

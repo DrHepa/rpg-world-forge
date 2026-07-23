@@ -1,0 +1,770 @@
+{
+  "$id": "https://rpg-world-forge.local/schemas/studio-runtime-package-manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "target_id": {
+            "const": "linux-x64"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "launch": {
+            "properties": {
+              "codex": {
+                "const": "runtime/codex/linux-x64/bin/codex"
+              },
+              "python": {
+                "const": "runtime/python/linux-x64/bin/python3"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "target_id": {
+            "const": "win32-x64"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "launch": {
+            "properties": {
+              "codex": {
+                "const": "runtime/codex/win32-x64/bin/codex.exe"
+              },
+              "python": {
+                "const": "runtime/python/win32-x64/python.exe"
+              }
+            },
+            "type": "object"
+          },
+          "sources": {
+            "properties": {
+              "python": {
+                "properties": {
+                  "normalization": {
+                    "const": null
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "python": {
+                "properties": {
+                  "archive": {
+                    "properties": {
+                      "sha256": {
+                        "const": "5854aa6ec71cad00334d5065633c210b2e7feb40956767a59a91791cadcf0b79"
+                      }
+                    },
+                    "required": [
+                      "sha256"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "archive"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "python"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "python": {
+                "properties": {
+                  "archive": {
+                    "properties": {
+                      "entrypoint": {
+                        "const": "python/bin/python3"
+                      },
+                      "filename": {
+                        "const": "cpython-3.12.13+20260718-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+                      },
+                      "payload_root": {
+                        "const": "python"
+                      },
+                      "size": {
+                        "const": 34199823
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "normalization": {
+                    "$ref": "#/$defs/normalizationReceipt"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "target_id": {
+            "const": "linux-x64"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "python": {
+                "properties": {
+                  "normalization": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "normalization"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "python"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "python": {
+                "properties": {
+                  "archive": {
+                    "properties": {
+                      "sha256": {
+                        "const": "5854aa6ec71cad00334d5065633c210b2e7feb40956767a59a91791cadcf0b79"
+                      }
+                    },
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "target_id": {
+            "const": "linux-x64"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "assembly_kind": {
+            "const": "synthetic_test_fixture"
+          }
+        },
+        "required": [
+          "assembly_kind"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "runtime_sources": {
+                "const": null
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "assembly_kind": {
+            "const": "verified_development_runtime"
+          }
+        },
+        "required": [
+          "assembly_kind"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "open_blocker_codes": {
+            "const": [
+              "codex_ripgrep_static_dependency_notice_sbom_incomplete",
+              "linux_bwrap_lgpl_corresponding_source_relink_build_materials_incomplete",
+              "linux_bwrap_musl_provenance_incomplete",
+              "pbs_zlib_ng_license_incomplete",
+              "linux_berkeley_db_dbm_route_unresolved",
+              "windows_vc_runtime_redistribution_authority_unresolved",
+              "github_attestation_trust_root_rfc3161_verification_pending"
+            ]
+          },
+          "sources": {
+            "properties": {
+              "runtime_sources": {
+                "$ref": "#/$defs/runtimeSourcesIdentity"
+              },
+              "runtime_sources_sha256": {
+                "const": "99419da1ccc87cb8ea6c279e7e8e6bbc1d6b4d08eb6a67ae6ac7bf66d1182414"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "assembly_kind": {
+            "const": "verified_development_runtime"
+          },
+          "target_id": {
+            "const": "linux-x64"
+          }
+        },
+        "required": [
+          "assembly_kind",
+          "target_id"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "codex": {
+                "properties": {
+                  "archive": {
+                    "const": {
+                      "entrypoint": "package/vendor/x86_64-unknown-linux-musl/bin/codex",
+                      "filename": "codex-0.144.6-linux-x64.tgz",
+                      "payload_root": "package/vendor/x86_64-unknown-linux-musl",
+                      "sha256": "b6752eb2e8c10e6fcc96ac5c1c8ad8342cdb9a74504fb84686addf081a7d2868",
+                      "size": 131212687
+                    }
+                  }
+                },
+                "type": "object"
+              },
+              "python": {
+                "properties": {
+                  "archive": {
+                    "const": {
+                      "entrypoint": "python/bin/python3",
+                      "filename": "cpython-3.12.13+20260718-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+                      "payload_root": "python",
+                      "sha256": "5854aa6ec71cad00334d5065633c210b2e7feb40956767a59a91791cadcf0b79",
+                      "size": 34199823
+                    }
+                  },
+                  "normalization": {
+                    "$ref": "#/$defs/normalizationReceipt"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "assembly_kind": {
+            "const": "verified_development_runtime"
+          },
+          "target_id": {
+            "const": "win32-x64"
+          }
+        },
+        "required": [
+          "assembly_kind",
+          "target_id"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "codex": {
+                "properties": {
+                  "archive": {
+                    "const": {
+                      "entrypoint": "package/vendor/x86_64-pc-windows-msvc/bin/codex.exe",
+                      "filename": "codex-0.144.6-win32-x64.tgz",
+                      "payload_root": "package/vendor/x86_64-pc-windows-msvc",
+                      "sha256": "e04afbe9841be306455d075ad414993a946c94a399e55d7f9ec223f734cd4101",
+                      "size": 145169047
+                    }
+                  }
+                },
+                "type": "object"
+              },
+              "python": {
+                "properties": {
+                  "archive": {
+                    "const": {
+                      "entrypoint": "python/python.exe",
+                      "filename": "cpython-3.12.13+20260718-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+                      "payload_root": "python",
+                      "sha256": "0d422a1439ec308e03f47df551bc30f5994727c456e414b026d202bcda9b7c1c",
+                      "size": 21932298
+                    }
+                  },
+                  "normalization": {
+                    "const": null
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    }
+  ],
+  "properties": {
+    "assembly_kind": {
+      "enum": [
+        "synthetic_test_fixture",
+        "verified_development_runtime"
+      ]
+    },
+    "format": {
+      "const": "rpg-world-forge.studio_runtime_package_manifest"
+    },
+    "format_version": {
+      "const": 1,
+      "type": "integer"
+    },
+    "inventory": {
+      "items": {
+        "$ref": "#/$defs/inventoryEntry"
+      },
+      "maxItems": 16384,
+      "minItems": 1,
+      "type": "array"
+    },
+    "launch": {
+      "$ref": "#/$defs/launch"
+    },
+    "open_blocker_codes": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{2,127}$",
+        "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "redistribution_status": {
+      "const": "blocked"
+    },
+    "release_ready": {
+      "const": false
+    },
+    "schema_id": {
+      "const": "https://rpg-world-forge.local/schemas/studio-runtime-package-manifest.schema.json"
+    },
+    "source_date_epoch": {
+      "maximum": 4354819199,
+      "minimum": 315532800,
+      "type": "integer"
+    },
+    "sources": {
+      "$ref": "#/$defs/sources"
+    },
+    "target_id": {
+      "enum": [
+        "linux-x64",
+        "win32-x64"
+      ]
+    }
+  },
+  "required": [
+    "assembly_kind",
+    "format",
+    "format_version",
+    "inventory",
+    "launch",
+    "open_blocker_codes",
+    "redistribution_status",
+    "release_ready",
+    "schema_id",
+    "source_date_epoch",
+    "sources",
+    "target_id"
+  ],
+  "title": "RPG World Forge Studio runtime package manifest",
+  "type": "object",
+  "$defs": {
+    "archive": {
+      "additionalProperties": false,
+      "properties": {
+        "entrypoint": {
+          "$ref": "#/$defs/portablePath"
+        },
+        "filename": {
+          "$ref": "#/$defs/filename"
+        },
+        "payload_root": {
+          "$ref": "#/$defs/portablePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "maximum": 536870912,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "entrypoint",
+        "filename",
+        "payload_root",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "normalizationReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "archive_sha256": {
+          "const": "5854aa6ec71cad00334d5065633c210b2e7feb40956767a59a91791cadcf0b79"
+        },
+        "format": {
+          "const": "rpg-world-forge.studio_runtime_archive_normalization"
+        },
+        "format_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "path": {
+          "const": "runtime/python/linux-x64/runtime-archive-normalization.json"
+        },
+        "sha256": {
+          "const": "3c4fea7af2d435c036d412a56d7b762131e780560b339cbffe80e7637416db0e"
+        },
+        "size": {
+          "const": 1031213,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "archive_sha256",
+        "format",
+        "format_version",
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "filename": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/portablePath"
+        },
+        {
+          "not": {
+            "pattern": "/",
+            "type": "string"
+          }
+        },
+        {
+          "maxLength": 255,
+          "pattern": "^[^<>:\"|?*]+$",
+          "type": "string"
+        },
+        {
+          "not": {
+            "pattern": "[ .]$",
+            "type": "string"
+          }
+        },
+        {
+          "not": {
+            "pattern": "^(?:[aA][uU][xX]|[cC][oO][nN]|[nN][uU][lL]|[pP][rR][nN]|[cC][oO][mM][1-9]|[lL][pP][tT][1-9])(?:\\..*)?$",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "forgeSource": {
+      "additionalProperties": false,
+      "properties": {
+        "inventory_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "version": {
+          "const": "0.7.0"
+        }
+      },
+      "required": [
+        "inventory_sha256",
+        "version"
+      ],
+      "type": "object"
+    },
+    "inventoryEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "enum": [
+            "codex",
+            "control",
+            "forge",
+            "python"
+          ]
+        },
+        "mode": {
+          "enum": [
+            420,
+            493
+          ],
+          "type": "integer"
+        },
+        "path": {
+          "$ref": "#/$defs/portablePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "maximum": 805306368,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "component",
+        "mode",
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "launch": {
+      "additionalProperties": false,
+      "properties": {
+        "codex": {
+          "$ref": "#/$defs/portablePath"
+        },
+        "mcp_module": {
+          "const": "worldforge.studio.mcp_server"
+        },
+        "python": {
+          "$ref": "#/$defs/portablePath"
+        },
+        "service_module": {
+          "const": "worldforge.studio"
+        }
+      },
+      "required": [
+        "codex",
+        "mcp_module",
+        "python",
+        "service_module"
+      ],
+      "type": "object"
+    },
+    "portablePath": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?/)(?!.*(?:^|/)\\.\\.?$)[\\u0020-\\u007e]+$",
+      "type": "string"
+    },
+    "runtimeSource": {
+      "additionalProperties": false,
+      "properties": {
+        "archive": {
+          "$ref": "#/$defs/archive"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "archive",
+        "version"
+      ],
+      "type": "object"
+    },
+    "runtimeSourcesIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "const": "rpg-world-forge.studio_runtime_sources"
+        },
+        "format_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "path": {
+          "const": "runtime-sources.json"
+        },
+        "sha256": {
+          "const": "99419da1ccc87cb8ea6c279e7e8e6bbc1d6b4d08eb6a67ae6ac7bf66d1182414"
+        },
+        "size": {
+          "const": 13717,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "path",
+        "sha256",
+        "size"
+      ],
+      "type": "object"
+    },
+    "pythonRuntimeSource": {
+      "additionalProperties": false,
+      "properties": {
+        "archive": {
+          "$ref": "#/$defs/archive"
+        },
+        "normalization": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/normalizationReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "const": "3.12.13"
+        }
+      },
+      "required": [
+        "archive",
+        "normalization",
+        "version"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "sources": {
+      "additionalProperties": false,
+      "properties": {
+        "codex": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/runtimeSource"
+            },
+            {
+              "properties": {
+                "version": {
+                  "const": "0.144.6"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
+        "forge": {
+          "$ref": "#/$defs/forgeSource"
+        },
+        "python": {
+          "$ref": "#/$defs/pythonRuntimeSource"
+        },
+        "runtime_sources_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_sources": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/runtimeSourcesIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "codex",
+        "forge",
+        "python",
+        "runtime_sources",
+        "runtime_sources_sha256"
+      ],
+      "type": "object"
+    }
+  }
+}
