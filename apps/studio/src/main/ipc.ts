@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from "electron";
 
@@ -34,13 +34,27 @@ import { isTrustedStudioSender } from "./security";
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const WORKSPACE_ID_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/u;
 const JOB_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,127}$/u;
+const CHANGESET_ID_PATTERN = JOB_ID_PATTERN;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
+const MAX_SOURCE_DOCUMENT_BYTES = 256 * 1024;
 const MAX_RUNTIME_TICKS = 1_000_000;
 type NamedJobOperation =
   | "asset.receipt.validate"
   | "assetpack.verify"
   | "runtime.headless"
   | "runtime.replay";
-const CHANGESET_STATUSES = new Set(["staged", "approved", "rejected", "applied"]);
+type ChangesetActionMethod =
+  | "changeset.approve"
+  | "changeset.reject"
+  | "changeset.apply";
+type ChangesetActionStatus = "approved" | "rejected" | "applied";
+const CHANGESET_STATUSES = new Set([
+  "staged",
+  "approved",
+  "applying",
+  "rejected",
+  "applied",
+]);
 const JOB_STATES = new Set([
   "queued",
   "running",
@@ -130,6 +144,76 @@ export function registerStudioIpc(
       () => validateSingleArgument(args, validateSourceReadArgument),
       ({ workspaceId, path }) =>
         requestNamed(service, "source.read", { workspace_id: workspaceId, path }),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.stageSourceDocument, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateStageSourceDocumentArgument),
+      ({ workspaceId, path, baseSha256, content }) =>
+        requestStageSourceDocument(service, workspaceId, path, baseSha256, content),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getChangeset, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateChangesetIdArgument),
+      ({ changesetId }) => requestChangesetGet(service, changesetId),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.readChangesetDiff, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateChangesetIdArgument),
+      ({ changesetId }) => requestChangesetDiff(service, changesetId),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.approveChangeset, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateChangesetActionArgument),
+      ({ changesetId, expectedReviewSha256 }) =>
+        requestChangesetAction(
+          service,
+          "changeset.approve",
+          "approved",
+          changesetId,
+          expectedReviewSha256,
+        ),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.rejectChangeset, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateChangesetActionArgument),
+      ({ changesetId, expectedReviewSha256 }) =>
+        requestChangesetAction(
+          service,
+          "changeset.reject",
+          "rejected",
+          changesetId,
+          expectedReviewSha256,
+        ),
+    );
+  });
+
+  ipcMain.handle(IPC_CHANNELS.applyChangeset, async (event, ...args: unknown[]) => {
+    if (!trusted(event)) return untrustedFailure();
+    return await captureValidated(
+      () => validateSingleArgument(args, validateChangesetActionArgument),
+      ({ changesetId, expectedReviewSha256 }) =>
+        requestChangesetAction(
+          service,
+          "changeset.apply",
+          "applied",
+          changesetId,
+          expectedReviewSha256,
+        ),
     );
   });
 
@@ -269,6 +353,12 @@ export function registerStudioIpc(
     ipcMain.removeHandler(IPC_CHANNELS.getWorkspaceOverview);
     ipcMain.removeHandler(IPC_CHANNELS.listSourceDocuments);
     ipcMain.removeHandler(IPC_CHANNELS.readSourceDocument);
+    ipcMain.removeHandler(IPC_CHANNELS.stageSourceDocument);
+    ipcMain.removeHandler(IPC_CHANNELS.getChangeset);
+    ipcMain.removeHandler(IPC_CHANNELS.readChangesetDiff);
+    ipcMain.removeHandler(IPC_CHANNELS.approveChangeset);
+    ipcMain.removeHandler(IPC_CHANNELS.rejectChangeset);
+    ipcMain.removeHandler(IPC_CHANNELS.applyChangeset);
     ipcMain.removeHandler(IPC_CHANNELS.validateWorld);
     ipcMain.removeHandler(IPC_CHANNELS.analyzeWorld);
     ipcMain.removeHandler(IPC_CHANNELS.validateAssetReceipt);
@@ -303,6 +393,64 @@ export function validateSourceReadArgument(
     throw new TypeError("Studio source path is invalid");
   }
   return { workspaceId: validateWorkspaceId(params.workspaceId), path: params.path };
+}
+
+export function validateStageSourceDocumentArgument(value: unknown): {
+  workspaceId: string;
+  path: string;
+  baseSha256: string;
+  content: string;
+} {
+  const params = validateClosedParams(value, [
+    "workspaceId",
+    "path",
+    "baseSha256",
+    "content",
+  ]);
+  if (typeof params.path !== "string" || !isPortableSourcePath(params.path)) {
+    throw new TypeError("Studio source path is invalid");
+  }
+  if (typeof params.baseSha256 !== "string" || !SHA256_PATTERN.test(params.baseSha256)) {
+    throw new TypeError("Studio base SHA-256 is invalid");
+  }
+  if (
+    typeof params.content !== "string" ||
+    containsInvalidUnicode(params.content) ||
+    Buffer.byteLength(params.content, "utf8") > MAX_SOURCE_DOCUMENT_BYTES
+  ) {
+    throw new TypeError(
+      `Studio source content must be valid UTF-8 of at most ${MAX_SOURCE_DOCUMENT_BYTES} bytes`,
+    );
+  }
+  return {
+    workspaceId: validateWorkspaceId(params.workspaceId),
+    path: params.path,
+    baseSha256: params.baseSha256,
+    content: params.content,
+  };
+}
+
+export function validateChangesetIdArgument(value: unknown): { changesetId: string } {
+  const params = validateClosedParams(value, ["changesetId"]);
+  return { changesetId: validateChangesetId(params.changesetId) };
+}
+
+export function validateChangesetActionArgument(value: unknown): {
+  changesetId: string;
+  expectedReviewSha256?: string;
+} {
+  const params = validateClosedParams(value, ["changesetId", "expectedReviewSha256"]);
+  const changesetId = validateChangesetId(params.changesetId);
+  if (!("expectedReviewSha256" in params)) {
+    return { changesetId };
+  }
+  if (
+    typeof params.expectedReviewSha256 !== "string" ||
+    !SHA256_PATTERN.test(params.expectedReviewSha256)
+  ) {
+    throw new TypeError("Studio expected review SHA-256 is invalid");
+  }
+  return { changesetId, expectedReviewSha256: params.expectedReviewSha256 };
 }
 
 export function validateAssetReceiptArgument(
@@ -553,6 +701,113 @@ async function requestJobCreate(
   );
 }
 
+async function requestStageSourceDocument(
+  service: ForgeServiceClient,
+  workspaceId: string,
+  path: string,
+  baseSha256: string,
+  content: string,
+): Promise<StudioClientResult<StudioReplyEnvelope>> {
+  const requestId = randomUUID();
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        "changeset.create",
+        {
+          workspace_id: workspaceId,
+          operations: [
+            {
+              path,
+              operation: "replace",
+              expected_base_sha256: baseSha256,
+              content,
+            },
+          ],
+        },
+        DEFAULT_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) =>
+        validateStageSourceDocumentReply(
+          reply,
+          requestId,
+          workspaceId,
+          path,
+          baseSha256,
+          content,
+        ),
+      ),
+  );
+}
+
+async function requestChangesetGet(
+  service: ForgeServiceClient,
+  changesetId: string,
+): Promise<StudioClientResult<StudioReplyEnvelope>> {
+  const requestId = randomUUID();
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        "changeset.get",
+        { changeset_id: changesetId },
+        DEFAULT_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) => validateChangesetGetReply(reply, requestId, changesetId)),
+  );
+}
+
+async function requestChangesetDiff(
+  service: ForgeServiceClient,
+  changesetId: string,
+): Promise<StudioClientResult<StudioReplyEnvelope>> {
+  const requestId = randomUUID();
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        "changeset.diff",
+        { changeset_id: changesetId },
+        DEFAULT_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) => validateChangesetDiffReply(reply, requestId, changesetId)),
+  );
+}
+
+async function requestChangesetAction(
+  service: ForgeServiceClient,
+  method: ChangesetActionMethod,
+  status: ChangesetActionStatus,
+  changesetId: string,
+  expectedReviewSha256: string | undefined,
+): Promise<StudioClientResult<StudioReplyEnvelope>> {
+  const requestId = randomUUID();
+  return await capture(() =>
+    service
+      .request(
+        requestId,
+        method,
+        {
+          changeset_id: changesetId,
+          ...(expectedReviewSha256 === undefined
+            ? {}
+            : { expected_review_sha256: expectedReviewSha256 }),
+        },
+        DEFAULT_REQUEST_TIMEOUT_MS,
+      )
+      .then((reply) =>
+        validateChangesetActionReply(
+          reply,
+          requestId,
+          method,
+          status,
+          changesetId,
+          expectedReviewSha256,
+        ),
+      ),
+  );
+}
+
 function validateNamedReply(
   value: unknown,
   requestId: string,
@@ -591,6 +846,153 @@ function validateJobCreateReply(
     throw new StudioProtocolError("Forge Studio returned a mismatched job.create result");
   }
   return reply;
+}
+
+function validateStageSourceDocumentReply(
+  value: unknown,
+  requestId: string,
+  workspaceId: string,
+  path: string,
+  baseSha256: string,
+  content: string,
+): StudioReplyEnvelope {
+  const reply = validateNamedReply(value, requestId, "changeset.create");
+  if (reply.kind === "error") return reply;
+  if (reply.method !== "changeset.create") {
+    throw new StudioProtocolError("Forge Studio returned an invalid changeset.create reply");
+  }
+  const record = requireChangesetIdentity(reply.result.changeset);
+  const operations = record.operations;
+  const operation: unknown = Array.isArray(operations) ? operations[0] : undefined;
+  const proposedSha256 = createHash("sha256").update(content, "utf8").digest("hex");
+  if (
+    record.format_version !== 2 ||
+    record.workspace_id !== workspaceId ||
+    record.status !== "staged" ||
+    !Array.isArray(operations) ||
+    operations.length !== 1 ||
+    !isRecord(operation) ||
+    operation.path !== path ||
+    operation.operation !== "replace" ||
+    operation.base_sha256 !== baseSha256 ||
+    operation.proposed_sha256 !== proposedSha256 ||
+    operation.size !== Buffer.byteLength(content, "utf8") ||
+    !hasValidV2ReviewIdentity(record)
+  ) {
+    throw new StudioProtocolError("Forge Studio returned a mismatched staged source document");
+  }
+  return reply;
+}
+
+function validateChangesetGetReply(
+  value: unknown,
+  requestId: string,
+  changesetId: string,
+): StudioReplyEnvelope {
+  const reply = validateNamedReply(value, requestId, "changeset.get");
+  if (reply.kind === "error") return reply;
+  if (reply.method !== "changeset.get") {
+    throw new StudioProtocolError("Forge Studio returned an invalid changeset.get reply");
+  }
+  requireChangesetIdentity(reply.result.changeset, changesetId);
+  return reply;
+}
+
+function validateChangesetDiffReply(
+  value: unknown,
+  requestId: string,
+  changesetId: string,
+): StudioReplyEnvelope {
+  const reply = validateNamedReply(value, requestId, "changeset.diff");
+  if (reply.kind === "error") return reply;
+  if (reply.method !== "changeset.diff") {
+    throw new StudioProtocolError("Forge Studio returned an invalid changeset.diff reply");
+  }
+  const diff = reply.result.diff;
+  if (diff.changeset_id !== changesetId) {
+    throw new StudioProtocolError("Forge Studio returned a mismatched changeset diff");
+  }
+  if (
+    diff.changeset_format_version === 2 &&
+    computeReviewSha256(diff.operations) !== diff.review_sha256
+  ) {
+    throw new StudioProtocolError("Forge Studio returned a mismatched changeset diff review");
+  }
+  return reply;
+}
+
+function validateChangesetActionReply(
+  value: unknown,
+  requestId: string,
+  method: ChangesetActionMethod,
+  status: ChangesetActionStatus,
+  changesetId: string,
+  expectedReviewSha256: string | undefined,
+): StudioReplyEnvelope {
+  const reply = validateNamedReply(value, requestId, method);
+  if (reply.kind === "error") return reply;
+  if (reply.method !== method) {
+    throw new StudioProtocolError(`Forge Studio returned an invalid ${method} reply`);
+  }
+  const record = requireChangesetIdentity(reply.result.changeset, changesetId);
+  if (record.status !== status) {
+    throw new StudioProtocolError(`Forge Studio returned a mismatched ${method} status`);
+  }
+  if (
+    (record.format_version === 2 && record.review_sha256 !== expectedReviewSha256) ||
+    (record.format_version === 1 && expectedReviewSha256 !== undefined)
+  ) {
+    throw new StudioProtocolError(`Forge Studio returned a mismatched ${method} review identity`);
+  }
+  return reply;
+}
+
+function requireChangesetIdentity(
+  value: unknown,
+  expectedChangesetId?: string,
+): Record<string, unknown> {
+  if (
+    !isRecord(value) ||
+    typeof value.changeset_id !== "string" ||
+    !CHANGESET_ID_PATTERN.test(value.changeset_id) ||
+    (expectedChangesetId !== undefined && value.changeset_id !== expectedChangesetId) ||
+    (value.format_version === 2 && !hasValidV2ReviewIdentity(value))
+  ) {
+    throw new StudioProtocolError("Forge Studio returned a mismatched changeset identity");
+  }
+  return value;
+}
+
+function hasValidV2ReviewIdentity(value: Record<string, unknown>): boolean {
+  return (
+    value.format_version === 2 &&
+    typeof value.review_sha256 === "string" &&
+    Array.isArray(value.operations) &&
+    computeReviewSha256(value.operations) === value.review_sha256
+  );
+}
+
+function computeReviewSha256(operations: readonly unknown[]): string | null {
+  const projected: Record<string, unknown>[] = [];
+  for (const value of operations) {
+    if (!isRecord(value)) return null;
+    const projection = {
+      base_sha256: value.base_sha256,
+      base_size: value.base_size,
+      operation: value.operation,
+      path: value.path,
+      proposed_sha256: value.proposed_sha256,
+      size: value.size,
+    };
+    if (Object.values(projection).some((item) => item === undefined)) return null;
+    projected.push(projection);
+  }
+  const canonical = JSON.stringify({
+    format: "rpg-world-forge.studio_changeset_review",
+    format_version: 1,
+    operations: projected,
+  });
+  return createHash("sha256").update(canonical, "utf8").digest("hex");
 }
 
 async function captureValidated<T, U>(
@@ -666,6 +1068,27 @@ function validateWorkspaceId(value: unknown): string {
     throw new TypeError("Studio workspace ID is invalid");
   }
   return value;
+}
+
+function validateChangesetId(value: unknown): string {
+  if (typeof value !== "string" || !CHANGESET_ID_PATTERN.test(value)) {
+    throw new TypeError("Studio changeset ID is invalid");
+  }
+  return value;
+}
+
+function containsInvalidUnicode(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const following = value.charCodeAt(index + 1);
+      if (index + 1 >= value.length || following < 0xdc00 || following > 0xdfff) return true;
+      index += 1;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function validateLimit(value: unknown): number {

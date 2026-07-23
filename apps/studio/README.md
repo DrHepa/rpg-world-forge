@@ -6,8 +6,12 @@ app-server 0.144.6. Codex can reach the Forge only through an argv-bound MCP
 process exposing three changeset staging/read tools. It cannot approve or apply
 changesets. The Python service already provides bounded workspace overview,
 manifest-authorized source inspection, release validation, and in-memory
-narrative analysis methods. Visual lore editors, asset tools, Modly, Blender,
-file watching, and native playtests remain later batches.
+narrative analysis methods. Its exact changeset protocol also exposes stage,
+get, list, immutable diff, approve, reject, and apply. Electron maps the human
+review boundary to six named preload methods; staging is only a one-file
+base-hashed replacement, and no generic RPC is exposed. Visual review UI,
+asset tools, Modly, Blender, file watching, and native playtests remain later
+batches.
 
 ## Development
 

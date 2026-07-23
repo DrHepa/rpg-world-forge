@@ -40,9 +40,13 @@ rolling back. An `applying` row with no published journal is safely restored to
 `approved`, because no source temporary or target mutation occurs before the
 journal publication. Unknown or inconsistent durable state fails closed.
 
-The manager exposes review internally in this slice. Adding a service, preload,
-or renderer capability is a separate contract change. The Codex MCP boundary
-continues to stage, get, and list changesets only; it cannot approve or apply.
+The Python service exposes exact stage, get, list, diff, approve, reject, and
+apply request/response contracts. Electron exposes only named human controls:
+staging maps to one `replace` operation with `expected_base_sha256`, while get,
+diff, and action replies are correlated to the requested ID, review hash, and
+resulting status. This does not claim a visual review workflow. The Codex MCP
+boundary continues to expose exactly stage, get, and list; it cannot diff,
+approve, reject, or apply.
 
 ## Consequences
 

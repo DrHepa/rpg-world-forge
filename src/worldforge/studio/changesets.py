@@ -854,8 +854,12 @@ class ChangesetManager:
         if not isinstance(kind, str) or kind not in {"create", "replace", "delete"}:
             raise invalid_request(f"changeset operation {index} has an unknown operation")
         allowed = {"path", "operation", "content"} if kind != "delete" else {"path", "operation"}
+        if kind != "create":
+            allowed.add("expected_base_sha256")
         if set(raw) != allowed:
-            raise invalid_request(f"changeset operation {index} has invalid fields")
+            required = allowed - {"expected_base_sha256"}
+            if set(raw) != required:
+                raise invalid_request(f"changeset operation {index} has invalid fields")
         relative = _normalize_path(raw.get("path"))
         target = _safe_target(world_root, relative)
         info = _path_info(target)
@@ -876,6 +880,18 @@ class ChangesetManager:
                 require_standalone=True,
             )
             base = _hash(base_payload)
+            expected_base = raw.get("expected_base_sha256")
+            if expected_base is not None:
+                if (
+                    not isinstance(expected_base, str)
+                    or len(expected_base) != 64
+                    or any(character not in "0123456789abcdef" for character in expected_base)
+                ):
+                    raise invalid_request(
+                        f"changeset operation {index} expected_base_sha256 is invalid"
+                    )
+                if not hmac.compare_digest(expected_base, base):
+                    raise conflict(f"Changeset base changed before staging: {relative}")
         payload: bytes | None = None
         proposed: str | None = None
         if kind != "delete":

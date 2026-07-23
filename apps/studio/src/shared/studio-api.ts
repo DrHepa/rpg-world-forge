@@ -3,9 +3,17 @@ import type {
   AssetReceiptValidateInput as StudioAssetReceiptValidateInput,
   AssetpackVerifyOperation as StudioAssetpackVerifyOperation,
   AssetpackVerifyInput as StudioAssetpackVerifyInput,
+  ChangesetApplyResponse as StudioChangesetApplyResponse,
+  ChangesetApproveResponse as StudioChangesetApproveResponse,
+  ChangesetCreateResponse as StudioChangesetCreateResponse,
+  ChangesetDiff as StudioChangesetDiff,
+  ChangesetDiffResponse as StudioChangesetDiffResponse,
+  ChangesetGetResponse as StudioChangesetGetResponse,
+  ChangesetRejectResponse as StudioChangesetRejectResponse,
   Error as StudioErrorEnvelope,
   Event as StudioEventEnvelope,
   ForgeStudioDurableJobRecordV2WithV1ReadCompatibility as StudioJob,
+  ForgeStudioReviewableFileChangesetV2 as StudioChangeset,
   JobCancelRequest as StudioJobCancelRequest,
   JobCancelResponse as StudioJobCancelResponse,
   JobCreateRequest as StudioJobCreateRequest,
@@ -39,6 +47,14 @@ export type {
   StudioEventEnvelope,
   StudioAssetReceiptValidateInput,
   StudioAssetpackVerifyInput,
+  StudioChangeset,
+  StudioChangesetApplyResponse,
+  StudioChangesetApproveResponse,
+  StudioChangesetCreateResponse,
+  StudioChangesetDiff,
+  StudioChangesetDiffResponse,
+  StudioChangesetGetResponse,
+  StudioChangesetRejectResponse,
   StudioJob,
   StudioJobCancelRequest,
   StudioJobCancelResponse,
@@ -75,6 +91,12 @@ export type StudioWorldValidateReply = StudioWorldValidateResponse | StudioError
 export type StudioWorldAnalyzeReply = StudioWorldAnalyzeResponse | StudioErrorEnvelope;
 export type StudioJobCreateReply = StudioJobCreateResponse | StudioErrorEnvelope;
 export type StudioJobCancelReply = StudioJobCancelResponse | StudioErrorEnvelope;
+export type StudioChangesetCreateReply = StudioChangesetCreateResponse | StudioErrorEnvelope;
+export type StudioChangesetGetReply = StudioChangesetGetResponse | StudioErrorEnvelope;
+export type StudioChangesetDiffReply = StudioChangesetDiffResponse | StudioErrorEnvelope;
+export type StudioChangesetApproveReply = StudioChangesetApproveResponse | StudioErrorEnvelope;
+export type StudioChangesetRejectReply = StudioChangesetRejectResponse | StudioErrorEnvelope;
+export type StudioChangesetApplyReply = StudioChangesetApplyResponse | StudioErrorEnvelope;
 
 export type StudioAssetReceiptValidateJob = StudioManagedJobV2CommonRecord &
   StudioAssetReceiptValidateOperation;
@@ -133,6 +155,12 @@ export type StudioCapabilityMethod =
   | "source.read"
   | "world.validate"
   | "world.analyze"
+  | "changeset.create"
+  | "changeset.get"
+  | "changeset.diff"
+  | "changeset.approve"
+  | "changeset.reject"
+  | "changeset.apply"
   | "job.create"
   | "job.cancel";
 
@@ -144,7 +172,7 @@ export interface EventsListParams {
 
 export interface ChangesetsListParams {
   workspace_id?: string;
-  status?: "staged" | "approved" | "rejected" | "applied";
+  status?: "staged" | "approved" | "applying" | "rejected" | "applied";
   limit?: number;
 }
 
@@ -256,6 +284,28 @@ export interface ForgeStudioApi {
     workspaceId: string,
     path: string,
   ): Promise<StudioClientResult<StudioSourceReadReply>>;
+  stageSourceDocument(
+    workspaceId: string,
+    path: string,
+    baseSha256: string,
+    content: string,
+  ): Promise<StudioClientResult<StudioChangesetCreateReply>>;
+  getChangeset(changesetId: string): Promise<StudioClientResult<StudioChangesetGetReply>>;
+  readChangesetDiff(
+    changesetId: string,
+  ): Promise<StudioClientResult<StudioChangesetDiffReply>>;
+  approveChangeset(
+    changesetId: string,
+    expectedReviewSha256?: string,
+  ): Promise<StudioClientResult<StudioChangesetApproveReply>>;
+  rejectChangeset(
+    changesetId: string,
+    expectedReviewSha256?: string,
+  ): Promise<StudioClientResult<StudioChangesetRejectReply>>;
+  applyChangeset(
+    changesetId: string,
+    expectedReviewSha256?: string,
+  ): Promise<StudioClientResult<StudioChangesetApplyReply>>;
   validateWorld(workspaceId: string): Promise<StudioClientResult<StudioWorldValidateReply>>;
   analyzeWorld(workspaceId: string): Promise<StudioClientResult<StudioWorldAnalyzeReply>>;
   validateAssetReceipt(
@@ -307,6 +357,7 @@ export const STUDIO_METHODS: ReadonlySet<StudioMethod> = new Set([
   "changeset.create",
   "changeset.get",
   "changeset.list",
+  "changeset.diff",
   "changeset.approve",
   "changeset.reject",
   "changeset.apply",
@@ -334,6 +385,12 @@ export const IPC_CHANNELS = Object.freeze({
   getWorkspaceOverview: "studio:get-workspace-overview",
   listSourceDocuments: "studio:list-source-documents",
   readSourceDocument: "studio:read-source-document",
+  stageSourceDocument: "studio:stage-source-document",
+  getChangeset: "studio:get-changeset",
+  readChangesetDiff: "studio:read-changeset-diff",
+  approveChangeset: "studio:approve-changeset",
+  rejectChangeset: "studio:reject-changeset",
+  applyChangeset: "studio:apply-changeset",
   validateWorld: "studio:validate-world",
   analyzeWorld: "studio:analyze-world",
   validateAssetReceipt: "studio:validate-asset-receipt",

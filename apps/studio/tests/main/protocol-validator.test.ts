@@ -141,4 +141,198 @@ describe("Studio protocol authoring discrimination", () => {
     expect(validateStudioEnvelope({ ...valid, method: "source.list" })).toBe(false);
     expect(validateStudioEnvelope({ ...valid, result: { documents: [] } })).toBe(false);
   });
+
+  it("closes every changeset request and response including immutable diffs", () => {
+    const operation = {
+      path: "source/lore/entry.md",
+      operation: "replace",
+      base_sha256: "a".repeat(64),
+      base_size: 4,
+      proposed_sha256: "b".repeat(64),
+      size: 4,
+    } as const;
+    const changeset = {
+      format: "rpg-world-forge.studio_changeset",
+      format_version: 2,
+      changeset_id: "changeset_01",
+      workspace_id: "workspace_01",
+      status: "staged",
+      operations: [operation],
+      review_sha256: "c".repeat(64),
+      created_at: "2026-07-23T00:00:00Z",
+      updated_at: "2026-07-23T00:00:00Z",
+    } as const;
+    const create = {
+      ...protocol,
+      kind: "request",
+      request_id: "stage-1",
+      method: "changeset.create",
+      params: {
+        workspace_id: "workspace_01",
+        operations: [
+          {
+            path: "source/lore/entry.md",
+            operation: "replace",
+            expected_base_sha256: "a".repeat(64),
+            content: "new\n",
+          },
+        ],
+      },
+    } as const;
+    expect(validateStudioEnvelope(create)).toBe(true);
+    expect(validateStudioEnvelope({ ...create, params: { ...create.params, cwd: "/tmp" } })).toBe(
+      false,
+    );
+    expect(
+      validateStudioEnvelope({
+        ...create,
+        params: {
+          ...create.params,
+          operations: [{ ...create.params.operations[0], operation: "execute" }],
+        },
+      }),
+    ).toBe(false);
+
+    const ids = ["changeset.get", "changeset.diff"] as const;
+    for (const method of ids) {
+      expect(
+        validateStudioEnvelope({
+          ...protocol,
+          kind: "request",
+          request_id: method,
+          method,
+          params: { changeset_id: "changeset_01" },
+        }),
+      ).toBe(true);
+    }
+    expect(
+      validateStudioEnvelope({
+        ...protocol,
+        kind: "request",
+        request_id: "list-1",
+        method: "changeset.list",
+        params: { workspace_id: "workspace_01", status: "applying", limit: 1 },
+      }),
+    ).toBe(true);
+    for (const method of [
+      "changeset.approve",
+      "changeset.reject",
+      "changeset.apply",
+    ] as const) {
+      expect(
+        validateStudioEnvelope({
+          ...protocol,
+          kind: "request",
+          request_id: method,
+          method,
+          params: {
+            changeset_id: "changeset_01",
+            expected_review_sha256: "c".repeat(64),
+          },
+        }),
+      ).toBe(true);
+    }
+
+    const getResponse = {
+      ...protocol,
+      kind: "response",
+      request_id: "get-1",
+      method: "changeset.get",
+      result: { changeset },
+    } as const;
+    expect(validateStudioEnvelope(getResponse)).toBe(true);
+    const withoutReview: Record<string, unknown> = { ...changeset };
+    delete withoutReview.review_sha256;
+    expect(
+      validateStudioEnvelope({ ...getResponse, result: { changeset: withoutReview } }),
+    ).toBe(false);
+    expect(
+      validateStudioEnvelope({
+        ...getResponse,
+        result: { changeset: { ...changeset, provider: "openai" } },
+      }),
+    ).toBe(false);
+    const legacyChangeset = {
+      ...withoutReview,
+      format_version: 1,
+      operations: [
+        {
+          path: operation.path,
+          operation: operation.operation,
+          base_sha256: operation.base_sha256,
+          proposed_sha256: operation.proposed_sha256,
+          size: operation.size,
+        },
+      ],
+    } as const;
+    expect(
+      validateStudioEnvelope({ ...getResponse, result: { changeset: legacyChangeset } }),
+    ).toBe(true);
+    expect(
+      validateStudioEnvelope({
+        ...getResponse,
+        result: { changeset: { ...legacyChangeset, provider: "openai" } },
+      }),
+    ).toBe(false);
+    expect(
+      validateStudioEnvelope({
+        ...getResponse,
+        result: { changeset: { ...changeset, format_version: 3 } },
+      }),
+    ).toBe(false);
+
+    const diffResponse = {
+      ...protocol,
+      kind: "response",
+      request_id: "diff-1",
+      method: "changeset.diff",
+      result: {
+        diff: {
+          changeset_id: "changeset_01",
+          changeset_format_version: 2,
+          available: true,
+          unavailable_reason: null,
+          review_sha256: "c".repeat(64),
+          operations: [
+            {
+              ...operation,
+              text_hunks: [
+                {
+                  base_start: 1,
+                  base_count: 1,
+                  proposed_start: 1,
+                  proposed_count: 1,
+                  lines: [
+                    { kind: "remove", text: "old\n" },
+                    { kind: "add", text: "new\n" },
+                  ],
+                },
+              ],
+              json_pointer_changes: null,
+            },
+          ],
+        },
+      },
+    } as const;
+    expect(validateStudioEnvelope(diffResponse)).toBe(true);
+    expect(
+      validateStudioEnvelope({
+        ...diffResponse,
+        result: {
+          diff: { ...diffResponse.result.diff, changeset_format_version: 1 },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateStudioEnvelope({
+        ...diffResponse,
+        result: {
+          diff: {
+            ...diffResponse.result.diff,
+            operations: [{ ...diffResponse.result.diff.operations[0], operation: "execute" }],
+          },
+        },
+      }),
+    ).toBe(false);
+  });
 });

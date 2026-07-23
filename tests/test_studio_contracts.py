@@ -8,6 +8,9 @@ from pathlib import Path
 from worldforge.contract_catalog import audit_contracts, load_contract_catalog
 from worldforge.studio.changeset_review import compute_review_sha256
 from worldforge.studio.contracts import (
+    EXACT_CHANGESET_METHODS,
+    LEGACY_METHODS,
+    METHODS,
     PORTABLE_SOURCE_PATH_FORMAT,
     StudioContractError,
     studio_job_path,
@@ -21,6 +24,30 @@ from worldforge.studio.contracts import (
 
 
 class StudioContractTests(unittest.TestCase):
+    def test_protocol_schema_method_partition_matches_python(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        schema = json.loads(
+            (root / "schemas/studio-protocol.schema.json").read_text(encoding="utf-8")
+        )
+        definitions = schema["$defs"]
+
+        self.assertEqual(set(METHODS), set(definitions["method"]["enum"]))
+        self.assertEqual(set(LEGACY_METHODS), set(definitions["legacyMethod"]["enum"]))
+        self.assertTrue(set(EXACT_CHANGESET_METHODS).isdisjoint(LEGACY_METHODS))
+        request_refs = {entry["$ref"] for entry in definitions["request"]["oneOf"]}
+        response_refs = {entry["$ref"] for entry in definitions["response"]["oneOf"]}
+        for name in (
+            "changesetCreate",
+            "changesetGet",
+            "changesetList",
+            "changesetDiff",
+            "changesetApprove",
+            "changesetReject",
+            "changesetApply",
+        ):
+            self.assertIn(f"#/$defs/{name}Request", request_refs)
+            self.assertIn(f"#/$defs/{name}Response", response_refs)
+
     def test_catalog_audits_all_studio_contracts(self) -> None:
         root = Path(__file__).resolve().parents[1]
         result = audit_contracts(root)
@@ -38,8 +65,20 @@ class StudioContractTests(unittest.TestCase):
         self.assertIn("tests/test_studio_changesets_v2.py", changeset["tests"])
 
         schema = json.loads((root / changeset["schema"]).read_text(encoding="utf-8"))
-        self.assertEqual([1, 2], schema["properties"]["format_version"]["enum"])
-        self.assertIn("base_size", schema["$defs"]["operation"]["required"])
+        versions = [schema["$defs"][entry["$ref"].rsplit("/", 1)[-1]] for entry in schema["oneOf"]]
+        self.assertEqual(
+            [1, 2],
+            [entry["properties"]["format_version"]["const"] for entry in versions],
+        )
+        self.assertTrue(all(entry["additionalProperties"] is False for entry in versions))
+        self.assertNotIn("review_sha256", versions[0]["properties"])
+        self.assertIn("review_sha256", versions[1]["required"])
+        self.assertTrue(
+            all(
+                "base_size" in operation["required"]
+                for operation in schema["$defs"]["operation"]["oneOf"]
+            )
+        )
         self.assertEqual(2, len(schema["oneOf"]))
 
     def test_workspace_validator_is_closed_and_versioned(self) -> None:
@@ -186,7 +225,7 @@ class StudioContractTests(unittest.TestCase):
         schema = json.loads(
             (root / "schemas/studio-changeset.schema.json").read_text(encoding="utf-8")
         )
-        path_contract = schema["$defs"]["operation"]["properties"]["path"]
+        path_contract = schema["$defs"]["sourcePath"]
         self.assertEqual(PORTABLE_SOURCE_PATH_FORMAT, path_contract["format"])
         self.assertEqual(
             {
@@ -482,6 +521,255 @@ class StudioContractTests(unittest.TestCase):
             validate_studio_protocol_envelope({**response, "method": "source.list"})
         with self.assertRaises(StudioContractError):
             validate_studio_protocol_envelope({**response, "result": {"documents": []}})
+
+    def test_protocol_discriminates_closed_changeset_requests_and_v1_v2_results(self) -> None:
+        operation_v2 = {
+            "path": "source/lore/entry.md",
+            "operation": "replace",
+            "base_sha256": "a" * 64,
+            "base_size": 4,
+            "proposed_sha256": "b" * 64,
+            "size": 4,
+        }
+        changeset_v2 = {
+            "format": "rpg-world-forge.studio_changeset",
+            "format_version": 2,
+            "changeset_id": "changeset_01",
+            "workspace_id": "workspace_01",
+            "status": "staged",
+            "review_sha256": compute_review_sha256([operation_v2]),
+            "operations": [operation_v2],
+            "created_at": "2026-07-23T12:00:00Z",
+            "updated_at": "2026-07-23T12:00:00Z",
+        }
+        operation_v1 = {key: value for key, value in operation_v2.items() if key != "base_size"}
+        changeset_v1 = {key: value for key, value in changeset_v2.items() if key != "review_sha256"}
+        changeset_v1["format_version"] = 1
+        changeset_v1["operations"] = [operation_v1]
+        request = {
+            "protocol": "rpg-world-forge.studio_protocol",
+            "protocol_version": 1,
+            "kind": "request",
+            "request_id": "changeset-request",
+            "method": "changeset.create",
+            "params": {
+                "workspace_id": "workspace_01",
+                "operations": [
+                    {
+                        "path": "source/lore/entry.md",
+                        "operation": "replace",
+                        "expected_base_sha256": "a" * 64,
+                        "content": "new\n",
+                    }
+                ],
+            },
+        }
+        requests = (
+            request,
+            {
+                **request,
+                "method": "changeset.get",
+                "params": {"changeset_id": "changeset_01"},
+            },
+            {
+                **request,
+                "method": "changeset.list",
+                "params": {"workspace_id": "workspace_01", "status": "applying", "limit": 1},
+            },
+            {
+                **request,
+                "method": "changeset.diff",
+                "params": {"changeset_id": "changeset_01"},
+            },
+            *(
+                {
+                    **request,
+                    "method": method,
+                    "params": {
+                        "changeset_id": "changeset_01",
+                        "expected_review_sha256": changeset_v2["review_sha256"],
+                    },
+                }
+                for method in (
+                    "changeset.approve",
+                    "changeset.reject",
+                    "changeset.apply",
+                )
+            ),
+        )
+        for envelope in requests:
+            with self.subTest(method=envelope["method"]):
+                self.assertEqual(envelope, validate_studio_protocol_envelope(envelope))
+
+        invalid_requests = (
+            {**request, "params": {**request["params"], "command": "shell.exec"}},
+            {
+                **request,
+                "params": {
+                    "workspace_id": "workspace_01",
+                    "operations": [
+                        {
+                            "path": "source/lore/entry.md",
+                            "operation": "replace",
+                            "expected_base_sha256": "A" * 64,
+                            "content": "new\n",
+                        }
+                    ],
+                },
+            },
+            {
+                **request,
+                "params": {
+                    "workspace_id": "workspace_01",
+                    "operations": [
+                        {
+                            "path": "source/lore/entry.md",
+                            "operation": "replace",
+                            "content": "new\n",
+                        }
+                    ],
+                },
+            },
+            {
+                **request,
+                "method": "changeset.get",
+                "params": {"changeset_id": "changeset_01", "workspace_id": "workspace_01"},
+            },
+            {
+                **request,
+                "method": "changeset.list",
+                "params": {"status": "created"},
+            },
+            {
+                **request,
+                "method": "changeset.diff",
+                "params": {"changeset_id": "../bad"},
+            },
+            {
+                **request,
+                "method": "changeset.approve",
+                "params": {
+                    "changeset_id": "changeset_01",
+                    "expected_review_sha256": None,
+                },
+            },
+        )
+        for envelope in invalid_requests:
+            with self.subTest(envelope=envelope), self.assertRaises(StudioContractError):
+                validate_studio_protocol_envelope(envelope)
+
+        response = {
+            "protocol": "rpg-world-forge.studio_protocol",
+            "protocol_version": 1,
+            "kind": "response",
+            "request_id": "changeset-request",
+            "method": "changeset.create",
+            "result": {"changeset": changeset_v2},
+        }
+        for method in (
+            "changeset.create",
+            "changeset.get",
+            "changeset.approve",
+            "changeset.reject",
+            "changeset.apply",
+        ):
+            for changeset in (changeset_v1, changeset_v2):
+                envelope = {**response, "method": method, "result": {"changeset": changeset}}
+                with self.subTest(method=method, version=changeset["format_version"]):
+                    self.assertEqual(envelope, validate_studio_protocol_envelope(envelope))
+
+        listed = {
+            **response,
+            "method": "changeset.list",
+            "result": {"changesets": [changeset_v1, changeset_v2]},
+        }
+        self.assertEqual(listed, validate_studio_protocol_envelope(listed))
+
+        diff_v2 = {
+            "changeset_id": "changeset_01",
+            "changeset_format_version": 2,
+            "available": True,
+            "unavailable_reason": None,
+            "review_sha256": changeset_v2["review_sha256"],
+            "operations": [
+                {
+                    **operation_v2,
+                    "text_hunks": [
+                        {
+                            "base_start": 1,
+                            "base_count": 1,
+                            "proposed_start": 1,
+                            "proposed_count": 1,
+                            "lines": [
+                                {"kind": "remove", "text": "old\n"},
+                                {"kind": "add", "text": "new\n"},
+                            ],
+                        }
+                    ],
+                    "json_pointer_changes": None,
+                }
+            ],
+        }
+        diff_response = {
+            **response,
+            "method": "changeset.diff",
+            "result": {"diff": diff_v2},
+        }
+        self.assertEqual(diff_response, validate_studio_protocol_envelope(diff_response))
+        legacy_diff = {
+            **diff_v2,
+            "changeset_format_version": 1,
+            "available": False,
+            "unavailable_reason": "legacy_base_bytes_not_retained",
+            "review_sha256": None,
+            "operations": [],
+        }
+        legacy_response = {**diff_response, "result": {"diff": legacy_diff}}
+        self.assertEqual(legacy_response, validate_studio_protocol_envelope(legacy_response))
+
+        invalid_responses = (
+            {**listed, "result": {"changeset": changeset_v2}},
+            {
+                **diff_response,
+                "result": {"diff": {**diff_v2, "changeset_format_version": 1}},
+            },
+            {
+                **diff_response,
+                "result": {
+                    "diff": {
+                        **diff_v2,
+                        "operations": [
+                            {
+                                **diff_v2["operations"][0],
+                                "operation": "execute",
+                            }
+                        ],
+                    }
+                },
+            },
+            {
+                **diff_response,
+                "result": {
+                    "diff": {
+                        **diff_v2,
+                        "operations": [
+                            {
+                                **diff_v2["operations"][0],
+                                "text_hunks": [
+                                    {
+                                        **diff_v2["operations"][0]["text_hunks"][0],
+                                        "lines": [{"kind": [], "text": "bad"}],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                },
+            },
+        )
+        for envelope in invalid_responses:
+            with self.subTest(envelope=envelope), self.assertRaises(StudioContractError):
+                validate_studio_protocol_envelope(envelope)
 
 
 if __name__ == "__main__":

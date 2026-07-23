@@ -1,5 +1,6 @@
 import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 
+import changesetSchema from "../../../../schemas/studio-changeset.schema.json";
 import jobSchema from "../../../../schemas/studio-job.schema.json";
 import protocolSchema from "../../../../schemas/studio-protocol.schema.json";
 import type {
@@ -26,6 +27,12 @@ const WINDOWS_RESERVED_NAMES = new Set([
 
 const ajv = new Ajv2020({ allErrors: true, allowUnionTypes: true, strict: true });
 ajv.addKeyword({ keyword: "x-worldforge-path-policy", schemaType: "object" });
+ajv.addKeyword({
+  keyword: "x-worldforge-max-utf8-bytes",
+  type: "string",
+  schemaType: "number",
+  validate: (limit: number, value: string) => Buffer.byteLength(value, "utf8") <= limit,
+});
 ajv.addFormat("rpg-world-forge-portable-source-path", {
   type: "string",
   validate: isPortableSourcePath,
@@ -34,6 +41,7 @@ ajv.addFormat("rpg-world-forge-portable-relative-path", {
   type: "string",
   validate: isPortableRelativePath,
 });
+ajv.addSchema(changesetSchema);
 ajv.addSchema(jobSchema);
 const validate: ValidateFunction<StudioEnvelope> = ajv.compile(protocolSchema);
 
@@ -76,7 +84,7 @@ function containsInvalidUnicode(value: string): boolean {
     const code = value.charCodeAt(index);
     if (code >= 0xd800 && code <= 0xdbff) {
       const following = value.charCodeAt(index + 1);
-      if (following < 0xdc00 || following > 0xdfff) {
+      if (index + 1 >= value.length || following < 0xdc00 || following > 0xdfff) {
         return true;
       }
       index += 1;

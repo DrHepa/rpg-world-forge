@@ -25,6 +25,7 @@ export type Method =
   | "changeset.create"
   | "changeset.get"
   | "changeset.list"
+  | "changeset.diff"
   | "changeset.approve"
   | "changeset.reject"
   | "changeset.apply"
@@ -43,12 +44,6 @@ export type LegacyMethod =
   | "workspace.list"
   | "workspace.get"
   | "events.list"
-  | "changeset.create"
-  | "changeset.get"
-  | "changeset.list"
-  | "changeset.approve"
-  | "changeset.reject"
-  | "changeset.apply"
   | "job.get"
   | "job.list"
   | "job.transition";
@@ -65,6 +60,11 @@ export type WorkspaceScopedAuthoringMethod =
 export type WorkspaceId = string;
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "entityId".
+ */
+export type EntityId = string;
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "sha256".
  */
 export type Sha256 = string;
@@ -75,12 +75,88 @@ export type Sha256 = string;
 export type PortableSourcePath = string;
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetJsonPointerChange".
+ */
+export type ChangesetJsonPointerChange =
+  | {
+      operation: "add";
+      pointer: string;
+      value: unknown;
+    }
+  | {
+      operation: "remove";
+      pointer: string;
+      old_value: unknown;
+    }
+  | {
+      operation: "replace";
+      pointer: string;
+      old_value: unknown;
+      value: unknown;
+    };
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetDiffOperation".
+ */
+export type ChangesetDiffOperation = {
+  [k: string]: unknown;
+} & {
+  path: PortableSourcePath;
+  operation: "create" | "replace" | "delete";
+  base_sha256: Sha256 | null;
+  base_size: number;
+  proposed_sha256: Sha256 | null;
+  size: number;
+  /**
+   * @maxItems 20000
+   */
+  text_hunks: ChangesetTextHunk[];
+  json_pointer_changes: ChangesetJsonPointerChange[] | null;
+};
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetDiff".
+ */
+export type ChangesetDiff =
+  | {
+      changeset_id: EntityId;
+      changeset_format_version: 1;
+      available: false;
+      unavailable_reason: "legacy_base_bytes_not_retained";
+      review_sha256: null;
+      /**
+       * @maxItems 0
+       */
+      operations: [];
+    }
+  | {
+      changeset_id: EntityId;
+      changeset_format_version: 2;
+      available: true;
+      unavailable_reason: null;
+      review_sha256: Sha256;
+      /**
+       * @minItems 1
+       * @maxItems 256
+       */
+      operations: [ChangesetDiffOperation, ...ChangesetDiffOperation[]];
+    };
+export type ForgeStudioReviewableFileChangesetV2 = ChangesetV1 | ChangesetV2;
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "request".
  */
 export type Request =
   | LegacyRequest
   | WorkspaceScopedAuthoringRequest
   | SourceReadRequest
+  | ChangesetCreateRequest
+  | ChangesetGetRequest
+  | ChangesetListRequest
+  | ChangesetDiffRequest
+  | ChangesetApproveRequest
+  | ChangesetRejectRequest
+  | ChangesetApplyRequest
   | JobCreateRequest
   | JobCancelRequest;
 /**
@@ -112,6 +188,13 @@ export type Response =
   | SourceReadResponse
   | WorldValidateResponse
   | WorldAnalyzeResponse
+  | ChangesetCreateResponse
+  | ChangesetGetResponse
+  | ChangesetListResponse
+  | ChangesetDiffResponse
+  | ChangesetApproveResponse
+  | ChangesetRejectResponse
+  | ChangesetApplyResponse
   | JobCreateResponse
   | JobCancelResponse;
 /**
@@ -320,6 +403,252 @@ export interface NarrativeFinding {
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetStageCreateOperation".
+ */
+export interface ChangesetStageCreateOperation {
+  path: PortableSourcePath;
+  operation: "create";
+  content: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetStageReplaceOperation".
+ */
+export interface ChangesetStageReplaceOperation {
+  path: PortableSourcePath;
+  operation: "replace";
+  expected_base_sha256: Sha256;
+  content: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetStageDeleteOperation".
+ */
+export interface ChangesetStageDeleteOperation {
+  path: PortableSourcePath;
+  operation: "delete";
+  expected_base_sha256: Sha256;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetCreateParams".
+ */
+export interface ChangesetCreateParams {
+  changeset_id?: EntityId;
+  workspace_id: WorkspaceId;
+  /**
+   * @minItems 1
+   * @maxItems 256
+   */
+  operations: [
+    ChangesetStageCreateOperation | ChangesetStageReplaceOperation | ChangesetStageDeleteOperation,
+    ...(
+      ChangesetStageCreateOperation | ChangesetStageReplaceOperation | ChangesetStageDeleteOperation
+    )[],
+  ];
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetIdParams".
+ */
+export interface ChangesetIdParams {
+  changeset_id: EntityId;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetListParams".
+ */
+export interface ChangesetListParams {
+  workspace_id?: WorkspaceId;
+  status?: "staged" | "approved" | "applying" | "rejected" | "applied";
+  limit?: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetActionParams".
+ */
+export interface ChangesetActionParams {
+  changeset_id: EntityId;
+  expected_review_sha256?: Sha256;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetTextDiffLine".
+ */
+export interface ChangesetTextDiffLine {
+  kind: "context" | "remove" | "add";
+  text: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetTextHunk".
+ */
+export interface ChangesetTextHunk {
+  base_start: number;
+  base_count: number;
+  proposed_start: number;
+  proposed_count: number;
+  /**
+   * @minItems 1
+   * @maxItems 40000
+   */
+  lines: [ChangesetTextDiffLine, ...ChangesetTextDiffLine[]];
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetResult".
+ */
+export interface ChangesetResult {
+  changeset: ForgeStudioReviewableFileChangesetV2;
+}
+export interface ChangesetV1 {
+  format: "rpg-world-forge.studio_changeset";
+  format_version: 1;
+  changeset_id: string;
+  workspace_id: string;
+  status: "staged" | "approved" | "applying" | "rejected" | "applied";
+  /**
+   * @minItems 1
+   * @maxItems 256
+   */
+  operations: [
+    (
+      | {
+          path: string;
+          operation: "create";
+          base_sha256: null;
+          proposed_sha256: string;
+          size: number;
+        }
+      | {
+          path: string;
+          operation: "replace";
+          base_sha256: string;
+          proposed_sha256: string;
+          size: number;
+        }
+      | {
+          path: string;
+          operation: "delete";
+          base_sha256: string;
+          proposed_sha256: null;
+          size: 0;
+        }
+    ),
+    ...(
+      | {
+          path: string;
+          operation: "create";
+          base_sha256: null;
+          proposed_sha256: string;
+          size: number;
+        }
+      | {
+          path: string;
+          operation: "replace";
+          base_sha256: string;
+          proposed_sha256: string;
+          size: number;
+        }
+      | {
+          path: string;
+          operation: "delete";
+          base_sha256: string;
+          proposed_sha256: null;
+          size: 0;
+        }
+    )[],
+  ];
+  created_at: string;
+  updated_at: string;
+}
+export interface ChangesetV2 {
+  format: "rpg-world-forge.studio_changeset";
+  format_version: 2;
+  changeset_id: string;
+  workspace_id: string;
+  status: "staged" | "approved" | "applying" | "rejected" | "applied";
+  /**
+   * @minItems 1
+   * @maxItems 256
+   */
+  operations: [
+    (
+      | {
+          path: string;
+          operation: "create";
+          base_sha256: null;
+          base_size: 0;
+          proposed_sha256: string;
+          size: number;
+        }
+      | {
+          path: string;
+          operation: "replace";
+          base_sha256: string;
+          base_size: number;
+          proposed_sha256: string;
+          size: number;
+        }
+      | {
+          path: string;
+          operation: "delete";
+          base_sha256: string;
+          base_size: number;
+          proposed_sha256: null;
+          size: 0;
+        }
+    ),
+    ...(
+      | {
+          path: string;
+          operation: "create";
+          base_sha256: null;
+          base_size: 0;
+          proposed_sha256: string;
+          size: number;
+        }
+      | {
+          path: string;
+          operation: "replace";
+          base_sha256: string;
+          base_size: number;
+          proposed_sha256: string;
+          size: number;
+        }
+      | {
+          path: string;
+          operation: "delete";
+          base_sha256: string;
+          base_size: number;
+          proposed_sha256: null;
+          size: 0;
+        }
+    )[],
+  ];
+  review_sha256: string;
+  created_at: string;
+  updated_at: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetListResult".
+ */
+export interface ChangesetListResult {
+  /**
+   * @maxItems 1000
+   */
+  changesets: ForgeStudioReviewableFileChangesetV2[];
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetDiffResult".
+ */
+export interface ChangesetDiffResult {
+  diff: ChangesetDiff;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "legacyRequest".
  */
 export interface LegacyRequest {
@@ -355,6 +684,90 @@ export interface SourceReadRequest {
   request_id: string;
   method: "source.read";
   params: SourceReadParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetCreateRequest".
+ */
+export interface ChangesetCreateRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "changeset.create";
+  params: ChangesetCreateParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetGetRequest".
+ */
+export interface ChangesetGetRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "changeset.get";
+  params: ChangesetIdParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetListRequest".
+ */
+export interface ChangesetListRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "changeset.list";
+  params: ChangesetListParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetDiffRequest".
+ */
+export interface ChangesetDiffRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "changeset.diff";
+  params: ChangesetIdParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetApproveRequest".
+ */
+export interface ChangesetApproveRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "changeset.approve";
+  params: ChangesetActionParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetRejectRequest".
+ */
+export interface ChangesetRejectRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "changeset.reject";
+  params: ChangesetActionParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetApplyRequest".
+ */
+export interface ChangesetApplyRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "changeset.apply";
+  params: ChangesetActionParams;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -599,6 +1012,90 @@ export interface WorldAnalyzeResponse {
   request_id: string;
   method: "world.analyze";
   result: WorldAnalyzeResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetCreateResponse".
+ */
+export interface ChangesetCreateResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "changeset.create";
+  result: ChangesetResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetGetResponse".
+ */
+export interface ChangesetGetResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "changeset.get";
+  result: ChangesetResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetListResponse".
+ */
+export interface ChangesetListResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "changeset.list";
+  result: ChangesetListResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetDiffResponse".
+ */
+export interface ChangesetDiffResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "changeset.diff";
+  result: ChangesetDiffResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetApproveResponse".
+ */
+export interface ChangesetApproveResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "changeset.approve";
+  result: ChangesetResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetRejectResponse".
+ */
+export interface ChangesetRejectResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "changeset.reject";
+  result: ChangesetResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "changesetApplyResponse".
+ */
+export interface ChangesetApplyResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "changeset.apply";
+  result: ChangesetResult;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema

@@ -16,6 +16,7 @@ JOB_FORMAT = "rpg-world-forge.studio_job"
 PROTOCOL_FORMAT = "rpg-world-forge.studio_protocol"
 STUDIO_VERSION = 1
 MAX_CHANGE_FILE_BYTES = 16 * 1024 * 1024
+MAX_CHANGESET_BYTES = 64 * 1024 * 1024
 MAX_CHANGESET_OPERATIONS = 256
 PORTABLE_SOURCE_PATH_FORMAT = "rpg-world-forge-portable-source-path"
 
@@ -56,6 +57,7 @@ METHODS = frozenset(
         "changeset.create",
         "changeset.get",
         "changeset.list",
+        "changeset.diff",
         "changeset.approve",
         "changeset.reject",
         "changeset.apply",
@@ -71,7 +73,19 @@ WORKSPACE_AUTHORING_METHODS = frozenset(
 )
 AUTHORING_METHODS = WORKSPACE_AUTHORING_METHODS | {"source.read"}
 EXACT_JOB_METHODS = frozenset({"job.create", "job.cancel"})
-LEGACY_METHODS = METHODS - AUTHORING_METHODS - EXACT_JOB_METHODS
+EXACT_CHANGESET_METHODS = frozenset(
+    {
+        "changeset.create",
+        "changeset.get",
+        "changeset.list",
+        "changeset.diff",
+        "changeset.approve",
+        "changeset.reject",
+        "changeset.apply",
+    }
+)
+CHANGESET_ACTION_METHODS = frozenset({"changeset.approve", "changeset.reject", "changeset.apply"})
+LEGACY_METHODS = METHODS - AUTHORING_METHODS - EXACT_JOB_METHODS - EXACT_CHANGESET_METHODS
 MAX_STUDIO_SOURCE_DEPTH = 8
 MAX_STUDIO_SOURCE_BYTES = 256 * 1024
 MAX_STUDIO_SOURCE_DOCUMENTS = 1024
@@ -222,6 +236,121 @@ def _validate_source_read_params(value: object, context: str) -> None:
     _closed(params, {"workspace_id", "path"}, context)
     _identifier(params["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
     _studio_source_contract_path(params["path"], f"{context}/path")
+
+
+def _validate_changeset_create_params(value: object, context: str) -> None:
+    params = _object(value, context)
+    allowed = {"changeset_id", "workspace_id", "operations"}
+    missing = {"workspace_id", "operations"} - set(params)
+    unknown = set(params) - allowed
+    if missing or unknown:
+        fields = missing or unknown
+        raise StudioContractError(f"{context} has invalid fields: {', '.join(sorted(fields))}")
+    if "changeset_id" in params:
+        _identifier(params["changeset_id"], f"{context}/changeset_id", ENTITY_ID_PATTERN)
+    _identifier(params["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
+    operations = params["operations"]
+    if (
+        not isinstance(operations, list)
+        or not operations
+        or len(operations) > MAX_CHANGESET_OPERATIONS
+    ):
+        raise StudioContractError(
+            f"{context}/operations must contain 1 to {MAX_CHANGESET_OPERATIONS} entries"
+        )
+    seen: set[tuple[str, ...]] = set()
+    total_bytes = 0
+    for index, value in enumerate(operations):
+        operation_context = f"{context}/operations/{index}"
+        operation = _object(value, operation_context)
+        kind = operation.get("operation")
+        if not isinstance(kind, str) or kind not in {"create", "replace", "delete"}:
+            raise StudioContractError(f"{operation_context}/operation is unknown")
+        required = {"path", "operation"}
+        allowed_operation = set(required)
+        if kind != "delete":
+            required.add("content")
+            allowed_operation.add("content")
+        if kind != "create":
+            required.add("expected_base_sha256")
+            allowed_operation.add("expected_base_sha256")
+        missing_operation = required - set(operation)
+        unknown_operation = set(operation) - allowed_operation
+        if missing_operation or unknown_operation:
+            fields = missing_operation or unknown_operation
+            raise StudioContractError(
+                f"{operation_context} has invalid fields: {', '.join(sorted(fields))}"
+            )
+        relative = _studio_source_contract_path(operation["path"], f"{operation_context}/path")
+        key = tuple(unicodedata.normalize("NFC", part).casefold() for part in relative.parts)
+        if key in seen:
+            raise StudioContractError(f"{context}/operations contain an NFC/casefold collision")
+        seen.add(key)
+        if "expected_base_sha256" in operation:
+            _sha256(
+                operation["expected_base_sha256"],
+                f"{operation_context}/expected_base_sha256",
+            )
+        if kind != "delete":
+            content = _plain_string(operation["content"], f"{operation_context}/content")
+            try:
+                content_size = len(content.encode("utf-8", errors="strict"))
+            except UnicodeEncodeError as exc:
+                raise StudioContractError(
+                    f"{operation_context}/content must be valid UTF-8 text"
+                ) from exc
+            if content_size > MAX_STUDIO_SOURCE_BYTES:
+                raise StudioContractError(
+                    f"{operation_context}/content must be at most "
+                    f"{MAX_STUDIO_SOURCE_BYTES} UTF-8 bytes"
+                )
+            total_bytes += content_size
+            if total_bytes > MAX_CHANGESET_BYTES:
+                raise StudioContractError(
+                    f"{context}/operations retain at most {MAX_CHANGESET_BYTES} UTF-8 bytes"
+                )
+
+
+def _validate_changeset_id_params(value: object, context: str) -> None:
+    params = _object(value, context)
+    _closed(params, {"changeset_id"}, context)
+    _identifier(params["changeset_id"], f"{context}/changeset_id", ENTITY_ID_PATTERN)
+
+
+def _validate_changeset_list_params(value: object, context: str) -> None:
+    params = _object(value, context)
+    allowed = {"workspace_id", "status", "limit"}
+    unknown = set(params) - allowed
+    if unknown:
+        raise StudioContractError(
+            f"{context} contains unknown fields: {', '.join(sorted(unknown))}"
+        )
+    if "workspace_id" in params:
+        _identifier(params["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
+    if "status" in params and (
+        not isinstance(params["status"], str) or params["status"] not in CHANGESET_STATES
+    ):
+        raise StudioContractError(f"{context}/status is unknown")
+    if "limit" in params:
+        limit = _integer(params["limit"], f"{context}/limit", minimum=1)
+        if limit > 1000:
+            raise StudioContractError(f"{context}/limit must be at most 1000")
+
+
+def _validate_changeset_action_params(value: object, context: str) -> None:
+    params = _object(value, context)
+    allowed = {"changeset_id", "expected_review_sha256"}
+    missing = {"changeset_id"} - set(params)
+    unknown = set(params) - allowed
+    if missing or unknown:
+        fields = missing or unknown
+        raise StudioContractError(f"{context} has invalid fields: {', '.join(sorted(fields))}")
+    _identifier(params["changeset_id"], f"{context}/changeset_id", ENTITY_ID_PATTERN)
+    if "expected_review_sha256" in params:
+        _sha256(
+            params["expected_review_sha256"],
+            f"{context}/expected_review_sha256",
+        )
 
 
 def _validate_source_document_summary(value: object, context: str) -> None:
@@ -708,6 +837,169 @@ def validate_studio_changeset(value: object) -> dict[str, Any]:
     return changeset
 
 
+def _validate_changeset_diff_line(value: object, context: str) -> None:
+    line = _object(value, context)
+    _closed(line, {"kind", "text"}, context)
+    if not isinstance(line["kind"], str) or line["kind"] not in {
+        "context",
+        "remove",
+        "add",
+    }:
+        raise StudioContractError(f"{context}/kind is unknown")
+    _plain_string(line["text"], f"{context}/text")
+
+
+def _validate_changeset_text_hunk(value: object, context: str) -> None:
+    hunk = _object(value, context)
+    _closed(
+        hunk,
+        {"base_start", "base_count", "proposed_start", "proposed_count", "lines"},
+        context,
+    )
+    _integer(hunk["base_start"], f"{context}/base_start", minimum=1)
+    _integer(hunk["base_count"], f"{context}/base_count")
+    _integer(hunk["proposed_start"], f"{context}/proposed_start", minimum=1)
+    _integer(hunk["proposed_count"], f"{context}/proposed_count")
+    lines = hunk["lines"]
+    if not isinstance(lines, list) or not lines or len(lines) > 40_000:
+        raise StudioContractError(f"{context}/lines must contain 1 to 40000 entries")
+    for index, line in enumerate(lines):
+        _validate_changeset_diff_line(line, f"{context}/lines/{index}")
+
+
+def _validate_changeset_json_change(value: object, context: str) -> None:
+    change = _object(value, context)
+    kind = change.get("operation")
+    fields = {
+        "add": {"operation", "pointer", "value"},
+        "remove": {"operation", "pointer", "old_value"},
+        "replace": {"operation", "pointer", "old_value", "value"},
+    }
+    if not isinstance(kind, str) or kind not in fields:
+        raise StudioContractError(f"{context}/operation is unknown")
+    _closed(change, fields[kind], context)
+    _plain_string(change["pointer"], f"{context}/pointer")
+    for field in fields[kind] - {"operation", "pointer"}:
+        _strict_json_value(change[field], f"{context}/{field}")
+
+
+def _validate_changeset_diff(value: object, context: str) -> None:
+    diff = _object(value, context)
+    required = {
+        "changeset_id",
+        "changeset_format_version",
+        "available",
+        "unavailable_reason",
+        "review_sha256",
+        "operations",
+    }
+    _closed(diff, required, context)
+    _identifier(diff["changeset_id"], f"{context}/changeset_id", ENTITY_ID_PATTERN)
+    version = diff["changeset_format_version"]
+    if isinstance(version, bool) or not isinstance(version, int) or version not in {1, 2}:
+        raise StudioContractError(f"{context}/changeset_format_version must be 1 or 2")
+    _boolean(diff["available"], f"{context}/available")
+    operations = diff["operations"]
+    if version == 1:
+        if (
+            diff["available"] is not False
+            or diff["unavailable_reason"] != "legacy_base_bytes_not_retained"
+            or diff["review_sha256"] is not None
+            or operations != []
+        ):
+            raise StudioContractError(f"{context} is not a valid unavailable v1 diff")
+        return
+    if (
+        diff["available"] is not True
+        or diff["unavailable_reason"] is not None
+        or not isinstance(operations, list)
+        or not operations
+        or len(operations) > MAX_CHANGESET_OPERATIONS
+    ):
+        raise StudioContractError(f"{context} is not a valid available v2 diff")
+    review_sha256 = _sha256(diff["review_sha256"], f"{context}/review_sha256")
+    public_operations: list[dict[str, Any]] = []
+    for index, value in enumerate(operations):
+        operation_context = f"{context}/operations/{index}"
+        operation = _object(value, operation_context)
+        fields = {
+            "path",
+            "operation",
+            "base_sha256",
+            "base_size",
+            "proposed_sha256",
+            "size",
+            "text_hunks",
+            "json_pointer_changes",
+        }
+        _closed(operation, fields, operation_context)
+        hunks = operation["text_hunks"]
+        if not isinstance(hunks, list) or len(hunks) > 20_000:
+            raise StudioContractError(
+                f"{operation_context}/text_hunks must contain at most 20000 entries"
+            )
+        for hunk_index, hunk in enumerate(hunks):
+            _validate_changeset_text_hunk(hunk, f"{operation_context}/text_hunks/{hunk_index}")
+        json_changes = operation["json_pointer_changes"]
+        if json_changes is not None:
+            if not isinstance(json_changes, list) or len(json_changes) > 100_000:
+                raise StudioContractError(
+                    f"{operation_context}/json_pointer_changes must contain at most 100000 entries"
+                )
+            for change_index, change in enumerate(json_changes):
+                _validate_changeset_json_change(
+                    change,
+                    f"{operation_context}/json_pointer_changes/{change_index}",
+                )
+        public_operations.append(
+            {
+                field: operation[field]
+                for field in (
+                    "path",
+                    "operation",
+                    "base_sha256",
+                    "base_size",
+                    "proposed_sha256",
+                    "size",
+                )
+            }
+        )
+    validate_studio_changeset(
+        {
+            "format": CHANGESET_FORMAT,
+            "format_version": 2,
+            "changeset_id": diff["changeset_id"],
+            "workspace_id": "review_validation",
+            "status": "staged",
+            "operations": public_operations,
+            "review_sha256": review_sha256,
+            "created_at": "1970-01-01T00:00:00Z",
+            "updated_at": "1970-01-01T00:00:00Z",
+        }
+    )
+
+
+def _validate_changeset_result(method: str, value: object, context: str) -> None:
+    result = _object(value, context)
+    if method == "changeset.list":
+        _closed(result, {"changesets"}, context)
+        changesets = result["changesets"]
+        if not isinstance(changesets, list) or len(changesets) > 1000:
+            raise StudioContractError(f"{context}/changesets must contain at most 1000 entries")
+        for index, changeset in enumerate(changesets):
+            try:
+                validate_studio_changeset(changeset)
+            except StudioContractError as exc:
+                raise StudioContractError(f"{context}/changesets/{index}: {exc}") from exc
+        return
+    if method == "changeset.diff":
+        _closed(result, {"diff"}, context)
+        _validate_changeset_diff(result["diff"], f"{context}/diff")
+        return
+    _closed(result, {"changeset"}, context)
+    validate_studio_changeset(result["changeset"])
+
+
 def validate_studio_job(value: object) -> dict[str, Any]:
     job = _object(value, "job")
     required = {
@@ -799,6 +1091,14 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
             _validate_workspace_params(envelope["params"], "envelope/params")
         elif method == "source.read":
             _validate_source_read_params(envelope["params"], "envelope/params")
+        elif method == "changeset.create":
+            _validate_changeset_create_params(envelope["params"], "envelope/params")
+        elif method in {"changeset.get", "changeset.diff"}:
+            _validate_changeset_id_params(envelope["params"], "envelope/params")
+        elif method == "changeset.list":
+            _validate_changeset_list_params(envelope["params"], "envelope/params")
+        elif method in CHANGESET_ACTION_METHODS:
+            _validate_changeset_action_params(envelope["params"], "envelope/params")
         elif method == "job.create":
             validate_job_create_params(envelope["params"])
         elif method == "job.cancel":
@@ -814,6 +1114,8 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
             raise StudioContractError("envelope/method is unknown")
         if method in AUTHORING_METHODS:
             _validate_authoring_result(method, envelope["result"], "envelope/result")
+        elif method in EXACT_CHANGESET_METHODS:
+            _validate_changeset_result(method, envelope["result"], "envelope/result")
         elif method in EXACT_JOB_METHODS:
             result = _object(envelope["result"], "envelope/result")
             _closed(result, {"job"}, "envelope/result")

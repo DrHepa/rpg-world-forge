@@ -18,7 +18,7 @@ from worldforge.studio.authoring import (
     MAX_SOURCE_DOCUMENT_BYTES,
     MAX_SOURCE_DOCUMENTS,
 )
-from worldforge.studio.contracts import METHODS
+from worldforge.studio.contracts import EXACT_CHANGESET_METHODS, METHODS
 from worldforge.studio.errors import StudioError
 from worldforge.studio.service import StudioService
 from worldforge.studio.storage import StudioStore
@@ -395,6 +395,7 @@ class StudioAuthoringTests(unittest.TestCase):
         discriminated = (
             set(schema["$defs"]["legacyMethod"]["enum"])
             | set(schema["$defs"]["workspaceScopedAuthoringMethod"]["enum"])
+            | set(EXACT_CHANGESET_METHODS)
             | {"source.read", "job.create", "job.cancel"}
         )
         self.assertEqual(METHODS, frozenset(discriminated))

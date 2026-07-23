@@ -131,6 +131,8 @@ class ForgeMcpTests(unittest.TestCase):
             )
             staged = responses[2]["result"]["structuredContent"]["changeset"]
             self.assertEqual("staged", staged["status"])
+            self.assertEqual(2, staged["format_version"])
+            self.assertRegex(staged["review_sha256"], r"^[0-9a-f]{64}$")
             self.assertEqual("workspace_01", staged["workspace_id"])
             self.assertEqual(
                 "mcp_change_01",

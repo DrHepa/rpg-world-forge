@@ -17,9 +17,12 @@ describe("preload API", () => {
     expect(Object.keys(api).sort()).toEqual([
       "analyzeWorld",
       "answerCodexUserInput",
+      "applyChangeset",
+      "approveChangeset",
       "bindCodexWorkspace",
       "cancelJob",
       "forkCodexThread",
+      "getChangeset",
       "getCodexStatus",
       "getServiceStatus",
       "getWorkspaceOverview",
@@ -32,11 +35,14 @@ describe("preload API", () => {
       "listWorkspaces",
       "onCodexEvent",
       "onEvent",
+      "readChangesetDiff",
       "readCodexAccount",
       "readSourceDocument",
+      "rejectChangeset",
       "resumeCodexThread",
       "runHeadless",
       "runReplay",
+      "stageSourceDocument",
       "startCodexLogin",
       "startCodexThread",
       "startCodexTurn",
@@ -59,6 +65,17 @@ describe("preload API", () => {
     await api.getWorkspaceOverview("workspace_01");
     await api.listSourceDocuments("workspace_01");
     await api.readSourceDocument("workspace_01", "source/world.json");
+    await api.stageSourceDocument(
+      "workspace_01",
+      "source/world.json",
+      "a".repeat(64),
+      "{}\n",
+    );
+    await api.getChangeset("changeset_01");
+    await api.readChangesetDiff("changeset_01");
+    await api.approveChangeset("changeset_01", "b".repeat(64));
+    await api.rejectChangeset("legacy_01");
+    await api.applyChangeset("changeset_01", "b".repeat(64));
     await api.validateWorld("workspace_01");
     await api.analyzeWorld("workspace_01");
     const receiptValidation = await api.validateAssetReceipt("workspace_01", {
@@ -116,6 +133,23 @@ describe("preload API", () => {
       [IPC_CHANNELS.readSourceDocument, {
         workspaceId: "workspace_01",
         path: "source/world.json",
+      }],
+      [IPC_CHANNELS.stageSourceDocument, {
+        workspaceId: "workspace_01",
+        path: "source/world.json",
+        baseSha256: "a".repeat(64),
+        content: "{}\n",
+      }],
+      [IPC_CHANNELS.getChangeset, { changesetId: "changeset_01" }],
+      [IPC_CHANNELS.readChangesetDiff, { changesetId: "changeset_01" }],
+      [IPC_CHANNELS.approveChangeset, {
+        changesetId: "changeset_01",
+        expectedReviewSha256: "b".repeat(64),
+      }],
+      [IPC_CHANNELS.rejectChangeset, { changesetId: "legacy_01" }],
+      [IPC_CHANNELS.applyChangeset, {
+        changesetId: "changeset_01",
+        expectedReviewSha256: "b".repeat(64),
       }],
       [IPC_CHANNELS.validateWorld, { workspaceId: "workspace_01" }],
       [IPC_CHANNELS.analyzeWorld, { workspaceId: "workspace_01" }],

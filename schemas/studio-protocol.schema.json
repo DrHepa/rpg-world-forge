@@ -42,6 +42,7 @@
         "changeset.create",
         "changeset.get",
         "changeset.list",
+        "changeset.diff",
         "changeset.approve",
         "changeset.reject",
         "changeset.apply",
@@ -59,12 +60,6 @@
         "workspace.list",
         "workspace.get",
         "events.list",
-        "changeset.create",
-        "changeset.get",
-        "changeset.list",
-        "changeset.approve",
-        "changeset.reject",
-        "changeset.apply",
         "job.get",
         "job.list",
         "job.transition"
@@ -74,6 +69,7 @@
       "enum": ["workspace.overview", "source.list", "world.validate", "world.analyze"]
     },
     "workspaceId": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+    "entityId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"},
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "portableSourcePath": {
       "type": "string",
@@ -291,6 +287,292 @@
         }
       }
     },
+    "changesetStageCreateOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "operation", "content"],
+      "properties": {
+        "path": {"$ref": "#/$defs/portableSourcePath"},
+        "operation": {"const": "create"},
+        "content": {
+          "type": "string",
+          "maxLength": 262144,
+          "x-worldforge-max-utf8-bytes": 262144
+        }
+      }
+    },
+    "changesetStageReplaceOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "operation", "expected_base_sha256", "content"],
+      "properties": {
+        "path": {"$ref": "#/$defs/portableSourcePath"},
+        "operation": {"const": "replace"},
+        "expected_base_sha256": {"$ref": "#/$defs/sha256"},
+        "content": {
+          "type": "string",
+          "maxLength": 262144,
+          "x-worldforge-max-utf8-bytes": 262144
+        }
+      }
+    },
+    "changesetStageDeleteOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "operation", "expected_base_sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/portableSourcePath"},
+        "operation": {"const": "delete"},
+        "expected_base_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "changesetCreateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_id", "operations"],
+      "properties": {
+        "changeset_id": {"$ref": "#/$defs/entityId"},
+        "workspace_id": {"$ref": "#/$defs/workspaceId"},
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "oneOf": [
+              {"$ref": "#/$defs/changesetStageCreateOperation"},
+              {"$ref": "#/$defs/changesetStageReplaceOperation"},
+              {"$ref": "#/$defs/changesetStageDeleteOperation"}
+            ]
+          }
+        }
+      }
+    },
+    "changesetIdParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changeset_id"],
+      "properties": {"changeset_id": {"$ref": "#/$defs/entityId"}}
+    },
+    "changesetListParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workspace_id": {"$ref": "#/$defs/workspaceId"},
+        "status": {"enum": ["staged", "approved", "applying", "rejected", "applied"]},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 1000}
+      }
+    },
+    "changesetActionParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changeset_id"],
+      "properties": {
+        "changeset_id": {"$ref": "#/$defs/entityId"},
+        "expected_review_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "changesetTextDiffLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "text"],
+      "properties": {
+        "kind": {"enum": ["context", "remove", "add"]},
+        "text": {"type": "string"}
+      }
+    },
+    "changesetTextHunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_start", "base_count", "proposed_start", "proposed_count", "lines"],
+      "properties": {
+        "base_start": {"type": "integer", "minimum": 1},
+        "base_count": {"type": "integer", "minimum": 0},
+        "proposed_start": {"type": "integer", "minimum": 1},
+        "proposed_count": {"type": "integer", "minimum": 0},
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 40000,
+          "items": {"$ref": "#/$defs/changesetTextDiffLine"}
+        }
+      }
+    },
+    "changesetJsonPointerChange": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "pointer", "value"],
+          "properties": {
+            "operation": {"const": "add"},
+            "pointer": {"type": "string"},
+            "value": {}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "pointer", "old_value"],
+          "properties": {
+            "operation": {"const": "remove"},
+            "pointer": {"type": "string"},
+            "old_value": {}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation", "pointer", "old_value", "value"],
+          "properties": {
+            "operation": {"const": "replace"},
+            "pointer": {"type": "string"},
+            "old_value": {},
+            "value": {}
+          }
+        }
+      ]
+    },
+    "changesetDiffOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "operation",
+        "base_sha256",
+        "base_size",
+        "proposed_sha256",
+        "size",
+        "text_hunks",
+        "json_pointer_changes"
+      ],
+      "properties": {
+        "path": {"$ref": "#/$defs/portableSourcePath"},
+        "operation": {"enum": ["create", "replace", "delete"]},
+        "base_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "base_size": {"type": "integer", "minimum": 0, "maximum": 16777216},
+        "proposed_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "size": {"type": "integer", "minimum": 0, "maximum": 16777216},
+        "text_hunks": {
+          "type": "array",
+          "maxItems": 20000,
+          "items": {"$ref": "#/$defs/changesetTextHunk"}
+        },
+        "json_pointer_changes": {
+          "oneOf": [
+            {
+              "type": "array",
+              "maxItems": 100000,
+              "items": {"$ref": "#/$defs/changesetJsonPointerChange"}
+            },
+            {"type": "null"}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"operation": {"const": "create"}}},
+          "then": {
+            "properties": {
+              "base_sha256": {"type": "null"},
+              "base_size": {"const": 0},
+              "proposed_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"operation": {"const": "replace"}}},
+          "then": {
+            "properties": {
+              "base_sha256": {"$ref": "#/$defs/sha256"},
+              "proposed_sha256": {"$ref": "#/$defs/sha256"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"operation": {"const": "delete"}}},
+          "then": {
+            "properties": {
+              "base_sha256": {"$ref": "#/$defs/sha256"},
+              "proposed_sha256": {"type": "null"},
+              "size": {"const": 0}
+            }
+          }
+        }
+      ]
+    },
+    "changesetDiff": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "changeset_id",
+            "changeset_format_version",
+            "available",
+            "unavailable_reason",
+            "review_sha256",
+            "operations"
+          ],
+          "properties": {
+            "changeset_id": {"$ref": "#/$defs/entityId"},
+            "changeset_format_version": {"const": 1},
+            "available": {"const": false},
+            "unavailable_reason": {"const": "legacy_base_bytes_not_retained"},
+            "review_sha256": {"type": "null"},
+            "operations": {"type": "array", "maxItems": 0}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "changeset_id",
+            "changeset_format_version",
+            "available",
+            "unavailable_reason",
+            "review_sha256",
+            "operations"
+          ],
+          "properties": {
+            "changeset_id": {"$ref": "#/$defs/entityId"},
+            "changeset_format_version": {"const": 2},
+            "available": {"const": true},
+            "unavailable_reason": {"type": "null"},
+            "review_sha256": {"$ref": "#/$defs/sha256"},
+            "operations": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {"$ref": "#/$defs/changesetDiffOperation"}
+            }
+          }
+        }
+      ]
+    },
+    "changesetResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changeset"],
+      "properties": {"changeset": {"$ref": "studio-changeset.schema.json"}}
+    },
+    "changesetListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changesets"],
+      "properties": {
+        "changesets": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {"$ref": "studio-changeset.schema.json"}
+        }
+      }
+    },
+    "changesetDiffResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["diff"],
+      "properties": {"diff": {"$ref": "#/$defs/changesetDiff"}}
+    },
     "legacyRequest": {
       "type": "object",
       "additionalProperties": false,
@@ -330,6 +612,97 @@
         "params": {"$ref": "#/$defs/sourceReadParams"}
       }
     },
+    "changesetCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.create"},
+        "params": {"$ref": "#/$defs/changesetCreateParams"}
+      }
+    },
+    "changesetGetRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.get"},
+        "params": {"$ref": "#/$defs/changesetIdParams"}
+      }
+    },
+    "changesetListRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.list"},
+        "params": {"$ref": "#/$defs/changesetListParams"}
+      }
+    },
+    "changesetDiffRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.diff"},
+        "params": {"$ref": "#/$defs/changesetIdParams"}
+      }
+    },
+    "changesetApproveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.approve"},
+        "params": {"$ref": "#/$defs/changesetActionParams"}
+      }
+    },
+    "changesetRejectRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.reject"},
+        "params": {"$ref": "#/$defs/changesetActionParams"}
+      }
+    },
+    "changesetApplyRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.apply"},
+        "params": {"$ref": "#/$defs/changesetActionParams"}
+      }
+    },
     "jobCreateRequest": {
       "type": "object",
       "additionalProperties": false,
@@ -361,6 +734,13 @@
         {"$ref": "#/$defs/legacyRequest"},
         {"$ref": "#/$defs/workspaceScopedAuthoringRequest"},
         {"$ref": "#/$defs/sourceReadRequest"},
+        {"$ref": "#/$defs/changesetCreateRequest"},
+        {"$ref": "#/$defs/changesetGetRequest"},
+        {"$ref": "#/$defs/changesetListRequest"},
+        {"$ref": "#/$defs/changesetDiffRequest"},
+        {"$ref": "#/$defs/changesetApproveRequest"},
+        {"$ref": "#/$defs/changesetRejectRequest"},
+        {"$ref": "#/$defs/changesetApplyRequest"},
         {"$ref": "#/$defs/jobCreateRequest"},
         {"$ref": "#/$defs/jobCancelRequest"}
       ]
@@ -443,6 +823,97 @@
         "result": {"$ref": "#/$defs/worldAnalyzeResult"}
       }
     },
+    "changesetCreateResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.create"},
+        "result": {"$ref": "#/$defs/changesetResult"}
+      }
+    },
+    "changesetGetResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.get"},
+        "result": {"$ref": "#/$defs/changesetResult"}
+      }
+    },
+    "changesetListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.list"},
+        "result": {"$ref": "#/$defs/changesetListResult"}
+      }
+    },
+    "changesetDiffResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.diff"},
+        "result": {"$ref": "#/$defs/changesetDiffResult"}
+      }
+    },
+    "changesetApproveResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.approve"},
+        "result": {"$ref": "#/$defs/changesetResult"}
+      }
+    },
+    "changesetRejectResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.reject"},
+        "result": {"$ref": "#/$defs/changesetResult"}
+      }
+    },
+    "changesetApplyResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "changeset.apply"},
+        "result": {"$ref": "#/$defs/changesetResult"}
+      }
+    },
     "jobCreateResponse": {
       "type": "object",
       "additionalProperties": false,
@@ -489,6 +960,13 @@
         {"$ref": "#/$defs/sourceReadResponse"},
         {"$ref": "#/$defs/worldValidateResponse"},
         {"$ref": "#/$defs/worldAnalyzeResponse"},
+        {"$ref": "#/$defs/changesetCreateResponse"},
+        {"$ref": "#/$defs/changesetGetResponse"},
+        {"$ref": "#/$defs/changesetListResponse"},
+        {"$ref": "#/$defs/changesetDiffResponse"},
+        {"$ref": "#/$defs/changesetApproveResponse"},
+        {"$ref": "#/$defs/changesetRejectResponse"},
+        {"$ref": "#/$defs/changesetApplyResponse"},
         {"$ref": "#/$defs/jobCreateResponse"},
         {"$ref": "#/$defs/jobCancelResponse"}
       ]

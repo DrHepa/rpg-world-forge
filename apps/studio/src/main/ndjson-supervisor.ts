@@ -2,6 +2,20 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 
 import type {
+  ChangesetApplyRequest as StudioChangesetApplyRequest,
+  ChangesetApplyResponse as StudioChangesetApplyResponse,
+  ChangesetApproveRequest as StudioChangesetApproveRequest,
+  ChangesetApproveResponse as StudioChangesetApproveResponse,
+  ChangesetCreateRequest as StudioChangesetCreateRequest,
+  ChangesetCreateResponse as StudioChangesetCreateResponse,
+  ChangesetDiffRequest as StudioChangesetDiffRequest,
+  ChangesetDiffResponse as StudioChangesetDiffResponse,
+  ChangesetGetRequest as StudioChangesetGetRequest,
+  ChangesetGetResponse as StudioChangesetGetResponse,
+  ChangesetListRequest as StudioChangesetListRequest,
+  ChangesetListResponse as StudioChangesetListResponse,
+  ChangesetRejectRequest as StudioChangesetRejectRequest,
+  ChangesetRejectResponse as StudioChangesetRejectResponse,
   Error as StudioErrorEnvelope,
   Event as StudioEventEnvelope,
   JobCancelRequest as StudioJobCancelRequest,
@@ -178,9 +192,23 @@ export type StudioRequestParams<M extends StudioMethod> = M extends "job.create"
     ? StudioJobCancelRequest["params"]
     : M extends "source.read"
       ? StudioSourceReadParams
-      : M extends StudioWorkspaceScopedAuthoringMethod
-        ? StudioWorkspaceScopedParams
-        : Record<string, unknown>;
+      : M extends "changeset.create"
+        ? StudioChangesetCreateRequest["params"]
+        : M extends "changeset.get"
+          ? StudioChangesetGetRequest["params"]
+          : M extends "changeset.list"
+            ? StudioChangesetListRequest["params"]
+            : M extends "changeset.diff"
+              ? StudioChangesetDiffRequest["params"]
+              : M extends "changeset.approve"
+                ? StudioChangesetApproveRequest["params"]
+                : M extends "changeset.reject"
+                  ? StudioChangesetRejectRequest["params"]
+                  : M extends "changeset.apply"
+                    ? StudioChangesetApplyRequest["params"]
+                    : M extends StudioWorkspaceScopedAuthoringMethod
+                      ? StudioWorkspaceScopedParams
+                      : Record<string, unknown>;
 
 export type StudioSuccessForMethod<M extends StudioMethod> = M extends "workspace.overview"
   ? StudioWorkspaceOverviewResponse
@@ -188,15 +216,29 @@ export type StudioSuccessForMethod<M extends StudioMethod> = M extends "workspac
     ? StudioSourceListResponse
     : M extends "source.read"
       ? StudioSourceReadResponse
-      : M extends "world.validate"
-        ? StudioWorldValidateResponse
-        : M extends "world.analyze"
-          ? StudioWorldAnalyzeResponse
-          : M extends "job.create"
-            ? StudioJobCreateResponse
-            : M extends "job.cancel"
-              ? StudioJobCancelResponse
-              : StudioLegacyResponse;
+      : M extends "changeset.create"
+        ? StudioChangesetCreateResponse
+        : M extends "changeset.get"
+          ? StudioChangesetGetResponse
+          : M extends "changeset.list"
+            ? StudioChangesetListResponse
+            : M extends "changeset.diff"
+              ? StudioChangesetDiffResponse
+              : M extends "changeset.approve"
+                ? StudioChangesetApproveResponse
+                : M extends "changeset.reject"
+                  ? StudioChangesetRejectResponse
+                  : M extends "changeset.apply"
+                    ? StudioChangesetApplyResponse
+                    : M extends "world.validate"
+                      ? StudioWorldValidateResponse
+                      : M extends "world.analyze"
+                        ? StudioWorldAnalyzeResponse
+                        : M extends "job.create"
+                          ? StudioJobCreateResponse
+                          : M extends "job.cancel"
+                            ? StudioJobCancelResponse
+                            : StudioLegacyResponse;
 
 export type StudioReplyForMethod<M extends StudioMethod> =
   | StudioSuccessForMethod<M>

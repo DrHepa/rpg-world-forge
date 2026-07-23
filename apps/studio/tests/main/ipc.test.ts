@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -5,6 +7,8 @@ import {
   validateAssetpackArgument,
   validateAssetReceiptArgument,
   validateCancelJobArgument,
+  validateChangesetActionArgument,
+  validateChangesetIdArgument,
   validateChangesetsListParams,
   validateEventsListParams,
   validateHeadlessArgument,
@@ -12,6 +16,7 @@ import {
   validateInterruptTurnArgument,
   validateLoginArgument,
   validateReplayArgument,
+  validateStageSourceDocumentArgument,
   validateSourceReadArgument,
   validateStartTurnArgument,
   validateUserInputArgument,
@@ -103,6 +108,391 @@ describe("Studio named authoring and job IPC contracts", () => {
     [validateCancelJobArgument, { jobId: "../job" }],
   ])("rejects malformed or capability-shaped authoring/job input %#", (validate, value) => {
     expect(() => validate(value)).toThrow();
+  });
+});
+
+describe("Studio named changeset IPC contracts", () => {
+  it("accepts only closed portable stage, identity, and action inputs", () => {
+    const baseSha256 = "a".repeat(64);
+    expect(
+      validateStageSourceDocumentArgument({
+        workspaceId: "workspace_01",
+        path: "source/lore/entry.md",
+        baseSha256,
+        content: "new\n",
+      }),
+    ).toEqual({
+      workspaceId: "workspace_01",
+      path: "source/lore/entry.md",
+      baseSha256,
+      content: "new\n",
+    });
+    expect(validateChangesetIdArgument({ changesetId: "changeset_01" })).toEqual({
+      changesetId: "changeset_01",
+    });
+    expect(
+      validateChangesetActionArgument({
+        changesetId: "changeset_01",
+        expectedReviewSha256: "b".repeat(64),
+      }),
+    ).toEqual({
+      changesetId: "changeset_01",
+      expectedReviewSha256: "b".repeat(64),
+    });
+    expect(validateChangesetActionArgument({ changesetId: "legacy_01" })).toEqual({
+      changesetId: "legacy_01",
+    });
+  });
+
+  it.each([
+    {
+      workspaceId: "workspace_01",
+      path: "source/../entry.md",
+      baseSha256: "a".repeat(64),
+      content: "new\n",
+    },
+    {
+      workspaceId: "workspace_01",
+      path: "source/lore/entry.md",
+      baseSha256: "A".repeat(64),
+      content: "new\n",
+    },
+    {
+      workspaceId: "workspace_01",
+      path: "source/lore/entry.md",
+      baseSha256: "a".repeat(64),
+      content: "bad\ud800",
+    },
+    {
+      workspaceId: "workspace_01",
+      path: "source/lore/entry.md",
+      baseSha256: "a".repeat(64),
+      content: "x",
+      operation: "delete",
+    },
+  ])("rejects malformed or capability-shaped stage input %#", (value) => {
+    expect(() => validateStageSourceDocumentArgument(value)).toThrow();
+  });
+
+  it("enforces the exact UTF-8 byte ceiling for staged text", () => {
+    expect(() =>
+      validateStageSourceDocumentArgument({
+        workspaceId: "workspace_01",
+        path: "source/lore/entry.md",
+        baseSha256: "a".repeat(64),
+        content: "é".repeat(128 * 1024 + 1),
+      }),
+    ).toThrow();
+  });
+
+  it.each([
+    [validateChangesetIdArgument, { changesetId: "../bad" }],
+    [validateChangesetIdArgument, { changesetId: "changeset_01", operation: "apply" }],
+    [
+      validateChangesetActionArgument,
+      { changesetId: "changeset_01", expectedReviewSha256: null },
+    ],
+    [
+      validateChangesetActionArgument,
+      { changesetId: "changeset_01", expectedReviewSha256: "A".repeat(64) },
+    ],
+  ])("rejects malformed changeset identity input %#", (validate, value) => {
+    expect(() => validate(value)).toThrow();
+  });
+
+  it("maps six review controls to fixed methods and one replace operation", async () => {
+    const harness = createIpcHarness();
+    const baseSha256 = "a".repeat(64);
+    const calls = [
+      [
+        IPC_CHANNELS.stageSourceDocument,
+        {
+          workspaceId: "workspace_01",
+          path: "source/lore/entry.md",
+          baseSha256,
+          content: "new\n",
+        },
+        "changeset.create",
+        {
+          workspace_id: "workspace_01",
+          operations: [
+            {
+              path: "source/lore/entry.md",
+              operation: "replace",
+              expected_base_sha256: baseSha256,
+              content: "new\n",
+            },
+          ],
+        },
+      ],
+      [
+        IPC_CHANNELS.getChangeset,
+        { changesetId: "changeset_01" },
+        "changeset.get",
+        { changeset_id: "changeset_01" },
+      ],
+      [
+        IPC_CHANNELS.readChangesetDiff,
+        { changesetId: "changeset_01" },
+        "changeset.diff",
+        { changeset_id: "changeset_01" },
+      ],
+      [
+        IPC_CHANNELS.approveChangeset,
+        { changesetId: "changeset_01", expectedReviewSha256: "b".repeat(64) },
+        "changeset.approve",
+        {
+          changeset_id: "changeset_01",
+          expected_review_sha256: "b".repeat(64),
+        },
+      ],
+      [
+        IPC_CHANNELS.rejectChangeset,
+        { changesetId: "legacy_01" },
+        "changeset.reject",
+        { changeset_id: "legacy_01" },
+      ],
+      [
+        IPC_CHANNELS.applyChangeset,
+        { changesetId: "changeset_01", expectedReviewSha256: "b".repeat(64) },
+        "changeset.apply",
+        {
+          changeset_id: "changeset_01",
+          expected_review_sha256: "b".repeat(64),
+        },
+      ],
+    ] as const;
+    for (const [channel, argument] of calls) {
+      expect(await harness.invoke(channel, argument)).toMatchObject({ ok: true });
+    }
+    expect(harness.request.mock.calls.map((call) => [call[1], call[2]])).toEqual(
+      calls.map(([, , method, params]) => [method, params]),
+    );
+  });
+
+  it("rejects untrusted callers and extra arguments before changeset requests", async () => {
+    const harness = createIpcHarness();
+    expect(
+      await harness.invoke(
+        IPC_CHANNELS.stageSourceDocument,
+        {
+          workspaceId: "workspace_01",
+          path: "source/lore/entry.md",
+          baseSha256: "a".repeat(64),
+          content: "new\n",
+        },
+        { trusted: false },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(
+      await harness.invoke(
+        IPC_CHANNELS.getChangeset,
+        { changesetId: "changeset_01" },
+        { extraArgument: true },
+      ),
+    ).toMatchObject({ ok: false, error: { code: "invalid_request" } });
+    expect(harness.request).not.toHaveBeenCalled();
+  });
+
+  it("correlates one staged replacement through its full v2 review identity", async () => {
+    const harness = createIpcHarness();
+    const baseSha256 = "a".repeat(64);
+    const content = "new\n";
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(
+        createChangesetResponse(
+          requestId,
+          "changeset.create",
+          createV2Changeset({ baseSha256, content }),
+        ),
+      ),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.stageSourceDocument, {
+        workspaceId: "workspace_01",
+        path: "source/lore/entry.md",
+        baseSha256,
+        content,
+      }),
+    ).toMatchObject({ ok: true, value: { result: { changeset: { format_version: 2 } } } });
+
+    for (const mutation of [
+      { workspace_id: "workspace_02" },
+      { status: "approved" },
+      { format_version: 1, review_sha256: undefined },
+      { review_sha256: "0".repeat(64) },
+      {
+        operations: [
+          {
+            ...createV2Changeset({ baseSha256, content }).operations[0],
+            operation: "delete",
+          },
+        ],
+      },
+    ]) {
+      const record = { ...createV2Changeset({ baseSha256, content }), ...mutation };
+      if (mutation.review_sha256 === undefined) delete record.review_sha256;
+      harness.request.mockImplementationOnce((requestId: string) =>
+        Promise.resolve(createChangesetResponse(requestId, "changeset.create", record)),
+      );
+      expect(
+        await harness.invoke(IPC_CHANNELS.stageSourceDocument, {
+          workspaceId: "workspace_01",
+          path: "source/lore/entry.md",
+          baseSha256,
+          content,
+        }),
+      ).toMatchObject({ ok: false, error: { code: "service_unavailable" } });
+    }
+  });
+
+  it("correlates get, diff, and exact action status for v1 and v2 replies", async () => {
+    const harness = createIpcHarness();
+    const v2 = createV2Changeset({ baseSha256: "a".repeat(64), content: "new\n" });
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(createChangesetResponse(requestId, "changeset.get", v2)),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.getChangeset, { changesetId: "changeset_01" }),
+    ).toMatchObject({ ok: true });
+
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(createDiffResponse(requestId, v2)),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.readChangesetDiff, { changesetId: "changeset_01" }),
+    ).toMatchObject({ ok: true });
+
+    for (const [channel, method, status] of [
+      [IPC_CHANNELS.approveChangeset, "changeset.approve", "approved"],
+      [IPC_CHANNELS.rejectChangeset, "changeset.reject", "rejected"],
+      [IPC_CHANNELS.applyChangeset, "changeset.apply", "applied"],
+    ] as const) {
+      harness.request.mockImplementationOnce((requestId: string) =>
+        Promise.resolve(
+          createChangesetResponse(requestId, method, { ...v2, status }),
+        ),
+      );
+      expect(
+        await harness.invoke(channel, {
+          changesetId: "changeset_01",
+          expectedReviewSha256: v2.review_sha256,
+        }),
+      ).toMatchObject({ ok: true });
+    }
+
+    const legacy = createV1Changeset();
+    harness.request.mockImplementationOnce((requestId: string) =>
+      Promise.resolve(
+        createChangesetResponse(requestId, "changeset.reject", {
+          ...legacy,
+          status: "rejected",
+        }),
+      ),
+    );
+    expect(
+      await harness.invoke(IPC_CHANNELS.rejectChangeset, { changesetId: "legacy_01" }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("rejects mismatched IDs, review hashes, statuses, methods, and diff operations", async () => {
+    const harness = createIpcHarness();
+    const v2 = createV2Changeset({ baseSha256: "a".repeat(64), content: "new\n" });
+    const cases = [
+      {
+        channel: IPC_CHANNELS.getChangeset,
+        argument: { changesetId: "changeset_01" },
+        reply: (requestId: string) =>
+          createChangesetResponse(requestId, "changeset.get", {
+            ...v2,
+            changeset_id: "changeset_02",
+          }),
+      },
+      {
+        channel: IPC_CHANNELS.readChangesetDiff,
+        argument: { changesetId: "changeset_01" },
+        reply: (requestId: string) => ({
+          ...createDiffResponse(requestId, v2),
+          result: {
+            diff: {
+              ...createDiffResponse(requestId, v2).result.diff,
+              operations: [
+                {
+                  ...createDiffResponse(requestId, v2).result.diff.operations[0],
+                  operation: "execute",
+                },
+              ],
+            },
+          },
+        }),
+      },
+      {
+        channel: IPC_CHANNELS.approveChangeset,
+        argument: {
+          changesetId: "changeset_01",
+          expectedReviewSha256: v2.review_sha256,
+        },
+        reply: (requestId: string) =>
+          createChangesetResponse(requestId, "changeset.approve", {
+            ...v2,
+            status: "rejected",
+          }),
+      },
+      {
+        channel: IPC_CHANNELS.applyChangeset,
+        argument: {
+          changesetId: "changeset_01",
+          expectedReviewSha256: "0".repeat(64),
+        },
+        reply: (requestId: string) =>
+          createChangesetResponse(requestId, "changeset.apply", {
+            ...v2,
+            status: "applied",
+          }),
+      },
+      {
+        channel: IPC_CHANNELS.approveChangeset,
+        argument: { changesetId: "changeset_01" },
+        reply: (requestId: string) =>
+          createChangesetResponse(requestId, "changeset.approve", {
+            ...v2,
+            status: "approved",
+          }),
+      },
+      {
+        channel: IPC_CHANNELS.rejectChangeset,
+        argument: {
+          changesetId: "legacy_01",
+          expectedReviewSha256: v2.review_sha256,
+        },
+        reply: (requestId: string) =>
+          createChangesetResponse(requestId, "changeset.reject", {
+            ...createV1Changeset(),
+            status: "rejected",
+          }),
+      },
+      {
+        channel: IPC_CHANNELS.rejectChangeset,
+        argument: {
+          changesetId: "changeset_01",
+          expectedReviewSha256: v2.review_sha256,
+        },
+        reply: (requestId: string) =>
+          createChangesetResponse(requestId, "changeset.approve", {
+            ...v2,
+            status: "rejected",
+          }),
+      },
+    ];
+    for (const testCase of cases) {
+      harness.request.mockImplementationOnce((requestId: string) =>
+        Promise.resolve(testCase.reply(requestId)),
+      );
+      expect(await harness.invoke(testCase.channel, testCase.argument)).toMatchObject({
+        ok: false,
+        error: { code: "service_unavailable" },
+      });
+    }
   });
 });
 
@@ -530,6 +920,123 @@ function createManagedJobResponse(
         error: null,
         created_at: "2026-07-23T00:00:00Z",
         updated_at: "2026-07-23T00:00:00Z",
+      },
+    },
+  };
+}
+
+function createV2Changeset({ baseSha256, content }: { baseSha256: string; content: string }) {
+  const operation = {
+    path: "source/lore/entry.md",
+    operation: "replace" as const,
+    base_sha256: baseSha256,
+    base_size: 4,
+    proposed_sha256: createHash("sha256").update(content, "utf8").digest("hex"),
+    size: Buffer.byteLength(content, "utf8"),
+  };
+  return {
+    format: "rpg-world-forge.studio_changeset" as const,
+    format_version: 2 as const,
+    changeset_id: "changeset_01",
+    workspace_id: "workspace_01",
+    status: "staged" as "staged" | "approved" | "rejected" | "applied",
+    operations: [operation],
+    review_sha256: reviewSha256([operation]),
+    created_at: "2026-07-23T00:00:00Z",
+    updated_at: "2026-07-23T00:00:00Z",
+  };
+}
+
+function createV1Changeset() {
+  return {
+    format: "rpg-world-forge.studio_changeset" as const,
+    format_version: 1 as const,
+    changeset_id: "legacy_01",
+    workspace_id: "workspace_01",
+    status: "staged" as "staged" | "approved" | "rejected" | "applied",
+    operations: [
+      {
+        path: "source/lore/legacy.md",
+        operation: "replace" as const,
+        base_sha256: "a".repeat(64),
+        proposed_sha256: "b".repeat(64),
+        size: 4,
+      },
+    ],
+    created_at: "2026-07-22T00:00:00Z",
+    updated_at: "2026-07-22T00:00:00Z",
+  };
+}
+
+function reviewSha256(operations: readonly Record<string, unknown>[]): string {
+  const projected = operations.map((operation) => ({
+    base_sha256: operation.base_sha256,
+    base_size: operation.base_size,
+    operation: operation.operation,
+    path: operation.path,
+    proposed_sha256: operation.proposed_sha256,
+    size: operation.size,
+  }));
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        format: "rpg-world-forge.studio_changeset_review",
+        format_version: 1,
+        operations: projected,
+      }),
+      "utf8",
+    )
+    .digest("hex");
+}
+
+function createChangesetResponse(
+  requestId: string,
+  method: string,
+  changeset: Record<string, unknown>,
+) {
+  return {
+    protocol: "rpg-world-forge.studio_protocol",
+    protocol_version: 1,
+    kind: "response",
+    request_id: requestId,
+    method,
+    result: { changeset },
+  };
+}
+
+function createDiffResponse(requestId: string, changeset: ReturnType<typeof createV2Changeset>) {
+  const operation = changeset.operations[0];
+  return {
+    protocol: "rpg-world-forge.studio_protocol",
+    protocol_version: 1,
+    kind: "response",
+    request_id: requestId,
+    method: "changeset.diff",
+    result: {
+      diff: {
+        changeset_id: changeset.changeset_id,
+        changeset_format_version: 2,
+        available: true,
+        unavailable_reason: null,
+        review_sha256: changeset.review_sha256,
+        operations: [
+          {
+            ...operation,
+            text_hunks: [
+              {
+                base_start: 1,
+                base_count: 1,
+                proposed_start: 1,
+                proposed_count: 1,
+                lines: [
+                  { kind: "remove", text: "old\n" },
+                  { kind: "add", text: "new\n" },
+                ],
+              },
+            ],
+            json_pointer_changes: null,
+          },
+        ],
       },
     },
   };

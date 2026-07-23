@@ -6,6 +6,12 @@ import {
   type StudioAssetpackVerifyReply,
   type StudioActivityEvent,
   type StudioClientResult,
+  type StudioChangesetApplyReply,
+  type StudioChangesetApproveReply,
+  type StudioChangesetCreateReply,
+  type StudioChangesetDiffReply,
+  type StudioChangesetGetReply,
+  type StudioChangesetRejectReply,
   type StudioJobCancelReply,
   type StudioReplyEnvelope,
   type StudioRuntimeHeadlessReply,
@@ -66,6 +72,50 @@ export function createStudioApi(transport: PreloadTransport): ForgeStudioApi {
     async readSourceDocument(workspaceId, path) {
       return asClientResult<StudioSourceReadReply>(
         await transport.invoke(IPC_CHANNELS.readSourceDocument, { workspaceId, path }),
+      );
+    },
+    async stageSourceDocument(workspaceId, path, baseSha256, content) {
+      return asClientResult<StudioChangesetCreateReply>(
+        await transport.invoke(IPC_CHANNELS.stageSourceDocument, {
+          workspaceId,
+          path,
+          baseSha256,
+          content,
+        }),
+      );
+    },
+    async getChangeset(changesetId) {
+      return asClientResult<StudioChangesetGetReply>(
+        await transport.invoke(IPC_CHANNELS.getChangeset, { changesetId }),
+      );
+    },
+    async readChangesetDiff(changesetId) {
+      return asClientResult<StudioChangesetDiffReply>(
+        await transport.invoke(IPC_CHANNELS.readChangesetDiff, { changesetId }),
+      );
+    },
+    async approveChangeset(changesetId, expectedReviewSha256) {
+      return asClientResult<StudioChangesetApproveReply>(
+        await transport.invoke(IPC_CHANNELS.approveChangeset, {
+          changesetId,
+          ...(expectedReviewSha256 === undefined ? {} : { expectedReviewSha256 }),
+        }),
+      );
+    },
+    async rejectChangeset(changesetId, expectedReviewSha256) {
+      return asClientResult<StudioChangesetRejectReply>(
+        await transport.invoke(IPC_CHANNELS.rejectChangeset, {
+          changesetId,
+          ...(expectedReviewSha256 === undefined ? {} : { expectedReviewSha256 }),
+        }),
+      );
+    },
+    async applyChangeset(changesetId, expectedReviewSha256) {
+      return asClientResult<StudioChangesetApplyReply>(
+        await transport.invoke(IPC_CHANNELS.applyChangeset, {
+          changesetId,
+          ...(expectedReviewSha256 === undefined ? {} : { expectedReviewSha256 }),
+        }),
       );
     },
     async validateWorld(workspaceId) {

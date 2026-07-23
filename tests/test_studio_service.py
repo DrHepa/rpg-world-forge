@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import tempfile
@@ -239,6 +240,83 @@ class StudioServiceTests(unittest.TestCase):
                     },
                 )["result"]["changeset"]
                 self.assertEqual("approved", approved["status"])
+
+    def test_changeset_stage_verifies_base_and_exposes_exact_diff(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            world = temp / "world"
+            create_world_project(world, world_id="studio_world", title="Studio", language="en")
+            source_path = world / "source/world.json"
+            base_sha256 = hashlib.sha256(source_path.read_bytes()).hexdigest()
+            with StudioStore(temp / "data") as store:
+                service = StudioService(store)
+
+                def request(
+                    request_id: str, method: str, params: dict[str, object]
+                ) -> dict[str, object]:
+                    return service.handle(
+                        {
+                            "protocol": "rpg-world-forge.studio_protocol",
+                            "protocol_version": 1,
+                            "kind": "request",
+                            "request_id": request_id,
+                            "method": method,
+                            "params": params,
+                        }
+                    )
+
+                request(
+                    "register",
+                    "workspace.register",
+                    {
+                        "workspace_id": "workspace_01",
+                        "forge_root": str(FORGE_ROOT),
+                        "world_root": str(world),
+                    },
+                )
+                with self.assertRaisesRegex(StudioError, "base changed") as mismatch:
+                    request(
+                        "mismatch",
+                        "changeset.create",
+                        {
+                            "workspace_id": "workspace_01",
+                            "operations": [
+                                {
+                                    "path": "source/world.json",
+                                    "operation": "replace",
+                                    "expected_base_sha256": "0" * 64,
+                                    "content": "{}\n",
+                                }
+                            ],
+                        },
+                    )
+                self.assertEqual("conflict", mismatch.exception.code)
+
+                staged = request(
+                    "stage",
+                    "changeset.create",
+                    {
+                        "workspace_id": "workspace_01",
+                        "operations": [
+                            {
+                                "path": "source/world.json",
+                                "operation": "replace",
+                                "expected_base_sha256": base_sha256,
+                                "content": "{}\n",
+                            }
+                        ],
+                    },
+                )["result"]["changeset"]
+                self.assertEqual(base_sha256, staged["operations"][0]["base_sha256"])
+                diff = request(
+                    "diff",
+                    "changeset.diff",
+                    {"changeset_id": staged["changeset_id"]},
+                )["result"]["diff"]
+                self.assertTrue(diff["available"])
+                self.assertEqual(staged["changeset_id"], diff["changeset_id"])
+                self.assertEqual(staged["review_sha256"], diff["review_sha256"])
+                self.assertEqual("replace", diff["operations"][0]["operation"])
 
 
 if __name__ == "__main__":

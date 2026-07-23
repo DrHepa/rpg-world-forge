@@ -59,6 +59,7 @@ class StudioService:
             "changeset.create": self._changeset_create,
             "changeset.get": self._changeset_get,
             "changeset.list": self._changeset_list,
+            "changeset.diff": self._changeset_diff,
             "changeset.approve": self._changeset_approve,
             "changeset.reject": self._changeset_reject,
             "changeset.apply": self._changeset_apply,
@@ -173,6 +174,10 @@ class StudioService:
                 limit=params.get("limit", 100),
             )
         }
+
+    def _changeset_diff(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(params, allowed={"changeset_id"}, required={"changeset_id"})
+        return {"diff": self.changesets.diff(params["changeset_id"])}
 
     def _changeset_approve(self, params: dict[str, Any]) -> dict[str, Any]:
         _closed_params(
