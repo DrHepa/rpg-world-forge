@@ -41,6 +41,10 @@ ajv.addFormat("rpg-world-forge-portable-relative-path", {
   type: "string",
   validate: isPortableRelativePath,
 });
+ajv.addFormat("rpg-world-forge-portable-asset-catalog-path", {
+  type: "string",
+  validate: isPortableAssetCatalogPath,
+});
 ajv.addSchema(changesetSchema);
 ajv.addSchema(jobSchema);
 const validate: ValidateFunction<StudioEnvelope> = ajv.compile(protocolSchema);
@@ -56,6 +60,11 @@ export function isPortableSourcePath(value: string): boolean {
 export function isPortableRelativePath(value: string): boolean {
   const parts = value.split("/");
   return parts.length >= 1 && parts.length <= 16 && parts.every(isPortablePathComponent);
+}
+
+export function isPortableAssetCatalogPath(value: string): boolean {
+  const parts = value.split("/");
+  return parts.length >= 1 && parts.length <= 32 && parts.every(isPortablePathComponent);
 }
 
 function isPortablePathComponent(value: string): boolean {

@@ -7,6 +7,7 @@ from pathlib import PurePosixPath
 from typing import Any
 
 from isoworld.content.portability import portable_relative_path
+from isoworld.runtime_io import RuntimeIOError, decode_json_object
 from worldforge.studio.changeset_review import ReviewDiffError, compute_review_sha256
 from worldforge.studio.errors import ERROR_CODES, StudioContractError
 
@@ -24,6 +25,7 @@ WORKSPACE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
 ENTITY_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
 OPERATION_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+ASSET_ENTRY_ID_PATTERN = re.compile(r"^asset_[0-9a-f]{64}$")
 TIMESTAMP_PATTERN = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$"
 )
@@ -51,6 +53,8 @@ METHODS = frozenset(
         "workspace.overview",
         "source.list",
         "source.read",
+        "asset.catalog.list",
+        "asset.catalog.inspect",
         "world.validate",
         "world.analyze",
         "events.list",
@@ -73,6 +77,7 @@ WORKSPACE_AUTHORING_METHODS = frozenset(
 )
 AUTHORING_METHODS = WORKSPACE_AUTHORING_METHODS | {"source.read"}
 EXACT_JOB_METHODS = frozenset({"job.create", "job.cancel"})
+EXACT_ASSET_CATALOG_METHODS = frozenset({"asset.catalog.list", "asset.catalog.inspect"})
 EXACT_CHANGESET_METHODS = frozenset(
     {
         "changeset.create",
@@ -85,10 +90,39 @@ EXACT_CHANGESET_METHODS = frozenset(
     }
 )
 CHANGESET_ACTION_METHODS = frozenset({"changeset.approve", "changeset.reject", "changeset.apply"})
-LEGACY_METHODS = METHODS - AUTHORING_METHODS - EXACT_JOB_METHODS - EXACT_CHANGESET_METHODS
+LEGACY_METHODS = (
+    METHODS
+    - AUTHORING_METHODS
+    - EXACT_JOB_METHODS
+    - EXACT_CHANGESET_METHODS
+    - EXACT_ASSET_CATALOG_METHODS
+)
 MAX_STUDIO_SOURCE_DEPTH = 8
 MAX_STUDIO_SOURCE_BYTES = 256 * 1024
 MAX_STUDIO_SOURCE_DOCUMENTS = 1024
+MAX_ASSET_CATALOG_PAGE = 64
+MAX_ASSET_INLINE_BYTES = 256 * 1024
+MAX_ASSET_CATALOG_PATH_DEPTH = 32
+MAX_ASSET_CATALOG_PATH_LENGTH = 4096
+ASSET_CATALOG_CATEGORIES = frozenset(
+    {
+        "manifest",
+        "target",
+        "visual_bible",
+        "audio_bible",
+        "inventory",
+        "specification",
+        "production_receipt",
+        "production_request",
+        "production_output",
+        "processing_receipt",
+        "processing_recipe",
+        "processing_output",
+        "license",
+        "qa",
+        "runtime_output",
+    }
+)
 MAX_STUDIO_DIAGNOSTICS = 512
 MAX_STUDIO_JOB_PATH_DEPTH = 16
 MAX_STUDIO_RECEIPT_ISSUES = 256
@@ -236,6 +270,46 @@ def _validate_source_read_params(value: object, context: str) -> None:
     _closed(params, {"workspace_id", "path"}, context)
     _identifier(params["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
     _studio_source_contract_path(params["path"], f"{context}/path")
+
+
+def _validate_asset_catalog_list_params(value: object, context: str) -> None:
+    params = _object(value, context)
+    allowed = {"workspace_id", "offset", "limit", "expected_manifest_revision"}
+    missing = {"workspace_id"} - set(params)
+    unknown = set(params) - allowed
+    if missing or unknown:
+        fields = missing or unknown
+        raise StudioContractError(f"{context} has invalid fields: {', '.join(sorted(fields))}")
+    _identifier(params["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
+    offset = 0
+    if "offset" in params:
+        offset = _integer(params["offset"], f"{context}/offset")
+    if "limit" in params:
+        limit = _integer(params["limit"], f"{context}/limit", minimum=1)
+        if limit > MAX_ASSET_CATALOG_PAGE:
+            raise StudioContractError(f"{context}/limit must be at most {MAX_ASSET_CATALOG_PAGE}")
+    expected = params.get("expected_manifest_revision")
+    if expected is not None:
+        _sha256(expected, f"{context}/expected_manifest_revision")
+    if offset > 0 and expected is None:
+        raise StudioContractError(
+            f"{context}/expected_manifest_revision is required after page one"
+        )
+
+
+def _validate_asset_catalog_inspect_params(value: object, context: str) -> None:
+    params = _object(value, context)
+    _closed(
+        params,
+        {"workspace_id", "entry_id", "expected_manifest_revision"},
+        context,
+    )
+    _identifier(params["workspace_id"], f"{context}/workspace_id", WORKSPACE_ID_PATTERN)
+    _identifier(params["entry_id"], f"{context}/entry_id", ASSET_ENTRY_ID_PATTERN)
+    _sha256(
+        params["expected_manifest_revision"],
+        f"{context}/expected_manifest_revision",
+    )
 
 
 def _validate_changeset_create_params(value: object, context: str) -> None:
@@ -495,6 +569,7 @@ def _validate_workspace_overview(value: object, context: str) -> None:
         "world_validation": True,
         "narrative_analysis": True,
         "staged_changesets": True,
+        "asset_catalog_inspection": True,
     }
     _closed(capabilities, set(expected_capabilities), f"{context}/capabilities")
     for field, expected in expected_capabilities.items():
@@ -529,6 +604,236 @@ def _validate_authoring_result(method: str, value: object, context: str) -> None
             _validate_narrative_analysis(result["analysis"], f"{context}/analysis")
     else:  # pragma: no cover - callers discriminate the method first
         raise StudioContractError("envelope/method is unknown")
+
+
+def _asset_catalog_path(value: object, context: str, *, nullable: bool) -> PurePosixPath | None:
+    if value is None and nullable:
+        return None
+    if not isinstance(value, str) or len(value) > MAX_ASSET_CATALOG_PATH_LENGTH:
+        raise StudioContractError(f"{context} must be a bounded portable path")
+    try:
+        relative = portable_relative_path(value)
+    except UnicodeError as exc:
+        raise StudioContractError(f"{context} must be a bounded portable path") from exc
+    if relative is None or len(relative.parts) > MAX_ASSET_CATALOG_PATH_DEPTH:
+        raise StudioContractError(f"{context} must be a bounded portable path")
+    return relative
+
+
+def _validate_asset_catalog_entry(value: object, context: str) -> dict[str, Any]:
+    entry = _object(value, context)
+    _closed(
+        entry,
+        {
+            "entry_id",
+            "asset_id",
+            "category",
+            "role",
+            "path",
+            "sha256",
+            "media_type",
+            "selected",
+            "inspectable",
+        },
+        context,
+    )
+    _identifier(entry["entry_id"], f"{context}/entry_id", ASSET_ENTRY_ID_PATTERN)
+    if entry["asset_id"] is not None:
+        _plain_string(entry["asset_id"], f"{context}/asset_id", max_length=128)
+    category = entry["category"]
+    if not isinstance(category, str) or category not in ASSET_CATALOG_CATEGORIES:
+        raise StudioContractError(f"{context}/category is unknown")
+    if entry["role"] is not None:
+        _plain_string(entry["role"], f"{context}/role", max_length=128)
+    path = _asset_catalog_path(entry["path"], f"{context}/path", nullable=True)
+    _sha256(entry["sha256"], f"{context}/sha256")
+    if entry["media_type"] is not None:
+        _plain_string(entry["media_type"], f"{context}/media_type", max_length=128)
+    _boolean(entry["selected"], f"{context}/selected")
+    _boolean(entry["inspectable"], f"{context}/inspectable")
+    if entry["selected"] and category != "production_output":
+        raise StudioContractError(f"{context}/selected is limited to production outputs")
+    if path is None and (
+        category != "processing_recipe"
+        or entry["inspectable"] is not False
+        or entry["selected"] is not False
+    ):
+        raise StudioContractError(f"{context} has an invalid identity-only entry")
+    return entry
+
+
+def _bounded_text(value: object, context: str) -> str:
+    text = _plain_string(value, context)
+    try:
+        encoded = text.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise StudioContractError(f"{context} must be valid UTF-8") from exc
+    if len(encoded) > MAX_ASSET_INLINE_BYTES:
+        raise StudioContractError(f"{context} must be at most {MAX_ASSET_INLINE_BYTES} UTF-8 bytes")
+    return text
+
+
+def _bounded_string_array(value: object, context: str) -> None:
+    if not isinstance(value, list) or len(value) > 64:
+        raise StudioContractError(f"{context} must contain at most 64 strings")
+    for index, item in enumerate(value):
+        _plain_string(item, f"{context}/{index}", max_length=256)
+
+
+def _validate_asset_inspection(value: object, context: str) -> dict[str, Any]:
+    inspection = _object(value, context)
+    kind = inspection.get("kind")
+    if kind == "json":
+        _closed(inspection, {"kind", "encoding", "content", "value"}, context)
+        if inspection["encoding"] != "utf-8":
+            raise StudioContractError(f"{context}/encoding must be utf-8")
+        content = _bounded_text(inspection["content"], f"{context}/content")
+        parsed = _object(inspection["value"], f"{context}/value")
+        _strict_json_value(parsed, f"{context}/value")
+        try:
+            decoded = decode_json_object(
+                content.encode("utf-8"),
+                source="asset catalog inspection",
+            )
+        except RuntimeIOError as exc:
+            raise StudioContractError(f"{context}/content must be a strict JSON object") from exc
+        if decoded != parsed:
+            raise StudioContractError(f"{context}/value does not match content")
+    elif kind == "glsl":
+        _closed(inspection, {"kind", "encoding", "content"}, context)
+        if inspection["encoding"] != "utf-8":
+            raise StudioContractError(f"{context}/encoding must be utf-8")
+        _bounded_text(inspection["content"], f"{context}/content")
+    elif kind == "png":
+        _closed(
+            inspection,
+            {"kind", "width", "height", "bit_depth", "color_type", "interlaced"},
+            context,
+        )
+        for field in ("width", "height", "bit_depth"):
+            _integer(inspection[field], f"{context}/{field}", minimum=1)
+        _integer(inspection["color_type"], f"{context}/color_type")
+        _boolean(inspection["interlaced"], f"{context}/interlaced")
+    elif kind == "wav":
+        _closed(
+            inspection,
+            {
+                "kind",
+                "channels",
+                "sample_rate",
+                "sample_width_bits",
+                "frame_count",
+                "duration_ms",
+            },
+            context,
+        )
+        for field in ("channels", "sample_rate", "sample_width_bits"):
+            _integer(inspection[field], f"{context}/{field}", minimum=1)
+        for field in ("frame_count", "duration_ms"):
+            _integer(inspection[field], f"{context}/{field}")
+    elif kind == "font":
+        _closed(inspection, {"kind", "flavor", "table_count"}, context)
+        if inspection["flavor"] not in {"truetype", "opentype"}:
+            raise StudioContractError(f"{context}/flavor is unknown")
+        _integer(inspection["table_count"], f"{context}/table_count", minimum=1)
+    elif kind == "glb":
+        _closed(
+            inspection,
+            {
+                "kind",
+                "byte_length",
+                "json_chunk_bytes",
+                "bin_chunk_bytes",
+                "extensions_used",
+                "extensions_required",
+                "external_uris",
+                "embedded_uris",
+                "max_texture_dimension",
+                "metrics",
+            },
+            context,
+        )
+        for field in (
+            "byte_length",
+            "json_chunk_bytes",
+            "bin_chunk_bytes",
+            "embedded_uris",
+            "max_texture_dimension",
+        ):
+            _integer(inspection[field], f"{context}/{field}")
+        for field in ("extensions_used", "extensions_required", "external_uris"):
+            _bounded_string_array(inspection[field], f"{context}/{field}")
+        metrics = _object(inspection["metrics"], f"{context}/metrics")
+        metric_fields = {
+            "nodes",
+            "meshes",
+            "materials",
+            "textures",
+            "skins",
+            "bones",
+            "influences",
+            "animations",
+            "vertices",
+            "triangles",
+            "external_uris",
+        }
+        _closed(metrics, metric_fields, f"{context}/metrics")
+        for field in metric_fields:
+            _integer(metrics[field], f"{context}/metrics/{field}")
+    elif kind == "unavailable":
+        _closed(inspection, {"kind", "reason"}, context)
+        if inspection["reason"] not in {"identity_only", "unsupported_media_type"}:
+            raise StudioContractError(f"{context}/reason is unknown")
+    else:
+        raise StudioContractError(f"{context}/kind is unknown")
+    return inspection
+
+
+def _validate_asset_catalog_result(method: str, value: object, context: str) -> None:
+    result = _object(value, context)
+    if method == "asset.catalog.list":
+        _closed(
+            result,
+            {"manifest_revision", "offset", "limit", "entries", "next_offset"},
+            context,
+        )
+        _sha256(result["manifest_revision"], f"{context}/manifest_revision")
+        offset = _integer(result["offset"], f"{context}/offset")
+        limit = _integer(result["limit"], f"{context}/limit", minimum=1)
+        if limit > MAX_ASSET_CATALOG_PAGE:
+            raise StudioContractError(f"{context}/limit must be at most {MAX_ASSET_CATALOG_PAGE}")
+        entries = result["entries"]
+        if not isinstance(entries, list) or len(entries) > limit:
+            raise StudioContractError(f"{context}/entries exceeds the requested page")
+        seen: set[str] = set()
+        for index, entry in enumerate(entries):
+            validated = _validate_asset_catalog_entry(entry, f"{context}/entries/{index}")
+            if validated["entry_id"] in seen:
+                raise StudioContractError(f"{context}/entries contains duplicate entry IDs")
+            seen.add(validated["entry_id"])
+        next_offset = result["next_offset"]
+        if next_offset is not None:
+            expected = offset + len(entries)
+            if (
+                isinstance(next_offset, bool)
+                or not isinstance(next_offset, int)
+                or next_offset != expected
+                or len(entries) != limit
+            ):
+                raise StudioContractError(f"{context}/next_offset is inconsistent")
+        return
+
+    _closed(result, {"manifest_revision", "entry", "inspection"}, context)
+    _sha256(result["manifest_revision"], f"{context}/manifest_revision")
+    entry = _validate_asset_catalog_entry(result["entry"], f"{context}/entry")
+    inspection = _validate_asset_inspection(result["inspection"], f"{context}/inspection")
+    if inspection["kind"] == "unavailable":
+        if entry["inspectable"] is not False:
+            raise StudioContractError(f"{context}/entry cannot inspect unavailable media")
+        if inspection["reason"] == "identity_only" and entry["path"] is not None:
+            raise StudioContractError(f"{context}/inspection identity is inconsistent")
+    elif entry["inspectable"] is not True:
+        raise StudioContractError(f"{context}/entry must be inspectable")
 
 
 def studio_job_path(value: object) -> PurePosixPath | None:
@@ -1091,6 +1396,10 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
             _validate_workspace_params(envelope["params"], "envelope/params")
         elif method == "source.read":
             _validate_source_read_params(envelope["params"], "envelope/params")
+        elif method == "asset.catalog.list":
+            _validate_asset_catalog_list_params(envelope["params"], "envelope/params")
+        elif method == "asset.catalog.inspect":
+            _validate_asset_catalog_inspect_params(envelope["params"], "envelope/params")
         elif method == "changeset.create":
             _validate_changeset_create_params(envelope["params"], "envelope/params")
         elif method in {"changeset.get", "changeset.diff"}:
@@ -1114,6 +1423,8 @@ def validate_studio_protocol_envelope(value: object) -> dict[str, Any]:
             raise StudioContractError("envelope/method is unknown")
         if method in AUTHORING_METHODS:
             _validate_authoring_result(method, envelope["result"], "envelope/result")
+        elif method in EXACT_ASSET_CATALOG_METHODS:
+            _validate_asset_catalog_result(method, envelope["result"], "envelope/result")
         elif method in EXACT_CHANGESET_METHODS:
             _validate_changeset_result(method, envelope["result"], "envelope/result")
         elif method in EXACT_JOB_METHODS:

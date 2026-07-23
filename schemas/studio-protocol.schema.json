@@ -36,6 +36,8 @@
         "workspace.overview",
         "source.list",
         "source.read",
+        "asset.catalog.list",
+        "asset.catalog.inspect",
         "world.validate",
         "world.analyze",
         "events.list",
@@ -100,6 +102,316 @@
       "properties": {
         "workspace_id": {"$ref": "#/$defs/workspaceId"},
         "path": {"$ref": "#/$defs/portableSourcePath"}
+      }
+    },
+    "assetEntryId": {
+      "type": "string",
+      "pattern": "^asset_[0-9a-f]{64}$"
+    },
+    "portableAssetCatalogPath": {
+      "type": "string",
+      "format": "rpg-world-forge-portable-asset-catalog-path",
+      "maxLength": 4096,
+      "x-worldforge-path-policy": {
+        "root": "registered world root",
+        "separator": "/",
+        "normalization": "NFC",
+        "reject_traversal_segments": true,
+        "reject_windows_reserved_names": true,
+        "reject_trailing_dot_or_space": true,
+        "max_component_utf8_bytes": 255,
+        "max_depth": 32,
+        "collision_key": "NFC-casefold"
+      },
+      "pattern": "^[^/\\\\\\u0000-\\u001f<>:\\u0022|?*]+(?:/[^/\\\\\\u0000-\\u001f<>:\\u0022|?*]+)*$"
+    },
+    "assetCatalogListParams": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workspace_id"],
+          "properties": {
+            "workspace_id": {"$ref": "#/$defs/workspaceId"},
+            "offset": {"const": 0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 64},
+            "expected_manifest_revision": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workspace_id", "offset", "expected_manifest_revision"],
+          "properties": {
+            "workspace_id": {"$ref": "#/$defs/workspaceId"},
+            "offset": {"type": "integer", "minimum": 1},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 64},
+            "expected_manifest_revision": {"$ref": "#/$defs/sha256"}
+          }
+        }
+      ]
+    },
+    "assetCatalogInspectParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace_id", "entry_id", "expected_manifest_revision"],
+      "properties": {
+        "workspace_id": {"$ref": "#/$defs/workspaceId"},
+        "entry_id": {"$ref": "#/$defs/assetEntryId"},
+        "expected_manifest_revision": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "assetCatalogEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry_id",
+        "asset_id",
+        "category",
+        "role",
+        "path",
+        "sha256",
+        "media_type",
+        "selected",
+        "inspectable"
+      ],
+      "properties": {
+        "entry_id": {"$ref": "#/$defs/assetEntryId"},
+        "asset_id": {"type": ["string", "null"], "maxLength": 128},
+        "category": {
+          "enum": [
+            "manifest",
+            "target",
+            "visual_bible",
+            "audio_bible",
+            "inventory",
+            "specification",
+            "production_receipt",
+            "production_request",
+            "production_output",
+            "processing_receipt",
+            "processing_recipe",
+            "processing_output",
+            "license",
+            "qa",
+            "runtime_output"
+          ]
+        },
+        "role": {"type": ["string", "null"], "maxLength": 128},
+        "path": {
+          "oneOf": [
+            {"$ref": "#/$defs/portableAssetCatalogPath"},
+            {"type": "null"}
+          ]
+        },
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "media_type": {"type": ["string", "null"], "maxLength": 128},
+        "selected": {"type": "boolean"},
+        "inspectable": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"path": {"type": "null"}}},
+          "then": {
+            "properties": {
+              "category": {"const": "processing_recipe"},
+              "selected": {"const": false},
+              "inspectable": {"const": false}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"selected": {"const": true}}},
+          "then": {"properties": {"category": {"const": "production_output"}}}
+        }
+      ]
+    },
+    "assetJsonInspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "encoding", "content", "value"],
+      "properties": {
+        "kind": {"const": "json"},
+        "encoding": {"const": "utf-8"},
+        "content": {
+          "type": "string",
+          "maxLength": 262144,
+          "x-worldforge-max-utf8-bytes": 262144
+        },
+        "value": {"type": "object"}
+      }
+    },
+    "assetGlslInspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "encoding", "content"],
+      "properties": {
+        "kind": {"const": "glsl"},
+        "encoding": {"const": "utf-8"},
+        "content": {
+          "type": "string",
+          "maxLength": 262144,
+          "x-worldforge-max-utf8-bytes": 262144
+        }
+      }
+    },
+    "assetPngInspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "width", "height", "bit_depth", "color_type", "interlaced"],
+      "properties": {
+        "kind": {"const": "png"},
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "bit_depth": {"type": "integer", "minimum": 1},
+        "color_type": {"type": "integer", "minimum": 0},
+        "interlaced": {"type": "boolean"}
+      }
+    },
+    "assetWavInspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "channels",
+        "sample_rate",
+        "sample_width_bits",
+        "frame_count",
+        "duration_ms"
+      ],
+      "properties": {
+        "kind": {"const": "wav"},
+        "channels": {"type": "integer", "minimum": 1},
+        "sample_rate": {"type": "integer", "minimum": 1},
+        "sample_width_bits": {"type": "integer", "minimum": 1},
+        "frame_count": {"type": "integer", "minimum": 0},
+        "duration_ms": {"type": "integer", "minimum": 0}
+      }
+    },
+    "assetFontInspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "flavor", "table_count"],
+      "properties": {
+        "kind": {"const": "font"},
+        "flavor": {"enum": ["truetype", "opentype"]},
+        "table_count": {"type": "integer", "minimum": 1}
+      }
+    },
+    "assetGlbMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodes",
+        "meshes",
+        "materials",
+        "textures",
+        "skins",
+        "bones",
+        "influences",
+        "animations",
+        "vertices",
+        "triangles",
+        "external_uris"
+      ],
+      "properties": {
+        "nodes": {"type": "integer", "minimum": 0},
+        "meshes": {"type": "integer", "minimum": 0},
+        "materials": {"type": "integer", "minimum": 0},
+        "textures": {"type": "integer", "minimum": 0},
+        "skins": {"type": "integer", "minimum": 0},
+        "bones": {"type": "integer", "minimum": 0},
+        "influences": {"type": "integer", "minimum": 0},
+        "animations": {"type": "integer", "minimum": 0},
+        "vertices": {"type": "integer", "minimum": 0},
+        "triangles": {"type": "integer", "minimum": 0},
+        "external_uris": {"type": "integer", "minimum": 0}
+      }
+    },
+    "assetGlbInspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "byte_length",
+        "json_chunk_bytes",
+        "bin_chunk_bytes",
+        "extensions_used",
+        "extensions_required",
+        "external_uris",
+        "embedded_uris",
+        "max_texture_dimension",
+        "metrics"
+      ],
+      "properties": {
+        "kind": {"const": "glb"},
+        "byte_length": {"type": "integer", "minimum": 0},
+        "json_chunk_bytes": {"type": "integer", "minimum": 0},
+        "bin_chunk_bytes": {"type": "integer", "minimum": 0},
+        "extensions_used": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"type": "string", "maxLength": 256}
+        },
+        "extensions_required": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"type": "string", "maxLength": 256}
+        },
+        "external_uris": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"type": "string", "maxLength": 256}
+        },
+        "embedded_uris": {"type": "integer", "minimum": 0},
+        "max_texture_dimension": {"type": "integer", "minimum": 0},
+        "metrics": {"$ref": "#/$defs/assetGlbMetrics"}
+      }
+    },
+    "assetUnavailableInspection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reason"],
+      "properties": {
+        "kind": {"const": "unavailable"},
+        "reason": {"enum": ["identity_only", "unsupported_media_type"]}
+      }
+    },
+    "assetInspection": {
+      "oneOf": [
+        {"$ref": "#/$defs/assetJsonInspection"},
+        {"$ref": "#/$defs/assetGlslInspection"},
+        {"$ref": "#/$defs/assetPngInspection"},
+        {"$ref": "#/$defs/assetWavInspection"},
+        {"$ref": "#/$defs/assetFontInspection"},
+        {"$ref": "#/$defs/assetGlbInspection"},
+        {"$ref": "#/$defs/assetUnavailableInspection"}
+      ]
+    },
+    "assetCatalogListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_revision", "offset", "limit", "entries", "next_offset"],
+      "properties": {
+        "manifest_revision": {"$ref": "#/$defs/sha256"},
+        "offset": {"type": "integer", "minimum": 0},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 64},
+        "entries": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {"$ref": "#/$defs/assetCatalogEntry"}
+        },
+        "next_offset": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "assetCatalogInspectResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_revision", "entry", "inspection"],
+      "properties": {
+        "manifest_revision": {"$ref": "#/$defs/sha256"},
+        "entry": {"$ref": "#/$defs/assetCatalogEntry"},
+        "inspection": {"$ref": "#/$defs/assetInspection"}
       }
     },
     "sourceDocumentSummary": {
@@ -208,14 +520,16 @@
             "source_inspection",
             "world_validation",
             "narrative_analysis",
-            "staged_changesets"
+            "staged_changesets",
+            "asset_catalog_inspection"
           ],
           "properties": {
             "providers": {"const": false},
             "source_inspection": {"const": true},
             "world_validation": {"const": true},
             "narrative_analysis": {"const": true},
-            "staged_changesets": {"const": true}
+            "staged_changesets": {"const": true},
+            "asset_catalog_inspection": {"const": true}
           }
         }
       }
@@ -612,6 +926,32 @@
         "params": {"$ref": "#/$defs/sourceReadParams"}
       }
     },
+    "assetCatalogListRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.catalog.list"},
+        "params": {"$ref": "#/$defs/assetCatalogListParams"}
+      }
+    },
+    "assetCatalogInspectRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "params"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "request"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.catalog.inspect"},
+        "params": {"$ref": "#/$defs/assetCatalogInspectParams"}
+      }
+    },
     "changesetCreateRequest": {
       "type": "object",
       "additionalProperties": false,
@@ -734,6 +1074,8 @@
         {"$ref": "#/$defs/legacyRequest"},
         {"$ref": "#/$defs/workspaceScopedAuthoringRequest"},
         {"$ref": "#/$defs/sourceReadRequest"},
+        {"$ref": "#/$defs/assetCatalogListRequest"},
+        {"$ref": "#/$defs/assetCatalogInspectRequest"},
         {"$ref": "#/$defs/changesetCreateRequest"},
         {"$ref": "#/$defs/changesetGetRequest"},
         {"$ref": "#/$defs/changesetListRequest"},
@@ -795,6 +1137,32 @@
         "request_id": {"type": "string", "minLength": 1},
         "method": {"const": "source.read"},
         "result": {"$ref": "#/$defs/sourceReadResult"}
+      }
+    },
+    "assetCatalogListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.catalog.list"},
+        "result": {"$ref": "#/$defs/assetCatalogListResult"}
+      }
+    },
+    "assetCatalogInspectResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "protocol_version", "kind", "request_id", "method", "result"],
+      "properties": {
+        "protocol": {"const": "rpg-world-forge.studio_protocol"},
+        "protocol_version": {"const": 1},
+        "kind": {"const": "response"},
+        "request_id": {"type": "string", "minLength": 1},
+        "method": {"const": "asset.catalog.inspect"},
+        "result": {"$ref": "#/$defs/assetCatalogInspectResult"}
       }
     },
     "worldValidateResponse": {
@@ -958,6 +1326,8 @@
         {"$ref": "#/$defs/workspaceOverviewResponse"},
         {"$ref": "#/$defs/sourceListResponse"},
         {"$ref": "#/$defs/sourceReadResponse"},
+        {"$ref": "#/$defs/assetCatalogListResponse"},
+        {"$ref": "#/$defs/assetCatalogInspectResponse"},
         {"$ref": "#/$defs/worldValidateResponse"},
         {"$ref": "#/$defs/worldAnalyzeResponse"},
         {"$ref": "#/$defs/changesetCreateResponse"},

@@ -608,6 +608,7 @@ const OVERVIEW = {
     world_validation: true,
     narrative_analysis: true,
     staged_changesets: true,
+    asset_catalog_inspection: true,
   },
 };
 

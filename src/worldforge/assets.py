@@ -617,21 +617,46 @@ def validate_asset_manifest(
 ) -> list[AssetIssue]:
     if profile not in {"build", "draft", "release"}:
         raise AssetManifestError("profile must be build, draft, or release")
-    if profile == "build":
-        path = Path(manifest_path)
-        raw = _read_json(path)
-        if raw.get("format_version") != 3:
-            raise AssetManifestError("the build profile is only valid for asset manifest v3")
     path = Path(manifest_path)
     raw = _read_json(path)
-    root = path.parent.resolve()
-    issues: list[AssetIssue] = []
-
     if raw.get("format_version") == 3:
         from worldforge.asset_manifest_v3 import validate_asset_manifest_v3
 
         return validate_asset_manifest_v3(
             path,
+            profile=profile,
+            worldpack_path=worldpack_path,
+        )
+    return validate_asset_manifest_object(
+        raw,
+        root=path.parent,
+        profile=profile,
+        worldpack_path=worldpack_path,
+    )
+
+
+def validate_asset_manifest_object(
+    raw: dict[str, Any],
+    *,
+    root: str | Path,
+    profile: str = "draft",
+    worldpack_path: str | Path | None = None,
+) -> list[AssetIssue]:
+    """Validate one already captured manifest object against its artifact root."""
+
+    if profile not in {"build", "draft", "release"}:
+        raise AssetManifestError("profile must be build, draft, or release")
+    if profile == "build" and raw.get("format_version") != 3:
+        raise AssetManifestError("the build profile is only valid for asset manifest v3")
+    root = Path(root).resolve()
+    issues: list[AssetIssue] = []
+
+    if raw.get("format_version") == 3:
+        from worldforge.asset_manifest_v3 import validate_asset_manifest_v3_object
+
+        return validate_asset_manifest_v3_object(
+            raw,
+            root=root,
             profile=profile,
             worldpack_path=worldpack_path,
         )

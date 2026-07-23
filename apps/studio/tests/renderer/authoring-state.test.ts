@@ -245,6 +245,7 @@ function overview(workspaceId: string) {
       world_validation: true as const,
       narrative_analysis: true as const,
       staged_changesets: true as const,
+      asset_catalog_inspection: true as const,
     },
   };
 }

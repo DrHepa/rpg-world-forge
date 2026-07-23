@@ -532,11 +532,30 @@ def validate_asset_manifest_v3(
     if profile not in {"draft", "build", "release"}:
         return [_issue("profile", "must be draft, build, or release")]
     path = Path(manifest_path)
-    root = path.parent.resolve()
     try:
         raw = read_json_object(path)
     except AssetContractError as exc:
         return [_issue("manifest", str(exc))]
+    return validate_asset_manifest_v3_object(
+        raw,
+        root=path.parent,
+        profile=profile,
+        worldpack_path=worldpack_path,
+    )
+
+
+def validate_asset_manifest_v3_object(
+    raw: dict[str, Any],
+    *,
+    root: str | Path,
+    profile: str,
+    worldpack_path: str | Path | None,
+) -> list[ContractIssue]:
+    """Validate one captured v3 manifest while resolving its referenced artifacts."""
+
+    if profile not in {"draft", "build", "release"}:
+        return [_issue("profile", "must be draft, build, or release")]
+    root = Path(root).resolve()
     issues: list[ContractIssue] = []
     release_like = profile in {"build", "release"}
     if raw.get("format") != "rpg-world-forge.asset_manifest" or raw.get("format_version") != 3:

@@ -331,17 +331,17 @@ def _media_limit(media_type: str, requested: int) -> int:
     return min(requested, MAX_MEDIA_BYTES)
 
 
-def read_validated_resource(
+def _read_resource_snapshot(
     root: str | Path,
     relative: PurePosixPath,
-    media_type: str,
     *,
-    limit: int = MAX_MEDIA_BYTES,
+    media_type: str | None,
+    limit: int,
     materialize_descriptor: int | None = None,
 ) -> ValidatedMedia:
-    """Validate one stable read and optionally materialize that exact capture."""
-
-    effective_limit = _media_limit(media_type, limit)
+    effective_limit = (
+        min(limit, MAX_MEDIA_BYTES) if media_type is None else _media_limit(media_type, limit)
+    )
     snapshot = _path_snapshot(Path(root), relative, limit=effective_limit)
     descriptor: int | None = None
     directories: list[int] = []
@@ -361,14 +361,19 @@ def read_validated_resource(
             descriptor,
             expected_size=before.st_size,
             limit=effective_limit,
-            retain_limit=_retained_limit(media_type, effective_limit),
+            retain_limit=(
+                min(effective_limit, MAX_RETAINED_MEDIA_BYTES)
+                if media_type is None
+                else _retained_limit(media_type, effective_limit)
+            ),
         )
-        if payload is not None:
-            _validate_media_payload(payload, media_type, snapshot.target)
-        else:
-            capture.flush()
-            with mmap.mmap(capture.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
-                _validate_media_payload(mapped, media_type, snapshot.target)
+        if media_type is not None:
+            if payload is not None:
+                _validate_media_payload(payload, media_type, snapshot.target)
+            else:
+                capture.flush()
+                with mmap.mmap(capture.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+                    _validate_media_payload(mapped, media_type, snapshot.target)
         after = descriptor_file_stat(descriptor)
         if _file_state(after) != _file_state(before):
             raise MediaValidationError(
@@ -394,6 +399,45 @@ def read_validated_resource(
             os.close(descriptor)
         for directory in reversed(directories):
             os.close(directory)
+
+
+def read_resource_snapshot(
+    root: str | Path,
+    relative: PurePosixPath,
+    *,
+    limit: int = MAX_MEDIA_BYTES,
+    materialize_descriptor: int | None = None,
+) -> ValidatedMedia:
+    """Hash one stable resource read and optionally materialize that exact capture."""
+
+    if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_MEDIA_BYTES:
+        raise ValueError("limit must be a positive resource bound")
+    return _read_resource_snapshot(
+        root,
+        relative,
+        media_type=None,
+        limit=limit,
+        materialize_descriptor=materialize_descriptor,
+    )
+
+
+def read_validated_resource(
+    root: str | Path,
+    relative: PurePosixPath,
+    media_type: str,
+    *,
+    limit: int = MAX_MEDIA_BYTES,
+    materialize_descriptor: int | None = None,
+) -> ValidatedMedia:
+    """Validate one stable read and optionally materialize that exact capture."""
+
+    return _read_resource_snapshot(
+        root,
+        relative,
+        media_type=media_type,
+        limit=limit,
+        materialize_descriptor=materialize_descriptor,
+    )
 
 
 def read_validated_media(

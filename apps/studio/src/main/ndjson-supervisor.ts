@@ -2,6 +2,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 
 import type {
+  AssetCatalogInspectRequest as StudioAssetCatalogInspectRequest,
+  AssetCatalogInspectResponse as StudioAssetCatalogInspectResponse,
+  AssetCatalogListRequest as StudioAssetCatalogListRequest,
+  AssetCatalogListResponse as StudioAssetCatalogListResponse,
   ChangesetApplyRequest as StudioChangesetApplyRequest,
   ChangesetApplyResponse as StudioChangesetApplyResponse,
   ChangesetApproveRequest as StudioChangesetApproveRequest,
@@ -206,9 +210,13 @@ export type StudioRequestParams<M extends StudioMethod> = M extends "job.create"
                   ? StudioChangesetRejectRequest["params"]
                   : M extends "changeset.apply"
                     ? StudioChangesetApplyRequest["params"]
-                    : M extends StudioWorkspaceScopedAuthoringMethod
-                      ? StudioWorkspaceScopedParams
-                      : Record<string, unknown>;
+                    : M extends "asset.catalog.list"
+                      ? StudioAssetCatalogListRequest["params"]
+                      : M extends "asset.catalog.inspect"
+                        ? StudioAssetCatalogInspectRequest["params"]
+                        : M extends StudioWorkspaceScopedAuthoringMethod
+                          ? StudioWorkspaceScopedParams
+                          : Record<string, unknown>;
 
 export type StudioSuccessForMethod<M extends StudioMethod> = M extends "workspace.overview"
   ? StudioWorkspaceOverviewResponse
@@ -238,7 +246,11 @@ export type StudioSuccessForMethod<M extends StudioMethod> = M extends "workspac
                           ? StudioJobCreateResponse
                           : M extends "job.cancel"
                             ? StudioJobCancelResponse
-                            : StudioLegacyResponse;
+                            : M extends "asset.catalog.list"
+                              ? StudioAssetCatalogListResponse
+                              : M extends "asset.catalog.inspect"
+                                ? StudioAssetCatalogInspectResponse
+                                : StudioLegacyResponse;
 
 export type StudioReplyForMethod<M extends StudioMethod> =
   | StudioSuccessForMethod<M>

@@ -4,6 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from worldforge.studio.assets import AssetCatalogManager
 from worldforge.studio.authoring import AuthoringManager
 from worldforge.studio.changesets import ChangesetManager
 from worldforge.studio.contracts import (
@@ -42,6 +43,7 @@ class StudioService:
         self.store = store
         self.scheduler = scheduler
         self.workspaces = WorkspaceManager(store)
+        self.assets = AssetCatalogManager(self.workspaces)
         self.authoring = AuthoringManager(self.workspaces)
         self.changesets = ChangesetManager(store)
         self.jobs = JobManager(store)
@@ -53,6 +55,8 @@ class StudioService:
             "workspace.overview": self._workspace_overview,
             "source.list": self._source_list,
             "source.read": self._source_read,
+            "asset.catalog.list": self._asset_catalog_list,
+            "asset.catalog.inspect": self._asset_catalog_inspect,
             "world.validate": self._world_validate,
             "world.analyze": self._world_analyze,
             "events.list": self._events_list,
@@ -110,6 +114,7 @@ class StudioService:
                 "narrative_analysis": True,
                 "staged_changesets": True,
                 "durable_jobs": True,
+                "asset_catalog_inspection": True,
             },
         }
 
@@ -135,6 +140,31 @@ class StudioService:
     def _source_read(self, params: dict[str, Any]) -> dict[str, Any]:
         _closed_params(params, allowed={"workspace_id", "path"}, required={"workspace_id", "path"})
         return self.authoring.read_source(params["workspace_id"], params["path"])
+
+    def _asset_catalog_list(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(
+            params,
+            allowed={"workspace_id", "offset", "limit", "expected_manifest_revision"},
+            required={"workspace_id"},
+        )
+        return self.assets.list(
+            params["workspace_id"],
+            offset=params.get("offset", 0),
+            limit=params.get("limit", 64),
+            expected_manifest_revision=params.get("expected_manifest_revision"),
+        )
+
+    def _asset_catalog_inspect(self, params: dict[str, Any]) -> dict[str, Any]:
+        _closed_params(
+            params,
+            allowed={"workspace_id", "entry_id", "expected_manifest_revision"},
+            required={"workspace_id", "entry_id", "expected_manifest_revision"},
+        )
+        return self.assets.inspect(
+            params["workspace_id"],
+            entry_id=params["entry_id"],
+            expected_manifest_revision=params["expected_manifest_revision"],
+        )
 
     def _world_validate(self, params: dict[str, Any]) -> dict[str, Any]:
         _closed_params(params, allowed={"workspace_id"}, required={"workspace_id"})

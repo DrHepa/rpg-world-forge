@@ -210,6 +210,7 @@ class AuthoringManager:
                         "world_validation": True,
                         "narrative_analysis": True,
                         "staged_changesets": True,
+                        "asset_catalog_inspection": True,
                     },
                 }
             }

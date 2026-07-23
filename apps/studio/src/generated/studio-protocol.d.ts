@@ -19,6 +19,8 @@ export type Method =
   | "workspace.overview"
   | "source.list"
   | "source.read"
+  | "asset.catalog.list"
+  | "asset.catalog.inspect"
   | "world.validate"
   | "world.analyze"
   | "events.list"
@@ -73,6 +75,77 @@ export type Sha256 = string;
  * via the `definition` "portableSourcePath".
  */
 export type PortableSourcePath = string;
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetEntryId".
+ */
+export type AssetEntryId = string;
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "portableAssetCatalogPath".
+ */
+export type PortableAssetCatalogPath = string;
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetCatalogListParams".
+ */
+export type AssetCatalogListParams =
+  | {
+      workspace_id: WorkspaceId;
+      offset?: 0;
+      limit?: number;
+      expected_manifest_revision?: Sha256;
+    }
+  | {
+      workspace_id: WorkspaceId;
+      offset: number;
+      limit?: number;
+      expected_manifest_revision: Sha256;
+    };
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetCatalogEntry".
+ */
+export type AssetCatalogEntry = {
+  [k: string]: unknown;
+} & {
+  entry_id: AssetEntryId;
+  asset_id: string | null;
+  category:
+    | "manifest"
+    | "target"
+    | "visual_bible"
+    | "audio_bible"
+    | "inventory"
+    | "specification"
+    | "production_receipt"
+    | "production_request"
+    | "production_output"
+    | "processing_receipt"
+    | "processing_recipe"
+    | "processing_output"
+    | "license"
+    | "qa"
+    | "runtime_output";
+  role: string | null;
+  path: PortableAssetCatalogPath | null;
+  sha256: Sha256;
+  media_type: string | null;
+  selected: boolean;
+  inspectable: boolean;
+};
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetInspection".
+ */
+export type AssetInspection =
+  | AssetJsonInspection
+  | AssetGlslInspection
+  | AssetPngInspection
+  | AssetWavInspection
+  | AssetFontInspection
+  | AssetGlbInspection
+  | AssetUnavailableInspection;
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "changesetJsonPointerChange".
@@ -150,6 +223,8 @@ export type Request =
   | LegacyRequest
   | WorkspaceScopedAuthoringRequest
   | SourceReadRequest
+  | AssetCatalogListRequest
+  | AssetCatalogInspectRequest
   | ChangesetCreateRequest
   | ChangesetGetRequest
   | ChangesetListRequest
@@ -186,6 +261,8 @@ export type Response =
   | WorkspaceOverviewResponse
   | SourceListResponse
   | SourceReadResponse
+  | AssetCatalogListResponse
+  | AssetCatalogInspectResponse
   | WorldValidateResponse
   | WorldAnalyzeResponse
   | ChangesetCreateResponse
@@ -259,6 +336,142 @@ export interface WorkspaceScopedParams {
 export interface SourceReadParams {
   workspace_id: WorkspaceId;
   path: PortableSourcePath;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetCatalogInspectParams".
+ */
+export interface AssetCatalogInspectParams {
+  workspace_id: WorkspaceId;
+  entry_id: AssetEntryId;
+  expected_manifest_revision: Sha256;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetJsonInspection".
+ */
+export interface AssetJsonInspection {
+  kind: "json";
+  encoding: "utf-8";
+  content: string;
+  value: {
+    [k: string]: unknown;
+  };
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetGlslInspection".
+ */
+export interface AssetGlslInspection {
+  kind: "glsl";
+  encoding: "utf-8";
+  content: string;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetPngInspection".
+ */
+export interface AssetPngInspection {
+  kind: "png";
+  width: number;
+  height: number;
+  bit_depth: number;
+  color_type: number;
+  interlaced: boolean;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetWavInspection".
+ */
+export interface AssetWavInspection {
+  kind: "wav";
+  channels: number;
+  sample_rate: number;
+  sample_width_bits: number;
+  frame_count: number;
+  duration_ms: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetFontInspection".
+ */
+export interface AssetFontInspection {
+  kind: "font";
+  flavor: "truetype" | "opentype";
+  table_count: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetGlbMetrics".
+ */
+export interface AssetGlbMetrics {
+  nodes: number;
+  meshes: number;
+  materials: number;
+  textures: number;
+  skins: number;
+  bones: number;
+  influences: number;
+  animations: number;
+  vertices: number;
+  triangles: number;
+  external_uris: number;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetGlbInspection".
+ */
+export interface AssetGlbInspection {
+  kind: "glb";
+  byte_length: number;
+  json_chunk_bytes: number;
+  bin_chunk_bytes: number;
+  /**
+   * @maxItems 64
+   */
+  extensions_used: string[];
+  /**
+   * @maxItems 64
+   */
+  extensions_required: string[];
+  /**
+   * @maxItems 64
+   */
+  external_uris: string[];
+  embedded_uris: number;
+  max_texture_dimension: number;
+  metrics: AssetGlbMetrics;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetUnavailableInspection".
+ */
+export interface AssetUnavailableInspection {
+  kind: "unavailable";
+  reason: "identity_only" | "unsupported_media_type";
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetCatalogListResult".
+ */
+export interface AssetCatalogListResult {
+  manifest_revision: Sha256;
+  offset: number;
+  limit: number;
+  /**
+   * @maxItems 64
+   */
+  entries: AssetCatalogEntry[];
+  next_offset: number | null;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetCatalogInspectResult".
+ */
+export interface AssetCatalogInspectResult {
+  manifest_revision: Sha256;
+  entry: AssetCatalogEntry;
+  inspection: AssetInspection;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
@@ -337,6 +550,7 @@ export interface WorkspaceOverview {
     world_validation: true;
     narrative_analysis: true;
     staged_changesets: true;
+    asset_catalog_inspection: true;
   };
 }
 /**
@@ -687,6 +901,30 @@ export interface SourceReadRequest {
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetCatalogListRequest".
+ */
+export interface AssetCatalogListRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "asset.catalog.list";
+  params: AssetCatalogListParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetCatalogInspectRequest".
+ */
+export interface AssetCatalogInspectRequest {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "request";
+  request_id: string;
+  method: "asset.catalog.inspect";
+  params: AssetCatalogInspectParams;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
  * via the `definition` "changesetCreateRequest".
  */
 export interface ChangesetCreateRequest {
@@ -988,6 +1226,30 @@ export interface SourceReadResponse {
   request_id: string;
   method: "source.read";
   result: SourceReadResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetCatalogListResponse".
+ */
+export interface AssetCatalogListResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "asset.catalog.list";
+  result: AssetCatalogListResult;
+}
+/**
+ * This interface was referenced by `undefined`'s JSON-Schema
+ * via the `definition` "assetCatalogInspectResponse".
+ */
+export interface AssetCatalogInspectResponse {
+  protocol: "rpg-world-forge.studio_protocol";
+  protocol_version: 1;
+  kind: "response";
+  request_id: string;
+  method: "asset.catalog.inspect";
+  result: AssetCatalogInspectResult;
 }
 /**
  * This interface was referenced by `undefined`'s JSON-Schema

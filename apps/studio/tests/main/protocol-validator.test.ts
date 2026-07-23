@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { validateStudioEnvelope } from "../../src/main/protocol-validator";
 import type {
+  AssetCatalogInspectRequest,
+  AssetCatalogInspectResponse,
+  AssetCatalogListRequest,
+  AssetCatalogListResponse,
+} from "../../src/generated/studio-protocol";
+import type {
   StudioJobCancelResponse,
   StudioJobCreateRequest,
   StudioJobCreateResponse,
@@ -15,6 +21,197 @@ const protocol = {
 } as const;
 
 describe("Studio protocol authoring discrimination", () => {
+  it("closes revision-bound asset catalog requests", () => {
+    const firstPage: AssetCatalogListRequest = {
+      ...protocol,
+      kind: "request",
+      request_id: "assets-1",
+      method: "asset.catalog.list",
+      params: { workspace_id: "workspace_01", limit: 64 },
+    };
+    const laterPage: AssetCatalogListRequest = {
+      ...firstPage,
+      request_id: "assets-2",
+      params: {
+        workspace_id: "workspace_01",
+        offset: 64,
+        limit: 64,
+        expected_manifest_revision: "a".repeat(64),
+      },
+    };
+    const inspect: AssetCatalogInspectRequest = {
+      ...protocol,
+      kind: "request",
+      request_id: "asset-inspect-1",
+      method: "asset.catalog.inspect",
+      params: {
+        workspace_id: "workspace_01",
+        entry_id: `asset_${"b".repeat(64)}`,
+        expected_manifest_revision: "a".repeat(64),
+      },
+    };
+
+    expect(validateStudioEnvelope(firstPage)).toBe(true);
+    expect(validateStudioEnvelope(laterPage)).toBe(true);
+    expect(validateStudioEnvelope(inspect)).toBe(true);
+    expect(
+      validateStudioEnvelope({
+        ...laterPage,
+        params: { workspace_id: "workspace_01", offset: 64, limit: 64 },
+      }),
+    ).toBe(false);
+    expect(
+      validateStudioEnvelope({
+        ...firstPage,
+        params: { ...firstPage.params, path: "assets/renderpack/manifest.json" },
+      }),
+    ).toBe(false);
+    expect(
+      validateStudioEnvelope({
+        ...inspect,
+        params: { ...inspect.params, entry_id: "assets/renderpack/manifest.json" },
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts only closed metadata-only asset catalog responses", () => {
+    const entry = {
+      entry_id: `asset_${"b".repeat(64)}`,
+      asset_id: "neutral_sheet",
+      category: "runtime_output",
+      role: "texture",
+      path: "assets/renderpack/processed/neutral_sheet/neutral_sheet.png",
+      sha256: "c".repeat(64),
+      media_type: "image/png",
+      selected: false,
+      inspectable: true,
+    } as const;
+    const list: AssetCatalogListResponse = {
+      ...protocol,
+      kind: "response",
+      request_id: "assets-1",
+      method: "asset.catalog.list",
+      result: {
+        manifest_revision: "a".repeat(64),
+        offset: 0,
+        limit: 64,
+        entries: [entry],
+        next_offset: null,
+      },
+    };
+    const inspect: AssetCatalogInspectResponse = {
+      ...protocol,
+      kind: "response",
+      request_id: "asset-inspect-1",
+      method: "asset.catalog.inspect",
+      result: {
+        manifest_revision: "a".repeat(64),
+        entry,
+        inspection: {
+          kind: "png",
+          width: 32,
+          height: 16,
+          bit_depth: 8,
+          color_type: 6,
+          interlaced: false,
+        },
+      },
+    };
+
+    expect(validateStudioEnvelope(list)).toBe(true);
+    expect(validateStudioEnvelope(inspect)).toBe(true);
+    expect(
+      validateStudioEnvelope({ ...list, result: { ...list.result, total: 1 } }),
+    ).toBe(false);
+    expect(
+      validateStudioEnvelope({
+        ...list,
+        result: {
+          ...list.result,
+          entries: [{ ...entry, path: "/absolute/private.png" }],
+        },
+      }),
+    ).toBe(false);
+    expect(
+      validateStudioEnvelope({
+        ...inspect,
+        result: {
+          ...inspect.result,
+          inspection: { ...inspect.result.inspection, bytes: "forbidden" },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("enforces portable asset paths and UTF-8 byte limits", () => {
+    const entry = {
+      entry_id: `asset_${"b".repeat(64)}`,
+      asset_id: "neutral_sheet",
+      category: "runtime_output",
+      role: "texture",
+      path: "assets/renderpack/processed/neutral_sheet/neutral_sheet.png",
+      sha256: "c".repeat(64),
+      media_type: "image/png",
+      selected: false,
+      inspectable: true,
+    } as const;
+    const list = {
+      ...protocol,
+      kind: "response",
+      request_id: "asset-path",
+      method: "asset.catalog.list",
+      result: {
+        manifest_revision: "a".repeat(64),
+        offset: 0,
+        limit: 64,
+        entries: [entry],
+        next_offset: null,
+      },
+    } as const;
+
+    for (const path of [
+      "assets/../private.png",
+      Array.from({ length: 33 }, (_, index) => `part-${String(index)}`).join("/"),
+      "assets/cafe\u0301.png",
+    ]) {
+      expect(
+        validateStudioEnvelope({
+          ...list,
+          result: { ...list.result, entries: [{ ...entry, path }] },
+        }),
+      ).toBe(false);
+    }
+
+    const oversizedValue = { text: "é".repeat(200_000) };
+    for (const inspection of [
+      {
+        kind: "json",
+        encoding: "utf-8",
+        content: JSON.stringify(oversizedValue),
+        value: oversizedValue,
+      },
+      {
+        kind: "glsl",
+        encoding: "utf-8",
+        content: "é".repeat(200_000),
+      },
+    ]) {
+      expect(
+        validateStudioEnvelope({
+          ...protocol,
+          kind: "response",
+          request_id: `asset-${inspection.kind}`,
+          method: "asset.catalog.inspect",
+          result: {
+            manifest_revision: "a".repeat(64),
+            entry,
+            inspection,
+          },
+        }),
+      ).toBe(false);
+    }
+  });
+
   it("requires the exact source.read request params", () => {
     const valid: StudioSourceReadRequest = {
       ...protocol,
