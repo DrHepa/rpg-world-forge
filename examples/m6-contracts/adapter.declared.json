@@ -1,0 +1,78 @@
+{
+  "budgets": {
+    "max_assets": 1024,
+    "max_bindings": 2048,
+    "max_draw_calls": 4096,
+    "max_loaded_bytes": 536870912,
+    "max_triangles": 10000000,
+    "target_frame_milliseconds": 16.666667
+  },
+  "capability_ids": [
+    "action_replay",
+    "actor_needs",
+    "conditional_dialogue",
+    "construction",
+    "content_renderpack_v1",
+    "content_worldpack_v1_v5",
+    "contextual_interactions",
+    "costed_abilities",
+    "delayed_consequences",
+    "directed_relationships",
+    "grid_movement",
+    "hierarchical_goals",
+    "path_navigation",
+    "playable_actor_switching",
+    "presentation_world_2d",
+    "reactive_quests",
+    "resource_economy",
+    "schedules",
+    "timed_scenes",
+    "typed_knowledge",
+    "versioned_persistence",
+    "world_clock"
+  ],
+  "components": {
+    "animation": {
+      "id": "contract_animation",
+      "version": "0.0.0"
+    },
+    "engine": {
+      "id": "contract_engine",
+      "version": "0.0.0"
+    },
+    "packager": {
+      "id": "contract_packager",
+      "version": "0.0.0"
+    },
+    "physics": {
+      "id": "contract_physics",
+      "version": "0.0.0"
+    },
+    "renderer": {
+      "id": "contract_renderer",
+      "version": "0.0.0"
+    }
+  },
+  "content_hash": "3638d006f787a9c17d019cb7aad6a13dae4f619676a1ad02bd02eda56208c5c7",
+  "format": "rpg-world-forge.runtime_adapter",
+  "format_version": 1,
+  "id": "neutral_contract_adapter",
+  "platforms": [
+    "linux_x86_64",
+    "windows_x86_64"
+  ],
+  "presentation_modes": [
+    "2_5d",
+    "2_5d_over_3d",
+    "2d",
+    "2d_over_2_5d",
+    "2d_over_3d",
+    "3d"
+  ],
+  "runtime_api": {
+    "maximum_exclusive": "1.0.0",
+    "minimum": "0.5.0"
+  },
+  "state": "declared",
+  "version": "0.0.0"
+}

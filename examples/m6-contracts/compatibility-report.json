@@ -1,0 +1,68 @@
+{
+  "adapter_hash": "3638d006f787a9c17d019cb7aad6a13dae4f619676a1ad02bd02eda56208c5c7",
+  "capability_catalog_hash": "a24c8eb4f15101bd0988c6af5ba9c51bb28d087ad7300340ee971c26552e3b94",
+  "checks": [
+    {
+      "id": "adapter_state",
+      "issues": [
+        {
+          "code": "adapter_not_verified",
+          "path": "adapter/state"
+        }
+      ],
+      "passed": false
+    },
+    {
+      "id": "capability_coverage",
+      "issues": [],
+      "passed": true
+    },
+    {
+      "id": "m5_pack_integrity",
+      "issues": [
+        {
+          "code": "pack_unverified",
+          "path": "composition/packs/renderpack"
+        }
+      ],
+      "passed": false
+    },
+    {
+      "id": "pack_profile",
+      "issues": [],
+      "passed": true
+    },
+    {
+      "id": "platform_support",
+      "issues": [],
+      "passed": true
+    },
+    {
+      "id": "runtime_api",
+      "issues": [],
+      "passed": true
+    },
+    {
+      "id": "semantic_slot_ownership",
+      "issues": [],
+      "passed": true
+    },
+    {
+      "id": "world_identity",
+      "issues": [],
+      "passed": true
+    }
+  ],
+  "compatible": false,
+  "composition_hash": "bbb1c166bfeb0364de528415bf7487a4f6020437613667380cece8fcbc7a190a",
+  "content_hash": "45bb6d61d8174e31637efb8e70cabe24cb8a7abb3dae294c7d67df1f374f050f",
+  "format": "rpg-world-forge.runtime_compatibility_report",
+  "format_version": 1,
+  "pack_hashes": {
+    "renderpack": "1111111111111111111111111111111111111111111111111111111111111111",
+    "worldpack": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70"
+  },
+  "platform": "linux_x86_64",
+  "profile_hash": "ee166e0410278b6ee895bbe880ea369d1e9d7f6b5bdd3608dc1ab0781ebd2796",
+  "world_content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70"
+}

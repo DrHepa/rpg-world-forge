@@ -86,6 +86,28 @@ class ContractCatalogTests(unittest.TestCase):
         )
         self.assertEqual(["tests/test_m5_production.py"], discovery["tests"])
 
+    def test_m6_runtime_composition_entries_are_complete_and_keep_legacy_phase_name(self) -> None:
+        catalog = load_contract_catalog(ROOT)
+        entries = {entry["id"]: entry for entry in catalog["contracts"]}
+        expected = {
+            "runtime-adapter": "rpg-world-forge.runtime_adapter",
+            "runtime-capability-catalog": "rpg-world-forge.runtime_capability_catalog",
+            "runtime-compatibility-report": "rpg-world-forge.runtime_compatibility_report",
+            "runtime-composition": "rpg-world-forge.runtime_composition",
+            "runtime-presentation-profile": "rpg-world-forge.runtime_presentation_profile",
+        }
+
+        for contract_id, format_name in expected.items():
+            with self.subTest(contract=contract_id):
+                entry = entries[contract_id]
+                self.assertEqual(format_name, entry["format"])
+                self.assertEqual(1, entry["version"])
+                self.assertEqual(["M6"], entry["m5_phases"])
+                self.assertIn(
+                    "tests/test_m6_runtime_composition_contracts.py",
+                    entry["tests"],
+                )
+
     def test_json_fixture_identity_is_strict_and_schema_bound(self) -> None:
         catalog = load_contract_catalog(ROOT)
         entry_index, entry = next(

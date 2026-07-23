@@ -1,0 +1,328 @@
+{
+  "$id": "https://rpg-world-forge.local/schemas/runtime-composition.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adapter": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "capability_catalog_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "rpg-world-forge.runtime_composition"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "packs": {
+      "additionalProperties": false,
+      "properties": {
+        "assetpack": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/pack_ref"
+            },
+            {
+              "properties": {
+                "format": {
+                  "const": "rpg-world-forge.assetpack"
+                },
+                "format_version": {
+                  "const": 1
+                }
+              }
+            }
+          ]
+        },
+        "renderpack": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/pack_ref"
+            },
+            {
+              "properties": {
+                "format": {
+                  "const": "isoworld.renderpack"
+                },
+                "format_version": {
+                  "const": 1
+                }
+              }
+            }
+          ]
+        },
+        "worldpack": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/pack_ref"
+            },
+            {
+              "properties": {
+                "format": {
+                  "const": "isoworld.worldpack"
+                },
+                "format_version": {
+                  "enum": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "worldpack"
+      ],
+      "type": "object"
+    },
+    "profile": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "enum": [
+            "profile_2_5d",
+            "profile_2_5d_over_3d",
+            "profile_2d",
+            "profile_2d_over_2_5d",
+            "profile_2d_over_3d",
+            "profile_3d"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "release_id": {
+      "$ref": "#/$defs/semver"
+    },
+    "required_capability_ids": {
+      "items": {
+        "$ref": "runtime-capability-catalog.schema.json#/$defs/capability_id"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "slot_owners": {
+      "items": {
+        "$ref": "#/$defs/slot_owner"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "world_content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "world_id": {
+      "$ref": "#/$defs/id"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "world_id",
+    "world_content_hash",
+    "release_id",
+    "profile",
+    "capability_catalog_hash",
+    "adapter",
+    "packs",
+    "required_capability_ids",
+    "slot_owners",
+    "content_hash"
+  ],
+  "title": "RPG World Forge runtime composition v1",
+  "type": "object",
+  "$defs": {
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "pack_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "type": "string"
+        },
+        "format_version": {
+          "type": "integer"
+        },
+        "path": {
+          "$ref": "#/$defs/portable_path"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "portable_path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "not": {
+        "pattern": "(?:^|/)\\.{1,2}(?:/|$)"
+      },
+      "pattern": "^[^<>:\"\\\\|?*\\u0000-\\u001F]+$",
+      "type": "string"
+    },
+    "semantic_slot": {
+      "maxLength": 194,
+      "minLength": 3,
+      "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_]*){1,2}$",
+      "type": "string"
+    },
+    "semver": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "slot_owner": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "representation": {
+                "const": "3d"
+              }
+            },
+            "required": [
+              "representation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "pack": {
+                "const": "assetpack"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "pack": {
+                "const": "renderpack"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "plane": {
+                "const": "audio"
+              }
+            },
+            "required": [
+              "plane"
+            ]
+          },
+          "then": {
+            "properties": {
+              "representation": {
+                "const": "audio"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "plane": {
+                "const": "ui_overlay"
+              }
+            },
+            "required": [
+              "plane"
+            ]
+          },
+          "then": {
+            "properties": {
+              "representation": {
+                "const": "2d"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/id"
+        },
+        "pack": {
+          "enum": [
+            "assetpack",
+            "renderpack"
+          ]
+        },
+        "plane": {
+          "enum": [
+            "audio",
+            "ui_overlay",
+            "world_base",
+            "world_overlay"
+          ]
+        },
+        "representation": {
+          "enum": [
+            "2_5d",
+            "2d",
+            "3d",
+            "audio"
+          ]
+        },
+        "slot": {
+          "$ref": "#/$defs/semantic_slot"
+        }
+      },
+      "required": [
+        "slot",
+        "plane",
+        "pack",
+        "asset_id",
+        "representation"
+      ],
+      "type": "object"
+    }
+  }
+}

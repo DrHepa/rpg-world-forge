@@ -934,6 +934,142 @@
       "version": 1
     },
     {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/adapter.declared.json"
+      ],
+      "format": "rpg-world-forge.runtime_adapter",
+      "id": "runtime-adapter",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.runtime_composition:validate_runtime_adapter"
+      ],
+      "schema": "schemas/runtime-adapter.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py"
+      ],
+      "title": "RPG World Forge runtime adapter declaration v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/capability-catalog.json"
+      ],
+      "format": "rpg-world-forge.runtime_capability_catalog",
+      "id": "runtime-capability-catalog",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.runtime_composition:validate_runtime_capability_catalog"
+      ],
+      "schema": "schemas/runtime-capability-catalog.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py"
+      ],
+      "title": "RPG World Forge runtime capability catalog v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/compatibility-report.json"
+      ],
+      "format": "rpg-world-forge.runtime_compatibility_report",
+      "id": "runtime-compatibility-report",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.runtime_composition:validate_runtime_compatibility_report"
+      ],
+      "schema": "schemas/runtime-compatibility-report.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py"
+      ],
+      "title": "RPG World Forge runtime compatibility report v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/composition.json"
+      ],
+      "format": "rpg-world-forge.runtime_composition",
+      "id": "runtime-composition",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.runtime_composition:validate_runtime_composition",
+        "worldforge.runtime_composition:verify_runtime_composition"
+      ],
+      "schema": "schemas/runtime-composition.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py"
+      ],
+      "title": "RPG World Forge runtime composition v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/profiles/profile_2_5d.json",
+        "examples/m6-contracts/profiles/profile_2_5d_over_3d.json",
+        "examples/m6-contracts/profiles/profile_2d.json",
+        "examples/m6-contracts/profiles/profile_2d_over_2_5d.json",
+        "examples/m6-contracts/profiles/profile_2d_over_3d.json",
+        "examples/m6-contracts/profiles/profile_3d.json"
+      ],
+      "format": "rpg-world-forge.runtime_presentation_profile",
+      "id": "runtime-presentation-profile",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.runtime_composition:validate_runtime_presentation_profile"
+      ],
+      "schema": "schemas/runtime-presentation-profile.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py"
+      ],
+      "title": "RPG World Forge runtime presentation profile v1",
+      "version": 1
+    },
+    {
       "cli_commands": [
         "audit-contracts"
       ],

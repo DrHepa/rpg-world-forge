@@ -34,7 +34,7 @@ _ENTRY_KEYS = frozenset(
 )
 _TOP_LEVEL_KEYS = frozenset({"format", "format_version", "contracts"})
 _PATH_LIST_FIELDS = ("fixtures", "tests", "docs")
-_ALLOWED_PHASES = frozenset({"M1", "M2", "M2.5", "M3", "M4", "M5"})
+_ALLOWED_PHASES = frozenset({"M1", "M2", "M2.5", "M3", "M4", "M5", "M6"})
 _PORTABLE_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _CATALOG_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")

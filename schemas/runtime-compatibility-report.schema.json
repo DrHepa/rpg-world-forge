@@ -1,0 +1,152 @@
+{
+  "$id": "https://rpg-world-forge.local/schemas/runtime-compatibility-report.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adapter_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "capability_catalog_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "maxItems": 8,
+      "minItems": 8,
+      "type": "array"
+    },
+    "compatible": {
+      "type": "boolean"
+    },
+    "composition_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "rpg-world-forge.runtime_compatibility_report"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "pack_hashes": {
+      "additionalProperties": false,
+      "properties": {
+        "assetpack": {
+          "$ref": "#/$defs/sha256"
+        },
+        "renderpack": {
+          "$ref": "#/$defs/sha256"
+        },
+        "worldpack": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "worldpack"
+      ],
+      "type": "object"
+    },
+    "platform": {
+      "enum": [
+        "linux_x86_64",
+        "windows_x86_64"
+      ]
+    },
+    "profile_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "world_content_hash": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "composition_hash",
+    "world_content_hash",
+    "profile_hash",
+    "capability_catalog_hash",
+    "adapter_hash",
+    "pack_hashes",
+    "platform",
+    "checks",
+    "compatible",
+    "content_hash"
+  ],
+  "title": "RPG World Forge runtime compatibility report v1",
+  "type": "object",
+  "$defs": {
+    "check": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "enum": [
+            "adapter_state",
+            "capability_coverage",
+            "m5_pack_integrity",
+            "pack_profile",
+            "platform_support",
+            "runtime_api",
+            "semantic_slot_ownership",
+            "world_identity"
+          ]
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/issue"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "passed",
+        "issues"
+      ],
+      "type": "object"
+    },
+    "issue": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "adapter_not_verified",
+            "asset_binding_missing",
+            "capability_missing",
+            "pack_hash_mismatch",
+            "pack_kind_missing",
+            "pack_unverified",
+            "platform_unsupported",
+            "profile_mismatch",
+            "representation_mismatch",
+            "runtime_api_incompatible",
+            "semantic_slot_duplicate",
+            "semantic_slot_missing",
+            "world_identity_mismatch"
+          ]
+        },
+        "path": {
+          "pattern": "^[a-z0-9_/:-]+$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "path"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

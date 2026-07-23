@@ -1,0 +1,65 @@
+{
+  "adapter": {
+    "content_hash": "3638d006f787a9c17d019cb7aad6a13dae4f619676a1ad02bd02eda56208c5c7",
+    "id": "neutral_contract_adapter",
+    "version": "0.0.0"
+  },
+  "capability_catalog_hash": "a24c8eb4f15101bd0988c6af5ba9c51bb28d087ad7300340ee971c26552e3b94",
+  "content_hash": "bbb1c166bfeb0364de528415bf7487a4f6020437613667380cece8fcbc7a190a",
+  "format": "rpg-world-forge.runtime_composition",
+  "format_version": 1,
+  "packs": {
+    "renderpack": {
+      "content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "format": "isoworld.renderpack",
+      "format_version": 1,
+      "path": "examples/m6-contracts/unavailable.renderpack.json"
+    },
+    "worldpack": {
+      "content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70",
+      "format": "isoworld.worldpack",
+      "format_version": 5,
+      "path": "content/compiled/foundation.worldpack.json"
+    }
+  },
+  "profile": {
+    "content_hash": "ee166e0410278b6ee895bbe880ea369d1e9d7f6b5bdd3608dc1ab0781ebd2796",
+    "id": "profile_2d"
+  },
+  "release_id": "1.0.0",
+  "required_capability_ids": [
+    "action_replay",
+    "actor_needs",
+    "conditional_dialogue",
+    "construction",
+    "content_renderpack_v1",
+    "content_worldpack_v1_v5",
+    "contextual_interactions",
+    "costed_abilities",
+    "delayed_consequences",
+    "directed_relationships",
+    "grid_movement",
+    "hierarchical_goals",
+    "path_navigation",
+    "playable_actor_switching",
+    "presentation_world_2d",
+    "reactive_quests",
+    "resource_economy",
+    "schedules",
+    "timed_scenes",
+    "typed_knowledge",
+    "versioned_persistence",
+    "world_clock"
+  ],
+  "slot_owners": [
+    {
+      "asset_id": "neutral_sprite",
+      "pack": "renderpack",
+      "plane": "world_base",
+      "representation": "2d",
+      "slot": "actor:neutral"
+    }
+  ],
+  "world_content_hash": "f87191f68b5a519006772748f3f6cbe3f2115a4cf2d4cc339c9a36821b384c70",
+  "world_id": "foundation_slice"
+}

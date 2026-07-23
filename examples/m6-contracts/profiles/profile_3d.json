@@ -1,0 +1,20 @@
+{
+  "content_hash": "dd37cdc2387534e1f8465cf0998c5e6211932282e63120d4d0a6e426436525c0",
+  "format": "rpg-world-forge.runtime_presentation_profile",
+  "format_version": 1,
+  "id": "profile_3d",
+  "layers": [
+    "3d"
+  ],
+  "mode": "3d",
+  "required_capability_ids": [
+    "animation_gltf",
+    "collision_gltf",
+    "content_assetpack_v1",
+    "content_worldpack_v1_v5",
+    "presentation_world_3d"
+  ],
+  "required_packs": [
+    "assetpack"
+  ]
+}

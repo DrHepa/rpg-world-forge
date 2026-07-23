@@ -1,0 +1,25 @@
+{
+  "content_hash": "d7c89016720fb3eff00d71b3ae194c1f91ff6ff434b6e9331c01c283a6e3426d",
+  "format": "rpg-world-forge.runtime_presentation_profile",
+  "format_version": 1,
+  "id": "profile_2d_over_3d",
+  "layers": [
+    "3d",
+    "2d"
+  ],
+  "mode": "2d_over_3d",
+  "required_capability_ids": [
+    "animation_gltf",
+    "collision_gltf",
+    "content_assetpack_v1",
+    "content_renderpack_v1",
+    "content_worldpack_v1_v5",
+    "presentation_world_2d",
+    "presentation_world_3d",
+    "presentation_world_mixed"
+  ],
+  "required_packs": [
+    "assetpack",
+    "renderpack"
+  ]
+}

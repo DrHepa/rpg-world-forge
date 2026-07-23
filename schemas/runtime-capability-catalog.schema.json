@@ -1,0 +1,255 @@
+{
+  "$id": "https://rpg-world-forge.local/schemas/runtime-capability-catalog.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "items": {
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "id": {
+                  "enum": [
+                    "catalog_multi_world_v1",
+                    "content_assetpack_v1",
+                    "content_renderpack_v1",
+                    "content_worldpack_v1_v5",
+                    "locales"
+                  ]
+                }
+              },
+              "required": [
+                "id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "determinism": {
+                  "const": "deterministic"
+                },
+                "domain": {
+                  "const": "content"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "id": {
+                  "enum": [
+                    "conditional_dialogue",
+                    "personal_campaigns",
+                    "reactive_quests",
+                    "timed_scenes",
+                    "typed_knowledge"
+                  ]
+                }
+              },
+              "required": [
+                "id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "determinism": {
+                  "const": "deterministic"
+                },
+                "domain": {
+                  "const": "narrative"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "id": {
+                  "const": "packaging_standalone"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "determinism": {
+                  "const": "deterministic"
+                },
+                "domain": {
+                  "const": "packaging"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "id": {
+                  "enum": [
+                    "animation_gltf",
+                    "presentation_audio",
+                    "presentation_ui_2d",
+                    "presentation_world_2_5d",
+                    "presentation_world_2d",
+                    "presentation_world_3d",
+                    "presentation_world_mixed"
+                  ]
+                }
+              },
+              "required": [
+                "id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "determinism": {
+                  "const": "deterministic_presentation"
+                },
+                "domain": {
+                  "const": "presentation"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "id": {
+                  "enum": [
+                    "action_replay",
+                    "actor_needs",
+                    "collision_gltf",
+                    "construction",
+                    "contextual_interactions",
+                    "costed_abilities",
+                    "delayed_consequences",
+                    "directed_relationships",
+                    "grid_movement",
+                    "hierarchical_goals",
+                    "path_navigation",
+                    "playable_actor_switching",
+                    "resource_economy",
+                    "schedules",
+                    "simulation_fixed_step",
+                    "versioned_persistence",
+                    "world_clock"
+                  ]
+                }
+              },
+              "required": [
+                "id"
+              ]
+            },
+            "then": {
+              "properties": {
+                "determinism": {
+                  "const": "deterministic"
+                },
+                "domain": {
+                  "const": "simulation"
+                }
+              }
+            }
+          }
+        ],
+        "properties": {
+          "determinism": {
+            "enum": [
+              "deterministic",
+              "deterministic_presentation"
+            ]
+          },
+          "domain": {
+            "enum": [
+              "content",
+              "narrative",
+              "packaging",
+              "presentation",
+              "simulation"
+            ]
+          },
+          "id": {
+            "$ref": "#/$defs/capability_id"
+          }
+        },
+        "required": [
+          "id",
+          "domain",
+          "determinism"
+        ],
+        "type": "object"
+      },
+      "maxItems": 35,
+      "minItems": 35,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "rpg-world-forge.runtime_capability_catalog"
+    },
+    "format_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "capabilities",
+    "content_hash"
+  ],
+  "title": "RPG World Forge runtime capability catalog v1",
+  "type": "object",
+  "$defs": {
+    "capability_id": {
+      "enum": [
+        "action_replay",
+        "actor_needs",
+        "animation_gltf",
+        "catalog_multi_world_v1",
+        "collision_gltf",
+        "conditional_dialogue",
+        "construction",
+        "content_assetpack_v1",
+        "content_renderpack_v1",
+        "content_worldpack_v1_v5",
+        "contextual_interactions",
+        "costed_abilities",
+        "delayed_consequences",
+        "directed_relationships",
+        "grid_movement",
+        "hierarchical_goals",
+        "locales",
+        "packaging_standalone",
+        "path_navigation",
+        "personal_campaigns",
+        "playable_actor_switching",
+        "presentation_audio",
+        "presentation_ui_2d",
+        "presentation_world_2_5d",
+        "presentation_world_2d",
+        "presentation_world_3d",
+        "presentation_world_mixed",
+        "reactive_quests",
+        "resource_economy",
+        "schedules",
+        "simulation_fixed_step",
+        "timed_scenes",
+        "typed_knowledge",
+        "versioned_persistence",
+        "world_clock"
+      ],
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

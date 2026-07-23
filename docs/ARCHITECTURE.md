@@ -171,6 +171,34 @@ AI is not a game subsystem. It does not decide dialogue, quests, routes, or
 actions during play. It may propose authoring material, but that material must
 be reviewed and compiled before it reaches the runtime.
 
+## M6 runtime-composition contract boundary
+
+M6 composes unchanged M5 artifacts before it implements or selects a runtime:
+
+```text
+worldpack v1-v5 ----+
+renderpack v1 ------+--> hash-bound composition --> compatibility report
+assetpack v1 -------+          |                          |
+capability catalog -+          v                          v
+presentation profile       declared/verified adapter   static checks
+```
+
+Six profiles define only the world planes: 2D, 2.5D, 3D, 2D over 2.5D, 2D over
+3D, and 2.5D over 3D. UI and audio are orthogonal planes. The composition binds
+each selected semantic slot to one plane, pack, asset, and representation.
+Renderpack v1 remains unchanged; its selected bindings receive 2D/2.5D
+classification from the outer composition. Assetpack representation must match
+the sealed binding exactly.
+
+The adapter document is a requirement declaration, not an implementation
+locator. It contains no module, command, executable, provider, model, or MCP
+endpoint. Only `verified` state can satisfy compatibility, and verification
+still requires all pack, profile, platform, runtime API, capability, semantic
+ownership, and world-identity checks. These contracts do not claim a native 3D
+runtime, collision, animation, composed bundle, package, or M6 release.
+
+[ADR-0016](decisions/0016-runtime-composition-contracts.md) records this seam.
+
 ## State flow
 
 The runtime uses a small reactive-style flow:

@@ -120,6 +120,9 @@ model, or network call executed.
 M6 starts from a sealed M5 `assetpack_v1`; it does not reopen asset production.
 The milestone will:
 
+- [x] Define hash-bound capability, presentation-profile, adapter,
+  composition, and compatibility-report contracts without selecting an engine
+  or changing M5 packs.
 - Select and pin at least one explicit 3D game runtime/engine contract outside
   the Forge, including platform, renderer, physics, animation, packaging, and
   performance budgets.
@@ -141,3 +144,8 @@ assetpack proves that gate can be enforced; it is not a committed game asset or
 an engine choice. Exit gate: a separate game repository imports a verified 3D
 bundle, runs without Forge or network access, and passes boundary, native-smoke,
 determinism, performance, and packaging checks.
+
+The completed contract item is not M6 runtime readiness. The neutral adapter is
+deliberately declared and its report is incompatible; adapter execution,
+composed bundles, native 3D proof, game integration, and release gates remain
+open.

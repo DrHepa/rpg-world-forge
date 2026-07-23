@@ -1,0 +1,182 @@
+{
+  "capabilities": [
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "action_replay"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "actor_needs"
+    },
+    {
+      "determinism": "deterministic_presentation",
+      "domain": "presentation",
+      "id": "animation_gltf"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "content",
+      "id": "catalog_multi_world_v1"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "collision_gltf"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "narrative",
+      "id": "conditional_dialogue"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "construction"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "content",
+      "id": "content_assetpack_v1"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "content",
+      "id": "content_renderpack_v1"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "content",
+      "id": "content_worldpack_v1_v5"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "contextual_interactions"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "costed_abilities"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "delayed_consequences"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "directed_relationships"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "grid_movement"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "hierarchical_goals"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "content",
+      "id": "locales"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "packaging",
+      "id": "packaging_standalone"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "path_navigation"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "narrative",
+      "id": "personal_campaigns"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "playable_actor_switching"
+    },
+    {
+      "determinism": "deterministic_presentation",
+      "domain": "presentation",
+      "id": "presentation_audio"
+    },
+    {
+      "determinism": "deterministic_presentation",
+      "domain": "presentation",
+      "id": "presentation_ui_2d"
+    },
+    {
+      "determinism": "deterministic_presentation",
+      "domain": "presentation",
+      "id": "presentation_world_2_5d"
+    },
+    {
+      "determinism": "deterministic_presentation",
+      "domain": "presentation",
+      "id": "presentation_world_2d"
+    },
+    {
+      "determinism": "deterministic_presentation",
+      "domain": "presentation",
+      "id": "presentation_world_3d"
+    },
+    {
+      "determinism": "deterministic_presentation",
+      "domain": "presentation",
+      "id": "presentation_world_mixed"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "narrative",
+      "id": "reactive_quests"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "resource_economy"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "schedules"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "simulation_fixed_step"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "narrative",
+      "id": "timed_scenes"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "narrative",
+      "id": "typed_knowledge"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "versioned_persistence"
+    },
+    {
+      "determinism": "deterministic",
+      "domain": "simulation",
+      "id": "world_clock"
+    }
+  ],
+  "content_hash": "a24c8eb4f15101bd0988c6af5ba9c51bb28d087ad7300340ee971c26552e3b94",
+  "format": "rpg-world-forge.runtime_capability_catalog",
+  "format_version": 1
+}

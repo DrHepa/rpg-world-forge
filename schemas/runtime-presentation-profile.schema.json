@@ -1,0 +1,168 @@
+{
+  "$id": "https://rpg-world-forge.local/schemas/runtime-presentation-profile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "id": {"const": "profile_2_5d"},
+            "layers": {"const": ["2_5d"]},
+            "mode": {"const": "2_5d"},
+            "required_capability_ids": {
+              "const": [
+                "content_renderpack_v1",
+                "content_worldpack_v1_v5",
+                "presentation_world_2_5d"
+              ]
+            },
+            "required_packs": {"const": ["renderpack"]}
+          }
+        },
+        {
+          "properties": {
+            "id": {"const": "profile_2_5d_over_3d"},
+            "layers": {"const": ["3d", "2_5d"]},
+            "mode": {"const": "2_5d_over_3d"},
+            "required_capability_ids": {
+              "const": [
+                "animation_gltf",
+                "collision_gltf",
+                "content_assetpack_v1",
+                "content_renderpack_v1",
+                "content_worldpack_v1_v5",
+                "presentation_world_2_5d",
+                "presentation_world_3d",
+                "presentation_world_mixed"
+              ]
+            },
+            "required_packs": {"const": ["assetpack", "renderpack"]}
+          }
+        },
+        {
+          "properties": {
+            "id": {"const": "profile_2d"},
+            "layers": {"const": ["2d"]},
+            "mode": {"const": "2d"},
+            "required_capability_ids": {
+              "const": [
+                "content_renderpack_v1",
+                "content_worldpack_v1_v5",
+                "presentation_world_2d"
+              ]
+            },
+            "required_packs": {"const": ["renderpack"]}
+          }
+        },
+        {
+          "properties": {
+            "id": {"const": "profile_2d_over_2_5d"},
+            "layers": {"const": ["2_5d", "2d"]},
+            "mode": {"const": "2d_over_2_5d"},
+            "required_capability_ids": {
+              "const": [
+                "content_renderpack_v1",
+                "content_worldpack_v1_v5",
+                "presentation_world_2_5d",
+                "presentation_world_2d",
+                "presentation_world_mixed"
+              ]
+            },
+            "required_packs": {"const": ["renderpack"]}
+          }
+        },
+        {
+          "properties": {
+            "id": {"const": "profile_2d_over_3d"},
+            "layers": {"const": ["3d", "2d"]},
+            "mode": {"const": "2d_over_3d"},
+            "required_capability_ids": {
+              "const": [
+                "animation_gltf",
+                "collision_gltf",
+                "content_assetpack_v1",
+                "content_renderpack_v1",
+                "content_worldpack_v1_v5",
+                "presentation_world_2d",
+                "presentation_world_3d",
+                "presentation_world_mixed"
+              ]
+            },
+            "required_packs": {"const": ["assetpack", "renderpack"]}
+          }
+        },
+        {
+          "properties": {
+            "id": {"const": "profile_3d"},
+            "layers": {"const": ["3d"]},
+            "mode": {"const": "3d"},
+            "required_capability_ids": {
+              "const": [
+                "animation_gltf",
+                "collision_gltf",
+                "content_assetpack_v1",
+                "content_worldpack_v1_v5",
+                "presentation_world_3d"
+              ]
+            },
+            "required_packs": {"const": ["assetpack"]}
+          }
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "content_hash": {"$ref": "#/$defs/sha256"},
+    "format": {"const": "rpg-world-forge.runtime_presentation_profile"},
+    "format_version": {"const": 1},
+    "id": {
+      "enum": [
+        "profile_2_5d",
+        "profile_2_5d_over_3d",
+        "profile_2d",
+        "profile_2d_over_2_5d",
+        "profile_2d_over_3d",
+        "profile_3d"
+      ]
+    },
+    "layers": {
+      "items": {"enum": ["2_5d", "2d", "3d"]},
+      "maxItems": 2,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "mode": {
+      "enum": ["2_5d", "2_5d_over_3d", "2d", "2d_over_2_5d", "2d_over_3d", "3d"]
+    },
+    "required_capability_ids": {
+      "items": {"$ref": "runtime-capability-catalog.schema.json#/$defs/capability_id"},
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "required_packs": {
+      "items": {"enum": ["assetpack", "renderpack"]},
+      "maxItems": 2,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "id",
+    "mode",
+    "layers",
+    "required_packs",
+    "required_capability_ids",
+    "content_hash"
+  ],
+  "title": "RPG World Forge runtime presentation profile v1",
+  "type": "object",
+  "$defs": {
+    "sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}
+  }
+}

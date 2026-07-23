@@ -1,0 +1,196 @@
+{
+  "$id": "https://rpg-world-forge.local/schemas/runtime-adapter.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "budgets": {
+      "additionalProperties": false,
+      "properties": {
+        "max_assets": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_bindings": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_draw_calls": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_loaded_bytes": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_triangles": {
+          "maximum": 9223372036854775807,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "target_frame_milliseconds": {
+          "exclusiveMinimum": 0,
+          "maximum": 1000,
+          "type": "number"
+        }
+      },
+      "required": [
+        "max_assets",
+        "max_bindings",
+        "max_draw_calls",
+        "max_loaded_bytes",
+        "max_triangles",
+        "target_frame_milliseconds"
+      ],
+      "type": "object"
+    },
+    "capability_ids": {
+      "items": {
+        "$ref": "runtime-capability-catalog.schema.json#/$defs/capability_id"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "components": {
+      "additionalProperties": false,
+      "properties": {
+        "animation": {
+          "$ref": "#/$defs/component"
+        },
+        "engine": {
+          "$ref": "#/$defs/component"
+        },
+        "packager": {
+          "$ref": "#/$defs/component"
+        },
+        "physics": {
+          "$ref": "#/$defs/component"
+        },
+        "renderer": {
+          "$ref": "#/$defs/component"
+        }
+      },
+      "required": [
+        "engine",
+        "renderer",
+        "physics",
+        "animation",
+        "packager"
+      ],
+      "type": "object"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "rpg-world-forge.runtime_adapter"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/id"
+    },
+    "platforms": {
+      "items": {
+        "enum": [
+          "linux_x86_64",
+          "windows_x86_64"
+        ]
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "presentation_modes": {
+      "items": {
+        "enum": [
+          "2_5d",
+          "2_5d_over_3d",
+          "2d",
+          "2d_over_2_5d",
+          "2d_over_3d",
+          "3d"
+        ]
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "runtime_api": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum_exclusive": {
+          "$ref": "#/$defs/semver"
+        },
+        "minimum": {
+          "$ref": "#/$defs/semver"
+        }
+      },
+      "required": [
+        "minimum",
+        "maximum_exclusive"
+      ],
+      "type": "object"
+    },
+    "state": {
+      "enum": [
+        "declared",
+        "verified"
+      ]
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "id",
+    "version",
+    "state",
+    "runtime_api",
+    "platforms",
+    "presentation_modes",
+    "capability_ids",
+    "components",
+    "budgets",
+    "content_hash"
+  ],
+  "title": "RPG World Forge runtime adapter declaration v1",
+  "type": "object",
+  "$defs": {
+    "component": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "semver": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "content_hash": "ee166e0410278b6ee895bbe880ea369d1e9d7f6b5bdd3608dc1ab0781ebd2796",
+  "format": "rpg-world-forge.runtime_presentation_profile",
+  "format_version": 1,
+  "id": "profile_2d",
+  "layers": [
+    "2d"
+  ],
+  "mode": "2d",
+  "required_capability_ids": [
+    "content_renderpack_v1",
+    "content_worldpack_v1_v5",
+    "presentation_world_2d"
+  ],
+  "required_packs": [
+    "renderpack"
+  ]
+}
