@@ -130,6 +130,11 @@ The milestone will:
   with deterministic render-state planning and separate Windows ABI-only
   evidence. The adapter proves `animation_gltf` only and remains incompatible
   with every current 3D profile because collision is not implemented.
+- [x] Register the existing isometric pyray runtime as the exact
+  `isoworld_raylib_2_5d` adapter for `profile_2_5d` and Linux x86_64, deriving
+  its capability declaration from the foundation proof without binding the
+  adapter to that world hash or broadening it to 2D, mixed, 3D, packaging,
+  Windows, UI/audio, or performance claims.
 - Select and pin at least one explicit 3D game runtime/engine contract outside
   the Forge, including platform, renderer, physics, animation, packaging, and
   performance budgets.
@@ -154,8 +159,11 @@ determinism, performance, and packaging checks.
 
 The completed contract, bundle, and bounded animation proof are not M6 runtime
 readiness. The neutral contract adapter remains deliberately declared and its
-report incompatible. The separate verified `pyray_3d_v1` declaration omits
-collision, assetpack consumption, world presentation, packaging, and
+report incompatible. The verified legacy adapter can satisfy the Linux x86_64
+`profile_2_5d` contract when a worldpack's requirements are covered and its
+renderpack identity matches; the foundation is its verification fixture, not
+an adapter hash constraint. The separate verified `pyray_3d_v1` declaration
+omits collision, assetpack consumption, world presentation, packaging, and
 performance capabilities, so it cannot satisfy a 3D composition. Game
 integration, collision, representative performance, packaging, and release
 gates remain open.

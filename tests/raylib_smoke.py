@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import tempfile
 from pathlib import Path
 
@@ -14,10 +15,13 @@ from isoworld.content.renderpack import (
     RenderBinding,
     RenderPack,
 )
+from isoworld.render.pyray_2_5d import (
+    PYRAY_2_5D_ADAPTER,
+    PYRAY_2_5D_KEY,
+    PYRAY_2_5D_REGISTRY,
+)
 from isoworld.render.render_state import build_render_state
-from isoworld.render.renderer import IsometricRenderer
 from isoworld.render.resources import RaylibAssetRegistry
-from isoworld.world.state import initial_world_state
 
 
 def main() -> int:
@@ -34,6 +38,7 @@ def main() -> int:
             image = pr.gen_image_color(8, 8, pr.MAGENTA)
             if not pr.export_image(image, str(texture_path)):
                 raise RuntimeError("raylib could not export the smoke-test texture")
+            texture_hash = hashlib.sha256(texture_path.read_bytes()).hexdigest()
 
             pack = load_worldpack("content/compiled/foundation.worldpack.json")
             renderpack = RenderPack(
@@ -45,7 +50,7 @@ def main() -> int:
                     RenderAsset(
                         id="smoke_sprite",
                         kind="sprite",
-                        files=(AssetFile("texture", "smoke.png", "0" * 64, "image/png"),),
+                        files=(AssetFile("texture", "smoke.png", texture_hash, "image/png"),),
                         clips=(
                             AnimationClip(
                                 id="idle",
@@ -59,10 +64,19 @@ def main() -> int:
                 ),
                 bindings=(RenderBinding("actor:explorer", "smoke_sprite", "idle"),),
             )
+            adapter = PYRAY_2_5D_REGISTRY.resolve(PYRAY_2_5D_KEY)
+            if adapter is not PYRAY_2_5D_ADAPTER:
+                raise RuntimeError("legacy adapter registry returned a non-canonical value")
+            preflight = adapter.preflight(pack, renderpack)
+            if preflight.adapter_key != PYRAY_2_5D_KEY:
+                raise RuntimeError("legacy adapter preflight returned a non-canonical key")
+            app = adapter.create_app(pack, renderpack)
             registry = RaylibAssetRegistry(pr, renderpack)
             registry.load()
-            snapshot = build_render_state(initial_world_state(pack), pack)
-            renderer = IsometricRenderer(screen_width=96, screen_height=64)
+            snapshot = build_render_state(app.simulation.state, pack)
+            renderer = app.renderer
+            renderer.screen_width = 96
+            renderer.screen_height = 64
             renderer.attach_resources(registry)
             pr.begin_drawing()
             renderer.draw(pr, snapshot)

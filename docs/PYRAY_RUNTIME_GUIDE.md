@@ -387,6 +387,33 @@ replace semantic render-plan tests. Raylib 6.0's memory/software backends are
 promising for future headless rendering, but the standard Python wheel's
 supported path must be proven before making them a CI requirement.
 
+### Exact legacy 2.5D adapter
+
+`isoworld.render.pyray_2_5d` registers
+`isoworld_raylib_2_5d@0.1.0` for Linux x86_64 and `profile_2_5d` only. Its 22
+capabilities were derived from and verified against the exact 19 foundation
+worldpack requirements plus `content_renderpack_v1`,
+`content_worldpack_v1_v5`, and `presentation_world_2_5d`. The adapter is not
+bound to the foundation hash: another world may pass when its requirements are
+covered and its renderpack identity matches. It deliberately excludes
+`locales`, `personal_campaigns`, 2D, mixed/3D presentation, collision,
+assetpack, UI/audio, packaging, Windows, and performance readiness.
+
+Registry resolution is inert and imports no pyray. The adapter preflights an
+already-loaded worldpack/renderpack pair, verifies resource hashes under the
+five-asset, three-binding, and 1 MiB bounds, and then creates the existing
+`GameApp`. It neither replaces `IsometricRenderer` nor touches deterministic
+simulation. `tests/raylib_smoke.py` resolves that exact key and runs the seam
+under Xvfb on hosted Ubuntu x86_64 without a silent skip. A local aarch64
+window is not evidence for the declaration.
+
+The declared 1024 draw-call and 1000 ms values bound the neutral smoke; they
+are not benchmark evidence. `max_triangles: 1` is merely the schema's positive
+floor for this non-3D adapter and proves no triangle or GLB handling. The
+adapter is 2.5D because the implementation combines isometric projection,
+authored elevation, and deterministic depth sorting—not because it happens to
+construct a raylib `Camera2D`.
+
 ### Bounded GLB animation proof
 
 `isoworld.render.pyray_3d` is an M6 evidence adapter, not the generated game's

@@ -1,0 +1,72 @@
+{
+  "budgets": {
+    "max_assets": 5,
+    "max_bindings": 3,
+    "max_draw_calls": 1024,
+    "max_loaded_bytes": 1048576,
+    "max_triangles": 1,
+    "target_frame_milliseconds": 1000
+  },
+  "capability_ids": [
+    "action_replay",
+    "actor_needs",
+    "conditional_dialogue",
+    "construction",
+    "content_renderpack_v1",
+    "content_worldpack_v1_v5",
+    "contextual_interactions",
+    "costed_abilities",
+    "delayed_consequences",
+    "directed_relationships",
+    "grid_movement",
+    "hierarchical_goals",
+    "path_navigation",
+    "playable_actor_switching",
+    "presentation_world_2_5d",
+    "reactive_quests",
+    "resource_economy",
+    "schedules",
+    "timed_scenes",
+    "typed_knowledge",
+    "versioned_persistence",
+    "world_clock"
+  ],
+  "components": {
+    "animation": {
+      "id": "isoworld_tick_clips",
+      "version": "0.6.0"
+    },
+    "engine": {
+      "id": "isoworld_game_app",
+      "version": "0.6.0"
+    },
+    "packager": {
+      "id": "not_provided",
+      "version": "0.0.0"
+    },
+    "physics": {
+      "id": "not_provided",
+      "version": "0.0.0"
+    },
+    "renderer": {
+      "id": "isoworld_isometric_renderer",
+      "version": "0.6.0"
+    }
+  },
+  "content_hash": "2628adad118585ffc15c6509a49c92954660d7ea42788eed1ba69fef99e54fa8",
+  "format": "rpg-world-forge.runtime_adapter",
+  "format_version": 1,
+  "id": "isoworld_raylib_2_5d",
+  "platforms": [
+    "linux_x86_64"
+  ],
+  "presentation_modes": [
+    "2_5d"
+  ],
+  "runtime_api": {
+    "maximum_exclusive": "0.6.0",
+    "minimum": "0.5.0"
+  },
+  "state": "verified",
+  "version": "0.1.0"
+}

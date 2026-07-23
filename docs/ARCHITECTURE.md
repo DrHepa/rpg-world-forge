@@ -216,9 +216,37 @@ physics, animation, playability, performance, packaging, or M6 release
 readiness. [ADR-0017](decisions/0017-immutable-composed-runtime-bundle.md)
 records the ownership and publication boundary.
 
+### Registered legacy 2.5D adapter
+
+`isoworld_raylib_2_5d@0.1.0` exposes the established isometric runtime through
+the exact static adapter registry for Linux x86_64 and `profile_2_5d` only. Its
+22 declared capabilities were derived from and verified against the checked-in
+foundation worldpack's 19 required runtime features plus worldpack v1-v5,
+renderpack v1, and 2.5D world presentation. The declaration is not bound to
+that world's hash: another worldpack may pass when its requirements are a
+subset of those capabilities and its renderpack has the same world identity.
+The renderer proves 2.5D through isometric projection, authored elevation, and
+stable depth sorting; its use of `Camera2D` does not establish a separate 2D
+profile.
+
+Registry lookup returns a frozen opaque value and imports no pyray.
+`preflight()` checks one already-loaded worldpack/renderpack pair, verifies
+that every required runtime feature is covered, enforces matching world
+identity, five-asset/three-binding limits, and at most 1 MiB of hash-verified
+resource bytes, then `create_app()` delegates to the unchanged `GameApp`. The
+1024 draw-call and 1000 ms values are smoke ceilings, not representative
+performance evidence. The schema-required triangle value is a non-3D floor and
+proves no mesh behavior.
+
+The declaration omits 2D, mixed, 3D, assetpack, collision, UI, audio,
+packaging, Windows, and performance readiness. Ubuntu x86_64 CI exercises the
+exact adapter seam through the existing hidden-window smoke; local aarch64
+execution is not evidence for that platform. [ADR-0019](decisions/0019-legacy-pyray-2-5d-adapter.md)
+records these limits.
+
 ### Bounded pyray GLB proof
 
-The first code-owned M6 adapter is deliberately narrower than every committed
+The bounded 3D evidence adapter is deliberately narrower than every committed
 3D presentation profile. `pyray_3d_v1` accepts one exact snapshot-relative
 skinned GLB, one `actor:<id>` binding, one named animation, one uniform scale,
 and one presentation layer. Pure functions map the immutable `RenderState`
