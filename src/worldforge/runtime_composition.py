@@ -1,21 +1,42 @@
 from __future__ import annotations
 
 import copy
+import ctypes
 import json
 import math
+import os
 import re
-from collections.abc import Mapping
+import stat
+import sys
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Generic, TypeVar
 
+from isoworld.content.file_stat import (
+    FileStat,
+    descriptor_file_stat,
+    file_identity,
+    path_file_stat,
+)
 from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
-from isoworld.content.portability import is_portable_path_component
+from isoworld.content.portability import (
+    is_portable_path_component,
+    portable_path_key,
+    portable_relative_path,
+)
 from isoworld.content.renderpack import RenderPackError, load_renderpack
+from isoworld.runtime_adapter import (
+    RuntimeAdapterKey,
+    RuntimeAdapterRegistryError,
+    StaticRuntimeAdapterRegistry,
+)
+from isoworld.runtime_io import RuntimeIOError, decode_json_object
 from worldforge.asset_io import AssetContractError, resolve_artifact
 from worldforge.assetpack import AssetPackError, verify_assetpack
+from worldforge.game_boundary_policy import validate_lexical_directory_root
 from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 
 RUNTIME_CAPABILITY_CATALOG_FORMAT = "rpg-world-forge.runtime_capability_catalog"
@@ -337,10 +358,77 @@ _PACK_FORMATS = {
     "renderpack": ("isoworld.renderpack", {1}),
     "worldpack": ("isoworld.worldpack", {1, 2, 3, 4, 5}),
 }
+_RUNTIME_DOCUMENT_FIELDS = (
+    "capability_catalog",
+    "presentation_profile",
+    "runtime_adapter",
+    "composition",
+)
+_RUNTIME_DOCUMENT_MAX_BYTES = 16 * 1024 * 1024
+_PINNED_DIRECTORY_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_DIRECTORY", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+)
+_PINNED_FILE_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_BINARY", 0)
+    | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_NONBLOCK", 0)
+)
+_SAFE_POSIX_DOCUMENT_IO = (
+    os.name == "posix"
+    and all(
+        getattr(os, flag, 0) != 0
+        for flag in (
+            "O_DIRECTORY",
+            "O_NOFOLLOW",
+            "O_NONBLOCK",
+        )
+    )
+    and all(function in os.supports_dir_fd for function in (os.open, os.stat))
+    and os.stat in os.supports_follow_symlinks
+)
+
+T = TypeVar("T")
 
 
 class RuntimeCompositionError(ValueError):
     """Raised when an M6 composition contract is malformed or internally inconsistent."""
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class RuntimeCompositionDocuments:
+    """Canonical immutable snapshots of one explicit four-document composition."""
+
+    _capability_catalog_bytes: bytes
+    _presentation_profile_bytes: bytes
+    _runtime_adapter_bytes: bytes
+    _composition_bytes: bytes
+
+    @staticmethod
+    def _decode(payload: bytes) -> dict[str, Any]:
+        value = json.loads(payload.decode("utf-8"))
+        assert isinstance(value, dict)
+        return value
+
+    @property
+    def capability_catalog(self) -> dict[str, Any]:
+        return self._decode(self._capability_catalog_bytes)
+
+    @property
+    def presentation_profile(self) -> dict[str, Any]:
+        return self._decode(self._presentation_profile_bytes)
+
+    @property
+    def runtime_adapter(self) -> dict[str, Any]:
+        return self._decode(self._runtime_adapter_bytes)
+
+    @property
+    def composition(self) -> dict[str, Any]:
+        return self._decode(self._composition_bytes)
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -367,6 +455,16 @@ class RuntimeCompositionVerification:
     @property
     def content_hash(self) -> str:
         return str(self.report["content_hash"])
+
+
+@dataclass(frozen=True, slots=True)
+class RegisteredRuntimeComposition(Generic[T]):
+    """A statically compatible composition and its exact opaque registry value."""
+
+    documents: RuntimeCompositionDocuments
+    verification: RuntimeCompositionVerification
+    adapter_key: RuntimeAdapterKey
+    adapter_value: T
 
 
 def _object(value: object, context: str) -> dict[str, Any]:
@@ -1245,6 +1343,620 @@ def verify_runtime_composition(
     )
 
 
+def _explicit_document_paths(
+    *,
+    capability_catalog_path: str,
+    presentation_profile_path: str,
+    runtime_adapter_path: str,
+    composition_path: str,
+) -> dict[str, PurePosixPath]:
+    raw_paths = {
+        "capability_catalog": capability_catalog_path,
+        "presentation_profile": presentation_profile_path,
+        "runtime_adapter": runtime_adapter_path,
+        "composition": composition_path,
+    }
+    normalized: dict[str, PurePosixPath] = {}
+    collision_keys: dict[tuple[str, ...], str] = {}
+    for name in _RUNTIME_DOCUMENT_FIELDS:
+        relative = portable_relative_path(raw_paths[name])
+        if relative is None:
+            raise RuntimeCompositionError(
+                f"{name}_path must be a portable relative path beneath the explicit root"
+            )
+        key = portable_path_key(relative)
+        prior = collision_keys.get(key)
+        if prior is not None:
+            raise RuntimeCompositionError(
+                f"{name}_path has an NFC/casefold collision with {prior}_path"
+            )
+        normalized[name] = relative
+        collision_keys[key] = name
+    return normalized
+
+
+def _explicit_document_root(root: str | Path) -> tuple[Path, tuple[int, int]]:
+    root_path = Path(os.path.abspath(Path(root)))
+    issues = validate_lexical_directory_root(root_path)
+    if issues:
+        raise RuntimeCompositionError(f"runtime composition document root is unsafe: {issues[0]}")
+    try:
+        identity = file_identity(path_file_stat(root_path))
+    except OSError as exc:  # pragma: no cover - lexical validation reports normal failures
+        raise RuntimeCompositionError("runtime composition document root is unavailable") from exc
+    return root_path, identity
+
+
+def _require_document_root_identity(root: Path, expected: tuple[int, int]) -> None:
+    issues = validate_lexical_directory_root(root)
+    if issues:
+        raise RuntimeCompositionError(f"runtime composition document root changed: {issues[0]}")
+    try:
+        current = file_identity(path_file_stat(root))
+    except OSError as exc:
+        raise RuntimeCompositionError("runtime composition document root changed") from exc
+    if current != expected:
+        raise RuntimeCompositionError("runtime composition document root identity changed")
+
+
+def _platform_name() -> str:
+    return os.name
+
+
+def _is_link_or_reparse(info: FileStat) -> bool:
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
+def _same_file_state(left: FileStat, right: FileStat) -> bool:
+    return (
+        left.st_dev,
+        left.st_ino,
+        left.st_mode,
+        left.st_nlink,
+        left.st_size,
+        left.st_mtime_ns,
+        left.st_ctime_ns,
+        getattr(left, "st_file_attributes", 0),
+    ) == (
+        right.st_dev,
+        right.st_ino,
+        right.st_mode,
+        right.st_nlink,
+        right.st_size,
+        right.st_mtime_ns,
+        right.st_ctime_ns,
+        getattr(right, "st_file_attributes", 0),
+    )
+
+
+def _require_plain_directory(info: FileStat, *, context: str) -> None:
+    if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+        raise RuntimeCompositionError(f"{context} is not a plain directory")
+
+
+def _document_decode_error(context: str, error: BaseException) -> RuntimeCompositionError:
+    detail = str(error)
+    folded = detail.casefold()
+    if "duplicate json object key" in folded:
+        code = "JSON_DUPLICATE_KEY"
+    elif "non-finite json number" in folded:
+        code = (
+            "JSON_NONFINITE"
+            if any(token in folded for token in ("nan", "infinity"))
+            else "JSON_NUMBER_OVERFLOW"
+        )
+    elif "utf-8" in folded or "decode" in folded:
+        code = "JSON_NOT_UTF8"
+    elif "must contain a json object" in folded:
+        code = "JSON_NOT_OBJECT"
+    else:
+        code = "JSON_INVALID"
+    return RuntimeCompositionError(f"could not load {context}: {code}")
+
+
+def _read_pinned_document_descriptor(
+    descriptor: int,
+    before_path: FileStat,
+    *,
+    context: str,
+    after_path: Callable[[], FileStat],
+) -> dict[str, Any]:
+    active_descriptor: int | None = descriptor
+    try:
+        opened = descriptor_file_stat(descriptor)
+        if (
+            _is_link_or_reparse(opened)
+            or not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or opened.st_size < 0
+            or opened.st_size > _RUNTIME_DOCUMENT_MAX_BYTES
+            or not _same_file_state(before_path, opened)
+        ):
+            raise RuntimeCompositionError(f"could not load {context}: JSON_CHANGED")
+        with os.fdopen(descriptor, "rb") as stream:
+            active_descriptor = None
+            payload = stream.read(_RUNTIME_DOCUMENT_MAX_BYTES + 1)
+            stream.seek(0)
+            repeated = stream.read(_RUNTIME_DOCUMENT_MAX_BYTES + 1)
+            after_descriptor = descriptor_file_stat(stream.fileno())
+        if len(payload) > _RUNTIME_DOCUMENT_MAX_BYTES:
+            raise RuntimeCompositionError(f"could not load {context}: JSON_TOO_LARGE")
+        if payload != repeated or not _same_file_state(opened, after_descriptor):
+            raise RuntimeCompositionError(f"could not load {context}: JSON_CHANGED")
+        try:
+            visible_after = after_path()
+        except OSError as exc:
+            raise RuntimeCompositionError(f"could not load {context}: JSON_CHANGED") from exc
+        if _is_link_or_reparse(visible_after) or not _same_file_state(opened, visible_after):
+            raise RuntimeCompositionError(f"could not load {context}: JSON_CHANGED")
+        try:
+            return decode_json_object(payload, source=context)
+        except (RuntimeIOError, RecursionError) as exc:
+            raise _document_decode_error(context, exc) from exc
+    finally:
+        if active_descriptor is not None:
+            os.close(active_descriptor)
+
+
+def _require_standalone_document(info: FileStat, *, context: str) -> None:
+    if _is_link_or_reparse(info):
+        raise RuntimeCompositionError(f"could not load {context}: JSON_SYMLINK")
+    if not stat.S_ISREG(info.st_mode):
+        raise RuntimeCompositionError(f"could not load {context}: JSON_NOT_REGULAR")
+    if info.st_nlink != 1:
+        raise RuntimeCompositionError(f"could not load {context}: JSON_HARDLINK")
+    if info.st_size < 0 or info.st_size > _RUNTIME_DOCUMENT_MAX_BYTES:
+        raise RuntimeCompositionError(f"could not load {context}: JSON_TOO_LARGE")
+
+
+def _verify_visible_directory_chain(
+    chain: list[tuple[Path, tuple[int, int]]],
+    *,
+    context: str,
+) -> None:
+    for index, (path, expected) in enumerate(chain):
+        changed = "root identity changed" if index == 0 else "parent identity changed"
+        try:
+            info = path_file_stat(path)
+        except OSError as exc:
+            raise RuntimeCompositionError(f"{context} {changed}") from exc
+        _require_plain_directory(
+            info,
+            context=f"{context} {'root' if index == 0 else 'parent'}",
+        )
+        if file_identity(info) != expected:
+            raise RuntimeCompositionError(f"{context} {changed}")
+
+
+def _close_posix_directory_descriptors(descriptors: list[int]) -> None:
+    active_error = sys.exception()
+    first_error: OSError | None = None
+    for descriptor in reversed(descriptors):
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            if first_error is None:
+                first_error = exc
+    if first_error is None:
+        return
+    message = f"could not close pinned runtime document directories: {first_error}"
+    if active_error is not None:
+        active_error.add_note(message)
+        return
+    raise RuntimeCompositionError(message) from first_error
+
+
+def _posix_entry_stat(parent_descriptor: int, name: str) -> FileStat:
+    return os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+
+
+def _load_explicit_document_posix(
+    root: Path,
+    relative: PurePosixPath,
+    *,
+    context: str,
+    root_identity: tuple[int, int],
+) -> dict[str, Any]:
+    if not _SAFE_POSIX_DOCUMENT_IO:
+        raise RuntimeCompositionError("secure POSIX runtime document I/O is unavailable")
+    descriptors: list[int] = []
+    chain: list[tuple[Path, tuple[int, int]]] = []
+    try:
+        try:
+            root_descriptor = os.open(root, _PINNED_DIRECTORY_FLAGS)
+        except OSError as exc:
+            raise RuntimeCompositionError(f"{context} root could not be pinned") from exc
+        descriptors.append(root_descriptor)
+        opened_root = descriptor_file_stat(root_descriptor)
+        _require_plain_directory(opened_root, context=f"{context} root")
+        if file_identity(opened_root) != root_identity:
+            raise RuntimeCompositionError(f"{context} root identity changed")
+        chain.append((root, root_identity))
+
+        current_descriptor = root_descriptor
+        current_path = root
+        for component in relative.parts[:-1]:
+            try:
+                before = _posix_entry_stat(current_descriptor, component)
+            except FileNotFoundError:
+                raise RuntimeCompositionError(
+                    f"{context} parent is unsafe or unavailable: JSON_MISSING"
+                ) from None
+            except OSError as exc:
+                raise RuntimeCompositionError(f"{context} parent is unsafe or unavailable") from exc
+            _require_plain_directory(before, context=f"{context} parent")
+            try:
+                child_descriptor = os.open(
+                    component,
+                    _PINNED_DIRECTORY_FLAGS,
+                    dir_fd=current_descriptor,
+                )
+            except OSError as exc:
+                raise RuntimeCompositionError(f"{context} parent could not be pinned") from exc
+            descriptors.append(child_descriptor)
+            opened = descriptor_file_stat(child_descriptor)
+            try:
+                visible_after = _posix_entry_stat(current_descriptor, component)
+            except OSError as exc:
+                raise RuntimeCompositionError(f"{context} parent identity changed") from exc
+            _require_plain_directory(opened, context=f"{context} parent")
+            if not _same_file_state(before, opened) or not _same_file_state(opened, visible_after):
+                raise RuntimeCompositionError(f"{context} parent identity changed")
+            current_descriptor = child_descriptor
+            current_path /= component
+            chain.append((current_path, file_identity(opened)))
+
+        name = relative.name
+        try:
+            before_file = _posix_entry_stat(current_descriptor, name)
+        except FileNotFoundError:
+            raise RuntimeCompositionError(f"could not load {context}: JSON_MISSING") from None
+        except OSError as exc:
+            raise RuntimeCompositionError(f"could not load {context}: JSON_IO_ERROR") from exc
+        _require_standalone_document(before_file, context=context)
+        try:
+            file_descriptor = os.open(
+                name,
+                _PINNED_FILE_FLAGS,
+                dir_fd=current_descriptor,
+            )
+        except OSError as exc:
+            raise RuntimeCompositionError(f"could not load {context}: JSON_IO_ERROR") from exc
+        value = _read_pinned_document_descriptor(
+            file_descriptor,
+            before_file,
+            context=context,
+            after_path=lambda: _posix_entry_stat(current_descriptor, name),
+        )
+        _verify_visible_directory_chain(chain, context=context)
+        return value
+    finally:
+        _close_posix_directory_descriptors(descriptors)
+
+
+def _windows_open_directory_handle(path: Path) -> int:
+    win_dll = getattr(ctypes, "WinDLL", None)
+    if win_dll is None:
+        raise OSError("Windows directory handle APIs are unavailable")
+    kernel32 = win_dll("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    ]
+    create_file.restype = ctypes.c_void_p
+    handle = create_file(
+        str(path),
+        0x00000080,  # FILE_READ_ATTRIBUTES
+        0x00000001 | 0x00000002,  # share reads/writes, never deletion
+        None,
+        3,  # OPEN_EXISTING
+        0x02000000 | 0x00200000,  # BACKUP_SEMANTICS | OPEN_REPARSE_POINT
+        None,
+    )
+    invalid = ctypes.c_void_p(-1).value
+    if handle in {None, invalid}:
+        error = ctypes.get_last_error()
+        raise OSError(error, ctypes.FormatError(error), str(path))
+    return int(handle)
+
+
+def _windows_close_directory_handle(handle: int) -> None:
+    win_dll = getattr(ctypes, "WinDLL", None)
+    if win_dll is None:
+        raise OSError("Windows directory handle APIs are unavailable")
+    kernel32 = win_dll("kernel32", use_last_error=True)
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [ctypes.c_void_p]
+    close_handle.restype = ctypes.c_int
+    if not close_handle(ctypes.c_void_p(handle)):
+        error = ctypes.get_last_error()
+        raise OSError(error, ctypes.FormatError(error))
+
+
+def _close_windows_directory_handles(handles: list[int]) -> None:
+    active_error = sys.exception()
+    first_error: OSError | None = None
+    for handle in reversed(handles):
+        try:
+            _windows_close_directory_handle(handle)
+        except OSError as exc:
+            if first_error is None:
+                first_error = exc
+    if first_error is None:
+        return
+    message = f"could not close pinned Windows runtime document directories: {first_error}"
+    if active_error is not None:
+        active_error.add_note(message)
+        return
+    raise RuntimeCompositionError(message) from first_error
+
+
+def _pin_windows_directory(
+    path: Path,
+    *,
+    context: str,
+    expected_identity: tuple[int, int] | None = None,
+) -> tuple[int, FileStat]:
+    try:
+        before = path_file_stat(path)
+    except OSError as exc:
+        raise RuntimeCompositionError(f"{context} is unavailable") from exc
+    _require_plain_directory(before, context=context)
+    if expected_identity is not None and file_identity(before) != expected_identity:
+        raise RuntimeCompositionError(f"{context} identity changed")
+    try:
+        handle = _windows_open_directory_handle(path)
+    except OSError as exc:
+        raise RuntimeCompositionError(f"{context} could not be pinned") from exc
+    try:
+        after = path_file_stat(path)
+        _require_plain_directory(after, context=context)
+        if not _same_file_state(before, after):
+            raise RuntimeCompositionError(f"{context} identity changed")
+        return handle, after
+    except BaseException as validation_error:
+        try:
+            _windows_close_directory_handle(handle)
+        except OSError as close_error:
+            validation_error.add_note(f"could not close rejected Windows directory: {close_error}")
+        raise
+
+
+def _load_explicit_document_windows(
+    root: Path,
+    relative: PurePosixPath,
+    *,
+    context: str,
+    root_identity: tuple[int, int],
+) -> dict[str, Any]:
+    handles: list[int] = []
+    chain: list[tuple[Path, tuple[int, int]]] = []
+    try:
+        root_handle, root_info = _pin_windows_directory(
+            root,
+            context=f"{context} root",
+            expected_identity=root_identity,
+        )
+        handles.append(root_handle)
+        chain.append((root, file_identity(root_info)))
+        current_path = root
+        for component in relative.parts[:-1]:
+            current_path /= component
+            handle, info = _pin_windows_directory(
+                current_path,
+                context=f"{context} parent",
+            )
+            handles.append(handle)
+            chain.append((current_path, file_identity(info)))
+
+        path = current_path / relative.name
+        try:
+            before_file = path_file_stat(path)
+        except FileNotFoundError:
+            raise RuntimeCompositionError(f"could not load {context}: JSON_MISSING") from None
+        except OSError as exc:
+            raise RuntimeCompositionError(f"could not load {context}: JSON_IO_ERROR") from exc
+        _require_standalone_document(before_file, context=context)
+        try:
+            file_descriptor = os.open(path, _PINNED_FILE_FLAGS)
+        except OSError as exc:
+            raise RuntimeCompositionError(f"could not load {context}: JSON_IO_ERROR") from exc
+        value = _read_pinned_document_descriptor(
+            file_descriptor,
+            before_file,
+            context=context,
+            after_path=lambda: path_file_stat(path),
+        )
+        _verify_visible_directory_chain(chain, context=context)
+        return value
+    finally:
+        _close_windows_directory_handles(handles)
+
+
+def _load_explicit_document(
+    root: Path,
+    relative: PurePosixPath,
+    *,
+    context: str,
+    root_identity: tuple[int, int],
+) -> dict[str, Any]:
+    _require_document_root_identity(root, root_identity)
+    platform = _platform_name()
+    if platform == "posix":
+        value = _load_explicit_document_posix(
+            root,
+            relative,
+            context=context,
+            root_identity=root_identity,
+        )
+    elif platform == "nt":
+        value = _load_explicit_document_windows(
+            root,
+            relative,
+            context=context,
+            root_identity=root_identity,
+        )
+    else:
+        raise RuntimeCompositionError("secure runtime document I/O is unsupported")
+    _require_document_root_identity(root, root_identity)
+    return value
+
+
+def _load_runtime_composition_document_set(
+    root: Path,
+    root_identity: tuple[int, int],
+    paths: Mapping[str, PurePosixPath],
+) -> RuntimeCompositionDocuments:
+    values = {
+        name: _load_explicit_document(
+            root,
+            paths[name],
+            context=name.replace("_", " "),
+            root_identity=root_identity,
+        )
+        for name in _RUNTIME_DOCUMENT_FIELDS
+    }
+    catalog = validate_runtime_capability_catalog(values["capability_catalog"])
+    profile = validate_runtime_presentation_profile(values["presentation_profile"])
+    adapter = validate_runtime_adapter(values["runtime_adapter"])
+    composition = validate_runtime_composition(values["composition"])
+    _require_document_root_identity(root, root_identity)
+    return RuntimeCompositionDocuments(
+        _capability_catalog_bytes=canonical_json_bytes(catalog),
+        _presentation_profile_bytes=canonical_json_bytes(profile),
+        _runtime_adapter_bytes=canonical_json_bytes(adapter),
+        _composition_bytes=canonical_json_bytes(composition),
+    )
+
+
+def load_runtime_composition_documents(
+    root: str | Path,
+    *,
+    capability_catalog_path: str,
+    presentation_profile_path: str,
+    runtime_adapter_path: str,
+    composition_path: str,
+) -> RuntimeCompositionDocuments:
+    """Load four explicit strict JSON documents into detached canonical snapshots."""
+
+    root_path, root_identity = _explicit_document_root(root)
+    paths = _explicit_document_paths(
+        capability_catalog_path=capability_catalog_path,
+        presentation_profile_path=presentation_profile_path,
+        runtime_adapter_path=runtime_adapter_path,
+        composition_path=composition_path,
+    )
+    return _load_runtime_composition_document_set(root_path, root_identity, paths)
+
+
+def _verify_runtime_composition_documents(
+    documents: RuntimeCompositionDocuments,
+    *,
+    root: str | Path,
+    platform: str,
+    runtime_api_version: str,
+) -> RuntimeCompositionVerification:
+    return verify_runtime_composition(
+        documents.capability_catalog,
+        documents.presentation_profile,
+        documents.runtime_adapter,
+        documents.composition,
+        root=root,
+        platform=platform,
+        runtime_api_version=runtime_api_version,
+    )
+
+
+def verify_runtime_composition_files(
+    root: str | Path,
+    *,
+    capability_catalog_path: str,
+    presentation_profile_path: str,
+    runtime_adapter_path: str,
+    composition_path: str,
+    platform: str,
+    runtime_api_version: str = RUNTIME_API_VERSION,
+) -> RuntimeCompositionVerification:
+    """Load explicit documents once and recompute their integral compatibility report."""
+
+    root_path, root_identity = _explicit_document_root(root)
+    paths = _explicit_document_paths(
+        capability_catalog_path=capability_catalog_path,
+        presentation_profile_path=presentation_profile_path,
+        runtime_adapter_path=runtime_adapter_path,
+        composition_path=composition_path,
+    )
+    documents = _load_runtime_composition_document_set(root_path, root_identity, paths)
+    result = _verify_runtime_composition_documents(
+        documents,
+        root=root_path,
+        platform=platform,
+        runtime_api_version=runtime_api_version,
+    )
+    _require_document_root_identity(root_path, root_identity)
+    return result
+
+
+def load_registered_runtime_composition(
+    root: str | Path,
+    *,
+    capability_catalog_path: str,
+    presentation_profile_path: str,
+    runtime_adapter_path: str,
+    composition_path: str,
+    platform: str,
+    registry: StaticRuntimeAdapterRegistry[T],
+    runtime_api_version: str = RUNTIME_API_VERSION,
+) -> RegisteredRuntimeComposition[T]:
+    """Require static compatibility, then resolve one exact code-owned adapter key."""
+
+    if type(registry) is not StaticRuntimeAdapterRegistry:
+        raise TypeError("registry must be a StaticRuntimeAdapterRegistry")
+    root_path, root_identity = _explicit_document_root(root)
+    paths = _explicit_document_paths(
+        capability_catalog_path=capability_catalog_path,
+        presentation_profile_path=presentation_profile_path,
+        runtime_adapter_path=runtime_adapter_path,
+        composition_path=composition_path,
+    )
+    documents = _load_runtime_composition_document_set(root_path, root_identity, paths)
+    verification = _verify_runtime_composition_documents(
+        documents,
+        root=root_path,
+        platform=platform,
+        runtime_api_version=runtime_api_version,
+    )
+    _require_document_root_identity(root_path, root_identity)
+    if not verification.compatible:
+        raise RuntimeCompositionError("runtime composition is statically incompatible")
+    adapter = documents.runtime_adapter
+    key = RuntimeAdapterKey(
+        id=adapter["id"],
+        version=adapter["version"],
+        content_hash=adapter["content_hash"],
+    )
+    try:
+        value = StaticRuntimeAdapterRegistry.resolve(registry, key)
+    except RuntimeAdapterRegistryError as exc:
+        raise RuntimeCompositionError(
+            "runtime composition has no exact code-owned adapter registration"
+        ) from exc
+    return RegisteredRuntimeComposition(
+        documents=documents,
+        verification=verification,
+        adapter_key=key,
+        adapter_value=value,
+    )
+
+
 __all__ = [
     "COMPATIBILITY_CHECK_IDS",
     "COMPATIBILITY_ISSUE_CODES",
@@ -1266,15 +1978,20 @@ __all__ = [
     "RUNTIME_COMPOSITION_FORMAT",
     "RUNTIME_PRESENTATION_PROFILE_FIELDS",
     "RUNTIME_PRESENTATION_PROFILE_FORMAT",
+    "RegisteredRuntimeComposition",
     "RuntimeCompatibilityIssue",
+    "RuntimeCompositionDocuments",
     "RuntimeCompositionError",
     "RuntimeCompositionVerification",
     "SLOT_PLANES",
     "SLOT_REPRESENTATIONS",
+    "load_registered_runtime_composition",
+    "load_runtime_composition_documents",
     "validate_runtime_adapter",
     "validate_runtime_capability_catalog",
     "validate_runtime_compatibility_report",
     "validate_runtime_composition",
     "validate_runtime_presentation_profile",
     "verify_runtime_composition",
+    "verify_runtime_composition_files",
 ]

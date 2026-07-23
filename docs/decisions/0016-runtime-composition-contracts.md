@@ -41,6 +41,14 @@ renderpack v1 loader, and assetpack v1 verifier. It does not execute an adapter
 or choose an engine. An adapter in `declared` state can never produce a
 compatible report.
 
+Host code loads the four composition documents from explicit portable paths
+beneath one explicit root. It does not discover adapters, modules, entry
+points, commands, or files. Static loading always recomputes compatibility
+before an immutable, code-owned registry may resolve the exact adapter ID,
+version, and declaration hash. The resolved value remains opaque and is never
+invoked by this seam; adapters do not receive simulation state. A future
+presentation adapter may consume only a frozen render snapshot.
+
 The public contract catalog remains format v1. Its historically named
 `m5_phases` provenance field now permits `M6`; the name is retained to avoid a
 catalog migration and all existing entries remain unchanged.
