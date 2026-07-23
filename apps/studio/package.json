@@ -22,11 +22,12 @@
     "start": "npm run build && electron .",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "package:dir": "npm run build && electron-builder --dir",
+    "test": "npm run build && vitest run",
+    "test:watch": "npm run build && vitest",
+    "package:dir": "node scripts/package-shell.mjs",
+    "package:verify": "node scripts/verify-shell-package.mjs",
     "verify:fuses": "node scripts/verify-fuses.mjs",
-    "verify": "npm run check:generated && npm run lint && npm run typecheck && npm run test && npm run build"
+    "verify": "npm run check:generated && npm run lint && npm run typecheck && npm run test"
   },
   "dependencies": {
     "ajv": "8.20.0",
@@ -64,9 +65,13 @@
     "asar": true,
     "npmRebuild": false,
     "files": [
-      "dist-electron/**/*",
-      "dist-renderer/**/*",
-      "package.json"
+      "dist-electron/main/index.cjs",
+      "dist-electron/preload/index.cjs",
+      "dist-renderer/index.html",
+      "dist-renderer/assets/index.css",
+      "dist-renderer/assets/index.js",
+      "package.json",
+      "!node_modules/**/*"
     ],
     "extraResources": [
       {
@@ -76,6 +81,22 @@
       {
         "from": "protocol/codex-app-server-0.144.6",
         "to": "protocol/codex-app-server-0.144.6"
+      },
+      {
+        "from": "packaging/runtime-sources.json",
+        "to": "packaging/runtime-sources.json"
+      },
+      {
+        "from": "packaging/runtime-sources.schema.json",
+        "to": "packaging/runtime-sources.schema.json"
+      },
+      {
+        "from": "packaging/runtime-package-manifest.schema.json",
+        "to": "packaging/runtime-package-manifest.schema.json"
+      },
+      {
+        "from": "packaging/shell-package-manifest.schema.json",
+        "to": "packaging/shell-package-manifest.schema.json"
       }
     ],
     "afterPack": "./scripts/after-pack.cjs",
@@ -100,7 +121,7 @@
       "executableName": "rpg-world-forge-studio"
     },
     "directories": {
-      "output": "release"
+      "output": "${env.RWF_STUDIO_PACKAGE_OUTPUT}"
     }
   }
 }

@@ -60,7 +60,6 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
-npm run package:dir
 ```
 
 An optional provenance regeneration check does not start app-server or a model:
@@ -69,10 +68,53 @@ An optional provenance regeneration check does not start app-server or a model:
 node scripts/codex-protocol.mjs --check-generator /absolute/path/to/codex
 ```
 
-`package:dir` currently produces the Electron shell plus the pinned stable
-Codex protocol artifacts. The runtime manifest points at the audited future
-Python/Codex layouts; until native runtimes are supplied by the release
-pipeline, the package reports them unavailable instead of consulting `PATH`.
+An optional unpacked-shell check must use an explicit output directory outside
+the repository. It never launches Electron:
+
+```bash
+npm run package:dir -- \
+  --output /absolute/external/studio-shell \
+  --target linux-x64
+npm run package:verify -- \
+  --path /absolute/external/studio-shell/linux-unpacked \
+  --target linux-x64
+```
+
+Use `--target win32-x64` for the Windows layout. The packaging wrapper accepts
+only a nonexistent absolute output whose parent already exists outside every
+lexical or resolved alias of the repository. It reserves that exact directory
+before starting the build and passes the same retained binding to
+electron-builder through both its required environment macro and command-line
+override. Linux packages through the retained directory descriptor under
+`/proc`; Windows keeps a stdlib guard process and no-delete handle chain alive.
+The requested name is rebound to the retained identity before success, so a
+replacement cannot redirect build output into the repository. The after-pack
+hook statically
+hardens Electron fuses and writes an exact
+`shell_only` inventory. The verifier pins the package tree, validates the ASAR
+entrypoints, compares the runtime manifest, Codex protocol provenance, runtime
+source contract, and schemas byte for byte, and rejects missing, altered,
+linked, replaced, or extra resources. Each process build first removes its
+generated process tree and Vite empties its renderer tree. Electron-builder can
+select only the five exact clean build files plus its sanitized `package.json`;
+the verifier pins those clean source trees and requires identical ASAR file,
+directory, size, and hash inventories. Extra vendors, executables, runtimes,
+or stale outputs therefore fail instead of being hidden by `shell_only`. It
+does not launch the GUI.
+
+This is not a self-contained release: Python and Codex runtimes are absent,
+`release_ready` is false, and redistribution remains blocked by the seven
+checked-in provenance blockers. Linux uses descriptor-relative no-follow
+reads. Windows uses the stdlib Python backend and the audited Forge
+`NtCreateFile`/no-delete-sharing handle primitives while Node performs only
+static ASAR and fuse inspection against retained private snapshots. Set
+`RWF_STUDIO_BUILD_PYTHON` to an absolute supported Python 3.11/3.12 executable
+for Windows build and verification; the tool never searches `PATH`. Windows
+deletes only its two private snapshot files through their still-retained
+delete-capable handles. It deliberately leaves the now-empty unique temporary
+directory for OS or CI-job cleanup rather than recursively deleting a pathname
+after its anti-replacement guards have been released. A failed or uncertain
+snapshot is likewise preserved fail-closed.
 
 Tests use only `tests/fixtures/app-server`. They never log in, start a model,
 contact a provider, or enable network access.

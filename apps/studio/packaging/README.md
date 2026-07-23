@@ -122,6 +122,62 @@ omits delete sharing until final path binding succeeds.
 Hosts without either complete primitive set report
 `secure_primitive_unavailable` before mutating the destination.
 
+## Shell-only package verification
+
+The Electron `--dir` boundary is separate from runtime assembly. Package into
+an explicit directory outside the repository, then verify the exact unpacked
+tree:
+
+```console
+npm run package:dir -- \
+  --output /absolute/path/to/studio-shell \
+  --target linux-x64
+npm run package:verify -- \
+  --path /absolute/path/to/studio-shell/linux-unpacked \
+  --target linux-x64
+```
+
+`win32-x64` is the other accepted target layout and produces `win-unpacked`.
+The packaging wrapper accepts no raw electron-builder flags. Before spawning
+the build, it rejects a missing, relative, existing, repository-contained, or
+resolved repository-alias output, and requires its parent to exist. It then
+creates the exact output exclusively and keeps the binding live: Linux passes
+electron-builder a retained descriptor path under `/proc`, while Windows keeps
+a stdlib no-delete output guard alive. Final verification rebinds the requested
+name to that retained identity. The checked-in electron-builder output is a
+required environment macro, and the wrapper supplies the same retained path as
+an exact command-line override. There is no working in-repo default.
+
+After-pack creates a canonical
+`resources/shell-package-manifest.json` only after statically checking the
+hardened fuse wire. Verification never launches Electron. It retains the
+package root, directories, and regular files while hashing; rejects symlinks,
+hardlinks, replacements, aliases, empty extra directories, and extra files;
+checks the ASAR entrypoints; and compares the committed runtime manifest,
+Codex protocol provenance/tree, runtime sources, and runtime package/source
+schemas byte for byte. Process builds first remove the generated process tree,
+Vite empties the renderer tree, and electron-builder is limited to the exact
+five clean build files plus its sanitized `package.json`. The verifier pins the
+clean `dist-electron` and `dist-renderer` source snapshots through final binding
+and requires exact ASAR file/directory equality plus matching sizes and hashes;
+stale files and hidden vendor/runtime payloads are rejected.
+
+The result is deliberately `shell_only`, with no Python or Codex runtime
+payload. It always records `release_ready: false`, `blocked`, and the same seven
+open blocker codes as `runtime-sources.json`. Linux retains descriptor-relative
+no-follow handles. On Windows, a stdlib Python backend reuses the audited Forge
+`NtCreateFile` RootDirectory, no-reparse, no-delete-sharing, identity, and final
+binding primitives. It keeps original and private snapshot handles live while
+Node performs supported static ASAR and fuse inspection. Windows requires an
+absolute Python 3.11/3.12 path in `RWF_STUDIO_BUILD_PYTHON` and never searches
+`PATH`; unavailable primitives fail closed. The Windows backend marks only the
+two snapshot files that it created for deletion through their retained
+delete-capable handles, revalidates them, and closes those handles while the
+snapshot directory binding is still guarded. The resulting empty unique
+temporary directory is intentionally left for OS or CI-job cleanup. The Node
+caller never recursively removes a snapshot pathname after the backend releases
+its guards, and failed or uncertain snapshots are preserved fail-closed.
+
 ## Redistribution remains blocked
 
 The checked-in contract is intentionally fail-closed. It records every known

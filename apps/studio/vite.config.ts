@@ -7,6 +7,13 @@ export default defineConfig({
   build: {
     outDir: "dist-renderer",
     emptyOutDir: true,
-    sourcemap: true,
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        assetFileNames: "assets/[name][extname]",
+        chunkFileNames: "assets/[name].js",
+        entryFileNames: "assets/index.js",
+      },
+    },
   },
 });
