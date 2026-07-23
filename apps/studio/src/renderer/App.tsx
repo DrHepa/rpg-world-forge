@@ -4,6 +4,13 @@ import type {
   CodexBridgeStatus,
   CodexUserInputQuestion,
   ForgeServiceStatus,
+  StudioChangeset,
+  StudioChangesetApplyResponse,
+  StudioChangesetApproveResponse,
+  StudioChangesetCreateResponse,
+  StudioChangesetDiffResponse,
+  StudioChangesetGetResponse,
+  StudioChangesetRejectResponse,
   StudioClientResult,
   StudioErrorEnvelope,
   StudioSourceListResult,
@@ -12,6 +19,7 @@ import type {
   StudioWorldAnalyzeResult,
   StudioWorldValidateResult,
 } from "../shared/studio-api";
+import { ChangesetReviewPanel } from "./ChangesetReviewPanel";
 import { NeutralMapCanvas } from "./NeutralMapCanvas";
 import {
   authoringReducer,
@@ -24,6 +32,18 @@ import {
   sourceVersionKey,
   type SourceSummary,
 } from "./authoring-state";
+import {
+  actionCompletionError,
+  changesetReviewReducer,
+  createInitialChangesetReviewState,
+  expectedReviewSha256,
+  reviewActionUnavailableReason,
+  reviewEvidenceError,
+  sha256Utf8,
+  stagedChangesetError,
+  type ChangesetReviewAction,
+  type StagedDraftSnapshot,
+} from "./changeset-review-state";
 import {
   boundedFindings,
   changesetRows,
@@ -60,7 +80,14 @@ export function App() {
   const [workspaces, setWorkspaces] = useState<string[]>([]);
   const [registryPending, setRegistryPending] = useState(true);
   const [authoring, dispatch] = useReducer(authoringReducer, undefined, createInitialAuthoringState);
+  const [review, reviewDispatch] = useReducer(
+    changesetReviewReducer,
+    undefined,
+    createInitialChangesetReviewState,
+  );
   const generationRef = useRef(0);
+  const reviewRequestRef = useRef(0);
+  const reviewMutationRef = useRef<number | null>(null);
   const limiterRef = useRef(new RequestLimiter(4));
   const [errors, setErrors] = useState<string[]>([]);
   const [serviceActivityCount, setServiceActivityCount] = useState(0);
@@ -73,6 +100,12 @@ export function App() {
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
   const navigationTriggerRef = useRef<HTMLButtonElement | null>(null);
   const stayButtonRef = useRef<HTMLButtonElement>(null);
+  const reviewTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const reviewCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const reviewPendingStatusRef = useRef<HTMLParagraphElement>(null);
+  const reviewActionTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const reviewActionCancelRef = useRef<HTMLButtonElement>(null);
+  const [pendingReviewAction, setPendingReviewAction] = useState<ChangesetReviewAction | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [codexStatus, setCodexStatus] = useState<CodexBridgeStatus>(INITIAL_CODEX_STATUS);
   const [codexPending, setCodexPending] = useState(false);
@@ -151,6 +184,24 @@ export function App() {
   }, [pendingNavigation]);
 
   useEffect(() => {
+    if (review.selectedChangesetId) reviewCloseButtonRef.current?.focus();
+  }, [review.selectedChangesetId]);
+
+  useEffect(() => {
+    if (pendingReviewAction) reviewActionCancelRef.current?.focus();
+  }, [pendingReviewAction]);
+
+  useEffect(() => {
+    if (
+      review.pending === "approve" ||
+      review.pending === "reject" ||
+      review.pending === "apply"
+    ) {
+      reviewPendingStatusRef.current?.focus();
+    }
+  }, [review.pending]);
+
+  useEffect(() => {
     const workspaceId = authoring.workspaceId;
     if (typeof workspaceId !== "string") return undefined;
     const generation = authoring.generation;
@@ -216,7 +267,10 @@ export function App() {
   async function loadWorkspace(workspaceId: string): Promise<void> {
     const generation = generationRef.current + 1;
     generationRef.current = generation;
+    reviewMutationRef.current = null;
     dispatch({ type: "workspace-selected", workspaceId, generation });
+    reviewDispatch({ type: "workspace-changed", workspaceId, generation });
+    setPendingReviewAction(null);
     setDockEvents([]);
     setDockChangesets([]);
     setDockJobs([]);
@@ -310,6 +364,290 @@ export function App() {
         });
         if (generationRef.current === generation) recordError(message);
       });
+  }
+
+  async function stageSourceDraft(trigger: HTMLButtonElement): Promise<void> {
+    if (
+      !draft ||
+      !cached ||
+      !draft.dirty ||
+      draft.jsonSyntaxError !== null ||
+      !authoring.workspaceId ||
+      review.pending !== null
+    ) {
+      return;
+    }
+    const snapshotInput = {
+      workspaceId: authoring.workspaceId,
+      generation: authoring.generation,
+      path: draft.path,
+      baseSha256: draft.baseSha256,
+      baseSize: cached.size,
+      content: draft.text,
+    };
+    const requestId = reviewRequestRef.current + 1;
+    if (reviewMutationRef.current !== null) return;
+    reviewRequestRef.current = requestId;
+    reviewMutationRef.current = requestId;
+    reviewTriggerRef.current = trigger;
+    reviewDispatch({
+      type: "stage-started",
+      workspaceId: snapshotInput.workspaceId,
+      generation: snapshotInput.generation,
+      requestId,
+    });
+    try {
+      const proposedSha256 = await sha256Utf8(snapshotInput.content);
+      if (
+        generationRef.current !== snapshotInput.generation ||
+        reviewRequestRef.current !== requestId
+      ) {
+        return;
+      }
+      const snapshot: StagedDraftSnapshot = { ...snapshotInput, proposedSha256 };
+      const staged = await limiterRef.current
+        .run(() =>
+          window.forgeStudio.stageSourceDocument(
+            snapshot.workspaceId,
+            snapshot.path,
+            snapshot.baseSha256,
+            snapshot.content,
+          ),
+        )
+        .then((result) =>
+          responseResult<"changeset.create", StudioChangesetCreateResponse["result"]>(
+            result,
+            "changeset.create",
+          ),
+        );
+      if (
+        generationRef.current !== snapshotInput.generation ||
+        reviewRequestRef.current !== requestId
+      ) {
+        return;
+      }
+      const mismatch = stagedChangesetError(staged.changeset, snapshot);
+      if (mismatch) throw new Error(mismatch);
+      setDockRefresh((value) => value + 1);
+      void openChangesetNow(
+        snapshot.workspaceId,
+        snapshot.generation,
+        staged.changeset.changeset_id,
+      );
+    } catch (error) {
+      if (
+        generationRef.current !== snapshotInput.generation ||
+        reviewRequestRef.current !== requestId
+      ) {
+        return;
+      }
+      const message = describeError(error);
+      reviewDispatch({
+        type: "request-failed",
+        workspaceId: snapshotInput.workspaceId,
+        generation: snapshotInput.generation,
+        requestId,
+        request: "stage",
+        message,
+      });
+      recordError(message);
+    } finally {
+      if (reviewMutationRef.current === requestId) reviewMutationRef.current = null;
+    }
+  }
+
+  function requestChangesetReview(changesetId: string, trigger: HTMLButtonElement): void {
+    if (!authoring.workspaceId || pendingNavigation) return;
+    reviewTriggerRef.current = trigger;
+    void openChangesetNow(authoring.workspaceId, authoring.generation, changesetId);
+  }
+
+  async function openChangesetNow(
+    workspaceId: string,
+    generation: number,
+    changesetId: string,
+  ): Promise<void> {
+    const requestId = reviewRequestRef.current + 1;
+    reviewRequestRef.current = requestId;
+    reviewDispatch({
+      type: "open-started",
+      workspaceId,
+      generation,
+      requestId,
+      changesetId,
+    });
+    try {
+      const [recordResult, diffResult] = await Promise.all([
+        limiterRef.current
+          .run(() => window.forgeStudio.getChangeset(changesetId))
+          .then((result) =>
+            responseResult<"changeset.get", StudioChangesetGetResponse["result"]>(
+              result,
+              "changeset.get",
+            ),
+          ),
+        limiterRef.current
+          .run(() => window.forgeStudio.readChangesetDiff(changesetId))
+          .then((result) =>
+            responseResult<"changeset.diff", StudioChangesetDiffResponse["result"]>(
+              result,
+              "changeset.diff",
+            ),
+          ),
+      ]);
+      if (generationRef.current !== generation || reviewRequestRef.current !== requestId) return;
+      const mismatch = reviewEvidenceError(recordResult.changeset, diffResult.diff, {
+        workspaceId,
+        changesetId,
+      });
+      if (mismatch) throw new Error(mismatch);
+      reviewDispatch({
+        type: "open-succeeded",
+        workspaceId,
+        generation,
+        requestId,
+        changesetId,
+        record: recordResult.changeset,
+        diff: diffResult.diff,
+      });
+    } catch (error) {
+      if (generationRef.current !== generation || reviewRequestRef.current !== requestId) return;
+      const message = describeError(error);
+      reviewDispatch({
+        type: "request-failed",
+        workspaceId,
+        generation,
+        requestId,
+        request: "open",
+        message,
+      });
+      recordError(message);
+    }
+  }
+
+  function closeChangesetReview(): void {
+    reviewRequestRef.current += 1;
+    reviewDispatch({ type: "closed", requestId: reviewRequestRef.current });
+    setPendingReviewAction(null);
+    window.requestAnimationFrame(() => reviewTriggerRef.current?.focus());
+  }
+
+  function requestReviewAction(
+    action: ChangesetReviewAction,
+    trigger: HTMLButtonElement,
+  ): void {
+    const unavailable = reviewActionUnavailableReason(review.record, review.diff, action);
+    if (unavailable) {
+      recordError(unavailable);
+      return;
+    }
+    reviewActionTriggerRef.current = trigger;
+    setPendingReviewAction(action);
+  }
+
+  function cancelReviewAction(): void {
+    setPendingReviewAction(null);
+    window.requestAnimationFrame(() => reviewActionTriggerRef.current?.focus());
+  }
+
+  async function confirmReviewAction(): Promise<void> {
+    const action = pendingReviewAction;
+    const previous = review.record;
+    const diff = review.diff;
+    const workspaceId = authoring.workspaceId;
+    const generation = authoring.generation;
+    if (!action || !previous || !diff || !workspaceId) return;
+    const unavailable = reviewActionUnavailableReason(previous, diff, action);
+    if (unavailable) {
+      setPendingReviewAction(null);
+      recordError(unavailable);
+      return;
+    }
+    const expectedReview = expectedReviewSha256(previous);
+    const requestId = reviewRequestRef.current + 1;
+    if (reviewMutationRef.current !== null) return;
+    reviewRequestRef.current = requestId;
+    reviewMutationRef.current = requestId;
+    setPendingReviewAction(null);
+    reviewDispatch({
+      type: "action-started",
+      workspaceId,
+      generation,
+      requestId,
+      changesetId: previous.changeset_id,
+      action,
+      expectedReviewSha256: expectedReview,
+    });
+    try {
+      const next = await runChangesetAction(action, previous.changeset_id, expectedReview);
+      if (generationRef.current !== generation || reviewRequestRef.current !== requestId) return;
+      const mismatch = actionCompletionError(previous, next, action);
+      if (mismatch) throw new Error(mismatch);
+      reviewDispatch({
+        type: "action-succeeded",
+        workspaceId,
+        generation,
+        requestId,
+        changesetId: previous.changeset_id,
+        action,
+        previous,
+        record: next,
+      });
+      setDockRefresh((value) => value + 1);
+      if (action === "apply") {
+        await loadWorkspace(workspaceId);
+        window.requestAnimationFrame(() => document.querySelector<HTMLElement>("#world-workbench")?.focus());
+      } else {
+        window.requestAnimationFrame(() => reviewCloseButtonRef.current?.focus());
+      }
+    } catch (error) {
+      if (generationRef.current !== generation || reviewRequestRef.current !== requestId) return;
+      const message = describeError(error);
+      reviewDispatch({
+        type: "request-failed",
+        workspaceId,
+        generation,
+        requestId,
+        request: action,
+        message,
+      });
+      recordError(message);
+      window.requestAnimationFrame(() => reviewCloseButtonRef.current?.focus());
+    } finally {
+      if (reviewMutationRef.current === requestId) reviewMutationRef.current = null;
+    }
+  }
+
+  async function runChangesetAction(
+    action: ChangesetReviewAction,
+    changesetId: string,
+    expectedReview: string | null,
+  ): Promise<StudioChangeset> {
+    if (action === "approve") {
+      const result = await limiterRef.current.run(() =>
+        window.forgeStudio.approveChangeset(changesetId, expectedReview ?? undefined),
+      );
+      return responseResult<"changeset.approve", StudioChangesetApproveResponse["result"]>(
+        result,
+        "changeset.approve",
+      ).changeset;
+    }
+    if (action === "reject") {
+      const result = await limiterRef.current.run(() =>
+        window.forgeStudio.rejectChangeset(changesetId, expectedReview ?? undefined),
+      );
+      return responseResult<"changeset.reject", StudioChangesetRejectResponse["result"]>(
+        result,
+        "changeset.reject",
+      ).changeset;
+    }
+    const result = await limiterRef.current.run(() =>
+      window.forgeStudio.applyChangeset(changesetId, expectedReview ?? undefined),
+    );
+    return responseResult<"changeset.apply", StudioChangesetApplyResponse["result"]>(
+      result,
+      "changeset.apply",
+    ).changeset;
   }
 
   function stayOnDraft(): void {
@@ -413,10 +751,15 @@ export function App() {
 
   return (
     <div className="studio-shell">
-      <a className="skip-link" href="#world-workbench">
+      <div
+        className="studio-content"
+        aria-hidden={review.selectedChangesetId ? true : undefined}
+        inert={review.selectedChangesetId !== null}
+      >
+        <a className="skip-link" href="#world-workbench">
         Skip to World workbench
-      </a>
-      <header className="app-header">
+        </a>
+        <header className="app-header">
         <div className="brand-lockup">
           <span className="forge-mark" aria-hidden="true">◆</span>
           <div>
@@ -436,7 +779,7 @@ export function App() {
             Assistant
           </button>
         </div>
-      </header>
+        </header>
 
       {errors.length > 0 ? (
         <section className="error-banner" role="alert" aria-label="Studio errors">
@@ -573,6 +916,23 @@ export function App() {
                       <span>{draft.text.length.toLocaleString("en-US")} characters</span>
                       <span>No autosave · no repository writes</span>
                     </div>
+                    <div className="stage-review-row">
+                      <button
+                        type="button"
+                        disabled={
+                          !draft.dirty ||
+                          draft.jsonSyntaxError !== null ||
+                          review.pending !== null
+                        }
+                        onClick={(event) => void stageSourceDraft(event.currentTarget)}
+                      >
+                        {review.pending === "stage" ? "Staging exact snapshot…" : "Stage for review"}
+                      </button>
+                      <small>
+                        Sends this exact path, base SHA-256, and in-memory content to a review
+                        changeset. It does not write the source file.
+                      </small>
+                    </div>
                     {draft.jsonSyntaxError ? (
                       <p className="syntax-error" role="alert">
                         JSON syntax: {draft.jsonSyntaxError}
@@ -617,9 +977,10 @@ export function App() {
         serviceActivityCount={serviceActivityCount}
         onTab={setDockTab}
         onCancel={(jobId) => void cancelJob(jobId)}
+        onOpenChangeset={requestChangesetReview}
       />
 
-      <AssistantDrawer
+        <AssistantDrawer
         open={assistantOpen}
         workspaceId={authoring.workspaceId}
         status={codexStatus}
@@ -638,7 +999,7 @@ export function App() {
         onInterrupt={() => void interruptTurn()}
         onAnswer={(id, answer) => setUserAnswers((current) => ({ ...current, [id]: answer }))}
         onSubmitAnswers={(event) => void answerUserInput(event)}
-      />
+        />
 
       {pendingNavigation ? (
         <div className="modal-backdrop">
@@ -671,6 +1032,29 @@ export function App() {
             ? `Workspace ${authoring.workspaceId} ready`
             : "Choose a workspace"}
       </p>
+      </div>
+
+      {review.selectedChangesetId ? (
+        <ChangesetReviewPanel
+          state={review}
+          closeButtonRef={reviewCloseButtonRef}
+          pendingStatusRef={reviewPendingStatusRef}
+          obscured={pendingReviewAction !== null}
+          onClose={closeChangesetReview}
+          onRequestAction={requestReviewAction}
+        />
+      ) : null}
+
+      {pendingReviewAction ? (
+        <ReviewActionConfirmation
+          action={pendingReviewAction}
+          legacy={review.record?.format_version === 1}
+          dirtyDraft={Boolean(draft?.dirty)}
+          cancelButtonRef={reviewActionCancelRef}
+          onCancel={cancelReviewAction}
+          onConfirm={() => void confirmReviewAction()}
+        />
+      ) : null}
     </div>
   );
 }
@@ -750,6 +1134,7 @@ function BottomDock({
   serviceActivityCount,
   onTab,
   onCancel,
+  onOpenChangeset,
 }: {
   tab: DockTab;
   pending: boolean;
@@ -757,6 +1142,7 @@ function BottomDock({
   serviceActivityCount: number;
   onTab: (tab: DockTab) => void;
   onCancel: (jobId: string) => void;
+  onOpenChangeset: (changesetId: string, trigger: HTMLButtonElement) => void;
 }) {
   return (
     <section className="bottom-dock" aria-labelledby="dock-heading">
@@ -802,6 +1188,15 @@ function BottomDock({
                     Cancel job
                   </button>
                 ) : null}
+                {tab === "changesets" ? (
+                  <button
+                    type="button"
+                    className="secondary compact"
+                    onClick={(event) => onOpenChangeset(row.id, event.currentTarget)}
+                  >
+                    Open review
+                  </button>
+                ) : null}
               </li>
             ))}
           </ol>
@@ -809,6 +1204,98 @@ function BottomDock({
       </div>
     </section>
   );
+}
+
+function ReviewActionConfirmation({
+  action,
+  legacy,
+  dirtyDraft,
+  cancelButtonRef,
+  onCancel,
+  onConfirm,
+}: {
+  action: ChangesetReviewAction;
+  legacy: boolean;
+  dirtyDraft: boolean;
+  cancelButtonRef: React.RefObject<HTMLButtonElement | null>;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const heading =
+    action === "approve"
+      ? "Approve this reviewed changeset?"
+      : action === "reject"
+        ? "Reject this changeset?"
+        : "Apply this approved changeset?";
+  const description =
+    action === "approve"
+      ? "Approval records this human review only. It does not apply or write source files."
+      : action === "reject"
+        ? legacy
+          ? "This legacy review has no immutable exact diff. Rejection closes it without changing source files."
+          : "Rejection closes this reviewed proposal without changing source files."
+        : `This separate action writes the exact approved v2 proposal after the service rechecks its review identity and base hashes.${
+            dirtyDraft
+              ? " After success, verified sources refresh; a draft based on a changed source will no longer be active."
+              : ""
+          }`;
+  const confirmLabel =
+    action === "approve"
+      ? "Approve only"
+      : action === "reject"
+        ? "Confirm rejection"
+        : "Confirm apply";
+  return (
+    <div className="modal-backdrop">
+      <section
+        className="confirmation-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-action-heading"
+        aria-describedby="review-action-description"
+        onKeyDown={(event) => containConfirmationFocus(event, onCancel)}
+      >
+        <p className="eyebrow">Explicit human decision</p>
+        <h2 id="review-action-heading">{heading}</h2>
+        <p id="review-action-description">{description}</p>
+        <div className="actions">
+          <button ref={cancelButtonRef} type="button" onClick={onCancel}>Return to review</button>
+          <button
+            type="button"
+            className={action === "approve" ? undefined : "danger"}
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function containConfirmationFocus(
+  event: React.KeyboardEvent<HTMLElement>,
+  cancel: () => void,
+): void {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    cancel();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(
+    event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"),
+  );
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (!first || !last) return;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function AssistantDrawer({

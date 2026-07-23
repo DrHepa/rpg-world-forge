@@ -654,7 +654,7 @@ small {
 
 .editor-pane {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
   gap: 6px;
 }
 
@@ -674,6 +674,25 @@ small {
   gap: 12px;
   color: var(--muted);
   font-size: 0.66rem;
+}
+
+.stage-review-row {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.stage-review-row button {
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 0.7rem;
+}
+
+.stage-review-row small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
 }
 
 .syntax-error,
@@ -1042,6 +1061,292 @@ progress {
   font-size: 0.82rem;
 }
 
+.review-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgb(2 6 9 / 78%);
+}
+
+.changeset-review-panel {
+  width: min(1080px, 100%);
+  max-height: calc(100vh - 44px);
+  padding: 20px;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: #0d171e;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 55%);
+}
+
+.changeset-review-heading,
+.review-section-heading,
+.review-operation > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.changeset-review-heading {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.changeset-review-heading h2,
+.review-section-heading h3,
+.review-operation h4,
+.diff-hunk h5,
+.semantic-diff h5 {
+  margin: 0;
+}
+
+.review-summary {
+  max-width: 760px;
+  color: #b9c7ce;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.review-notice {
+  padding: 7px 9px;
+  border-radius: 6px;
+  color: #bde9c0;
+  background: rgb(50 94 56 / 26%);
+  font-size: 0.72rem;
+}
+
+.review-pending-status {
+  margin: 12px 0;
+  padding: 9px 11px;
+  border: 1px solid #6c5d39;
+  border-radius: 6px;
+  color: var(--warning);
+  background: rgb(105 83 36 / 24%);
+  font-size: 0.72rem;
+}
+
+.review-identity,
+.exact-diff,
+.legacy-review-warning,
+.review-actions {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.review-identity h3,
+.legacy-review-warning h3 {
+  margin: 0 0 9px;
+  font-size: 0.82rem;
+}
+
+.review-identity dl,
+.operation-anchors {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+
+.review-identity dl > div,
+.operation-anchors > div {
+  min-width: 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--surface-1);
+}
+
+.review-identity dt,
+.operation-anchors dt {
+  color: var(--muted);
+  font-size: 0.59rem;
+  text-transform: uppercase;
+}
+
+.review-identity dd,
+.operation-anchors dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.68rem;
+}
+
+.review-identity code,
+.operation-anchors code,
+.semantic-diff code,
+.diff-line code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+.review-section-heading > span,
+.review-operation > header > span {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.review-operation-list {
+  display: grid;
+  gap: 12px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-operation {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0a1218;
+}
+
+.review-operation > header > div {
+  min-width: 0;
+}
+
+.review-operation h4 {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+}
+
+.operation-kind {
+  color: var(--accent-strong);
+  font-size: 0.59rem;
+  text-transform: uppercase;
+}
+
+.operation-anchors {
+  margin-top: 9px;
+}
+
+.text-diff,
+.semantic-diff {
+  margin-top: 10px;
+}
+
+.diff-hunk {
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid #263944;
+  border-radius: 6px;
+}
+
+.diff-hunk h5,
+.semantic-diff h5 {
+  padding: 6px 8px;
+  color: #b6c6ce;
+  background: var(--surface-2);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.65rem;
+}
+
+.diff-hunk ol,
+.semantic-diff ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diff-line {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  min-height: 23px;
+  border-top: 1px solid rgb(41 59 70 / 45%);
+  font-size: 0.66rem;
+  line-height: 1.45;
+}
+
+.diff-line code {
+  padding: 3px 7px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.diff-prefix {
+  padding: 3px 6px;
+  color: var(--muted);
+  background: rgb(255 255 255 / 3%);
+  text-align: center;
+}
+
+.diff-add {
+  background: rgb(57 112 67 / 20%);
+}
+
+.diff-remove {
+  background: rgb(128 59 67 / 22%);
+}
+
+.semantic-diff > ol {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.semantic-diff li {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-1);
+}
+
+.semantic-diff li > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.semantic-diff strong {
+  color: var(--accent-strong);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
+.semantic-diff li > div code {
+  overflow-wrap: anywhere;
+  font-size: 0.68rem;
+}
+
+.semantic-diff p {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.63rem;
+}
+
+.semantic-diff p code {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.legacy-review-warning {
+  color: var(--warning);
+}
+
+.legacy-review-warning p,
+.review-actions p {
+  color: #b9c5cb;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.review-actions p {
+  max-width: 620px;
+  margin: 0;
+}
+
 .modal-backdrop {
   position: fixed;
   z-index: 60;
@@ -1173,9 +1478,28 @@ progress {
   .header-actions,
   .error-banner,
   .editor-heading,
-  .preview-toolbar {
+  .preview-toolbar,
+  .review-actions,
+  .review-operation > header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .stage-review-row,
+  .review-identity dl,
+  .operation-anchors {
+    grid-template-columns: 1fr;
+  }
+
+  .review-backdrop {
+    padding: 0;
+  }
+
+  .changeset-review-panel {
+    max-height: 100vh;
+    min-height: 100vh;
+    border: 0;
+    border-radius: 0;
   }
 
   .error-banner {

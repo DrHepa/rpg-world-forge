@@ -12,6 +12,9 @@ import type {
 
 const SHA_WORLD = "a".repeat(64);
 const SHA_MAP = "b".repeat(64);
+const SHA_PROPOSED = "6cd86327e443282ef8b2e4109125f8fc9c43c64951ba100f47665f62c468577e";
+const SHA_REVIEW = "d".repeat(64);
+const UPDATED_WORLD_CONTENT = '{"id":"world_01","title":"A quieter world"}';
 
 beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(canvasContext());
@@ -175,6 +178,226 @@ describe("Studio World authoring cockpit", () => {
     expect(screen.queryByText(/SECRET absolute\/path/u)).not.toBeInTheDocument();
     expect(screen.getByText(/1 live updates/u)).toBeInTheDocument();
   });
+
+  it("stages an exact draft, approves without applying, then separately applies and refreshes", async () => {
+    const appliedSha = "e".repeat(64);
+    const listSourceDocuments = vi
+      .fn()
+      .mockResolvedValueOnce(sourceListResponse(SHA_WORLD))
+      .mockResolvedValueOnce(sourceListResponse(appliedSha));
+    const readSourceDocument = vi.fn().mockImplementation((_workspaceId: string, path: string) =>
+      Promise.resolve(
+        namedResponse("source.read", {
+          document:
+            path === "source/maps/garden.json"
+              ? MAP_DOCUMENT
+              : listSourceDocuments.mock.calls.length > 1
+                ? { ...WORLD_DOCUMENT, sha256: appliedSha, content: UPDATED_WORLD_CONTENT }
+                : WORLD_DOCUMENT,
+        }),
+      ),
+    );
+    const { api, mocks } = createApi({ listSourceDocuments, readSourceDocument });
+    installApi(api);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    const editor = await screen.findByLabelText("In-memory source draft");
+    fireEvent.change(editor, { target: { value: UPDATED_WORLD_CONTENT } });
+    expect(mocks.stageSourceDocument).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Stage for review" }));
+    await waitFor(() =>
+      expect(mocks.stageSourceDocument).toHaveBeenCalledWith(
+        "workspace_01",
+        "source/world.json",
+        SHA_WORLD,
+        UPDATED_WORLD_CONTENT,
+      ),
+    );
+    expect(await screen.findByRole("dialog", { name: "Changeset review" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.getChangeset).toHaveBeenCalledWith("changeset_01");
+      expect(mocks.readChangesetDiff).toHaveBeenCalledWith("changeset_01");
+    });
+    expect(screen.getByText(SHA_REVIEW)).toBeInTheDocument();
+    expect(screen.getByText("/title")).toBeInTheDocument();
+    expect(screen.getByText('"A quieter world"')).toBeInTheDocument();
+    expect(document.querySelector("pre")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve review" }));
+    expect(screen.getByRole("dialog", { name: /Approve this reviewed changeset/u })).toBeInTheDocument();
+    expect(mocks.approveChangeset).not.toHaveBeenCalled();
+    expect(mocks.applyChangeset).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Approve only" }));
+    await waitFor(() =>
+      expect(mocks.approveChangeset).toHaveBeenCalledWith("changeset_01", SHA_REVIEW),
+    );
+    expect(mocks.applyChangeset).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Apply approved changeset" }));
+    expect(screen.getByRole("dialog", { name: /Apply this approved changeset/u })).toBeInTheDocument();
+    expect(screen.getByText(/draft based on a changed source will no longer be active/u)).toBeInTheDocument();
+    expect(mocks.applyChangeset).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm apply" }));
+    await waitFor(() =>
+      expect(mocks.applyChangeset).toHaveBeenCalledWith("changeset_01", SHA_REVIEW),
+    );
+    await waitFor(() => expect(listSourceDocuments).toHaveBeenCalledTimes(2));
+    expect(await screen.findByLabelText("In-memory source draft")).toHaveValue(UPDATED_WORLD_CONTENT);
+    expect(screen.queryByRole("dialog", { name: "Changeset review" })).not.toBeInTheDocument();
+  });
+
+  it("opens a v2 dock proposal, confirms rejection, and restores focus", async () => {
+    const { api, mocks } = createApi({
+      listChangesets: vi.fn().mockResolvedValue(
+        legacyResponse("changeset.list", { changesets: [V2_STAGED] }),
+      ),
+    });
+    installApi(api);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
+    const openButton = await screen.findByRole("button", { name: "Open review" });
+    fireEvent.click(openButton);
+    expect(await screen.findByRole("button", { name: "Close changeset review" })).toHaveFocus();
+    const rejectButton = await screen.findByRole("button", { name: "Reject changeset" });
+    fireEvent.click(rejectButton);
+    fireEvent.click(screen.getByRole("button", { name: "Return to review" }));
+    await waitFor(() => expect(rejectButton).toHaveFocus());
+    fireEvent.click(rejectButton);
+    expect(mocks.rejectChangeset).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm rejection" }));
+    await waitFor(() =>
+      expect(mocks.rejectChangeset).toHaveBeenCalledWith("changeset_01", SHA_REVIEW),
+    );
+    expect(mocks.applyChangeset).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Close changeset review" }));
+    await waitFor(() => expect(openButton).toHaveFocus());
+  });
+
+  it("exposes only the top review dialog and focuses a stable pending action status", async () => {
+    let resolveApproval: ((value: ReturnType<typeof approvalResponse>) => void) | undefined;
+    const approveChangeset = vi.fn().mockImplementation(
+      () =>
+        new Promise<ReturnType<typeof approvalResponse>>((resolve) => {
+          resolveApproval = resolve;
+        }),
+    );
+    const { api } = createApi({
+      listChangesets: vi.fn().mockResolvedValue(
+        legacyResponse("changeset.list", { changesets: [V2_STAGED] }),
+      ),
+      approveChangeset,
+    });
+    installApi(api);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open review" }));
+    const reviewDialog = await screen.findByRole("dialog", { name: "Changeset review" });
+    fireEvent.click(screen.getByRole("button", { name: "Approve review" }));
+
+    const confirmation = screen.getByRole("dialog", { name: /Approve this reviewed changeset/u });
+    expect(screen.getAllByRole("dialog")).toEqual([confirmation]);
+    expect(reviewDialog).toHaveAttribute("aria-hidden", "true");
+    expect(reviewDialog).not.toHaveAttribute("aria-modal");
+    expect(reviewDialog).toHaveAttribute("inert");
+    expect(document.querySelector(".studio-content")).toHaveAttribute("inert");
+    expect(screen.getByRole("button", { name: "Return to review" })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve only" }));
+    const pending = await screen.findByText("Approval request pending. Source files remain unchanged.");
+    expect(pending).toHaveFocus();
+    expect(reviewDialog).toHaveAttribute("aria-modal", "true");
+    expect(reviewDialog).not.toHaveAttribute("aria-hidden");
+    expect(reviewDialog).not.toHaveAttribute("inert");
+    expect(screen.getAllByRole("dialog")).toEqual([reviewDialog]);
+    expect(approveChangeset).toHaveBeenCalledWith("changeset_01", SHA_REVIEW);
+
+    await act(async () => {
+      resolveApproval?.(approvalResponse());
+      await Promise.resolve();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Close changeset review" })).toHaveFocus(),
+    );
+  });
+
+  it("keeps legacy v1 exact diff unavailable and permits only confirmed rejection", async () => {
+    const rejectChangeset = vi.fn().mockResolvedValue(
+      namedResponse("changeset.reject", { changeset: { ...V1_STAGED, status: "rejected" } }),
+    );
+    const { api } = createApi({
+      listChangesets: vi.fn().mockResolvedValue(
+        legacyResponse("changeset.list", { changesets: [V1_STAGED] }),
+      ),
+      getChangeset: vi.fn().mockResolvedValue(
+        namedResponse("changeset.get", { changeset: V1_STAGED }),
+      ),
+      readChangesetDiff: vi.fn().mockResolvedValue(
+        namedResponse("changeset.diff", { diff: V1_DIFF }),
+      ),
+      rejectChangeset,
+    });
+    installApi(api);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open review" }));
+    expect(await screen.findByRole("heading", { name: "Exact diff unavailable" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Approve review" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply approved changeset" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reject changeset" }));
+    expect(rejectChangeset).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm rejection" }));
+    await waitFor(() => expect(rejectChangeset).toHaveBeenCalledWith("legacy_01", undefined));
+  });
+
+  it("surfaces staging failures without opening hidden review or write flows", async () => {
+    const { api, mocks } = createApi({
+      stageSourceDocument: vi.fn().mockResolvedValue({
+        ok: false,
+        error: { code: "service_unavailable", message: "Review service unavailable" },
+      }),
+    });
+    installApi(api);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    fireEvent.change(await screen.findByLabelText("In-memory source draft"), {
+      target: { value: UPDATED_WORLD_CONTENT },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Stage for review" }));
+    expect(await screen.findByText("Review service unavailable")).toBeInTheDocument();
+    expect(mocks.getChangeset).not.toHaveBeenCalled();
+    expect(mocks.readChangesetDiff).not.toHaveBeenCalled();
+    expect(mocks.approveChangeset).not.toHaveBeenCalled();
+    expect(mocks.applyChangeset).not.toHaveBeenCalled();
+  });
+
+  it("keeps reviewed evidence open when an action fails and never advances to apply", async () => {
+    const approveChangeset = vi.fn().mockResolvedValue({
+      ok: false,
+      error: { code: "invalid_request", message: "Approval review identity is stale" },
+    });
+    const { api, mocks } = createApi({
+      listChangesets: vi.fn().mockResolvedValue(
+        legacyResponse("changeset.list", { changesets: [V2_STAGED] }),
+      ),
+      approveChangeset,
+    });
+    installApi(api);
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
+    fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Approve review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve only" }));
+    expect(await screen.findAllByText("Approval review identity is stale")).not.toHaveLength(0);
+    expect(screen.getByRole("dialog", { name: "Changeset review" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply approved changeset" })).not.toBeInTheDocument();
+    expect(mocks.applyChangeset).not.toHaveBeenCalled();
+    expect(mocks.listSourceDocuments).toHaveBeenCalledTimes(1);
+  });
 });
 
 function createApi(overrides: Partial<ForgeStudioApi> = {}) {
@@ -241,6 +464,24 @@ function createApi(overrides: Partial<ForgeStudioApi> = {}) {
   });
   const interruptCodexTurn = vi.fn().mockResolvedValue({ ok: true, value: undefined });
   const answerCodexUserInput = vi.fn().mockResolvedValue({ ok: true, value: undefined });
+  const stageSourceDocument = vi.fn().mockResolvedValue(
+    namedResponse("changeset.create", { changeset: V2_STAGED }),
+  );
+  const getChangeset = vi.fn().mockResolvedValue(
+    namedResponse("changeset.get", { changeset: V2_STAGED }),
+  );
+  const readChangesetDiff = vi.fn().mockResolvedValue(
+    namedResponse("changeset.diff", { diff: V2_DIFF }),
+  );
+  const approveChangeset = vi.fn().mockResolvedValue(
+    namedResponse("changeset.approve", { changeset: { ...V2_STAGED, status: "approved" } }),
+  );
+  const rejectChangeset = vi.fn().mockResolvedValue(
+    namedResponse("changeset.reject", { changeset: { ...V2_STAGED, status: "rejected" } }),
+  );
+  const applyChangeset = vi.fn().mockResolvedValue(
+    namedResponse("changeset.apply", { changeset: { ...V2_STAGED, status: "applied" } }),
+  );
   const api: ForgeStudioApi = {
     initialize: vi.fn().mockResolvedValue(legacyResponse("service.initialize", { service: "ready" })),
     getServiceStatus: vi.fn().mockResolvedValue({
@@ -256,12 +497,12 @@ function createApi(overrides: Partial<ForgeStudioApi> = {}) {
     getWorkspaceOverview,
     listSourceDocuments,
     readSourceDocument,
-    stageSourceDocument: unavailable,
-    getChangeset: unavailable,
-    readChangesetDiff: unavailable,
-    approveChangeset: unavailable,
-    rejectChangeset: unavailable,
-    applyChangeset: unavailable,
+    stageSourceDocument,
+    getChangeset,
+    readChangesetDiff,
+    approveChangeset,
+    rejectChangeset,
+    applyChangeset,
     validateWorld,
     analyzeWorld,
     validateAssetReceipt: unavailable,
@@ -303,6 +544,12 @@ function createApi(overrides: Partial<ForgeStudioApi> = {}) {
       startCodexTurn,
       interruptCodexTurn,
       answerCodexUserInput,
+      stageSourceDocument,
+      getChangeset,
+      readChangesetDiff,
+      approveChangeset,
+      rejectChangeset,
+      applyChangeset,
     },
   };
 }
@@ -333,6 +580,21 @@ function namedResponse<M extends string, R>(method: M, result: R) {
       result,
     },
   };
+}
+
+function approvalResponse() {
+  return namedResponse("changeset.approve", {
+    changeset: { ...V2_STAGED, status: "approved" as const },
+  });
+}
+
+function sourceListResponse(worldSha: string) {
+  return namedResponse("source.list", {
+    documents: [
+      { path: "source/world.json", kind: "world", size: 24, sha256: worldSha },
+      { path: "source/maps/garden.json", kind: "maps", size: 120, sha256: SHA_MAP },
+    ],
+  });
 }
 
 const OVERVIEW = {
@@ -383,6 +645,93 @@ const MAP_DOCUMENT = {
     rows: ["...", ".#."],
   }),
   json: {},
+};
+
+const V2_STAGED = {
+  format: "rpg-world-forge.studio_changeset" as const,
+  format_version: 2 as const,
+  changeset_id: "changeset_01",
+  workspace_id: "workspace_01",
+  status: "staged" as const,
+  operations: [
+    {
+      path: "source/world.json",
+      operation: "replace" as const,
+      base_sha256: SHA_WORLD,
+      base_size: 24,
+      proposed_sha256: SHA_PROPOSED,
+      size: new TextEncoder().encode(UPDATED_WORLD_CONTENT).byteLength,
+    },
+  ] as const,
+  review_sha256: SHA_REVIEW,
+  created_at: "2026-07-23T00:00:00Z",
+  updated_at: "2026-07-23T00:00:00Z",
+};
+
+const V2_DIFF = {
+  changeset_id: "changeset_01",
+  changeset_format_version: 2 as const,
+  available: true as const,
+  unavailable_reason: null,
+  review_sha256: SHA_REVIEW,
+  operations: [
+    {
+      path: "source/world.json",
+      operation: "replace" as const,
+      base_sha256: SHA_WORLD,
+      base_size: 24,
+      proposed_sha256: SHA_PROPOSED,
+      size: new TextEncoder().encode(UPDATED_WORLD_CONTENT).byteLength,
+      text_hunks: [
+        {
+          base_start: 1,
+          base_count: 1,
+          proposed_start: 1,
+          proposed_count: 1,
+          lines: [
+            { kind: "remove" as const, text: WORLD_DOCUMENT.content },
+            { kind: "add" as const, text: UPDATED_WORLD_CONTENT },
+          ],
+        },
+      ],
+      json_pointer_changes: [
+        {
+          operation: "replace" as const,
+          pointer: "/title",
+          old_value: "Neutral World",
+          value: "A quieter world",
+        },
+      ],
+    },
+  ] as const,
+};
+
+const V1_STAGED = {
+  format: "rpg-world-forge.studio_changeset" as const,
+  format_version: 1 as const,
+  changeset_id: "legacy_01",
+  workspace_id: "workspace_01",
+  status: "staged" as const,
+  operations: [
+    {
+      path: "source/world.json",
+      operation: "replace" as const,
+      base_sha256: SHA_WORLD,
+      proposed_sha256: SHA_PROPOSED,
+      size: 24,
+    },
+  ] as const,
+  created_at: "2026-07-22T00:00:00Z",
+  updated_at: "2026-07-22T00:00:00Z",
+};
+
+const V1_DIFF = {
+  changeset_id: "legacy_01",
+  changeset_format_version: 1 as const,
+  available: false as const,
+  unavailable_reason: "legacy_base_bytes_not_retained" as const,
+  review_sha256: null,
+  operations: [] as const,
 };
 
 function installApi(api: ForgeStudioApi): void {

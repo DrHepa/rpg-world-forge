@@ -72,8 +72,12 @@ draft cockpit and neutral non-authoritative Canvas preview.
 ## Consequences
 
 - The named preload boundary can stage one explicit base-hashed source draft
-  and drive human changeset review transitions; it provides no autosave,
-  arbitrary filesystem operation, or generic repository write path.
+  and drive human changeset review transitions. The renderer displays bounded
+  immutable v2 text/JSON Pointer evidence, sends the displayed review hash on
+  every v2 action, and keeps approval separate from a second confirmed apply.
+  Legacy v1 records are readable but cannot be freshly approved or applied in
+  the desktop because they have no exact immutable diff. The boundary provides
+  no autosave, arbitrary filesystem operation, or generic repository write path.
 - A compromised renderer cannot name IPC channels or directly reach files,
   commands, providers, local ports, or project roots.
 - Development requires one explicit interpreter setting; packaged builds are

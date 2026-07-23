@@ -9,9 +9,12 @@ manifest-authorized source inspection, release validation, and in-memory
 narrative analysis methods. Its exact changeset protocol also exposes stage,
 get, list, immutable diff, approve, reject, and apply. Electron maps the human
 review boundary to six named preload methods; staging is only a one-file
-base-hashed replacement, and no generic RPC is exposed. Visual review UI,
-asset tools, Modly, Blender, file watching, and native playtests remain later
-batches.
+base-hashed replacement, and no generic RPC is exposed. The World cockpit can
+stage an explicit dirty syntax-valid draft, open bounded immutable v2 text and
+JSON Pointer evidence, and require separate human confirmations for approval,
+rejection, and apply. Approval never auto-applies; v1 reviews remain readable
+but cannot be freshly approved or applied without exact evidence. Asset tools,
+Modly, Blender, file watching, and native playtests remain later batches.
 
 ## Development
 
