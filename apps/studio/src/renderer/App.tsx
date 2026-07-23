@@ -13,6 +13,7 @@ import type {
   StudioChangesetRejectResponse,
   StudioClientResult,
   StudioErrorEnvelope,
+  StudioJobCreateReply,
   StudioSourceListResult,
   StudioSourceReadResult,
   StudioWorkspaceOverviewResult,
@@ -21,6 +22,7 @@ import type {
 } from "../shared/studio-api";
 import { AssetsCockpit } from "./AssetsCockpit";
 import { ChangesetReviewPanel } from "./ChangesetReviewPanel";
+import { GameCockpit } from "./GameCockpit";
 import { NeutralMapCanvas } from "./NeutralMapCanvas";
 import {
   beginAssetCatalogInspection,
@@ -57,6 +59,13 @@ import {
   type StagedDraftSnapshot,
 } from "./changeset-review-state";
 import {
+  projectCanceledGameJob,
+  projectCreatedGameJob,
+  type GameJobRequest,
+  type GameJobView,
+  type GameOperation,
+} from "./game-job-view";
+import {
   boundedFindings,
   changesetRows,
   decodeLegacyList,
@@ -85,6 +94,7 @@ const COMPACT_DISCIPLINE_TABS_QUERY = "(max-width: 860px)";
 
 type DockTab = "activity" | "changesets" | "jobs";
 type WorkbenchTab = "world" | "assets" | "game";
+type GameOperationState<T> = Record<GameOperation, T>;
 type PendingNavigation =
   | { kind: "workspace"; workspaceId: string }
   | { kind: "source"; document: SourceSummary };
@@ -138,6 +148,23 @@ export function App() {
   const [dockJobs, setDockJobs] = useState<Record<string, unknown>[]>([]);
   const [dockPending, setDockPending] = useState(false);
   const [dockRefresh, setDockRefresh] = useState(0);
+  const [gameImmediateJobs, setGameImmediateJobs] = useState<Record<string, unknown>[]>([]);
+  const [gamePending, setGamePending] = useState<GameOperationState<boolean>>(
+    createGamePendingState,
+  );
+  const [gameErrors, setGameErrors] = useState<GameOperationState<string | null>>(
+    createGameErrorState,
+  );
+  const [cancelingGameJobIds, setCancelingGameJobIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const gameRequestTokensRef = useRef<GameOperationState<number>>(
+    createGameRequestTokenState(),
+  );
+  const gameCancelTokenRef = useRef(0);
+  const gameCancelTokensRef = useRef(new Map<string, number>());
+  const dockCancelTokenRef = useRef(0);
+  const dockCancelTokensRef = useRef(new Map<string, number>());
   const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
   const navigationTriggerRef = useRef<HTMLButtonElement | null>(null);
   const stayButtonRef = useRef<HTMLButtonElement>(null);
@@ -383,7 +410,7 @@ export function App() {
     event: React.KeyboardEvent<HTMLButtonElement>,
     current: WorkbenchTab,
   ): void {
-    const enabledTabs: WorkbenchTab[] = ["world", "assets"];
+    const enabledTabs: WorkbenchTab[] = ["world", "assets", "game"];
     const currentIndex = enabledTabs.indexOf(current);
     let next: WorkbenchTab | null = null;
     if (event.key === "Home") next = enabledTabs[0] ?? null;
@@ -425,6 +452,7 @@ export function App() {
   async function loadWorkspace(workspaceId: string): Promise<void> {
     const generation = generationRef.current + 1;
     generationRef.current = generation;
+    invalidateGameRequests();
     assetCatalogLazyContextRef.current = null;
     commitAssetCatalog((current) =>
       bindAssetCatalogWorkspace(current, workspaceId, generation),
@@ -436,6 +464,7 @@ export function App() {
     setDockEvents([]);
     setDockChangesets([]);
     setDockJobs([]);
+    setGameImmediateJobs([]);
     try {
       const [overview, sources, validation, analysis] = await Promise.all([
         limiterRef.current
@@ -830,11 +859,230 @@ export function App() {
     }
   }
 
+  function invalidateGameRequests(): void {
+    for (const operation of gameOperations()) {
+      gameRequestTokensRef.current[operation] += 1;
+    }
+    gameCancelTokenRef.current += 1;
+    gameCancelTokensRef.current.clear();
+    dockCancelTokenRef.current += 1;
+    dockCancelTokensRef.current.clear();
+    setGamePending(createGamePendingState());
+    setGameErrors(createGameErrorState());
+    setCancelingGameJobIds(new Set());
+  }
+
+  async function submitGameJob(request: GameJobRequest): Promise<void> {
+    const workspaceId = authoring.workspaceId;
+    const generation = authoring.generation;
+    const operation = request.operation;
+    if (!workspaceId || gamePending[operation]) return;
+    const token = gameRequestTokensRef.current[operation] + 1;
+    gameRequestTokensRef.current[operation] = token;
+    setGamePending((current) => ({ ...current, [operation]: true }));
+    setGameErrors((current) => ({ ...current, [operation]: null }));
+    try {
+      const reply = await limiterRef.current.run(() =>
+        executeGameJobRequest(workspaceId, request),
+      );
+      if (!isCurrentGameRequest(operation, workspaceId, generation, token)) return;
+      if (!reply.ok || reply.value.kind === "error") {
+        setGameErrors((current) => ({
+          ...current,
+          [operation]: "The fixed offline Game job could not be queued.",
+        }));
+        return;
+      }
+      if (
+        reply.value.kind !== "response" ||
+        reply.value.method !== "job.create"
+      ) {
+        setGameErrors((current) => ({
+          ...current,
+          [operation]: "Forge Studio returned an invalid Game job response.",
+        }));
+        return;
+      }
+      const candidate = reply.value.result.job;
+      const view = projectCreatedGameJob(candidate, workspaceId, request);
+      if (!view) {
+        setGameErrors((current) => ({
+          ...current,
+          [operation]: "Forge Studio returned an invalid Game job response.",
+        }));
+        return;
+      }
+      const immediate = candidate as Record<string, unknown>;
+      setGameImmediateJobs((current) => [
+        immediate,
+        ...current.filter((record) => record.job_id !== view.jobId),
+      ].slice(0, 12));
+      setDockRefresh((value) => value + 1);
+    } catch {
+      if (!isCurrentGameRequest(operation, workspaceId, generation, token)) return;
+      setGameErrors((current) => ({
+        ...current,
+        [operation]: "The fixed offline Game job could not be queued.",
+      }));
+    } finally {
+      if (isCurrentGameRequest(operation, workspaceId, generation, token)) {
+        setGamePending((current) => ({ ...current, [operation]: false }));
+      }
+    }
+  }
+
+  function isCurrentGameRequest(
+    operation: GameOperation,
+    workspaceId: string,
+    generation: number,
+    token: number,
+  ): boolean {
+    return (
+      authoring.workspaceId === workspaceId &&
+      generationRef.current === generation &&
+      gameRequestTokensRef.current[operation] === token
+    );
+  }
+
+  async function cancelGameJob(job: GameJobView): Promise<void> {
+    const workspaceId = authoring.workspaceId;
+    const generation = authoring.generation;
+    if (!workspaceId || !job.canCancel || cancelingGameJobIds.has(job.jobId)) return;
+    const token = gameCancelTokenRef.current + 1;
+    gameCancelTokenRef.current = token;
+    gameCancelTokensRef.current.set(job.jobId, token);
+    setCancelingGameJobIds((current) => new Set(current).add(job.jobId));
+    setGameErrors((current) => ({ ...current, [job.operation]: null }));
+    try {
+      const result = await window.forgeStudio.cancelJob(job.jobId);
+      if (!isCurrentGameCancellation(job.jobId, workspaceId, generation, token)) return;
+      if (!result.ok || result.value.kind === "error") {
+        setGameErrors((current) => ({
+          ...current,
+          [job.operation]: "The current Game job could not be canceled.",
+        }));
+        return;
+      }
+      if (
+        result.value.kind !== "response" ||
+        result.value.method !== "job.cancel"
+      ) {
+        setGameErrors((current) => ({
+          ...current,
+          [job.operation]: "Forge Studio returned an invalid job cancellation response.",
+        }));
+        return;
+      }
+      const candidate = result.value.result.job;
+      const updated = projectCanceledGameJob(
+        candidate,
+        workspaceId,
+        job.jobId,
+        job.operation,
+      );
+      if (!updated) {
+        setGameErrors((current) => ({
+          ...current,
+          [job.operation]: "Forge Studio returned an invalid job cancellation response.",
+        }));
+        return;
+      }
+      const immediate = candidate as Record<string, unknown>;
+      setGameImmediateJobs((current) => [
+        immediate,
+        ...current.filter((record) => record.job_id !== updated.jobId),
+      ].slice(0, 12));
+      setDockRefresh((value) => value + 1);
+    } catch {
+      if (!isCurrentGameCancellation(job.jobId, workspaceId, generation, token)) return;
+      setGameErrors((current) => ({
+        ...current,
+        [job.operation]: "The current Game job could not be canceled.",
+      }));
+    } finally {
+      if (isCurrentGameCancellation(job.jobId, workspaceId, generation, token)) {
+        gameCancelTokensRef.current.delete(job.jobId);
+        setCancelingGameJobIds((current) => {
+          const next = new Set(current);
+          next.delete(job.jobId);
+          return next;
+        });
+      }
+    }
+  }
+
+  function isCurrentGameCancellation(
+    jobId: string,
+    workspaceId: string,
+    generation: number,
+    token: number,
+  ): boolean {
+    return (
+      authoring.workspaceId === workspaceId &&
+      generationRef.current === generation &&
+      gameCancelTokensRef.current.get(jobId) === token
+    );
+  }
+
   async function cancelJob(jobId: string): Promise<void> {
-    const result = await window.forgeStudio.cancelJob(jobId);
-    if (!result.ok) recordError(result.error.message);
-    else if (result.value.kind === "error") recordError(result.value.error.message);
-    setDockRefresh((value) => value + 1);
+    const selected = dockJobs.find((record) => record.job_id === jobId);
+    const workspaceId = authoring.workspaceId;
+    const generation = authoring.generation;
+    if (
+      !selected ||
+      !workspaceId ||
+      selected.workspace_id !== workspaceId ||
+      typeof selected.operation !== "string" ||
+      (selected.format_version !== 1 && selected.format_version !== 2) ||
+      (selected.state !== "queued" && selected.state !== "running")
+    ) {
+      return;
+    }
+    const operation = selected.operation;
+    const token = dockCancelTokenRef.current + 1;
+    dockCancelTokenRef.current = token;
+    dockCancelTokensRef.current.set(jobId, token);
+    try {
+      const result = await window.forgeStudio.cancelJob(jobId);
+      if (!isCurrentDockCancellation(jobId, workspaceId, generation, token)) return;
+      if (
+        !result.ok ||
+        result.value.kind === "error" ||
+        result.value.kind !== "response" ||
+        result.value.method !== "job.cancel" ||
+        !cancelReplyMatches(result.value.result.job, {
+          jobId,
+          workspaceId,
+          operation,
+          formatVersion: selected.format_version,
+        })
+      ) {
+        recordError("The current job could not be canceled.");
+        return;
+      }
+      setDockRefresh((value) => value + 1);
+    } catch {
+      if (isCurrentDockCancellation(jobId, workspaceId, generation, token)) {
+        recordError("The current job could not be canceled.");
+      }
+    } finally {
+      if (isCurrentDockCancellation(jobId, workspaceId, generation, token)) {
+        dockCancelTokensRef.current.delete(jobId);
+      }
+    }
+  }
+
+  function isCurrentDockCancellation(
+    jobId: string,
+    workspaceId: string,
+    generation: number,
+    token: number,
+  ): boolean {
+    return (
+      authoring.workspaceId === workspaceId &&
+      generationRef.current === generation &&
+      dockCancelTokensRef.current.get(jobId) === token
+    );
   }
 
   async function bindCodex(event: React.FormEvent): Promise<void> {
@@ -907,6 +1155,12 @@ export function App() {
     if (dockTab === "changesets") return changesetRows(dockChangesets);
     return jobRows(dockJobs, dockEvents);
   }, [dockChangesets, dockEvents, dockJobs, dockTab]);
+  const gameJobRecords = useMemo(
+    () => mergeGameJobRecords(dockJobs, gameImmediateJobs),
+    [dockJobs, gameImmediateJobs],
+  );
+  const activeWorkbenchTarget = `#${activeWorkbench}-workbench`;
+  const activeWorkbenchLabel = titleCase(activeWorkbench);
   const isMapDraft = Boolean(
     draft && draft.jsonSyntaxError === null && selectedSummary?.path.includes("/maps/"),
   );
@@ -920,9 +1174,9 @@ export function App() {
       >
         <a
           className="skip-link"
-          href={activeWorkbench === "assets" ? "#assets-workbench" : "#world-workbench"}
+          href={activeWorkbenchTarget}
         >
-        Skip to {activeWorkbench === "assets" ? "Assets" : "World"} workbench
+        Skip to {activeWorkbenchLabel} workbench
         </a>
         <header className="app-header">
         <div className="brand-lockup">
@@ -1030,14 +1284,13 @@ export function App() {
               id="discipline-game"
               type="button"
               role="tab"
-              aria-selected="false"
+              aria-selected={activeWorkbench === "game"}
               aria-controls="game-workbench"
-              aria-label="Game"
-              tabIndex={-1}
-              disabled
+              tabIndex={activeWorkbench === "game" ? 0 : -1}
+              onClick={() => setActiveWorkbench("game")}
+              onKeyDown={(event) => moveWorkbenchTab(event, "game")}
             >
-              <span>Game</span>
-              <small aria-hidden="true">Coming next</small>
+              Game
             </button>
           </div>
         </aside>
@@ -1199,12 +1452,30 @@ export function App() {
           />
         </main>
 
-        <section
+        <main
           id="game-workbench"
+          className="world-area game-area"
           role="tabpanel"
           aria-labelledby="discipline-game"
-          hidden
-        />
+          tabIndex={-1}
+          hidden={activeWorkbench !== "game"}
+        >
+          <GameCockpit
+            key={`${authoring.workspaceId ?? "none"}\u0000${String(authoring.generation)}`}
+            workspaceId={authoring.workspaceId}
+            repositories={{
+              gameRegistered: Boolean(authoring.overview?.repositories.game_registered),
+              bundleRegistered: Boolean(authoring.overview?.repositories.bundle_registered),
+            }}
+            records={gameJobRecords}
+            events={dockEvents}
+            pending={gamePending}
+            errors={gameErrors}
+            cancelingJobIds={cancelingGameJobIds}
+            onSubmit={(request) => void submitGameJob(request)}
+            onCancel={(job) => void cancelGameJob(job)}
+          />
+        </main>
       </div>
 
       <BottomDock
@@ -1420,8 +1691,13 @@ function BottomDock({
                     <progress max="100" value={row.progress}>{row.progress}%</progress>
                   </label>
                 ) : null}
-                {tab === "jobs" && row.state && ["queued", "running", "paused", "awaiting_user", "awaiting_approval"].includes(row.state) ? (
-                  <button type="button" className="secondary compact" onClick={() => onCancel(row.id)}>
+                {tab === "jobs" && row.state && ["queued", "running"].includes(row.state) ? (
+                  <button
+                    type="button"
+                    className="secondary compact"
+                    aria-label={`Cancel ${row.title} job ${row.id}`}
+                    onClick={() => onCancel(row.id)}
+                  >
                     Cancel job
                   </button>
                 ) : null}
@@ -1653,6 +1929,130 @@ function responseResult<M extends string, R>(
   if (result.value.kind === "error") throw new Error(boundedMessage(result.value.error.message));
   if (result.value.method !== method) throw new Error(`Forge Studio returned an invalid ${method} response.`);
   return result.value.result;
+}
+
+function executeGameJobRequest(
+  workspaceId: string,
+  request: GameJobRequest,
+): Promise<StudioClientResult<StudioJobCreateReply>> {
+  if (request.operation === "assetpack.verify") {
+    return window.forgeStudio.verifyAssetpack(workspaceId, request.input);
+  }
+  if (request.operation === "runtime.headless") {
+    return window.forgeStudio.runHeadless(workspaceId, request.input);
+  }
+  return window.forgeStudio.runReplay(workspaceId, request.input);
+}
+
+function gameOperations(): readonly GameOperation[] {
+  return ["assetpack.verify", "runtime.headless", "runtime.replay"];
+}
+
+function createGamePendingState(): GameOperationState<boolean> {
+  return {
+    "assetpack.verify": false,
+    "runtime.headless": false,
+    "runtime.replay": false,
+  };
+}
+
+function createGameErrorState(): GameOperationState<string | null> {
+  return {
+    "assetpack.verify": null,
+    "runtime.headless": null,
+    "runtime.replay": null,
+  };
+}
+
+function createGameRequestTokenState(): GameOperationState<number> {
+  return {
+    "assetpack.verify": 0,
+    "runtime.headless": 0,
+    "runtime.replay": 0,
+  };
+}
+
+function cancelReplyMatches(
+  value: unknown,
+  expected: {
+    jobId: string;
+    workspaceId: string;
+    operation: string;
+    formatVersion: 1 | 2;
+  },
+): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = [
+    "created_at",
+    "error",
+    "format",
+    "format_version",
+    "input",
+    "job_id",
+    "operation",
+    "result",
+    "state",
+    "updated_at",
+    "workspace_id",
+  ];
+  if (
+    Object.keys(record).toSorted().join("\u0000") !== keys.join("\u0000") ||
+    record.format !== "rpg-world-forge.studio_job" ||
+    record.format_version !== expected.formatVersion ||
+    record.job_id !== expected.jobId ||
+    record.workspace_id !== expected.workspaceId ||
+    record.operation !== expected.operation
+  ) {
+    return false;
+  }
+  return (
+    record.state === "queued" ||
+    record.state === "running" ||
+    record.state === "awaiting_approval" ||
+    record.state === "awaiting_user" ||
+    record.state === "paused" ||
+    record.state === "succeeded" ||
+    record.state === "failed" ||
+    record.state === "canceled" ||
+    record.state === "orphaned"
+  );
+}
+
+function mergeGameJobRecords(
+  listed: readonly Record<string, unknown>[],
+  immediate: readonly Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const merged = [...listed];
+  const positions = new Map<string, number>();
+  for (const [index, record] of merged.entries()) {
+    if (typeof record.job_id === "string" && !positions.has(record.job_id)) {
+      positions.set(record.job_id, index);
+    }
+  }
+  const additions: Record<string, unknown>[] = [];
+  for (const record of immediate) {
+    if (typeof record.job_id !== "string") {
+      additions.push(record);
+      continue;
+    }
+    const index = positions.get(record.job_id);
+    if (index === undefined) {
+      additions.push(record);
+      positions.set(record.job_id, -(additions.length));
+      continue;
+    }
+    const listedRecord = merged[index];
+    if (
+      listedRecord &&
+      typeof record.updated_at === "string" &&
+      (typeof listedRecord.updated_at !== "string" ||
+        record.updated_at >= listedRecord.updated_at)
+    ) {
+      merged[index] = record;
+    }
+  }
+  return [...additions, ...merged];
 }
 
 function preferredSource(documents: readonly SourceSummary[]): SourceSummary | null {

@@ -174,13 +174,24 @@ for human review; it is never autosaved or written directly. The cockpit opens
 the returned immutable v2 text and JSON Pointer diff, requires separate approve
 and apply confirmations, and refreshes verified sources only after apply
 succeeds. Legacy v1 records remain readable with exact diff unavailable; the
-desktop does not offer fresh v1 approval or apply. The Assets and Game cockpit
-tabs share an accessible keyboard tablist, but only Assets is now enabled.
+desktop does not offer fresh v1 approval or apply. The World, Assets, and Game
+cockpits share a responsive accessible keyboard tablist; inactive panels remain
+mounted so an in-memory World draft survives discipline changes.
 The read-only Assets cockpit lazily loads one revision snapshot, replaces pages
 under exact revision-bound next/previous controls, filters categories only
 within the current page, and displays bounded JSON/GLSL or verified
-PNG/WAV/font/GLB metadata. It does not reconstruct paths, load media, play
-audio, render 3D, or expose binary payloads. Game remains labeled future work.
+PNG/WAV/font/GLB metadata. Authorized PNG/WAV entries may use the bounded
+revision-bound preview lease; no arbitrary file access or 3D rendering is
+introduced.
+The Game cockpit exposes exactly three existing fixed jobs: engine-neutral
+assetpack metadata/handoff verification, reference-runtime headless simulation
+for 0 through 1,000,000 ticks without graphics, and verification of an existing
+replay action log. Its paths are blank, portable, and relative to the selected
+workspace. The result view accepts only valid v2 records for that workspace,
+shows structured inputs, state, timestamps, results, and observed progress, and
+never displays raw payloads, worker output, or repository roots. The bounded
+job view is not chronological. It does not record replays, use generated-game
+slots, launch a game, create a bundle/package, or claim an M6 3D runtime.
 
 Changesets edit only UTF-8 files beneath a registered world's `source/`
 directory. New v2 records retain the exact base and proposed snapshots in

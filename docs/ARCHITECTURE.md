@@ -135,6 +135,22 @@ remain staged changesets and cannot approve or apply themselves. Provider/model
 execution, Blender, Modly, Ollama, arbitrary commands, file watching, and M6
 presentation work remain outside this boundary.
 
+The renderer's Game cockpit is a defensive view over three of those named
+capabilities: `assetpack.verify`, `runtime.headless`, and `runtime.replay`.
+Forms start with blank portable workspace-relative paths; headless ticks are
+integers from 0 through 1,000,000. Each request captures the selected workspace,
+workspace generation, and a local request token, so a late reply cannot enter a
+new workspace view. The immediate correlated queued record is merged before the
+bounded job/event lists refresh. Projection admits only current-workspace v2
+records with exact operation-specific inputs and results; legacy, malformed,
+other-operation, and other-workspace rows are absent. Progress is a running-only
+observation associated by workspace, job entity, and event identity. A running
+job without such evidence is indeterminate, and terminal jobs do not invent a
+final percentage. The main Game view renders controlled structured facts and
+error copy rather than raw JSON, details, stderr, or roots. It verifies an
+existing replay only and provides no recording, generated-game slot, launch,
+bundle/package, native renderer, or M6 3D capability.
+
 Asset previews are a separate three-method named boundary, not generic file
 access. The renderer can provide only a workspace/revision/entry tuple to open,
 then an opaque handle and bounded sequence to read or close. Python owns one

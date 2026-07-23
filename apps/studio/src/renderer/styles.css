@@ -462,6 +462,260 @@ small {
   min-width: 0;
 }
 
+.game-cockpit {
+  min-width: 0;
+}
+
+.game-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 82px;
+  padding: 2px 2px 15px;
+}
+
+.game-header h2 {
+  font-size: clamp(1.2rem, 2.6vw, 1.75rem);
+}
+
+.game-header p:last-child {
+  max-width: 760px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.game-registration {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  min-width: 310px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+
+.game-registration div {
+  padding: 9px 11px;
+}
+
+.game-registration div + div {
+  border-left: 1px solid var(--line);
+}
+
+.game-registration dt,
+.game-job-timestamps dt,
+.game-job-facts dt {
+  color: var(--muted);
+  font-size: 0.61rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.game-registration dd {
+  margin-top: 3px;
+  font-size: 0.73rem;
+  font-weight: 720;
+}
+
+.game-operation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.game-operation-grid form {
+  align-content: start;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+
+.game-operation-grid h3 {
+  font-size: 0.92rem;
+}
+
+.game-operation-grid form > p:not(.eyebrow, .game-form-error) {
+  min-height: 54px;
+  margin: -3px 0 1px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.game-operation-grid form > button {
+  align-self: end;
+  margin-top: auto;
+}
+
+.game-form-error,
+.game-form-status {
+  margin: 0;
+  padding: 8px 9px;
+  border-radius: 7px;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.game-form-error {
+  color: #ffc5ca;
+  background: rgb(111 50 58 / 35%);
+}
+
+.game-form-status {
+  color: #bde9c0;
+  background: rgb(50 94 56 / 26%);
+}
+
+.game-results {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+
+.game-results > .bounded-note {
+  margin: 7px 0 12px;
+}
+
+.game-job-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.game-job-list article {
+  display: grid;
+  gap: 11px;
+  height: 100%;
+  padding: 13px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0b141a;
+}
+
+.game-job-list article > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.game-job-list article > header div {
+  min-width: 0;
+}
+
+.game-job-list article > header code {
+  display: block;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.game-job-timestamps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.game-job-timestamps div,
+.game-job-facts dl div {
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: #111c23;
+}
+
+.game-job-timestamps dd,
+.game-job-facts dd {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: #d8e1e5;
+  font-size: 0.68rem;
+}
+
+.game-job-facts h4 {
+  margin: 0 0 6px;
+  color: #c7d2d8;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.game-job-facts dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.game-job-facts code {
+  font-size: 0.64rem;
+}
+
+.game-job-error {
+  padding: 9px 10px;
+  border-left: 3px solid var(--danger);
+  border-radius: 4px 7px 7px 4px;
+  color: #ffc5ca;
+  background: rgb(111 50 58 / 35%);
+}
+
+.game-job-error strong {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.68rem;
+}
+
+.game-job-error p {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+}
+
+.game-job-progress {
+  font-size: 0.68rem;
+}
+
+.game-job-progress progress {
+  width: 100%;
+}
+
+.game-job-running-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.game-job-list article > button {
+  justify-self: start;
+}
+
+.game-empty {
+  display: grid;
+  place-content: center;
+  min-height: 360px;
+  padding: 32px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface-1);
+  text-align: center;
+}
+
+.game-empty p {
+  max-width: 520px;
+  margin: 7px auto 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .assets-header {
   display: flex;
   align-items: flex-start;
@@ -1843,6 +2097,10 @@ progress {
 }
 
 @media (max-width: 1180px) {
+  .game-operation-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .workbench-layout {
     grid-template-columns: 190px minmax(420px, 1fr);
   }
@@ -1885,7 +2143,8 @@ progress {
 
   .app-header,
   .project-header,
-  .assets-header {
+  .assets-header,
+  .game-header {
     align-items: stretch;
     flex-direction: column;
   }
@@ -1926,6 +2185,15 @@ progress {
 
   .project-status {
     width: 100%;
+  }
+
+  .game-registration {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .game-operation-grid {
+    grid-template-columns: 1fr;
   }
 
   .workbench-layout {
@@ -2007,7 +2275,22 @@ progress {
   .review-identity dl,
   .operation-anchors,
   .asset-metadata,
-  .inspection-metrics {
+  .inspection-metrics,
+  .game-job-timestamps,
+  .game-job-facts dl {
+    grid-template-columns: 1fr;
+  }
+
+  .game-registration {
+    grid-template-columns: 1fr;
+  }
+
+  .game-registration div + div {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .game-job-list {
     grid-template-columns: 1fr;
   }
 

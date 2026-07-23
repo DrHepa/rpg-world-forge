@@ -68,6 +68,12 @@ Automated gates regenerate the tree outside the repository, build and verify a
 temporary assetpack, finalize a copied manifest, and validate the release
 profile. This proves the M5 contract without selecting an M6 runtime.
 
+The Forge Studio Game cockpit may invoke the existing offline
+`assetpack.verify`, reference `runtime.headless`, and `runtime.replay` jobs and
+present their structured evidence. That cockpit is verification UX over the M5
+handoff and current 2D/2.5D reference runtime, not an engine adapter, native
+playtest, generated-game replay recorder, or claim that M6 has begun.
+
 ## Consequences
 
 - The Forge can validate portable 3D production independently of any engine.

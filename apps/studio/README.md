@@ -24,8 +24,17 @@ lazy-loads the first 64-entry revision snapshot, replaces pages under
 revision-bound next/previous controls, keeps category filters page-local, and
 renders bounded semantic JSON, escaped GLSL, or verified PNG/WAV/font/GLB
 metadata. The cockpit never reconstructs paths or creates image, audio, font,
-WebGL, or 3D runtime previews. Asset production, Modly, Blender, file watching,
-the Game cockpit, and native playtests remain later batches.
+WebGL, or 3D runtime previews. The accessible Game cockpit uses only the three
+existing named jobs for assetpack metadata/handoff verification, reference
+headless ticks without graphics, and verification of an existing replay. It
+accepts blank portable workspace-relative paths, correlates replies to the
+selected workspace generation, and defensively presents only valid current-
+workspace v2 records. Results are structured and bounded; raw payloads, stderr,
+absolute roots, replay recording, generated-game slots, launch/play controls,
+bundle/package mutation, and M6 3D behavior are not exposed. Its bounded job
+view is explicitly not chronological, and percentages appear only for running
+jobs with a reliably associated observed progress event. Asset production,
+Modly, Blender, file watching, and native playtests remain later batches.
 
 ## Development
 
