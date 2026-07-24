@@ -46,7 +46,11 @@ from worldforge.composed_bundle import (
     verify_composed_runtime_bundle,
     verify_installed_composed_runtime_bundle,
 )
-from worldforge.directory_publish import directory_identity, publish_directory_noreplace
+from worldforge.directory_publish import (
+    directory_identity,
+    fsync_directory,
+    publish_directory_noreplace,
+)
 from worldforge.game_boundary import GameBoundaryError, audit_game_repository
 from worldforge.game_lock import GameMutationLockError, exclusive_game_mutation
 from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
@@ -136,10 +140,162 @@ def _target_path(root: Path, entry: dict[str, Any]) -> Path:
     )
 
 
+def _directory_chain(boundary: Path, leaf: Path) -> tuple[Path, ...]:
+    try:
+        relative = leaf.relative_to(boundary)
+    except ValueError as exc:
+        raise ComposedGameError("composed import directory escaped game_data") from exc
+    chain = [boundary]
+    current = boundary
+    for part in relative.parts:
+        current /= part
+        chain.append(current)
+    return tuple(chain)
+
+
+def _require_real_directory(path: Path, *, context: str) -> None:
+    try:
+        info = path_file_stat(path)
+    except OSError as exc:
+        raise ComposedGameError(f"could not inspect {context}: {exc}") from exc
+    if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+        raise ComposedGameError(f"{context} is not a real directory")
+
+
+def _first_missing_import_path(root: Path, destination: Path) -> Path:
+    game_data = root / "game_data"
+    _require_real_directory(game_data, context="game data root")
+    for path in _directory_chain(game_data, destination)[1:]:
+        try:
+            info = path_file_stat(path)
+        except FileNotFoundError:
+            return path
+        except OSError as exc:
+            raise ComposedGameError(f"could not inspect composed import path: {exc}") from exc
+        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+            raise ComposedGameError("composed import path is not a real directory")
+    raise ComposedGameError("derived composed release destination already exists")
+
+
+def _import_stage_paths(
+    publication_root: Path,
+    destination: Path,
+    bundle_hash: str,
+) -> tuple[Path, Path]:
+    stage_root = publication_root.parent / (f".{publication_root.name}.import-{bundle_hash}")
+    relative = destination.relative_to(publication_root)
+    staged_bundle = stage_root.joinpath(*relative.parts)
+    return stage_root, staged_bundle
+
+
+def _existing_import_stages(
+    root: Path,
+    destination: Path,
+    bundle_hash: str,
+) -> tuple[tuple[Path, Path, Path], ...]:
+    game_data = root / "game_data"
+    stages: list[tuple[Path, Path, Path]] = []
+    for publication_root in _directory_chain(game_data, destination)[1:]:
+        stage_root, staged_bundle = _import_stage_paths(
+            publication_root,
+            destination,
+            bundle_hash,
+        )
+        if stage_root.exists() or stage_root.is_symlink():
+            stages.append((publication_root, stage_root, staged_bundle))
+    if len(stages) > 1:
+        raise ComposedGameError("composed import has multiple staging directories")
+    return tuple(stages)
+
+
+def _authorized_import_parent(
+    root: Path,
+    publication_root: Path,
+    entries: list[dict[str, Any]],
+) -> None:
+    game_data = root / "game_data"
+    authorized = {game_data}
+    for item in entries:
+        relative = PurePosixPath(str(item["path"]))
+        installed = root.joinpath(*relative.parts)
+        authorized.update(_directory_chain(game_data, installed))
+    for path in _directory_chain(game_data, publication_root.parent):
+        _require_real_directory(path, context="recoverable composed import ancestor")
+        if path not in authorized:
+            raise ComposedGameError("recoverable composed import stage has an unauthorised parent")
+
+
+def _copy_owned_import_stage(
+    bundle: LoadedComposedRuntimeBundle[object],
+    stage_root: Path,
+    staged_bundle: Path,
+) -> None:
+    if staged_bundle == stage_root:
+        _copy_owned_bundle(bundle, stage_root)
+        return
+    stage_root.mkdir(mode=0o700)
+    current = stage_root
+    for part in staged_bundle.relative_to(stage_root).parts[:-1]:
+        current /= part
+        current.mkdir(mode=0o700)
+    _copy_owned_bundle(bundle, staged_bundle)
+    for current_path, _directories, _files in os.walk(stage_root, topdown=False):
+        fsync_directory(
+            Path(current_path),
+            context="composed import stage tree",
+        )
+    fsync_directory(
+        stage_root.parent,
+        context="composed import stage parent",
+    )
+
+
+def _verify_import_stage_envelope(stage_root: Path, staged_bundle: Path) -> tuple[int, int]:
+    root_identity = directory_identity(stage_root, context="composed import stage root")
+    current = stage_root
+    for part in staged_bundle.relative_to(stage_root).parts:
+        try:
+            children = tuple(current.iterdir())
+        except OSError as exc:
+            raise ComposedGameError(
+                f"could not inspect composed import stage envelope: {exc}"
+            ) from exc
+        if len(children) != 1 or children[0].name != part:
+            raise ComposedGameError("composed import stage envelope is not exact")
+        current = current / part
+        _require_real_directory(current, context="composed import stage envelope")
+    if current != staged_bundle:
+        raise ComposedGameError("composed import stage envelope is inconsistent")
+    if directory_identity(stage_root, context="composed import stage root") != root_identity:
+        raise ComposedGameError("composed import stage root identity changed")
+    return root_identity
+
+
+def _composition_recovery_ancestors(
+    root: Path,
+    destination_parent: Path,
+) -> tuple[Path, ...]:
+    game_data = root / "game_data"
+    chain = _directory_chain(game_data, destination_parent)
+    for path in chain:
+        _require_real_directory(path, context="recoverable composed import ancestor")
+    return chain[:-1]
+
+
+def _fsync_modified_ancestors(
+    paths: tuple[Path, ...],
+    *,
+    context: str,
+) -> None:
+    unique = sorted(set(paths), key=lambda path: (len(path.parts), str(path)), reverse=True)
+    for path in unique:
+        fsync_directory(path, context=context)
+
+
 def _entry_and_paths(
     bundle: LoadedComposedRuntimeBundle[object],
     root: Path,
-) -> tuple[dict[str, Any], Path, Path]:
+) -> tuple[dict[str, Any], Path]:
     documents = bundle.registered.documents
     composition = documents.composition
     profile = documents.presentation_profile
@@ -151,8 +307,7 @@ def _entry_and_paths(
     )
     entry = _catalog_entry(bundle, relative)
     destination = _target_path(root, entry)
-    stage = destination.parent / f".{destination.name}.import-{bundle.bundle_hash}"
-    return entry, destination, stage
+    return entry, destination
 
 
 def _copy_owned_bundle(
@@ -178,15 +333,19 @@ def _copy_owned_bundle(
         output_file.write(bundle._manifest_bytes)  # noqa: SLF001 - exact owned bytes
         output_file.flush()
         os.fsync(output_file.fileno())
-    for current, _directories, _files in os.walk(stage, topdown=False):
-        descriptor = os.open(current, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(descriptor)
-        finally:
-            _close_descriptor(
-                descriptor,
-                context="staged composed bundle directory cleanup",
-            )
+    _fsync_composed_bundle_tree(stage)
+
+
+def _fsync_composed_bundle_tree(root: Path) -> None:
+    for current, _directories, _files in os.walk(root, topdown=False):
+        fsync_directory(
+            Path(current),
+            context="composed bundle directory",
+        )
+    fsync_directory(
+        root.parent,
+        context="composed bundle publication parent",
+    )
 
 
 def _catalog_state(root: Path) -> ComposedCatalogState:
@@ -503,7 +662,13 @@ def _generation_stage(
         raise ComposedGameError("composed catalog has conflicting unpublished generations")
     if matching:
         stage = matching[0]
-        return stage, _verify_generation_directory(stage, payload)
+        identity = _verify_generation_directory(stage, payload)
+        fsync_directory(stage, context="catalog generation stage")
+        return stage, _verify_generation_directory(
+            stage,
+            payload,
+            expected_identity=identity,
+        )
 
     stage = generations_root / f"{prefix}{uuid.uuid4().hex}"
     _create_generation_stage(stage)
@@ -522,7 +687,39 @@ def _generation_stage(
             payload,
             expected_identity=identity,
         )
-    return stage, verified
+    fsync_directory(stage, context="catalog generation stage")
+    return stage, _verify_generation_directory(
+        stage,
+        payload,
+        expected_identity=verified,
+    )
+
+
+def _fsync_catalog_state(
+    root: Path,
+    state: ComposedCatalogState,
+) -> ComposedCatalogState:
+    if not state.entries:
+        return state
+    generations_root = root / CATALOG_GENERATIONS_RELATIVE_PATH
+    generation = generations_root / state.head_hash
+    fsync_directory(
+        generation,
+        context="composed catalog generation",
+    )
+    fsync_directory(
+        generations_root,
+        context="composed catalog generation root",
+    )
+    if len(state.entries) == 1:
+        fsync_directory(
+            generations_root.parent,
+            context="composed catalog parent",
+        )
+    current = _catalog_state(root)
+    if current != state:
+        raise ComposedGameError("composed catalog changed during durable metadata flush")
+    return current
 
 
 def _publish_catalog_generation(
@@ -561,7 +758,7 @@ def _publish_catalog_generation(
         _release_entry(entry) for entry in state.entries
     ):
         if current.head_hash == generation_hash and current_entries == expected_entries:
-            return current
+            return _fsync_catalog_state(root, current)
         raise ComposedGameError("composed catalog head changed before immutable publication")
 
     try:
@@ -590,7 +787,7 @@ def _publish_catalog_generation(
             and current.head_hash == generation_hash
             and current_entries == expected_entries
         ):
-            return current
+            return _fsync_catalog_state(root, current)
         raise ComposedGameError(
             "immutable composed catalog generation name is already occupied"
         ) from None
@@ -606,18 +803,19 @@ def _publish_catalog_generation(
         != generations_identity
     ):
         raise ComposedGameError("composed catalog generation root identity changed")
-    if os.name == "posix":
-        descriptor = os.open(
-            generations_root,
-            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0),
+    fsync_directory(
+        generation,
+        context="composed catalog generation",
+    )
+    fsync_directory(
+        generations_root,
+        context="composed catalog generation root",
+    )
+    if not state.entries:
+        fsync_directory(
+            generations_root.parent,
+            context="composed catalog parent",
         )
-        try:
-            os.fsync(descriptor)
-        finally:
-            _close_descriptor(
-                descriptor,
-                context="composed catalog generation root cleanup",
-            )
     published = _catalog_state(root)
     published_entries = tuple(_release_entry(entry) for entry in published.entries)
     if published.head_hash != generation_hash or published_entries != expected_entries:
@@ -698,7 +896,7 @@ def _publish_verified(
 ) -> Path:
     state = _catalog_state(root)
     existing_entries = [_release_entry(release) for release in state.entries]
-    entry, destination, stage = _entry_and_paths(bundle, root)
+    entry, destination = _entry_and_paths(bundle, root)
     _require_one_world_hash([*existing_entries, entry])
     if any(item == entry for item in existing_entries):
         raise ComposedGameError("the exact composed release is already imported")
@@ -716,14 +914,27 @@ def _publish_verified(
             )
     if destination.exists() or destination.is_symlink():
         raise ComposedGameError("derived composed release destination already exists")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if stage.exists() or stage.is_symlink():
+    publication_root = _first_missing_import_path(root, destination)
+    stage_root, staged_bundle = _import_stage_paths(
+        publication_root,
+        destination,
+        bundle.bundle_hash,
+    )
+    if stage_root.exists() or stage_root.is_symlink():
         raise ComposedGameError("derived composed release staging path already exists")
-    _copy_owned_bundle(bundle, stage)
-    stage_identity = directory_identity(stage, context="composed import stage")
-    published_identity = publish_directory_noreplace(stage, destination)
+    _copy_owned_import_stage(bundle, stage_root, staged_bundle)
+    stage_identity = _verify_import_stage_envelope(stage_root, staged_bundle)
+    candidate_identity = _verify_import_candidate(staged_bundle, bundle, entry)
+    published_identity = publish_directory_noreplace(stage_root, publication_root)
     if published_identity != stage_identity:
         raise ComposedGameError("published composed directory identity changed")
+    if directory_identity(destination, context="published composed import") != candidate_identity:
+        raise ComposedGameError("published composed bundle identity changed")
+    _fsync_composed_bundle_tree(destination)
+    _fsync_modified_ancestors(
+        _composition_recovery_ancestors(root, destination.parent),
+        context="composed import ancestor",
+    )
     _verify_import_candidate(destination, bundle, entry)
     _publish_catalog_generation(root, state, [*existing_entries, entry])
     _verify_game_postconditions(root, bundle.bundle_hash)
@@ -780,37 +991,68 @@ def _recover_import(
 ) -> Path | None:
     state = _catalog_state(root)
     entries = [_release_entry(release) for release in state.entries]
-    entry, destination, stage = _entry_and_paths(bundle, root)
+    entry, destination = _entry_and_paths(bundle, root)
     _require_one_world_hash([*entries, entry])
     exact_matches = [item for item in entries if item == entry]
     hash_matches = [item for item in entries if item.get("bundle_hash") == bundle.bundle_hash]
+    stages = _existing_import_stages(root, destination, bundle.bundle_hash)
 
     if exact_matches:
         if hash_matches != exact_matches:
             raise ComposedGameError("recovered composed catalog identity is inconsistent")
-        if stage.exists() or stage.is_symlink():
+        if stages:
             raise ComposedGameError("committed composed import retains a staging directory")
-        _verify_import_candidate(destination, bundle, entry)
+        identity = _verify_import_candidate(destination, bundle, entry)
+        _fsync_composed_bundle_tree(destination)
+        _fsync_modified_ancestors(
+            _composition_recovery_ancestors(root, destination.parent),
+            context="composed import ancestor",
+        )
+        if _verify_import_candidate(destination, bundle, entry) != identity:
+            raise ComposedGameError("recovered composed directory identity changed")
+        _fsync_catalog_state(root, state)
         _verify_game_postconditions(root, bundle.bundle_hash)
         return destination
     if hash_matches:
         raise ComposedGameError("recovered composed catalog identity is inconsistent")
 
     destination_exists = destination.exists() or destination.is_symlink()
-    stage_exists = stage.exists() or stage.is_symlink()
-    if destination_exists and stage_exists:
+    if destination_exists and stages:
         raise ComposedGameError("composed import has both staging and destination state")
-    if not destination_exists and not stage_exists:
+    if not destination_exists and not stages:
         return None
 
-    candidate = destination if destination_exists else stage
-    candidate_identity = _verify_import_candidate(candidate, bundle, entry)
-    if stage_exists:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        published_identity = publish_directory_noreplace(stage, destination)
-        if published_identity != candidate_identity:
+    candidate_identity = (
+        _verify_import_candidate(destination, bundle, entry) if destination_exists else None
+    )
+    if stages:
+        publication_root, stage_root, staged_bundle = stages[0]
+        _authorized_import_parent(root, publication_root, entries)
+        if publication_root.exists() or publication_root.is_symlink():
+            raise ComposedGameError(
+                "recoverable composed import publication path is already occupied"
+            )
+        stage_identity = _verify_import_stage_envelope(stage_root, staged_bundle)
+        candidate_identity = _verify_import_candidate(staged_bundle, bundle, entry)
+        _fsync_composed_bundle_tree(staged_bundle)
+        if _verify_import_candidate(staged_bundle, bundle, entry) != candidate_identity:
+            raise ComposedGameError("recovered composed stage identity changed")
+        published_identity = publish_directory_noreplace(stage_root, publication_root)
+        if published_identity != stage_identity:
             raise ComposedGameError("recovered composed directory identity changed")
-    _verify_import_candidate(destination, bundle, entry)
+        if (
+            directory_identity(destination, context="recovered composed import")
+            != candidate_identity
+        ):
+            raise ComposedGameError("recovered composed bundle identity changed")
+    assert candidate_identity is not None
+    _fsync_composed_bundle_tree(destination)
+    _fsync_modified_ancestors(
+        _composition_recovery_ancestors(root, destination.parent),
+        context="composed import ancestor",
+    )
+    if _verify_import_candidate(destination, bundle, entry) != candidate_identity:
+        raise ComposedGameError("recovered composed directory identity changed")
     _publish_catalog_generation(root, state, [*entries, entry])
     _verify_game_postconditions(root, bundle.bundle_hash)
     return destination

@@ -49,6 +49,9 @@ from worldforge.directory_publish import (
     publish_directory_noreplace,
     quarantine_and_remove_owned_directory,
 )
+from worldforge.directory_publish import (
+    fsync_directory as _portable_fsync_directory,
+)
 from worldforge.game_boundary import (
     FORBIDDEN_GAME_JSON_FORMATS,
     authoring_metadata_detail,
@@ -786,19 +789,13 @@ def _sha256(path: Path) -> str:
 
 
 def _fsync_directory(path: Path) -> None:
-    if os.name != "posix":
-        return
-    descriptor = os.open(
-        path,
-        os.O_RDONLY
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_DIRECTORY", 0)
-        | getattr(os, "O_NOFOLLOW", 0),
-    )
     try:
-        os.fsync(descriptor)
-    finally:
-        _close_descriptor(descriptor, context="directory fsync descriptor cleanup")
+        _portable_fsync_directory(
+            path,
+            context="composed bundle directory",
+        )
+    except DirectoryPublishError as exc:
+        raise ComposedBundleError(str(exc)) from exc
 
 
 def _fsync_tree_directories(root: Path) -> None:
@@ -1466,7 +1463,7 @@ def _identity_from_document(value: object, context: str) -> DirectoryIdentity:
     document = _exact(value, _IDENTITY_FIELDS, context)
     return (
         _integer(document["device"], f"{context}/device", minimum=0, maximum=2**64 - 1),
-        _integer(document["inode"], f"{context}/inode", minimum=0, maximum=2**64 - 1),
+        _integer(document["inode"], f"{context}/inode", minimum=0, maximum=2**128 - 1),
     )
 
 
@@ -1791,6 +1788,16 @@ def _recover_journal(
     if destination_identity is not None and stage_identity is None:
         if destination_identity != expected_identity:
             raise ComposedBundleError("published destination identity changed; preserving journal")
+        with verify_composed_runtime_bundle(
+            destination,
+            expected_bundle_hash=bundle_hash,
+            platform=platform,
+            runtime_api_version=runtime_api_version,
+            registry=registry,
+        ):
+            pass
+        _fsync_tree_directories(destination)
+        _fsync_directory(destination.parent)
         with verify_composed_runtime_bundle(
             destination,
             expected_bundle_hash=bundle_hash,

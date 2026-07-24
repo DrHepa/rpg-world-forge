@@ -587,6 +587,432 @@ class M6GameConsumerTests(unittest.TestCase):
             check=False,
         )
 
+    def test_owned_bundle_copy_uses_portable_directory_flush(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle_path, bundle_hash = self._build_bundle(root)
+            stage = root / "copied-stage"
+            loaded = composed_bundle_module.verify_composed_runtime_bundle(
+                bundle_path,
+                expected_bundle_hash=bundle_hash,
+                platform="linux_x86_64",
+                runtime_api_version=composed_game_module.RUNTIME_API_VERSION,
+                registry=PYRAY_2_5D_REGISTRY,
+            )
+            real_open = os.open
+
+            def reject_directory_descriptor(
+                path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+                flags: int,
+                *args: object,
+                **kwargs: object,
+            ) -> int:
+                if flags & getattr(os, "O_DIRECTORY", 0):
+                    raise PermissionError("Windows rejects Python directory descriptors")
+                return real_open(path, flags, *args, **kwargs)
+
+            try:
+                with (
+                    patch.object(
+                        composed_game_module,
+                        "fsync_directory",
+                        create=True,
+                    ) as flush_directory,
+                    patch.object(
+                        composed_game_module.os,
+                        "open",
+                        side_effect=reject_directory_descriptor,
+                    ),
+                ):
+                    composed_game_module._copy_owned_bundle(loaded, stage)  # noqa: SLF001
+            finally:
+                loaded.close()
+
+            expected = {
+                stage.parent,
+                stage,
+                *(path for path in stage.rglob("*") if path.is_dir()),
+            }
+            flushed = {call.args[0] for call in flush_directory.call_args_list}
+            self.assertEqual(expected, flushed)
+
+    def test_first_import_flushes_created_ancestor_entries_bottom_up(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "first-import-ancestor-durability"
+            create_game_project(
+                game,
+                game_id="first_import_ancestor_durability",
+                title="First Import Ancestor Durability",
+            )
+            flush = composed_game_module.fsync_directory
+            calls: list[tuple[Path, str]] = []
+
+            def record_flush(path: Path, *, context: str) -> None:
+                calls.append((path, context))
+                flush(path, context=context)
+
+            with patch.object(
+                composed_game_module,
+                "fsync_directory",
+                side_effect=record_flush,
+            ):
+                imported = import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            game_data = game / "game_data"
+            expected_composition: list[Path] = []
+            current = imported.parent.parent
+            while current != game_data.parent:
+                expected_composition.append(current)
+                current = current.parent
+            self.assertEqual(
+                expected_composition,
+                [path for path, context in calls if context == "composed import ancestor"],
+            )
+            self.assertEqual(
+                [game_data],
+                [path for path, context in calls if context == "composed catalog parent"],
+            )
+            self.assertNotIn(
+                game,
+                {
+                    path
+                    for path, context in calls
+                    if context
+                    in {
+                        "composed import ancestor",
+                        "composed catalog parent",
+                    }
+                },
+            )
+
+    def test_recovery_reflushes_composition_and_catalog_ancestor_entries(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "recovery-ancestor-durability"
+            create_game_project(
+                game,
+                game_id="recovery_ancestor_durability",
+                title="Recovery Ancestor Durability",
+            )
+            game_data = game / "game_data"
+            flush = composed_game_module.fsync_directory
+
+            def fail_composition_parent(path: Path, *, context: str) -> None:
+                if context == "composed import ancestor" and path == game_data:
+                    raise OSError("injected composition ancestor flush failure")
+                flush(path, context=context)
+
+            with (
+                patch.object(
+                    composed_game_module,
+                    "fsync_directory",
+                    side_effect=fail_composition_parent,
+                ),
+                self.assertRaisesRegex(OSError, "composition ancestor flush failure"),
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            def fail_catalog_parent(path: Path, *, context: str) -> None:
+                if context == "composed catalog parent":
+                    raise OSError("injected catalog parent flush failure")
+                flush(path, context=context)
+
+            with (
+                patch.object(
+                    composed_game_module,
+                    "fsync_directory",
+                    side_effect=fail_catalog_parent,
+                ),
+                self.assertRaisesRegex(OSError, "catalog parent flush failure"),
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+            self.assertEqual(1, len(load_composed_catalog(game)))
+
+            calls: list[tuple[Path, str]] = []
+
+            def record_flush(path: Path, *, context: str) -> None:
+                calls.append((path, context))
+                flush(path, context=context)
+
+            with patch.object(
+                composed_game_module,
+                "fsync_directory",
+                side_effect=record_flush,
+            ):
+                imported = import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            expected_composition: list[Path] = []
+            current = imported.parent.parent
+            while current != game_data.parent:
+                expected_composition.append(current)
+                current = current.parent
+            self.assertEqual(
+                expected_composition,
+                [path for path, context in calls if context == "composed import ancestor"],
+            )
+            self.assertEqual(
+                [game_data],
+                [path for path, context in calls if context == "composed catalog parent"],
+            )
+
+    def test_staged_bundle_flush_failure_is_retried_before_recovery_publish(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "staged-bundle-durability"
+            create_game_project(
+                game,
+                game_id="staged_bundle_durability",
+                title="Staged Bundle Durability",
+            )
+            flush = composed_game_module.fsync_directory
+
+            def fail_stage_root(path: Path, *, context: str) -> None:
+                if context == "composed bundle directory" and any(
+                    part.startswith(".") and f"import-{bundle_hash}" in part for part in path.parts
+                ):
+                    raise OSError("injected staged bundle flush failure")
+                flush(path, context=context)
+
+            for attempt in ("initial", "recovery"):
+                with (
+                    self.subTest(attempt=attempt),
+                    patch.object(
+                        composed_game_module,
+                        "fsync_directory",
+                        side_effect=fail_stage_root,
+                    ),
+                    self.assertRaisesRegex(OSError, "staged bundle flush failure"),
+                ):
+                    import_composed_bundle(
+                        bundle,
+                        game,
+                        expected_bundle_hash=bundle_hash,
+                    )
+                self.assertEqual(
+                    1,
+                    len(
+                        [
+                            path
+                            for path in (game / "game_data").rglob(".*.import-*")
+                            if path.is_dir()
+                        ]
+                    ),
+                )
+
+            imported = import_composed_bundle(
+                bundle,
+                game,
+                expected_bundle_hash=bundle_hash,
+            )
+            self.assertTrue(imported.is_dir())
+
+    def test_stage_mkdir_failure_leaves_no_compositions_tree_and_retry_succeeds(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "pre-stage-recovery"
+            create_game_project(
+                game,
+                game_id="pre_stage_recovery",
+                title="Pre-stage Recovery",
+            )
+            mkdir = Path.mkdir
+            injected = False
+
+            def fail_stage_mkdir(
+                path: Path,
+                mode: int = 0o777,
+                parents: bool = False,
+                exist_ok: bool = False,
+            ) -> None:
+                nonlocal injected
+                if (
+                    not injected
+                    and path.name.startswith(".")
+                    and f"import-{bundle_hash}" in path.name
+                ):
+                    injected = True
+                    raise OSError("injected composed stage mkdir failure")
+                mkdir(path, mode=mode, parents=parents, exist_ok=exist_ok)
+
+            with (
+                patch.object(Path, "mkdir", new=fail_stage_mkdir),
+                self.assertRaisesRegex(OSError, "composed stage mkdir failure"),
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            self.assertTrue(injected)
+            self.assertFalse((game / "game_data/compositions").exists())
+            imported = import_composed_bundle(
+                bundle,
+                game,
+                expected_bundle_hash=bundle_hash,
+            )
+            self.assertTrue(imported.is_dir())
+            self.assertEqual(1, len(load_composed_catalog(game)))
+
+    def test_first_import_stage_tree_uses_same_parent_publication_seam(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "same-parent-publication"
+            create_game_project(
+                game,
+                game_id="same_parent_publication",
+                title="Same-parent Publication",
+            )
+            publish = composed_game_module.publish_directory_noreplace
+            calls: list[tuple[Path, Path]] = []
+
+            def record_publish(source: Path, destination: Path) -> tuple[int, int]:
+                if f"import-{bundle_hash}" in source.name:
+                    calls.append((source, destination))
+                return publish(source, destination)
+
+            with patch.object(
+                composed_game_module,
+                "publish_directory_noreplace",
+                side_effect=record_publish,
+            ):
+                imported = import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            self.assertTrue(imported.is_dir())
+            self.assertEqual(1, len(calls))
+            source, destination = calls[0]
+            self.assertEqual(source.parent, destination.parent)
+            self.assertEqual(game / "game_data", source.parent)
+            self.assertEqual(game / "game_data/compositions", destination)
+
+    def test_generation_stage_flush_failure_is_retried_before_publication(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "generation-stage-durability"
+            create_game_project(
+                game,
+                game_id="generation_stage_durability",
+                title="Generation Stage Durability",
+            )
+            flush = composed_game_module.fsync_directory
+
+            def fail_generation_stage(path: Path, *, context: str) -> None:
+                if context == "catalog generation stage":
+                    raise OSError("injected generation stage flush failure")
+                flush(path, context=context)
+
+            for attempt in ("initial", "recovery"):
+                with (
+                    self.subTest(attempt=attempt),
+                    patch.object(
+                        composed_game_module,
+                        "fsync_directory",
+                        side_effect=fail_generation_stage,
+                    ),
+                    self.assertRaisesRegex(OSError, "generation stage flush failure"),
+                ):
+                    import_composed_bundle(
+                        bundle,
+                        game,
+                        expected_bundle_hash=bundle_hash,
+                    )
+                generations = game / CATALOG_GENERATIONS_RELATIVE_PATH
+                self.assertEqual(
+                    1,
+                    len(
+                        list(
+                            generations.glob(
+                                f"{composed_game_module.CATALOG_GENERATION_STAGE_PREFIX}*"
+                            )
+                        )
+                    ),
+                )
+
+            imported = import_composed_bundle(
+                bundle,
+                game,
+                expected_bundle_hash=bundle_hash,
+            )
+            self.assertTrue(imported.is_dir())
+
+    def test_generation_root_flush_failure_is_retried_before_recovered_success(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "generation-root-durability"
+            create_game_project(
+                game,
+                game_id="generation_root_durability",
+                title="Generation Root Durability",
+            )
+            flush = composed_game_module.fsync_directory
+
+            def fail_generation_root(path: Path, *, context: str) -> None:
+                if context == "composed catalog generation root":
+                    raise OSError("injected generation root flush failure")
+                flush(path, context=context)
+
+            for attempt in ("initial", "recovery"):
+                with (
+                    self.subTest(attempt=attempt),
+                    patch.object(
+                        composed_game_module,
+                        "fsync_directory",
+                        side_effect=fail_generation_root,
+                    ),
+                    self.assertRaisesRegex(OSError, "generation root flush failure"),
+                ):
+                    import_composed_bundle(
+                        bundle,
+                        game,
+                        expected_bundle_hash=bundle_hash,
+                    )
+                self.assertEqual(1, len(load_composed_catalog(game)))
+
+            imported = import_composed_bundle(
+                bundle,
+                game,
+                expected_bundle_hash=bundle_hash,
+            )
+            self.assertTrue(imported.is_dir())
+
     def test_empty_catalog_is_canonical_and_hash_bound(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2387,9 +2813,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     expected_bundle_hash=bundle_hash,
                 )
             stages = tuple(
-                path
-                for path in (game / "game_data/compositions").rglob(".*.import-*")
-                if path.is_dir()
+                path for path in (game / "game_data").rglob(".*.import-*") if path.is_dir()
             )
             self.assertEqual(1, len(stages))
             recovered = import_composed_bundle(
@@ -2400,6 +2824,61 @@ class M6GameConsumerTests(unittest.TestCase):
             self.assertTrue(recovered.is_dir())
             self.assertFalse(stages[0].exists())
             self.assertEqual(1, len(load_composed_catalog(game)))
+
+    def test_recoverable_stage_does_not_authorize_foreign_ancestor_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "foreign-stage-ancestor"
+            create_game_project(
+                game,
+                game_id="foreign_stage_ancestor",
+                title="Foreign Stage Ancestor",
+            )
+
+            with (
+                patch.object(
+                    composed_game_module,
+                    "publish_directory_noreplace",
+                    side_effect=OSError("injected before directory move"),
+                ),
+                self.assertRaisesRegex(OSError, "injected"),
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            stages = tuple(
+                path for path in (game / "game_data").rglob(".*.import-*") if path.is_dir()
+            )
+            self.assertEqual(1, len(stages))
+            foreign = game / "game_data/compositions"
+            foreign.mkdir()
+            foreign_identity = composed_game_module.directory_identity(
+                foreign,
+                context="foreign composition ancestor",
+            )
+
+            with self.assertRaisesRegex(
+                ComposedGameError,
+                "publication path is already occupied",
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            self.assertEqual(
+                foreign_identity,
+                composed_game_module.directory_identity(
+                    foreign,
+                    context="foreign composition ancestor",
+                ),
+            )
+            self.assertTrue(stages[0].is_dir())
 
     def test_catalog_manifest_and_payload_identity_swaps_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
