@@ -20,11 +20,13 @@ sys.path.insert(0, str(SOURCE_ROOT))
 
 from game_boundary_policy import (  # noqa: E402
     DEFAULT_IGNORED_TOP_LEVEL,
+    PUBLICATION_JOURNAL_PATHS,
     JSONPolicyError,
     load_strict_json_object,
     scan_python_capabilities,
     validate_dependency_provenance,
     validate_json_objects,
+    validate_publication_journals,
     validate_regular_tree,
 )
 
@@ -347,7 +349,14 @@ def _selected_policy_json() -> tuple[Path, ...]:
     game_data = PROJECT_ROOT / "game_data"
     if game_data.is_dir():
         selected.update(game_data.rglob("*.json"))
-    return tuple(sorted(path for path in selected if path.is_file() or path.is_symlink()))
+    journals = {PROJECT_ROOT / path for path in PUBLICATION_JOURNAL_PATHS}
+    return tuple(
+        sorted(
+            path
+            for path in selected
+            if path not in journals and (path.is_file() or path.is_symlink())
+        )
+    )
 
 
 def _canonical_dependency_issues() -> tuple[str, ...]:
@@ -381,6 +390,7 @@ def _canonical_policy_issues() -> tuple[str, ...]:
     selected_json = _selected_policy_json()
     if selected_json:
         issues.extend(validate_json_objects(selected_json, base=PROJECT_ROOT))
+    issues.extend(validate_publication_journals(PROJECT_ROOT))
     issues.extend(_canonical_dependency_issues())
     editable = PROJECT_ROOT / "src/game"
     if editable.is_dir() or editable.is_symlink():
@@ -666,9 +676,7 @@ def _verify_catalog_contracts() -> tuple[int, int, str]:
         composed_entries = load_composed_catalog(PROJECT_ROOT)
         composed_state = load_composed_catalog_state(PROJECT_ROOT)
         if composed_state.entries != composed_entries:
-            raise VerificationError(
-                "composed catalog head changed during standalone verification"
-            )
+            raise VerificationError("composed catalog head changed during standalone verification")
         validate_cross_catalog_world_hashes(
             tuple(bundle.release for bundle in bundles),
             composed_entries,
@@ -691,9 +699,7 @@ def main(arguments: list[str] | None = None) -> int:
     args = parser.parse_args(arguments)
     try:
         identity, runtime = _verify_repository_contracts()
-        bundles, composed_bundles, composed_catalog_hash = (
-            _verify_catalog_contracts()
-        )
+        bundles, composed_bundles, composed_catalog_hash = _verify_catalog_contracts()
     except VerificationError as exc:
         print(f"ERROR {exc}", file=sys.stderr)
         return 1

@@ -20,6 +20,7 @@ from isoworld.content.loader import WorldPackError, load_worldpack
 from isoworld.content.media import media_signature_matches
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
 from isoworld.content.portability import is_portable_path_component
+from isoworld.content.publication_journal import audit_publication_journals
 from isoworld.content.renderpack import RenderPackError, load_renderpack
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -547,6 +548,14 @@ def _audit_game_data_root(
     game_data = root / "game_data"
     _real_directory(game_data, "game data root")
     expected = {"compositions.lock.json", "shared.lock.json", "worlds.lock.json"}
+    journal_audit = audit_publication_journals(root)
+    if journal_audit.issues:
+        raise CatalogError(f"publication journal is invalid: {journal_audit.issues[0]}")
+    expected.update(
+        path.name
+        for path in journal_audit.terminal_paths
+        if path.parent == PurePosixPath("game_data")
+    )
     if releases:
         expected.add("worlds")
     if shared_assets:

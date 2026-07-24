@@ -5,16 +5,18 @@ import json
 import re
 import tomllib
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from worldforge.game_boundary_policy import (
     DEFAULT_IGNORED_TOP_LEVEL,
+    PUBLICATION_JOURNAL_PATHS,
     JSONPolicyError,
     load_strict_json_object,
     scan_python_capabilities,
     validate_dependency_provenance,
     validate_json_objects,
     validate_lexical_directory_root,
+    validate_publication_journals,
     validate_regular_tree,
 )
 from worldforge.runtime_audit import BANNED_IMPORT_ROOTS, imported_modules
@@ -613,7 +615,14 @@ def _selected_policy_json(base: Path) -> tuple[Path, ...]:
     game_data = base / "game_data"
     if game_data.is_dir():
         selected.update(game_data.rglob("*.json"))
-    return tuple(sorted(path for path in selected if path.is_file() or path.is_symlink()))
+    journals = {base / PurePosixPath(path.as_posix()) for path in PUBLICATION_JOURNAL_PATHS}
+    return tuple(
+        sorted(
+            path
+            for path in selected
+            if path not in journals and (path.is_file() or path.is_symlink())
+        )
+    )
 
 
 def _canonical_dependency_issues(base: Path) -> tuple[str, ...]:
@@ -644,6 +653,13 @@ def _policy_finding(issue: str) -> GameBoundaryFinding:
         return GameBoundaryFinding(Path(relative), "unsafe_game_path", issue)
     if code.startswith("JSON_"):
         return GameBoundaryFinding(Path(detail), "malformed_game_json", code)
+    if code.startswith("JOURNAL_"):
+        relative, _, journal_detail = detail.partition(":")
+        rule = {
+            "JOURNAL_ACTIVE": "active_publication_journal",
+            "JOURNAL_PARTIAL": "partial_publication_journal",
+        }.get(code, "invalid_publication_journal")
+        return GameBoundaryFinding(Path(relative), rule, journal_detail or code)
     if code.startswith("DEPENDENCY_"):
         return GameBoundaryFinding(
             Path("requirements.lock"),
@@ -680,6 +696,7 @@ def _canonical_policy_findings(
     selected_json = _selected_policy_json(base)
     if selected_json:
         issues.extend(validate_json_objects(selected_json, base=base))
+    issues.extend(validate_publication_journals(base))
     dependency_issues = _canonical_dependency_issues(base)
     if not suppress_dependency_issues:
         issues.extend(dependency_issues)

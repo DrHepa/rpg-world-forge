@@ -13,9 +13,16 @@ from pathlib import Path
 from typing import Any
 
 from isoworld.content.file_stat import FileStat, descriptor_file_stat, path_file_stat
+from isoworld.content.publication_journal import (
+    PUBLICATION_JOURNAL_PATHS as _PUBLICATION_JOURNAL_PATHS,
+)
+from isoworld.content.publication_journal import (
+    audit_publication_journals,
+)
 
 POLICY_API_VERSION = "1"
 MAX_JSON_BYTES = 16 * 1024 * 1024
+PUBLICATION_JOURNAL_PATHS = _PUBLICATION_JOURNAL_PATHS
 DEFAULT_IGNORED_TOP_LEVEL = frozenset(
     {
         ".git",
@@ -32,6 +39,22 @@ DEFAULT_IGNORED_TOP_LEVEL = frozenset(
 )
 PathLike = str | os.PathLike[str]
 DependencyData = str | bytes
+
+
+def validate_publication_journals(root: PathLike) -> tuple[str, ...]:
+    """Require exact publication journals to have a valid committed tip."""
+
+    return audit_publication_journals(root).issues
+
+
+def terminal_publication_journal_paths(root: PathLike) -> tuple[Path, ...]:
+    """Return exact validated terminal journal paths below one game root."""
+
+    base = Path(root)
+    audit = audit_publication_journals(base)
+    if audit.issues:
+        raise JSONPolicyError(audit.issues[0])
+    return tuple(base / relative for relative in audit.terminal_paths)
 
 
 class JSONPolicyError(ValueError):
