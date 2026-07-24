@@ -33,7 +33,7 @@ from worldforge.studio.errors import (
     not_found,
 )
 from worldforge.studio.storage import StudioStore, decode_object, encode_json, utc_now
-from worldforge.studio.workspaces import WorkspaceManager
+from worldforge.studio.workspaces import WorkspaceManager, _pinned_ancestor_identities
 from worldforge.world_lifecycle import inspect_world_project
 from worldforge.world_lock import exclusive_world_lifecycle
 
@@ -1657,10 +1657,24 @@ class ChangesetManager:
                     "internal_error", "Apply journal has incompatible changeset state"
                 )
             workspace, world_root, expected = _verified_world(self.store, journal["workspace_id"])
-            if journal["world_root"] != str(world_root) or journal["world_identity"] != list(
-                expected
-            ):
-                raise StudioError("internal_error", "Studio apply journal world identity changed")
+            try:
+                with _pinned_ancestor_identities(
+                    Path(journal["world_root"]),
+                    context="journalled changeset world root",
+                ) as journal_root_identities:
+                    journal_root_identity = journal_root_identities[-1]
+                    if (
+                        journal["world_identity"] != list(expected)
+                        or journal_root_identity != expected
+                    ):
+                        raise StudioError(
+                            "internal_error",
+                            "Studio apply journal world identity changed",
+                        )
+            except StudioError as exc:
+                raise StudioError(
+                    "internal_error", "Studio apply journal world identity changed"
+                ) from exc
             try:
                 with exclusive_world_lifecycle(world_root, error_type=ValueError):
                     with _pinned_operation_parents(journal, world_root) as parents:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -48,12 +49,12 @@ class StudioChangesetV2Tests(unittest.TestCase):
             world, store, workspace_id = self._workspace(temp)
             try:
                 source = world / "source/lore.txt"
-                source.write_text("base café\n", encoding="utf-8")
+                source.write_bytes("base café\n".encode())
                 manager = ChangesetManager(store)
 
                 staged = self._replace(manager, workspace_id)
                 first = manager.diff(staged["changeset_id"])
-                source.write_text("external mutation\n", encoding="utf-8")
+                source.write_bytes(b"external mutation\n")
                 second = manager.diff(staged["changeset_id"])
 
                 self.assertEqual(2, staged["format_version"])
@@ -336,6 +337,91 @@ class StudioChangesetV2Tests(unittest.TestCase):
                 self.assertFalse(stage_path.exists())
                 self.assertFalse(journal_path.exists())
                 self.assertFalse((world / "source/recovery-owned-stage.txt").exists())
+
+    @unittest.skipUnless(os.name == "posix", "POSIX symlink ancestry required")
+    def test_recovery_rejects_world_alias_with_linked_ancestor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            world, store, workspace_id = self._workspace(temp)
+            manager = ChangesetManager(store)
+            staged = manager.create(
+                {
+                    "workspace_id": workspace_id,
+                    "operations": [
+                        {
+                            "path": "source/linked-alias.txt",
+                            "operation": "create",
+                            "content": "never published\n",
+                        }
+                    ],
+                }
+            )
+            approved = manager.approve(
+                staged["changeset_id"], expected_review_sha256=staged["review_sha256"]
+            )
+            claimed = manager._claim_apply(approved)
+            identity = WorkspaceManager(store).root_identity(workspace_id, "world_root")
+            assert identity is not None
+            alias = temp / "world-alias"
+            alias.symlink_to(temp, target_is_directory=True)
+            journal_path = store.journals_dir / f"{staged['changeset_id']}.json"
+            with exclusive_world_lifecycle(world):
+                journal = manager._prepare_journal(claimed, world, identity)
+                journal["world_root"] = str(alias / world.name)
+                manager._write_journal(journal_path, journal)
+            store.close()
+
+            reopened = StudioStore(temp / "data")
+            try:
+                with self.assertRaisesRegex(StudioError, "world identity changed"):
+                    ChangesetManager(reopened)
+                self.assertTrue(journal_path.is_file())
+                self.assertFalse((world / "source/linked-alias.txt").exists())
+            finally:
+                reopened.close()
+
+    def test_recovery_normalizes_embedded_nul_in_journal_world_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            world, store, workspace_id = self._workspace(temp)
+            manager = ChangesetManager(store)
+            staged = manager.create(
+                {
+                    "workspace_id": workspace_id,
+                    "operations": [
+                        {
+                            "path": "source/nul-alias.txt",
+                            "operation": "create",
+                            "content": "never published\n",
+                        }
+                    ],
+                }
+            )
+            approved = manager.approve(
+                staged["changeset_id"], expected_review_sha256=staged["review_sha256"]
+            )
+            claimed = manager._claim_apply(approved)
+            identity = WorkspaceManager(store).root_identity(workspace_id, "world_root")
+            assert identity is not None
+            journal_path = store.journals_dir / f"{staged['changeset_id']}.json"
+            with exclusive_world_lifecycle(world):
+                journal = manager._prepare_journal(claimed, world, identity)
+                journal["world_root"] = f"{world}\x00alias"
+                manager._write_journal(journal_path, journal)
+            store.close()
+
+            reopened = StudioStore(temp / "data")
+            try:
+                with self.assertRaisesRegex(
+                    StudioError,
+                    "world identity changed",
+                ) as captured:
+                    ChangesetManager(reopened)
+                self.assertEqual("internal_error", captured.exception.code)
+                self.assertTrue(journal_path.is_file())
+                self.assertFalse((world / "source/nul-alias.txt").exists())
+            finally:
+                reopened.close()
 
 
 if __name__ == "__main__":

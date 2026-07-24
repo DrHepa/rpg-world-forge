@@ -1,18 +1,80 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 from worldforge.repository_boundary import FORGE_ROOT
 from worldforge.scaffold import create_world_project
 from worldforge.studio.errors import StudioError
 from worldforge.studio.jobs import JobManager
 from worldforge.studio.storage import StudioStore, encode_json
-from worldforge.studio.workspaces import WorkspaceManager
+from worldforge.studio.workspaces import (
+    WorkspaceManager,
+    _overlaps,
+    _pinned_ancestor_identities,
+)
 
 
 class StudioWorkspacesAndJobsTests(unittest.TestCase):
+    def test_overlap_uses_directory_identity_across_path_aliases(self) -> None:
+        short_data = Path("short-alias/world/.studio-data")
+        long_world = Path("long-alias/world")
+        shared_world_identity = (7, 11)
+
+        @contextmanager
+        def identities(path: Path, *, context: str):
+            del context
+            if path == short_data:
+                yield ((1, 1), shared_world_identity, (7, 12))
+            else:
+                yield ((2, 2), shared_world_identity)
+
+        with patch(
+            "worldforge.studio.workspaces._pinned_ancestor_identities",
+            side_effect=identities,
+        ):
+            self.assertTrue(_overlaps(short_data, long_world))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX no-follow ancestry required")
+    def test_overlap_walks_root_to_leaf_and_rejects_linked_ancestors(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            real = temp / "real"
+            nested = real / "nested"
+            nested.mkdir(parents=True)
+            expected: list[object] = [Path(nested.anchor), *nested.parts[1:]]
+            observed: list[object] = []
+            real_open = os.open
+
+            def record_open(
+                path: os.PathLike[str] | str,
+                flags: int,
+                mode: int = 0o777,
+                *,
+                dir_fd: int | None = None,
+            ) -> int:
+                observed.append(path)
+                if dir_fd is None:
+                    return real_open(path, flags, mode)
+                return real_open(path, flags, mode, dir_fd=dir_fd)
+
+            with patch(
+                "worldforge.studio.workspaces.os.open",
+                side_effect=record_open,
+            ):
+                with _pinned_ancestor_identities(nested, context="test ancestry") as identities:
+                    self.assertEqual(len(expected), len(identities))
+            self.assertEqual(expected, observed[: len(expected)])
+
+            alias = temp / "alias"
+            alias.symlink_to(real, target_is_directory=True)
+            with self.assertRaises(StudioError):
+                _overlaps(alias / "nested", real)
+
     def test_registers_canonical_roots_and_rejects_duplicates_and_nesting(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)

@@ -4,11 +4,13 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import time
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import patch
 
+from isoworld.content.file_stat import path_file_stat
 from isoworld.content.loader import load_worldpack
 from isoworld.core.app import GameApp
 from isoworld.persistence import write_replay
@@ -16,6 +18,11 @@ from worldforge.assetpack import build_assetpack
 from worldforge.repository_boundary import FORGE_ROOT
 from worldforge.scaffold import create_world_project
 from worldforge.studio.executor import JobScheduler
+from worldforge.studio.job_paths import (
+    JobPathError,
+    _entry,
+    verify_workspace_file,
+)
 from worldforge.studio.jobs import JobManager
 from worldforge.studio.storage import StudioStore
 from worldforge.studio.workspaces import WorkspaceManager
@@ -53,18 +60,59 @@ class StudioExecutorTests(unittest.TestCase):
         cls._temporary.cleanup()
 
     def setUp(self) -> None:
+        self._schedulers: list[JobScheduler] = []
         self.data_dir = self.root / f"data-{time.time_ns()}"
         self.store = StudioStore(self.data_dir)
-        WorkspaceManager(self.store).register(
-            {
-                "workspace_id": "workspace_01",
-                "forge_root": str(FORGE_ROOT),
-                "world_root": str(self.world),
-            }
-        )
+        try:
+            WorkspaceManager(self.store).register(
+                {
+                    "workspace_id": "workspace_01",
+                    "forge_root": str(FORGE_ROOT),
+                    "world_root": str(self.world),
+                }
+            )
+        except BaseException:
+            self.store.close()
+            shutil.rmtree(self.data_dir)
+            raise
 
     def tearDown(self) -> None:
-        self.store.close()
+        errors: list[BaseException] = []
+        for scheduler in reversed(self._schedulers):
+            try:
+                scheduler.shutdown()
+            except BaseException as exc:
+                errors.append(exc)
+        try:
+            self.store.close()
+        except BaseException as exc:
+            errors.append(exc)
+        try:
+            shutil.rmtree(self.data_dir)
+        except BaseException as exc:
+            errors.append(exc)
+        alive = [
+            scheduler._thread for scheduler in self._schedulers if scheduler._thread.is_alive()
+        ]
+        named = [
+            thread
+            for thread in threading.enumerate()
+            if thread.name == "studio-job-scheduler" and thread.is_alive()
+        ]
+        if errors:
+            raise errors[0]
+        self.assertEqual([], alive)
+        self.assertEqual([], named)
+        self.assertFalse(self.data_dir.exists())
+
+    def _scheduler(self, *, timeout_seconds: float | None = None) -> JobScheduler:
+        scheduler = (
+            JobScheduler(self.data_dir)
+            if timeout_seconds is None
+            else JobScheduler(self.data_dir, timeout_seconds=timeout_seconds)
+        )
+        self._schedulers.append(scheduler)
+        return scheduler
 
     def _create(self, operation: str, job_input: dict[str, object]) -> dict[str, object]:
         return JobManager(self.store).create(
@@ -109,7 +157,7 @@ class StudioExecutorTests(unittest.TestCase):
             ),
         )
         created = [self._create(operation, job_input) for operation, job_input in requests]
-        scheduler = JobScheduler(self.data_dir)
+        scheduler = self._scheduler()
         scheduler.start()
         try:
             scheduler.notify()
@@ -143,7 +191,7 @@ class StudioExecutorTests(unittest.TestCase):
 
     def test_two_schedulers_cannot_double_claim_one_job(self) -> None:
         job = self._create("runtime.headless", {"worldpack": "build/worldpack.json", "ticks": 1})
-        schedulers = [JobScheduler(self.data_dir), JobScheduler(self.data_dir)]
+        schedulers = [self._scheduler(), self._scheduler()]
         for scheduler in schedulers:
             scheduler.start()
             scheduler.notify()
@@ -163,7 +211,7 @@ class StudioExecutorTests(unittest.TestCase):
         self.assertEqual(1, len(transitions))
 
     def test_scheduler_start_and_shutdown_are_one_shot_and_idempotent(self) -> None:
-        scheduler = JobScheduler(self.data_dir)
+        scheduler = self._scheduler()
         scheduler.start()
         scheduler.shutdown()
         scheduler.shutdown()
@@ -171,7 +219,7 @@ class StudioExecutorTests(unittest.TestCase):
             scheduler.start()
 
     def test_scheduler_start_failure_reaps_before_idempotent_shutdown(self) -> None:
-        scheduler = JobScheduler(self.data_dir)
+        scheduler = self._scheduler()
         with (
             patch(
                 "worldforge.studio.executor.StudioStore",
@@ -183,6 +231,61 @@ class StudioExecutorTests(unittest.TestCase):
         scheduler.shutdown()
         scheduler.shutdown()
         self.assertFalse(scheduler._thread.is_alive())
+
+    def test_workspace_entries_use_the_shared_native_identity_domain(self) -> None:
+        expected = path_file_stat(self.worldpack)
+        with patch(
+            "worldforge.studio.job_paths.path_file_stat",
+            wraps=path_file_stat,
+        ) as native_stat:
+            path, observed = _entry(self.worldpack.parent, self.worldpack.name)
+
+        self.assertEqual(self.worldpack, path)
+        self.assertEqual((expected.st_dev, expected.st_ino), (observed.st_dev, observed.st_ino))
+        native_stat.assert_called_once_with(self.worldpack)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX descriptor-relative traversal required")
+    def test_workspace_file_parent_replacement_cannot_redirect_validation(self) -> None:
+        relative = PurePosixPath(f"pinned-{time.time_ns()}/input.json")
+        parent = self.world.joinpath(*relative.parts[:-1])
+        moved = parent.with_name(f"{parent.name}-original")
+        parent.mkdir()
+        (parent / relative.name).write_bytes(b'{"trusted":true}\n')
+        identity = WorkspaceManager(self.store).root_identity("workspace_01", "world_root")
+        assert identity is not None
+        real_open = os.open
+        replaced = False
+
+        def replace_after_child_open(
+            path: os.PathLike[str] | str,
+            flags: int,
+            mode: int = 0o777,
+            *,
+            dir_fd: int | None = None,
+        ) -> int:
+            nonlocal replaced
+            if dir_fd is None:
+                return real_open(path, flags, mode)
+            descriptor = real_open(path, flags, mode, dir_fd=dir_fd)
+            if not replaced and dir_fd is not None and str(path) == parent.name:
+                parent.rename(moved)
+                parent.mkdir()
+                (parent / relative.name).write_bytes(b'{"redirected":true}\n')
+                replaced = True
+            return descriptor
+
+        try:
+            with (
+                patch("worldforge.studio.job_paths.os.open", side_effect=replace_after_child_open),
+                self.assertRaises(JobPathError),
+            ):
+                verify_workspace_file(self.world, relative, world_identity=identity)
+            self.assertTrue(replaced)
+            self.assertEqual(b'{"trusted":true}\n', (moved / relative.name).read_bytes())
+            self.assertEqual(b'{"redirected":true}\n', (parent / relative.name).read_bytes())
+        finally:
+            shutil.rmtree(parent, ignore_errors=True)
+            shutil.rmtree(moved, ignore_errors=True)
 
     def test_queued_and_running_cancellation_are_durable(self) -> None:
         queued = self._create("runtime.headless", {"worldpack": "build/worldpack.json", "ticks": 0})
@@ -199,7 +302,7 @@ class StudioExecutorTests(unittest.TestCase):
             "import sys,time;sys.stdin.buffer.read();time.sleep(30)",
         )
         with patch("worldforge.studio.executor._worker_command", return_value=command):
-            scheduler = JobScheduler(self.data_dir)
+            scheduler = self._scheduler()
             scheduler.start()
             scheduler.notify()
             self._wait_for_state(str(running["job_id"]), "running")
@@ -283,7 +386,7 @@ class StudioExecutorTests(unittest.TestCase):
                     "runtime.headless", {"worldpack": "build/worldpack.json", "ticks": 0}
                 )
                 with patch("worldforge.studio.executor._worker_command", return_value=command):
-                    scheduler = JobScheduler(self.data_dir, timeout_seconds=timeout)
+                    scheduler = self._scheduler(timeout_seconds=timeout)
                     scheduler.start()
                     scheduler.notify()
                     if stop:
@@ -320,7 +423,7 @@ class StudioExecutorTests(unittest.TestCase):
                     self.tearDown()
                     self.setUp()
                 job = self._create("runtime.headless", {"worldpack": path, "ticks": 0})
-                scheduler = JobScheduler(self.data_dir)
+                scheduler = self._scheduler()
                 scheduler.start()
                 scheduler.notify()
                 completed = self._wait(str(job["job_id"]))
@@ -335,7 +438,7 @@ class StudioExecutorTests(unittest.TestCase):
             "asset.receipt.validate",
             {"receipt": receipt.relative_to(self.world / "assets").as_posix()},
         )
-        scheduler = JobScheduler(self.data_dir)
+        scheduler = self._scheduler()
         scheduler.start()
         scheduler.notify()
         completed = self._wait(str(job["job_id"]))
@@ -343,6 +446,33 @@ class StudioExecutorTests(unittest.TestCase):
         self.assertEqual("succeeded", completed["state"])
         self.assertFalse(completed["result"]["valid"])  # type: ignore[index]
         self.assertNotIn(str(self.world), str(completed["result"]))
+
+    def test_scheduler_exception_cleanup_releases_thread_and_database_tree(self) -> None:
+        data_dir = self.root / f"lifecycle-{time.time_ns()}"
+        store = StudioStore(data_dir)
+        scheduler = JobScheduler(data_dir)
+
+        def fail_while_running() -> None:
+            try:
+                scheduler.start()
+                raise AssertionError("injected assertion path")
+            finally:
+                try:
+                    scheduler.shutdown()
+                finally:
+                    store.close()
+
+        with self.assertRaisesRegex(AssertionError, "injected assertion path"):
+            fail_while_running()
+        self.assertFalse(scheduler._thread.is_alive())
+        self.assertFalse(
+            any(
+                thread.name == "studio-job-scheduler" and thread.is_alive()
+                for thread in threading.enumerate()
+            )
+        )
+        shutil.rmtree(data_dir)
+        self.assertFalse(data_dir.exists())
 
 
 if __name__ == "__main__":

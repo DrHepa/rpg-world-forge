@@ -133,19 +133,20 @@ class StudioChangesetTests(unittest.TestCase):
                     )
 
                 (world / "source/case.txt").write_text("other case", encoding="utf-8")
-                with self.assertRaisesRegex(StudioError, "collision"):
-                    manager.create(
-                        {
-                            "workspace_id": workspace_id,
-                            "operations": [
-                                {
-                                    "path": "source/Case.txt",
-                                    "operation": "replace",
-                                    "content": "ambiguous",
-                                }
-                            ],
-                        }
-                    )
+                if not case_target.samefile(world / "source/case.txt"):
+                    with self.assertRaisesRegex(StudioError, "collision"):
+                        manager.create(
+                            {
+                                "workspace_id": workspace_id,
+                                "operations": [
+                                    {
+                                        "path": "source/Case.txt",
+                                        "operation": "replace",
+                                        "content": "ambiguous",
+                                    }
+                                ],
+                            }
+                        )
 
                 composed = "caf\N{LATIN SMALL LETTER E WITH ACUTE}.txt"
                 decomposed = unicodedata.normalize("NFD", composed)
