@@ -285,6 +285,7 @@ class _WindowsRetainedTree:
     flush_file_buffers: Callable[[ctypes.c_void_p], int]
     close_handle: Callable[[ctypes.c_void_p], int]
     set_information: Callable[[ctypes.c_void_p, int, object, int], int]
+    flush_parent: Callable[[Path, DirectoryIdentity, str], None]
     namespace_mutated: bool = False
 
     def _require_root_handles(self, *, context: str) -> None:
@@ -349,7 +350,11 @@ class _WindowsRetainedTree:
                 "Windows publication payload tree changed during durable flush"
             )
         self._flush_handle(self.source_handle, "Windows publication stage")
-        self._flush_handle(self.parent_handle, "Windows publication stage parent")
+        self.flush_parent(
+            self.source.parent,
+            self.parent_identity,
+            "Windows publication stage parent",
+        )
         self._require_root_handles(context="durably retained Windows publication")
         self._require_payload_handles(context="durably retained Windows publication")
         if _windows_tree_snapshot(self.source) != self.expected_tree:
@@ -422,7 +427,11 @@ class _WindowsRetainedTree:
                 self.source_handle
             )
             self._flush_handle(self.source_handle, "published Windows directory")
-            self._flush_handle(self.parent_handle, "Windows publication parent")
+            self.flush_parent(
+                destination.parent,
+                self.parent_identity,
+                "Windows publication parent",
+            )
             self._require_root_handles(context="durably published Windows publication")
             try:
                 destination_info = path_file_stat(destination)
@@ -1379,17 +1388,14 @@ def _open_windows_retained_tree(
     set_information.restype = ctypes.c_int
     invalid_handle = ctypes.c_void_p(-1).value
 
-    def open_directory(path: Path, *, delete: bool, share_write: bool) -> int:
+    def open_source_directory(path: Path, *, delete: bool) -> int:
         access = 0x80000000 | 0x40000000 | 0x00100000
         if delete:
             access |= 0x00010000
-        share = 0x00000001
-        if share_write:
-            share |= 0x00000002
         handle = create_file(
             str(path),
             access,
-            share,
+            0x00000001,  # FILE_SHARE_READ
             None,
             3,
             0x02000000 | 0x00200000,
@@ -1402,6 +1408,85 @@ def _open_windows_retained_tree(
                 f"{_windows_error_detail(error)}"
             )
         return int(handle)
+
+    def open_parent_identity(path: Path) -> int:
+        handle = create_file(
+            str(path),
+            # FILE_TRAVERSE | FILE_READ_ATTRIBUTES | SYNCHRONIZE. The
+            # long-lived parent handle proves identity only; retaining write
+            # access here conflicts with the target-parent open performed by
+            # FileRenameInfo on native Windows.
+            0x00000020 | 0x00000080 | 0x00100000,
+            # The short-lived durability handle must coexist with this
+            # identity pin, while omitted delete sharing retains the parent
+            # namespace through publication.
+            0x00000001 | 0x00000002,
+            None,
+            3,
+            0x02000000 | 0x00200000,
+            None,
+        )
+        if handle in {None, invalid_handle}:
+            error = ctypes.get_last_error()
+            raise DirectoryPublishError(
+                f"Could not retain Windows publication parent {path}: "
+                f"{_windows_error_detail(error)}"
+            )
+        return int(handle)
+
+    def flush_parent(
+        path: Path,
+        expected_identity: DirectoryIdentity,
+        context: str,
+    ) -> None:
+        handle = create_file(
+            str(path),
+            # FlushFileBuffers requires write access. Keep this handle
+            # short-lived and close it before FileRenameInfo.
+            0x40000000 | 0x00000080 | 0x00100000,
+            0x00000001 | 0x00000002 | 0x00000004,
+            None,
+            3,
+            0x02000000 | 0x00200000,
+            None,
+        )
+        if handle in {None, invalid_handle}:
+            error = ctypes.get_last_error()
+            raise DirectoryPublishError(
+                f"Could not open {context} for durable metadata flush: "
+                f"{_windows_error_detail(error)}"
+            )
+        handle_value = int(handle)
+        primary: BaseException | None = None
+        try:
+            _require_expected_directory(
+                file_stat_module._windows_handle_stat(handle_value),  # noqa: SLF001
+                expected_identity,
+                context=f"{context} opened for durable metadata flush",
+            )
+            if not flush_file_buffers(ctypes.c_void_p(handle_value)):
+                error = ctypes.get_last_error()
+                raise DirectoryPublishError(
+                    f"Could not durably flush {context}: {_windows_error_detail(error)}"
+                )
+            _require_expected_directory(
+                file_stat_module._windows_handle_stat(handle_value),  # noqa: SLF001
+                expected_identity,
+                context=f"{context} durably flushed",
+            )
+        except BaseException as exc:
+            primary = exc
+            raise
+        finally:
+            if not close_handle(ctypes.c_void_p(handle_value)):
+                error = ctypes.get_last_error()
+                detail = (
+                    f"{context} durability handle cleanup failed: {_windows_error_detail(error)}"
+                )
+                if primary is not None:
+                    primary.add_note(detail)
+                else:
+                    raise DirectoryPublishError(detail)
 
     def open_tree_entry(path: Path, *, directory: bool) -> int:
         flags = 0x00200000
@@ -1435,24 +1520,16 @@ def _open_windows_retained_tree(
     payload_handles: list[_WindowsPayloadHandle] = []
     retained: _WindowsRetainedTree | None = None
     try:
-        source_handle = open_directory(
+        source_handle = open_source_directory(
             source,
             delete=delete_source,
-            share_write=False,
         )
         _require_expected_directory(
             file_stat_module._windows_handle_stat(source_handle),  # noqa: SLF001
             source_identity,
             context="retained Windows publication source",
         )
-        parent_handle = open_directory(
-            source.parent,
-            delete=False,
-            # The native rename internally requests write access to its target
-            # directory. Retain identity and deletion exclusion while sharing
-            # that write access with the kernel's rename open.
-            share_write=True,
-        )
+        parent_handle = open_parent_identity(source.parent)
         _require_expected_directory(
             file_stat_module._windows_handle_stat(parent_handle),  # noqa: SLF001
             parent_identity,
@@ -1498,6 +1575,7 @@ def _open_windows_retained_tree(
             flush_file_buffers=flush_file_buffers,
             close_handle=close_handle,
             set_information=set_information,
+            flush_parent=flush_parent,
         )
         yield retained
     finally:

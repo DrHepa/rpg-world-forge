@@ -207,7 +207,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
             self.assertIsInstance(caught.exception.__cause__, DirectoryPublishError)
             self.assertFalse(source.exists())
             self.assertTrue(destination.is_dir())
-            self.assertEqual(2, len(close.calls))
+            self.assertEqual(3 if failure == "flush" else 4, len(close.calls))
             if failure == "validation_close":
                 self.assertTrue(
                     any(
@@ -305,8 +305,18 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
 
             self.assertEqual(published_identity, result)
             self.assertTrue(destination.is_dir())
-            self.assertEqual([str(source), str(parent)], [call[0] for call in create_file.calls])
-            self.assertEqual([0x00000001, 0x00000003], [call[2] for call in create_file.calls])
+            self.assertEqual(
+                [str(source), str(parent), str(parent), str(parent)],
+                [call[0] for call in create_file.calls],
+            )
+            self.assertEqual(
+                [0xC0110000, 0x001000A0, 0x40100080, 0x40100080],
+                [call[1] for call in create_file.calls],
+            )
+            self.assertEqual(
+                [0x00000001, 0x00000003, 0x00000007, 0x00000007],
+                [call[2] for call in create_file.calls],
+            )
             self.assertEqual(1, len(set_information.calls))
             source_handle, information_class, payload, _size = set_information.calls[0]
             self.assertEqual(901, source_handle.value)
@@ -364,6 +374,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
             events: list[tuple[str, str]] = []
             mutation_attempted = False
             mutation_blocked = False
+            parent_handle_lifecycle_verified = False
 
             class CreateFile:
                 argtypes: object = None
@@ -387,6 +398,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
 
                 def __call__(self, *args: object) -> int:
                     nonlocal mutation_attempted, mutation_blocked
+                    nonlocal parent_handle_lifecycle_verified
                     closed = {int(call[0].value) for call in close.calls}
                     payload_handles = {
                         handle for handle, path in handles.items() if path not in {source, parent}
@@ -395,6 +407,16 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                         raise AssertionError(
                             "Windows payload handles closed before directory rename"
                         )
+                    parent_handles = [handle for handle, path in handles.items() if path == parent]
+                    if (
+                        len(parent_handles) != 2
+                        or parent_handles[0] in closed
+                        or parent_handles[1] not in closed
+                    ):
+                        raise AssertionError(
+                            "Windows parent identity/flush handle lifetimes are invalid"
+                        )
+                    parent_handle_lifecycle_verified = True
                     mutation_attempted = True
                     target = source / "nested/deeper/grand.txt"
                     target_handle = next(
@@ -470,6 +492,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
             self.assertEqual(source_identity, published)
             self.assertTrue(mutation_attempted)
             self.assertTrue(mutation_blocked)
+            self.assertTrue(parent_handle_lifecycle_verified)
             self.assertEqual(
                 [
                     ("flush", "stage/nested/child.txt"),
@@ -486,8 +509,19 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 [event for event in events if event[0] != "open"],
             )
             self.assertEqual(
-                [0x00000001, 0x00000003, *([0x00000005] * (len(handles) - 2))],
+                [
+                    0x00000001,
+                    0x00000003,
+                    *([0x00000005] * (len(handles) - 4)),
+                    0x00000007,
+                    0x00000007,
+                ],
                 [call[2] for call in create_file.calls],
+            )
+            parent_calls = [call for call in create_file.calls if Path(str(call[0])) == parent]
+            self.assertEqual(
+                [0x001000A0, 0x40100080, 0x40100080],
+                [call[1] for call in parent_calls],
             )
             self.assertEqual(len(handles), len(close.calls))
 
