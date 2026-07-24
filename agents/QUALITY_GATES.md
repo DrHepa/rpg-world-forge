@@ -118,3 +118,48 @@ P13/P14 report:
   smoke, dependency audit, and secret scan are required publication evidence.
   Before the first push that can execute them, they must be recorded as
   **pending**, never inferred as passes from local results.
+
+## M6 partial-readiness gate
+
+The current required verdict is:
+
+**PARTIAL — local implementation evidence only. Self-contained Studio release
+remains blocked; hosted and native evidence is pending until the final push.**
+
+Local M6 implementation evidence requires all of the following:
+
+- Studio protocol, durable workspace/job state, interactive World/lore, Assets,
+  and Game cockpits, bounded previews, and reviewed changeset stage/diff/
+  approve/apply behavior pass without provider/model execution.
+- Capability, presentation, adapter, composition, compatibility-report,
+  immutable composed-bundle, and composed-catalog contracts pass source and
+  standalone verification. Runtime data contains no executable locator or
+  authoring control plane.
+- The exact legacy Linux x86_64 2.5D adapter passes its static registration and
+  preflight contract. The pyray GLB proof remains deliberately incompatible
+  with 3D/mixed profiles until collision is implemented; it is not accepted as
+  3D runtime readiness.
+- Generated games independently verify composed releases and pass
+  representation-neutral headless, save, replay, package, extraction, and
+  extracted-package checks without `worldforge`.
+- Runtime-source validation, deterministic offline verification, secure
+  acquisition tests, synthetic assembly/ZIP reproducibility, and shell-package
+  static verification pass. All caches, outputs, games, and artifacts remain
+  outside the repository.
+- A `shell_only` package proves exact ASAR/resource inventories, hardened fuses,
+  and the absence of Python and Codex. It retains redistribution `blocked`, all
+  seven open blocker codes, and `release_ready=false`.
+
+Self-contained Studio assembly, artifact publication, signing, and
+runtime-download CI are blocked until every code in
+`apps/studio/packaging/runtime-sources.json` is closed with synchronized legal,
+provenance, SBOM/notices, source/relink, pruning, authority, attestation,
+validator, and target evidence.
+
+M6 cannot close on composition or 3D authoring evidence alone. Exit requires a
+pinned 3D engine/runtime contract and end-to-end proof of assetpack mapping,
+animation, collision/physics, deterministic simulation integration,
+representative performance, native Linux/Windows behavior, and standalone
+packaging. The SHA-pinned hosted rows and required native smokes remain
+**pending** before the final push; a skipped, missing, or failed row blocks
+publication.

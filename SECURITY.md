@@ -90,9 +90,12 @@ Changing one byte requires a new release and catalog entry.
 A generated game contains no Forge or authoring control plane: no `worldforge`
 dependency/import, `AGENTS.md`, `.agents/`, `.worldforge/`, editable canon,
 provider SDK, model client, prompt execution, or runtime network requirement.
-The current generated pyray game consumes only `isoworld.renderpack` v1 and must
-not be described as accepting or executing a 3D assetpack; that adapter and its
-trust policy belong to M6.
+The legacy generated pyray path consumes only `isoworld.renderpack` v1. The
+additive M6 composed-release catalog may independently verify an immutable
+composed bundle, but native dispatch remains authorized only for the exact
+Linux x86_64 legacy 2.5D adapter. The bounded pyray GLB proof is incompatible
+without collision and must not be described as accepting or executing a
+playable 3D composition.
 Its vendored `src/isoworld/` snapshot is verified against `runtime.lock.json`;
 game-owned code lives under `src/game/`. Snapshot updates replace the complete
 tree with an expected-current-hash check and precheck every installed bundle.
@@ -114,6 +117,46 @@ evidence, and undeclared files. Packaging operates on one private snapshot,
 verifies that copy independently, derives its identity from the copy, then
 reopens the completed archive and checks its exact inventory, metadata, sizes,
 and hashes before publishing it.
+
+Composed-release import must preserve the legacy catalog bytes, verify every
+existing composed entry, require exact world/release/profile/adapter/bundle
+identities, copy from a private pinned snapshot, publish without replacement,
+and roll back only material it still owns. Stored compatibility reports are
+diagnostic; authorization is recomputed against the static code-owned registry.
+Unsupported native selections must fail before importing pyray or opening a
+window. Saves and replays remain bound to the exact world content hash, not to a
+presentation declaration.
+
+## Studio runtime distribution boundary
+
+Runtime downloads, caches, assembled resources, shell packages, ZIPs, games,
+and end-to-end artifacts belong outside this repository. The checked-in Studio
+runtime-source contract is untrusted input and must pass its strict schema,
+inventory, hash, size, target, and cross-correlation checks before use. Fetching
+or assembling pinned bytes does not establish redistribution authority.
+
+Self-contained assembly and publication remain blocked while any of these exact
+codes is open:
+
+- `codex_ripgrep_static_dependency_notice_sbom_incomplete`
+- `linux_bwrap_lgpl_corresponding_source_relink_build_materials_incomplete`
+- `linux_bwrap_musl_provenance_incomplete`
+- `pbs_zlib_ng_license_incomplete`
+- `linux_berkeley_db_dbm_route_unresolved`
+- `windows_vc_runtime_redistribution_authority_unresolved`
+- `github_attestation_trust_root_rfc3161_verification_pending`
+
+The real assembler must enforce `release_ready=false` before opening an archive
+or creating an output. A synthetic assembly validates mechanics only. A
+statically verified `shell_only` package must contain neither Python nor Codex,
+must retain all blocker codes and redistribution status `blocked`, and must
+never be presented as a self-contained release.
+
+Closing the boundary requires a synchronized reviewed change to the provenance
+contract, exact notices/SBOM, corresponding source and relink materials,
+pruning decisions, redistribution authority, attestation verification,
+validators, package inventories, and target evidence. CI must not download,
+sign, upload, or publish blocked runtimes.
 
 ## Build and CI supply chain
 

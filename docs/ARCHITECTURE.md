@@ -167,6 +167,34 @@ Electron resources; it never searches `PATH`. Packages without both native
 runtimes report the bridge unavailable. Renderer artifacts use the same registered custom
 scheme in development and release, with no localhost or HMR server.
 
+### Studio runtime distribution boundary
+
+Technical provenance, acquisition, assembly, and distribution authorization are
+separate layers. The checked-in x64 runtime-source contract pins exact Codex and
+Python inputs, but it also reports `release_ready=false`, redistribution
+`blocked`, and seven structured legal/provenance blockers. Real runtime assembly
+checks that authorization before opening an archive or creating an output and
+therefore fails closed today.
+
+Acquisition caches, assembled resources, package trees, ZIPs, games, and
+end-to-end artifacts must live outside the Forge repository. Synthetic archives
+exercise bounded deterministic assembly and verification without creating
+redistributable runtime material. Linux output construction uses
+descriptor-relative no-follow operations; Windows uses retained
+`NtCreateFile` root-directory handles and rejects reparse points. Hosts without
+the required identity-preserving primitives fail closed.
+
+The Electron package boundary is independently testable in `shell_only` mode.
+It statically verifies hardened fuses, exact ASAR and resource inventories,
+source-to-package correlations, and final retained identities without launching
+Electron. A valid shell-only result proves that Python and Codex are absent,
+retains every blocker, and remains `release_ready=false`; it is not a
+self-contained Studio release. No runtime-download, signing, self-contained
+artifact, or publication CI is authorized until the provenance, notices, SBOM,
+source/relink materials, pruning decisions, redistribution authority, and
+attestation evidence close together. [ADR-0021](decisions/0021-studio-runtime-distribution-boundary.md)
+records this boundary.
+
 AI is not a game subsystem. It does not decide dialogue, quests, routes, or
 actions during play. It may propose authoring material, but that material must
 be reviewed and compiled before it reaches the runtime.
@@ -417,12 +445,26 @@ its lock, exact dependency, CI, notices, and native evidence together.
   bundles and processed assets.
 - Runtime bundles likewise use standalone external roots; neither export nor
   import accepts a bundle nested in Forge, world, bundle, or game storage.
-# Composed game releases
+## Composed game releases
 
 M6 adds an additive composed-release catalog beside the unchanged legacy world
 catalog. Generated games independently verify immutable composed bundle
 inventories and correlations before using their worldpack for deterministic
-headless simulation, saves, or replays. Native dispatch is a narrower
-code-owned authorization: the current release permits only the exact legacy
-2.5D adapter on Linux x86_64. See
-`docs/decisions/0020-composed-release-game-consumer.md`.
+headless simulation, saves, replays, package creation, extraction, and replay
+from the extracted package. Presentation-neutral persistence stays keyed to the
+world/release rather than to a representation variant. A pure composition plan
+orders world base, world overlay, and UI overlay by layer and slot while audio
+remains a separate sequence.
+
+Native dispatch is a narrower code-owned authorization: the current release
+permits only the exact legacy 2.5D adapter on Linux x86_64 and rejects an
+unsupported presentation before importing pyray or opening a window. The
+`pyray_3d_v1` proof is not dispatchable because the required collision
+capability is absent. See
+[ADR-0020](decisions/0020-composed-release-game-consumer.md).
+
+The complete local M6 implementation evidence is still only partial readiness.
+Composition and engine-neutral 3D authoring do not prove collision, physics,
+navigation, representative performance, cross-platform native behavior, or a
+full 3D runtime release. See
+[AUDIT_M6_2026-07-24.md](AUDIT_M6_2026-07-24.md).

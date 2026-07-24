@@ -115,10 +115,20 @@ copied manifests and validate their release profiles. The schema-required
 `openai` route value is a contract namespace, not evidence that a provider,
 model, or network call executed.
 
-## M6 - 3D game implementation and runtime adapters (planned)
+## M6 - Interactive Studio, composition, and runtime adapters (partial)
 
-M6 starts from a sealed M5 `assetpack_v1`; it does not reopen asset production.
-The milestone will:
+M6 starts from sealed M5 worldpack/renderpack/`assetpack_v1` artifacts; it does
+not reopen asset production or revise the completed M5 milestone. Its current
+status is **partial**:
+
+- [x] Add a local, sandboxed Studio with durable workspaces and interactive
+  World/lore, Assets, and Game cockpits. Text, neutral map previews, approved
+  PNG/WAV streams, font/GLSL/GLB metadata, and deterministic job state remain
+  bounded by named application-service methods.
+- [x] Keep source editing human-controlled through exact retained changeset
+  snapshots, review hashes, text/JSON Pointer diffs, and separate approve/apply
+  confirmations. Codex may stage and inspect changesets but cannot approve or
+  apply them.
 
 - [x] Define hash-bound capability, presentation-profile, adapter,
   composition, and compatibility-report contracts without selecting an engine
@@ -126,28 +136,43 @@ The milestone will:
 - [x] Define and implement an immutable composed-runtime bundle that preserves
   exact M5 bytes, recomputes compatibility evidence, resolves only a static
   adapter registry, and makes no adapter-execution or release-readiness claim.
-- [x] Prove a bounded pyray GLB load/animation/draw lifecycle on Linux x86_64
-  with deterministic render-state planning and separate Windows ABI-only
-  evidence. The adapter proves `animation_gltf` only and remains incompatible
-  with every current 3D profile because collision is not implemented.
+- [x] Implement target-gated pyray GLB load/animation/draw mechanics and
+  deterministic render-state planning, plus Linux-native and Windows ABI gate
+  definitions. Hosted/native execution evidence remains pending. The adapter
+  proves `animation_gltf` only and remains incompatible with every current 3D
+  profile because collision is not implemented.
 - [x] Register the existing isometric pyray runtime as the exact
   `isoworld_raylib_2_5d` adapter for `profile_2_5d` and Linux x86_64, deriving
   its capability declaration from the foundation proof without binding the
   adapter to that world hash or broadening it to 2D, mixed, 3D, packaging,
   Windows, UI/audio, or performance claims.
-- Select and pin at least one explicit 3D game runtime/engine contract outside
+- [x] Add an independent composed-release catalog and generated-game consumer.
+  Its headless, save, replay, package, extraction, and extracted-package
+  workflows remain representation-neutral; native dispatch admits only the
+  exact legacy Linux x86_64 2.5D adapter.
+- [x] Pin x64 Studio runtime provenance and implement bounded deterministic
+  acquisition plus synthetic assembly/ZIP mechanics. Real assembly remains
+  fail-closed while redistribution is blocked.
+- [x] Implement deterministic Linux/Windows `shell_only` Studio package
+  mechanics and static verification with exact ASAR/resource inventories and
+  Python/Codex payloads proven absent. Verified results state
+  `release_ready=false`; hosted target evidence remains pending.
+- [ ] Close all seven Studio runtime legal/provenance blockers and prove the
+  self-contained package on Linux x86_64 and Windows x86_64. Until then there is
+  no runtime-download, signing, self-contained artifact, or publication CI.
+- [ ] Select and pin at least one explicit 3D game runtime/engine contract outside
   the Forge, including platform, renderer, physics, animation, packaging, and
   performance budgets.
-- Map provider-neutral assetpack coordinates, semantic bindings, node names,
+- [ ] Map provider-neutral assetpack coordinates, semantic bindings, node names,
   materials, rigs, animation clips, colliders, and LODs into that adapter with
   deterministic validation and compatibility reporting.
-- Integrate the existing worldpack systems, narrative, living-world state,
+- [ ] Integrate the existing worldpack systems, narrative, living-world state,
   saves, replay, and multi-world catalog without introducing Blender, Modly,
   MCP, provider SDKs, authoring evidence, or weights into the game repository.
-- Add a standalone 3D game scaffold, native smoke scenes, representative
+- [ ] Add a standalone 3D game scaffold, native smoke scenes, representative
   benchmarks, package verification, and desktop CI while preserving the
   supported 2D/2.5D pyray path unchanged.
-- Define the immutable 3D bundle/import boundary only after the adapter proves
+- [ ] Define the immutable 3D bundle/import boundary only after the adapter proves
   end-to-end load, animation, collision, save/replay, and release verification.
 
 Entry gate for a selected game: its M5 release validation is green and the
@@ -167,10 +192,16 @@ omits collision, assetpack consumption, world presentation, packaging, and
 performance capabilities, so it cannot satisfy a 3D composition. Game
 integration, collision, representative performance, packaging, and release
 gates remain open.
-# M6 composed game consumption
+
+### M6 composed game consumption
 
 The first M6 consumer path is additive: generated games can install and verify
 immutable composed releases without changing legacy M5 catalog bytes or
 simulation semantics. Headless/save/replay workflows are representation-neutral.
 Current native presentation remains the exact Linux x86_64 legacy 2.5D adapter;
 the 3D adapter is still a bounded proof, not a playable runtime claim.
+
+The exact partial-readiness verdict, local evidence limits, and remaining gates
+are recorded in [AUDIT_M6_2026-07-24.md](AUDIT_M6_2026-07-24.md). The
+self-contained Studio distribution boundary is fixed by
+[ADR-0021](decisions/0021-studio-runtime-distribution-boundary.md).

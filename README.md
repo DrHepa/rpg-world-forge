@@ -114,6 +114,35 @@ different actors, genres, rules, maps, languages, and campaigns without
 changing the Forge. Independent game repositories import only immutable,
 hash-locked releases.
 
+## Current M6 slice (partial)
+
+**PARTIAL — local implementation evidence only. Self-contained Studio release
+remains blocked; hosted and native evidence is pending until the final push.**
+
+- Forge Studio provides interactive World/lore, Assets, and Game cockpits over
+  one durable local service. Source proposals remain exact reviewed changesets;
+  neither Codex nor a provider can approve or apply them.
+- Machine-readable capability, presentation, adapter, composition, and
+  compatibility contracts support 2D, 2.5D, 3D, and mixed world-plane plans.
+  Static adapter resolution and immutable composed bundles never turn contract
+  data into an executable locator.
+- Generated standalone games can install and independently verify composed
+  releases, then run representation-neutral headless, save, replay, package,
+  extraction, and extracted-package workflows without `worldforge`.
+- Native presentation is still limited to the exact legacy Linux x86_64 2.5D
+  adapter. The pyray GLB proof deliberately lacks collision and remains
+  incompatible with every current 3D/mixed profile; it is not a playable 3D
+  runtime or representative performance evidence.
+- Exact Studio runtime provenance, secure acquisition, deterministic synthetic
+  assembly, and shell-package verification are implemented. Verified
+  `shell_only` packages exclude Python and Codex, retain all seven open
+  legal/provenance blockers, and state `release_ready=false`.
+
+The full evidence, exclusions, and remaining gates are recorded in
+[AUDIT_M6_2026-07-24.md](docs/AUDIT_M6_2026-07-24.md). Self-contained artifact
+publication, signing, and runtime-download CI are intentionally absent; see
+[ADR-0021](docs/decisions/0021-studio-runtime-distribution-boundary.md).
+
 ## Forge Studio application service
 
 Forge Studio v1 begins with a local, provider-free Python application service.
@@ -222,9 +251,15 @@ registered workspace and can only stage or inspect changesets through the
 three-tool Forge MCP boundary; approval and apply remain human-controlled.
 Development requires explicit `RWF_STUDIO_DEV_PYTHON` and
 `RWF_STUDIO_DEV_CODEX` executables. Native packaged runtimes and the broader
-visual authoring tools remain separate release slices; see
+visual authoring tools remain separate release slices. The current package
+workflow builds and statically verifies only an external `shell_only` tree with
+Python and Codex absent. The self-contained path is fail-closed by the checked-in
+runtime provenance contract and cannot publish while its seven blockers remain
+open; see
 [ADR-0012](docs/decisions/0012-forge-studio-desktop-shell.md) and
-[ADR-0013](docs/decisions/0013-workspace-bound-codex-bridge.md).
+[ADR-0013](docs/decisions/0013-workspace-bound-codex-bridge.md), plus the
+distribution decision in
+[ADR-0021](docs/decisions/0021-studio-runtime-distribution-boundary.md).
 
 ## Quick start
 
@@ -501,8 +536,11 @@ Visual and audio production is described in
 capability-gated Modly routes. The M5/M6 boundary is fixed by
 [ADR-0010](docs/decisions/0010-m5-asset-production-and-m6-3d-runtime-boundary.md),
 and the local pre-push implementation/readiness evidence is recorded in
-[AUDIT_M5_2026-07-21.md](docs/AUDIT_M5_2026-07-21.md). The GPT and multi-agent
-protocol is documented in [agents/README.md](agents/README.md).
+[AUDIT_M5_2026-07-21.md](docs/AUDIT_M5_2026-07-21.md). Partial M6
+implementation evidence is recorded separately in
+[AUDIT_M6_2026-07-24.md](docs/AUDIT_M6_2026-07-24.md); it does not revise M5 or
+claim self-contained Studio or complete 3D runtime readiness. The GPT and
+multi-agent protocol is documented in [agents/README.md](agents/README.md).
 
 ## Public project
 
