@@ -97,6 +97,8 @@ jobs:
           node-version: "24.14.1"
           cache: npm
           cache-dependency-path: apps/studio/package-lock.json
+      - name: Install exact npm toolchain
+        run: npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0
       - name: Bind exact Linux Python for Studio subprocesses
         if: runner.os == 'Linux'
         shell: bash

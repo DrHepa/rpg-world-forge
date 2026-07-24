@@ -9,7 +9,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/ci.yml"
+STUDIO_PACKAGE = ROOT / "apps/studio/package.json"
+STUDIO_PACKAGE_LOCK = ROOT / "apps/studio/package-lock.json"
 SETUP_NODE_SHA = "49933ea5288caeca8642d1e84afbd3f7d6820020"
+NPM_BOOTSTRAP_COMMAND = "npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0"
 WINDOWS_NATIVE_PYTHON_TESTS = (
     "tests.test_studio_runtime_inputs.StudioRuntimeInputsTests."
     "test_native_windows_handles_block_target_swap_through_final_read",
@@ -75,6 +78,47 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
         for action, revision in uses:
             with self.subTest(action=action):
                 self.assertRegex(revision, r"\A[0-9a-f]{40}\Z")
+
+    def test_studio_bootstraps_exact_npm_once_at_repository_root(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        studio = _studio_job(workflow)
+        step_name = "      - name: Install exact npm toolchain\n"
+        exact_step = f"{step_name}        run: {NPM_BOOTSTRAP_COMMAND}\n"
+
+        self.assertEqual(workflow.count(NPM_BOOTSTRAP_COMMAND), 1)
+        self.assertEqual(studio.count(step_name), 1)
+        step_start = studio.index(step_name)
+        step_end = studio.index("      - name:", step_start + len(step_name))
+        self.assertEqual(studio[step_start:step_end], exact_step)
+
+        setup_node = studio.index(f"uses: actions/setup-node@{SETUP_NODE_SHA}")
+        npm_bootstrap = studio.index(exact_step)
+        npm_assertion = studio.index("      - name: Verify pinned Node and npm toolchain")
+        self.assertLess(setup_node, npm_bootstrap)
+        self.assertLess(npm_bootstrap, npm_assertion)
+
+    def test_studio_npm_bootstrap_correlates_manifest_and_lock_pins(self) -> None:
+        studio = _studio_job(WORKFLOW.read_text(encoding="utf-8"))
+        package = json.loads(STUDIO_PACKAGE.read_text(encoding="utf-8"))
+        package_lock = json.loads(STUDIO_PACKAGE_LOCK.read_text(encoding="utf-8"))
+        package_engines = package["engines"]
+        lock_engines = package_lock["packages"][""]["engines"]
+
+        self.assertEqual(package_engines, lock_engines)
+        self.assertEqual(package_engines, {"node": "24.14.1", "npm": "11.13.0"})
+        self.assertEqual(package["packageManager"], f"npm@{package_engines['npm']}")
+        self.assertEqual(
+            NPM_BOOTSTRAP_COMMAND,
+            (
+                "npm install --global --ignore-scripts --no-audit --no-fund "
+                f"npm@{package_engines['npm']}"
+            ),
+        )
+        self.assertEqual(
+            studio.count(f"process.version!=='v{package_engines['node']}'"),
+            1,
+        )
+        self.assertEqual(studio.count(f"!=='{package_engines['npm']}'"), 1)
 
     def test_all_rows_bind_python_and_run_complete_studio_and_runtime_gates(self) -> None:
         studio = _studio_job(WORKFLOW.read_text(encoding="utf-8"))
