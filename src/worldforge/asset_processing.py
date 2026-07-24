@@ -18,6 +18,7 @@ from array import array
 from pathlib import Path
 from typing import Any
 
+from isoworld.content.file_stat import file_identity, is_link_or_reparse, path_file_stat
 from worldforge.asset_formats.gltf import (
     DEFAULT_ALLOWED_EXTENSIONS,
     MAX_GLB_BYTES,
@@ -1060,10 +1061,33 @@ def _safe_asset_root(asset_root: str | Path) -> Path:
 
 def _recipe_relative_path(recipe_path: str | Path, root: Path) -> str:
     source = Path(os.path.abspath(Path(recipe_path)))
+    containment_error = f"Processing recipe must live under asset_root {root}"
     try:
-        relative = source.relative_to(root).as_posix()
-    except ValueError as exc:
-        raise AssetContractError(f"Processing recipe must live under asset_root {root}") from exc
+        root_info = path_file_stat(root)
+    except OSError as exc:
+        raise AssetContractError(containment_error) from exc
+    if is_link_or_reparse(root_info) or not stat.S_ISDIR(root_info.st_mode):
+        raise AssetContractError(containment_error)
+
+    root_identity = file_identity(root_info)
+    relative_parts = [source.name]
+    current = source.parent
+    while True:
+        try:
+            current_info = path_file_stat(current)
+        except OSError as exc:
+            raise AssetContractError(containment_error) from exc
+        if is_link_or_reparse(current_info) or not stat.S_ISDIR(current_info.st_mode):
+            raise AssetContractError(containment_error)
+        if file_identity(current_info) == root_identity:
+            break
+        parent = current.parent
+        if parent == current or not current.name:
+            raise AssetContractError(containment_error)
+        relative_parts.append(current.name)
+        current = parent
+
+    relative = "/".join(reversed(relative_parts))
     if normalized_relative_path(relative) is None:
         raise AssetContractError(f"Processing recipe has an unsafe asset-root path: {relative!r}")
     return relative

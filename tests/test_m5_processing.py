@@ -4,12 +4,14 @@ import contextlib
 import io
 import json
 import os
+import stat
 import struct
 import tempfile
 import unittest
 import wave
 import zlib
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -349,6 +351,66 @@ class DeterministicAssetProcessingTests(unittest.TestCase):
             self.assertEqual("glb_validate", validated["operation"])
             self.assertFalse(output.exists())
             self.assertEqual([], list(root.glob("**/.candidate.stage-*")))
+
+    def test_recipe_relative_path_uses_directory_identity_across_alias_spellings(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            base = Path(name)
+            canonical_root = base / "runneradmin/assets"
+            canonical_root.mkdir(parents=True)
+            alias_root = base / "RUNNER~1/assets"
+            alias_parent = alias_root / "recipes"
+            alias_recipe = alias_parent / "nested.json"
+
+            root_identity = (7, 11)
+            directory_states = {
+                canonical_root: SimpleNamespace(
+                    st_dev=root_identity[0],
+                    st_ino=root_identity[1],
+                    st_mode=stat.S_IFDIR | 0o700,
+                    st_file_attributes=0,
+                ),
+                alias_root: SimpleNamespace(
+                    st_dev=root_identity[0],
+                    st_ino=root_identity[1],
+                    st_mode=stat.S_IFDIR | 0o700,
+                    st_file_attributes=0,
+                ),
+                alias_parent: SimpleNamespace(
+                    st_dev=7,
+                    st_ino=12,
+                    st_mode=stat.S_IFDIR | 0o700,
+                    st_file_attributes=0,
+                ),
+            }
+
+            with patch.object(
+                asset_processing_module,
+                "path_file_stat",
+                side_effect=lambda path: directory_states[Path(path)],
+            ):
+                self.assertEqual(
+                    "recipes/nested.json",
+                    asset_processing_module._recipe_relative_path(
+                        alias_recipe,
+                        canonical_root,
+                    ),
+                )
+
+            directory_states[alias_parent] = SimpleNamespace(
+                st_dev=7,
+                st_ino=12,
+                st_mode=stat.S_IFDIR | 0o700,
+                st_file_attributes=0x00000400,
+            )
+            with (
+                patch.object(
+                    asset_processing_module,
+                    "path_file_stat",
+                    side_effect=lambda path: directory_states[Path(path)],
+                ),
+                self.assertRaisesRegex(AssetContractError, "must live under asset_root"),
+            ):
+                asset_processing_module._recipe_relative_path(alias_recipe, canonical_root)
 
     def test_recipe_validation_rejects_bad_root_path_hash_content_and_file_identity(self) -> None:
         with tempfile.TemporaryDirectory() as name:
