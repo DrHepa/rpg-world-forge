@@ -159,6 +159,7 @@ class _WindowsApi:
     _SYNCHRONIZE = 0x00100000
     _SHARE_READ = 0x00000001
     _SHARE_WRITE = 0x00000002
+    _SHARE_DELETE = 0x00000004
     _CREATE_NEW = 1
     _OPEN_EXISTING = 3
     _FILE_ATTRIBUTE_NORMAL = 0x00000080
@@ -231,11 +232,18 @@ class _WindowsApi:
         access: int,
         disposition: int,
         flags: int,
+        share_write: bool = True,
+        share_delete: bool = False,
     ) -> int:
+        share_mode = self._SHARE_READ
+        if share_write:
+            share_mode |= self._SHARE_WRITE
+        if share_delete:
+            share_mode |= self._SHARE_DELETE
         handle = self.create_file(
             str(path),
             access,
-            self._SHARE_READ | self._SHARE_WRITE,
+            share_mode,
             None,
             disposition,
             flags,
@@ -273,6 +281,17 @@ class _WindowsApi:
             | self._FILE_FLAG_SEQUENTIAL_SCAN,
         )
 
+    def open_owned_entry(self, path: Path) -> int:
+        return self._open(
+            path,
+            access=self._GENERIC_READ | self._FILE_READ_ATTRIBUTES | self._SYNCHRONIZE,
+            disposition=self._OPEN_EXISTING,
+            flags=self._FILE_FLAG_BACKUP_SEMANTICS
+            | self._FILE_FLAG_OPEN_REPARSE_POINT
+            | self._FILE_FLAG_SEQUENTIAL_SCAN,
+            share_delete=True,
+        )
+
     def create_temporary(self, path: Path) -> int:
         return self._open(
             path,
@@ -283,6 +302,7 @@ class _WindowsApi:
             | self._SYNCHRONIZE,
             disposition=self._CREATE_NEW,
             flags=self._FILE_ATTRIBUTE_NORMAL | self._FILE_FLAG_OPEN_REPARSE_POINT,
+            share_write=False,
         )
 
     def info(self, handle: int) -> _WindowsHandleInfo:
@@ -532,6 +552,13 @@ class _PinnedCacheFile:
         self.descriptor = -1
 
 
+@dataclass
+class _WindowsOwnedFile:
+    token: str
+    name: str
+    handle: int
+
+
 @dataclass(frozen=True)
 class _Inspection:
     status: str
@@ -750,7 +777,7 @@ class _Directory:
         self.windows_handles = windows_handles
         self.windows_identity = windows_identity
         self._posix_owned: dict[tuple[int, int], tuple[str, int]] = {}
-        self._windows_owned: dict[tuple[int, int], tuple[str, int]] = {}
+        self._windows_owned: dict[tuple[int, int], _WindowsOwnedFile] = {}
 
     def __enter__(self) -> _Directory:
         return self
@@ -771,8 +798,8 @@ class _Directory:
                 pass
         self._posix_owned.clear()
         if _WINDOWS_API is not None:
-            for _name, handle in tuple(self._windows_owned.values()):
-                _WINDOWS_API.close(handle)
+            for owned in tuple(self._windows_owned.values()):
+                _WINDOWS_API.close(owned.handle)
             self._windows_owned.clear()
             for handle in reversed(self.windows_handles):
                 _WINDOWS_API.close(handle)
@@ -919,6 +946,8 @@ class _Directory:
                 except FileExistsError:
                     continue
                 descriptor = -1
+                identity: tuple[int, int] | None = None
+                registered = False
                 try:
                     guard_info = _WINDOWS_API.info(guard)
                     if (
@@ -928,11 +957,25 @@ class _Directory:
                         or guard_info.size != 0
                     ):
                         raise RuntimeInputsError("cache_entry_unsafe", "cache")
+                    identity = guard_info.identity
+                    if identity in self._windows_owned:
+                        raise RuntimeInputsError("cache_entry_unsafe", "cache")
+                    self._windows_owned[identity] = _WindowsOwnedFile(
+                        token=name,
+                        name=name,
+                        handle=guard,
+                    )
+                    registered = True
                     descriptor = _WINDOWS_API.duplicate_to_fd(guard, writable=True)
                     opened = os.fstat(descriptor)
-                    identity = _identity(opened)
+                    if (
+                        not stat.S_ISREG(opened.st_mode)
+                        or _is_reparse(opened)
+                        or opened.st_nlink != 1
+                        or opened.st_size != 0
+                    ):
+                        raise RuntimeInputsError("cache_entry_unsafe", "cache")
                     self.assert_current()
-                    self._windows_owned[identity] = (name, guard)
                     return descriptor, name, identity
                 except Exception:
                     if descriptor >= 0:
@@ -940,7 +983,10 @@ class _Directory:
                             os.close(descriptor)
                         except OSError:
                             pass
-                    _WINDOWS_API.close(guard)
+                    if registered and identity is not None:
+                        self.cleanup_owned(name, identity)
+                    else:
+                        _WINDOWS_API.close(guard)
                     raise
             raise RuntimeInputsError("cache_root_unsafe", "cache")
         if (
@@ -1002,27 +1048,22 @@ class _Directory:
             if _WINDOWS_API is None:
                 return "preserved"
             owned = self._windows_owned.get(identity)
-            if owned is None or owned[0] != name:
+            if owned is None or owned.token != name:
                 return "preserved"
-            self._windows_owned.pop(identity)
-            guard = owned[1]
             try:
-                guard_info = _WINDOWS_API.info(guard)
-                current = self.entry_stat(name)
-                if (
-                    guard_info.directory
-                    or guard_info.reparse
-                    or guard_info.link_count != 1
-                    or current is None
-                    or _identity(current) != identity
-                ):
+                guard_info = self.windows_owned_info(identity, name)
+                current = self.windows_owned_named_info(identity, name)
+                if current is None or current.identity != guard_info.identity:
                     return "preserved"
-                _WINDOWS_API.delete_on_close(guard)
+                _WINDOWS_API.delete_on_close(owned.handle)
                 return "deleted"
             except RuntimeInputsError:
                 return "preserved"
             finally:
-                _WINDOWS_API.close(guard)
+                current_owned = self._windows_owned.get(identity)
+                if current_owned is owned:
+                    self._windows_owned.pop(identity)
+                _WINDOWS_API.close(owned.handle)
         if self.descriptor is not None:
             owned = self._posix_owned.get(identity)
             if owned is None or owned[0] != name:
@@ -1089,10 +1130,75 @@ class _Directory:
         identity: tuple[int, int],
         name: str,
     ) -> int:
+        return self._require_windows_owned(identity, name).handle
+
+    def _require_windows_owned(
+        self,
+        identity: tuple[int, int],
+        token: str,
+    ) -> _WindowsOwnedFile:
         owned = self._windows_owned.get(identity)
-        if owned is None or owned[0] != name:
+        if owned is None or owned.token != token:
             raise RuntimeInputsError("cache_entry_unsafe", "cache")
-        return owned[1]
+        return owned
+
+    def windows_owned_info(
+        self,
+        identity: tuple[int, int],
+        token: str,
+    ) -> _WindowsHandleInfo:
+        if _WINDOWS_API is None:
+            raise RuntimeInputsError("secure_primitive_unavailable", "cache")
+        owned = self._require_windows_owned(identity, token)
+        info = _WINDOWS_API.info(owned.handle)
+        if info.directory or info.reparse or info.link_count != 1 or info.identity != identity:
+            raise RuntimeInputsError("cache_entry_unsafe", "cache")
+        return info
+
+    def windows_owned_named_info(
+        self,
+        identity: tuple[int, int],
+        token: str,
+    ) -> _WindowsHandleInfo | None:
+        if _WINDOWS_API is None:
+            raise RuntimeInputsError("secure_primitive_unavailable", "cache")
+        owned = self._require_windows_owned(identity, token)
+        guard_info = self.windows_owned_info(identity, token)
+        self.assert_current()
+        handle: int | None = None
+        try:
+            try:
+                handle = _WINDOWS_API.open_owned_entry(self.path / owned.name)
+            except FileNotFoundError:
+                return None
+            except RuntimeInputsError:
+                raise RuntimeInputsError("cache_entry_unsafe", "cache") from None
+            current = _WINDOWS_API.info(handle)
+            if (
+                current.directory
+                or current.reparse
+                or current.link_count != 1
+                or current.identity != identity
+                or current.size != guard_info.size
+            ):
+                raise RuntimeInputsError("cache_entry_unsafe", "cache")
+        finally:
+            if handle is not None:
+                _WINDOWS_API.close(handle)
+        self.assert_current()
+        return current
+
+    def rebind_windows_owned(
+        self,
+        identity: tuple[int, int],
+        token: str,
+        previous_name: str,
+        current_name: str,
+    ) -> None:
+        owned = self._require_windows_owned(identity, token)
+        if owned.name != previous_name:
+            raise RuntimeInputsError("cache_entry_unsafe", "cache")
+        owned.name = current_name
 
     def release_windows_owned(
         self,
@@ -1101,11 +1207,9 @@ class _Directory:
     ) -> None:
         if _WINDOWS_API is None:
             return
-        owned = self._windows_owned.get(identity)
-        if owned is None or owned[0] != name:
-            raise RuntimeInputsError("cache_entry_unsafe", "cache")
+        owned = self._require_windows_owned(identity, name)
         self._windows_owned.pop(identity)
-        _WINDOWS_API.close(owned[1])
+        _WINDOWS_API.close(owned.handle)
 
 
 def _directory_flags() -> int:
@@ -1883,12 +1987,16 @@ def _publish_no_replace(
     if directory.windows_handles:
         if _WINDOWS_API is None:
             raise RuntimeInputsError("secure_primitive_unavailable", "cache")
-        temporary = directory.entry_stat(temporary_name)
+        temporary = directory.windows_owned_named_info(
+            temporary_identity,
+            temporary_name,
+        )
         if (
             temporary is None
-            or not stat.S_ISREG(temporary.st_mode)
-            or temporary.st_nlink != 1
-            or _identity(temporary) != temporary_identity
+            or temporary.directory
+            or temporary.reparse
+            or temporary.link_count != 1
+            or temporary.identity != temporary_identity
         ):
             raise RuntimeInputsError("cache_entry_unsafe", "cache")
         guard = directory.windows_owned_handle(
@@ -1900,6 +2008,32 @@ def _publish_no_replace(
             directory.windows_handles[-1],
             destination_name,
         )
+        directory.rebind_windows_owned(
+            temporary_identity,
+            temporary_name,
+            temporary_name,
+            destination_name,
+        )
+        directory.assert_current()
+        published = directory.windows_owned_named_info(
+            temporary_identity,
+            temporary_name,
+        )
+        if (
+            published is None
+            or published.directory
+            or published.reparse
+            or published.link_count != 1
+            or published.identity != temporary_identity
+        ):
+            raise RuntimeInputsError("cache_parent_changed", "cache")
+        _WINDOWS_API.flush(guard)
+        _sync_parent(directory)
+        directory.release_windows_owned(
+            temporary_identity,
+            temporary_name,
+        )
+        return
     elif directory.descriptor is not None:
         guard = directory.posix_owned_descriptor(
             temporary_identity,
@@ -1928,15 +2062,8 @@ def _publish_no_replace(
         or _identity(published) != temporary_identity
     ):
         raise RuntimeInputsError("cache_parent_changed", "cache")
-    if directory.windows_handles:
-        _WINDOWS_API.flush(guard)
     _sync_parent(directory)
-    if directory.windows_handles:
-        directory.release_windows_owned(
-            temporary_identity,
-            temporary_name,
-        )
-    elif directory.descriptor is not None:
+    if directory.descriptor is not None:
         directory.release_posix_owned(
             temporary_identity,
             temporary_name,
@@ -2009,12 +2136,32 @@ def _download_one(
                 "download_interrupted",
                 f"artifact.{artifact.component}",
             ) from None
-        if (
-            total != artifact.size
-            or sealed.st_size != artifact.size
-            or sealed.st_nlink != (1 if directory.windows_handles else 0)
-            or _identity(sealed) != temporary_identity
-        ):
+        if total != artifact.size or sealed.st_size != artifact.size:
+            raise RuntimeInputsError(
+                "download_size_mismatch",
+                f"artifact.{artifact.component}",
+            )
+        if directory.windows_handles:
+            try:
+                owned_info = directory.windows_owned_info(
+                    temporary_identity,
+                    temporary_name,
+                )
+            except RuntimeInputsError as error:
+                if error.code == "cache_entry_unsafe":
+                    raise RuntimeInputsError(
+                        "download_size_mismatch",
+                        f"artifact.{artifact.component}",
+                    ) from None
+                raise
+            if not stat.S_ISREG(sealed.st_mode) or _is_reparse(sealed):
+                raise RuntimeInputsError("cache_entry_unsafe", "cache")
+            if sealed.st_nlink != 1 or owned_info.size != artifact.size:
+                raise RuntimeInputsError(
+                    "download_size_mismatch",
+                    f"artifact.{artifact.component}",
+                )
+        elif sealed.st_nlink != 0 or _identity(sealed) != temporary_identity:
             raise RuntimeInputsError(
                 "download_size_mismatch",
                 f"artifact.{artifact.component}",
@@ -2029,7 +2176,19 @@ def _download_one(
             )
         directory.assert_current()
         if directory.windows_handles:
-            current_temp = directory.entry_stat(temporary_name)
+            current_temp = directory.windows_owned_named_info(
+                temporary_identity,
+                temporary_name,
+            )
+            if (
+                current_temp is None
+                or current_temp.directory
+                or current_temp.reparse
+                or current_temp.link_count != 1
+                or current_temp.identity != temporary_identity
+                or current_temp.size != sealed.st_size
+            ):
+                raise RuntimeInputsError("cache_entry_unsafe", "cache")
         elif directory.descriptor is not None:
             current_temp = os.fstat(
                 directory.posix_owned_descriptor(
@@ -2037,15 +2196,14 @@ def _download_one(
                     temporary_name,
                 )
             )
+            if (
+                current_temp.st_nlink != 0
+                or _identity(current_temp) != temporary_identity
+                or not _same_file_state(sealed, current_temp)
+            ):
+                raise RuntimeInputsError("cache_entry_unsafe", "cache")
         else:
             raise RuntimeInputsError("secure_primitive_unavailable", "cache")
-        if (
-            current_temp is None
-            or current_temp.st_nlink != (1 if directory.windows_handles else 0)
-            or _identity(current_temp) != temporary_identity
-            or not _same_file_state(sealed, current_temp)
-        ):
-            raise RuntimeInputsError("cache_entry_unsafe", "cache")
         try:
             _publish_no_replace(
                 directory,

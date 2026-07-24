@@ -113,16 +113,45 @@ class FakeOpener:
 class FakeWindowsHandleApi:
     """POSIX-backed seam for exercising Windows handle-binding logic."""
 
+    def __init__(self) -> None:
+        self._paths: dict[int, Path] = {}
+        self._delete_on_close: set[int] = set()
+        self.compatible_opens: list[Path] = []
+
+    def _remember(self, handle: int, path: Path) -> int:
+        self._paths[handle] = path
+        return handle
+
     def open_directory(self, path: Path) -> int:
-        return os.open(
+        return self._remember(
+            os.open(
+                path,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+            ),
             path,
-            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
         )
 
     def open_entry(self, path: Path) -> int:
-        return os.open(
+        return self._remember(
+            os.open(
+                path,
+                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+            ),
             path,
-            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0),
+        )
+
+    def open_owned_entry(self, path: Path) -> int:
+        self.compatible_opens.append(path)
+        return self.open_entry(path)
+
+    def create_temporary(self, path: Path) -> int:
+        return self._remember(
+            os.open(
+                path,
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+            ),
+            path,
         )
 
     def info(self, handle: int) -> object:
@@ -136,11 +165,41 @@ class FakeWindowsHandleApi:
         )
 
     def duplicate_to_fd(self, handle: int, *, writable: bool) -> int:
-        if writable:
-            raise AssertionError("offline seam must not request writable handles")
         return os.dup(handle)
 
+    def rename_no_replace(
+        self,
+        handle: int,
+        directory_handle: int,
+        destination_name: str,
+    ) -> None:
+        source = self._paths[handle]
+        destination = self._paths[directory_handle] / destination_name
+        if destination.exists():
+            raise FileExistsError
+        source.rename(destination)
+        for current_handle, current_path in tuple(self._paths.items()):
+            if current_path == source:
+                self._paths[current_handle] = destination
+
+    def delete_on_close(self, handle: int) -> None:
+        self._delete_on_close.add(handle)
+
+    def flush(self, handle: int) -> None:
+        os.fsync(handle)
+
     def close(self, handle: int) -> None:
+        path = self._paths.pop(handle, None)
+        delete = handle in self._delete_on_close
+        self._delete_on_close.discard(handle)
+        if delete and path is not None:
+            try:
+                opened = os.fstat(handle)
+                linked = path.lstat()
+                if runtime_inputs._identity(opened) == runtime_inputs._identity(linked):
+                    path.unlink()
+            except OSError:
+                pass
         os.close(handle)
 
 
@@ -157,6 +216,39 @@ def _write_cache(cache: Path, artifact: InputArtifact, payload: bytes) -> Path:
 
 
 class StudioRuntimeInputsTests(unittest.TestCase):
+    def test_windows_owner_seals_writers_and_only_reopen_adds_delete_sharing(
+        self,
+    ) -> None:
+        api = object.__new__(runtime_inputs._WindowsApi)
+        share_modes: list[int] = []
+
+        def create_file(
+            _path: str,
+            _access: int,
+            share_mode: int,
+            _security: object,
+            _disposition: int,
+            _flags: int,
+            _template: object,
+        ) -> int:
+            share_modes.append(share_mode)
+            return 123
+
+        api.create_file = create_file
+
+        api.open_entry(Path("ordinary-cache-entry"))
+        api.open_owned_entry(Path("retained-owned-entry"))
+        api.create_temporary(Path("new-owned-entry"))
+
+        self.assertEqual(
+            share_modes,
+            [
+                api._SHARE_READ | api._SHARE_WRITE,
+                api._SHARE_READ | api._SHARE_WRITE | api._SHARE_DELETE,
+                api._SHARE_READ,
+            ],
+        )
+
     def test_pinned_manifest_resolves_exact_bounded_inventory(self) -> None:
         document = runtime_inputs._manifest_document()
 
@@ -464,6 +556,64 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                     list((Path(directory) / TARGET / artifact.component).glob(".rwf-input-*.part")),
                     [],
                 )
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and hasattr(os, "O_TMPFILE"),
+        "Linux unnamed temporary exercise",
+    )
+    def test_posix_temp_state_failures_keep_established_error_contracts(self) -> None:
+        payload = b"stable error contract"
+        artifact = _artifact(payload)
+        original_fstat = os.fstat
+        cases = (
+            ("sealed-link", 1, "link", "download_size_mismatch"),
+            ("sealed-identity", 1, "identity", "download_size_mismatch"),
+            ("current-link", 2, "link", "cache_entry_unsafe"),
+            ("current-identity", 2, "identity", "cache_entry_unsafe"),
+        )
+        for name, target_call, mutation, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                matching_calls = 0
+
+                def mutate_fstat(
+                    descriptor: int,
+                    *,
+                    selected_call: int = target_call,
+                    selected_mutation: str = mutation,
+                ) -> os.stat_result:
+                    nonlocal matching_calls
+                    result = original_fstat(descriptor)
+                    if (
+                        stat.S_ISREG(result.st_mode)
+                        and result.st_nlink == 0
+                        and result.st_size == len(payload)
+                    ):
+                        matching_calls += 1
+                        if matching_calls == selected_call:
+                            fields = list(result)
+                            if selected_mutation == "link":
+                                fields[3] = 1
+                            else:
+                                fields[1] += 1
+                            return os.stat_result(fields)
+                    return result
+
+                with (
+                    patch(
+                        "scripts.studio_runtime_inputs.os.fstat",
+                        side_effect=mutate_fstat,
+                    ),
+                    self.assertRaises(RuntimeInputsError) as captured,
+                ):
+                    _fetch_artifacts(
+                        TARGET,
+                        Path(directory),
+                        (artifact,),
+                        FakeOpener(lambda _request: FakeResponse(payload)),
+                    )
+
+                self.assertEqual(captured.exception.code, expected)
+                self.assertGreaterEqual(matching_calls, target_call)
 
     def test_sha256_and_sri_sha512_mismatch_are_rejected(self) -> None:
         payload = b"digest"
@@ -827,6 +977,271 @@ class StudioRuntimeInputsTests(unittest.TestCase):
             self.assertTrue(moved.is_dir())
             self.assertTrue(target.is_dir())
 
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_owned_temp_mock_revalidates_and_cleans_by_guard(self) -> None:
+        payload = b"owned temporary"
+        fake_windows = FakeWindowsHandleApi()
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                runtime_inputs._open_windows_directory(cache, (), create=True) as parent,
+            ):
+                descriptor, name, identity = parent.create_temporary()
+                os.write(descriptor, payload)
+                os.fsync(descriptor)
+                os.close(descriptor)
+                temporary = parent.path / name
+
+                linked = parent.windows_owned_named_info(identity, name)
+                cleanup = parent.cleanup_owned(name, identity)
+
+                self.assertIsNotNone(linked)
+                self.assertEqual(linked.identity, identity)
+                self.assertEqual(linked.link_count, 1)
+                self.assertEqual(linked.size, len(payload))
+                self.assertEqual(cleanup, "deleted")
+                self.assertFalse(temporary.exists())
+                self.assertEqual(fake_windows.compatible_opens, [temporary, temporary])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_owned_temp_mock_cleans_partial_create_failure(self) -> None:
+        fake_windows = FakeWindowsHandleApi()
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                runtime_inputs._open_windows_directory(cache, (), create=True) as parent,
+                patch.object(
+                    fake_windows,
+                    "duplicate_to_fd",
+                    side_effect=RuntimeInputsError(
+                        "secure_primitive_unavailable",
+                        "cache",
+                    ),
+                ),
+                self.assertRaises(RuntimeInputsError) as captured,
+            ):
+                parent.create_temporary()
+
+            self.assertEqual(
+                captured.exception.code,
+                "secure_primitive_unavailable",
+            )
+            self.assertEqual(list(cache.glob(".rwf-input-*.part")), [])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_owned_temp_mock_preserves_changed_link_identity(self) -> None:
+        payload = b"linked owned temporary"
+        fake_windows = FakeWindowsHandleApi()
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                runtime_inputs._open_windows_directory(cache, (), create=True) as parent,
+            ):
+                descriptor, name, identity = parent.create_temporary()
+                os.write(descriptor, payload)
+                os.fsync(descriptor)
+                os.close(descriptor)
+                temporary = parent.path / name
+                alias = parent.path / "foreign-alias.part"
+                os.link(temporary, alias)
+
+                with self.assertRaises(RuntimeInputsError) as captured:
+                    parent.windows_owned_named_info(identity, name)
+                cleanup = parent.cleanup_owned(name, identity)
+
+                self.assertEqual(captured.exception.code, "cache_entry_unsafe")
+                self.assertEqual(cleanup, "preserved")
+                self.assertEqual(temporary.read_bytes(), payload)
+                self.assertEqual(alias.read_bytes(), payload)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_owned_temp_mock_publishes_and_reopens_exact_identity(self) -> None:
+        payload = b"published temporary"
+        fake_windows = FakeWindowsHandleApi()
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                runtime_inputs._open_windows_directory(cache, (), create=True) as parent,
+            ):
+                descriptor, name, identity = parent.create_temporary()
+                os.write(descriptor, payload)
+                os.fsync(descriptor)
+                os.close(descriptor)
+                temporary = parent.path / name
+                destination = parent.path / "published.bin"
+
+                runtime_inputs._publish_no_replace(
+                    parent,
+                    name,
+                    destination.name,
+                    identity,
+                )
+
+                self.assertFalse(temporary.exists())
+                self.assertEqual(destination.read_bytes(), payload)
+                self.assertEqual(parent.cleanup_owned(name, identity), "preserved")
+                self.assertEqual(fake_windows.compatible_opens, [temporary, destination])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_owned_temp_mock_preserves_mismatched_winner(self) -> None:
+        payload = b"owned loser"
+        hostile = b"foreign winner"
+        fake_windows = FakeWindowsHandleApi()
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                runtime_inputs._open_windows_directory(cache, (), create=True) as parent,
+            ):
+                descriptor, name, identity = parent.create_temporary()
+                os.write(descriptor, payload)
+                os.fsync(descriptor)
+                os.close(descriptor)
+                temporary = parent.path / name
+                destination = parent.path / "published.bin"
+                destination.write_bytes(hostile)
+
+                with self.assertRaises(FileExistsError):
+                    runtime_inputs._publish_no_replace(
+                        parent,
+                        name,
+                        destination.name,
+                        identity,
+                    )
+                cleanup = parent.cleanup_owned(name, identity)
+
+                self.assertEqual(destination.read_bytes(), hostile)
+                self.assertEqual(cleanup, "deleted")
+                self.assertFalse(temporary.exists())
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_handle_mock_downloads_once_then_reuses_exact_entry(self) -> None:
+        payload = b"mock Windows download"
+        artifact = _artifact(payload)
+        fake_windows = FakeWindowsHandleApi()
+        opener = FakeOpener(lambda _request: FakeResponse(payload))
+
+        def open_windows_cache(path: Path, *, create: bool) -> object:
+            return runtime_inputs._open_windows_directory(path, (), create=create)
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                patch(
+                    "scripts.studio_runtime_inputs._open_cache_directory",
+                    side_effect=open_windows_cache,
+                ),
+            ):
+                downloaded = _fetch_artifacts(TARGET, cache, (artifact,), opener)
+                reused = _fetch_artifacts(TARGET, cache, (artifact,), opener)
+
+            self.assertEqual(downloaded.items[0].status, "downloaded")
+            self.assertEqual(reused.items[0].status, "reused")
+            self.assertEqual(len(opener.calls), 1)
+            self.assertEqual(_cache_file(cache, artifact).read_bytes(), payload)
+            self.assertEqual(
+                list((cache / TARGET / artifact.component).glob(".rwf-input-*.part")),
+                [],
+            )
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_handle_mock_reports_conflict_and_cleans_owned_loser(self) -> None:
+        payload = b"mock Windows winner"
+        hostile = b"mock hostile bytes!"
+        self.assertEqual(len(payload), len(hostile))
+        artifact = _artifact(payload)
+        fake_windows = FakeWindowsHandleApi()
+
+        def open_windows_cache(path: Path, *, create: bool) -> object:
+            return runtime_inputs._open_windows_directory(path, (), create=create)
+
+        def race(
+            parent: object,
+            _temporary_name: str,
+            destination_name: str,
+            _identity: tuple[int, int],
+        ) -> None:
+            (parent.path / destination_name).write_bytes(hostile)
+            raise FileExistsError
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                patch(
+                    "scripts.studio_runtime_inputs._open_cache_directory",
+                    side_effect=open_windows_cache,
+                ),
+                patch("scripts.studio_runtime_inputs._publish_no_replace", side_effect=race),
+                self.assertRaises(RuntimeInputsError) as captured,
+            ):
+                _fetch_artifacts(
+                    TARGET,
+                    cache,
+                    (artifact,),
+                    FakeOpener(lambda _request: FakeResponse(payload)),
+                )
+
+            self.assertEqual(captured.exception.code, "cache_conflict")
+            self.assertEqual(_cache_file(cache, artifact).read_bytes(), hostile)
+            self.assertEqual(
+                list((cache / TARGET / artifact.component).glob(".rwf-input-*.part")),
+                [],
+            )
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_handle_mock_sealed_link_failure_keeps_size_error(self) -> None:
+        payload = b"mock Windows link state"
+        artifact = _artifact(payload)
+        fake_windows = FakeWindowsHandleApi()
+
+        def open_windows_cache(path: Path, *, create: bool) -> object:
+            return runtime_inputs._open_windows_directory(path, (), create=create)
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            component = cache / TARGET / artifact.component
+            alias = component / "foreign-alias.part"
+
+            def add_hardlink(_read_number: int) -> None:
+                if alias.exists():
+                    return
+                temporaries = list(component.glob(".rwf-input-*.part"))
+                self.assertEqual(len(temporaries), 1)
+                os.link(temporaries[0], alias)
+
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                patch(
+                    "scripts.studio_runtime_inputs._open_cache_directory",
+                    side_effect=open_windows_cache,
+                ),
+                self.assertRaises(RuntimeInputsError) as captured,
+            ):
+                _fetch_artifacts(
+                    TARGET,
+                    cache,
+                    (artifact,),
+                    FakeOpener(
+                        lambda _request: FakeResponse(
+                            payload,
+                            read_hook=add_hardlink,
+                        )
+                    ),
+                )
+
+            self.assertEqual(captured.exception.code, "download_size_mismatch")
+            self.assertTrue(alias.is_file())
+            self.assertEqual(
+                len(list(component.glob(".rwf-input-*.part"))),
+                1,
+            )
+
     def test_secure_directory_primitive_has_no_path_only_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -862,6 +1277,8 @@ class StudioRuntimeInputsTests(unittest.TestCase):
             _write_cache(cache, artifact, payload)
             target = cache / TARGET
             moved = cache / f"{TARGET}-moved"
+            cached = _cache_file(cache, artifact)
+            moved_cached = cached.with_name("input-moved.bin")
             original = runtime_inputs._read_and_hash
             attempted: list[str] = []
 
@@ -870,9 +1287,15 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                 try:
                     target.rename(moved)
                 except OSError:
-                    attempted.append("blocked")
+                    attempted.append("target-blocked")
                 else:
-                    attempted.append("renamed")
+                    attempted.append("target-renamed")
+                try:
+                    cached.rename(moved_cached)
+                except OSError:
+                    attempted.append("entry-blocked")
+                else:
+                    attempted.append("entry-renamed")
                 return result
 
             with patch(
@@ -882,9 +1305,100 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                 report = _verify_artifacts(TARGET, cache, (artifact,))
 
             self.assertTrue(report.valid)
-            self.assertEqual(attempted, ["blocked", "blocked"])
+            self.assertEqual(
+                attempted,
+                [
+                    "target-blocked",
+                    "entry-blocked",
+                    "target-blocked",
+                    "entry-blocked",
+                ],
+            )
             self.assertTrue(target.is_dir())
             self.assertFalse(moved.exists())
+            self.assertTrue(cached.is_file())
+            self.assertFalse(moved_cached.exists())
+
+    @unittest.skipUnless(os.name == "nt", "native Windows owned-handle exercise")
+    def test_native_windows_owned_temp_revalidates_blocks_rename_and_cleans(self) -> None:
+        payload = b"native owned temporary"
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with runtime_inputs._open_windows_directory(cache, (), create=True) as parent:
+                descriptor, name, identity = parent.create_temporary()
+                os.write(descriptor, payload)
+                os.fsync(descriptor)
+                os.close(descriptor)
+                temporary = parent.path / name
+                moved = parent.path / "moved.part"
+
+                with self.assertRaises(OSError):
+                    with temporary.open("r+b"):
+                        pass
+                linked = parent.windows_owned_named_info(identity, name)
+                with self.assertRaises(OSError):
+                    temporary.rename(moved)
+                cleanup = parent.cleanup_owned(name, identity)
+
+                self.assertIsNotNone(linked)
+                self.assertEqual(linked.identity, identity)
+                self.assertEqual(linked.link_count, 1)
+                self.assertEqual(linked.size, len(payload))
+                self.assertEqual(cleanup, "deleted")
+                self.assertFalse(temporary.exists())
+                self.assertFalse(moved.exists())
+
+    @unittest.skipUnless(os.name == "nt", "native Windows owned-handle exercise")
+    def test_native_windows_owned_temp_publishes_and_reopens(self) -> None:
+        payload = b"native published temporary"
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with runtime_inputs._open_windows_directory(cache, (), create=True) as parent:
+                descriptor, name, identity = parent.create_temporary()
+                os.write(descriptor, payload)
+                os.fsync(descriptor)
+                os.close(descriptor)
+                temporary = parent.path / name
+                destination = parent.path / "published.bin"
+
+                runtime_inputs._publish_no_replace(
+                    parent,
+                    name,
+                    destination.name,
+                    identity,
+                )
+
+                self.assertFalse(temporary.exists())
+                self.assertEqual(destination.read_bytes(), payload)
+                self.assertEqual(parent.cleanup_owned(name, identity), "preserved")
+
+    @unittest.skipUnless(os.name == "nt", "native Windows owned-handle exercise")
+    def test_native_windows_owned_temp_preserves_mismatched_winner(self) -> None:
+        payload = b"native owned loser"
+        hostile = b"native foreign winner"
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with runtime_inputs._open_windows_directory(cache, (), create=True) as parent:
+                descriptor, name, identity = parent.create_temporary()
+                os.write(descriptor, payload)
+                os.fsync(descriptor)
+                os.close(descriptor)
+                temporary = parent.path / name
+                destination = parent.path / "published.bin"
+                destination.write_bytes(hostile)
+
+                with self.assertRaises(FileExistsError):
+                    runtime_inputs._publish_no_replace(
+                        parent,
+                        name,
+                        destination.name,
+                        identity,
+                    )
+                cleanup = parent.cleanup_owned(name, identity)
+
+                self.assertEqual(destination.read_bytes(), hostile)
+                self.assertEqual(cleanup, "deleted")
+                self.assertFalse(temporary.exists())
 
     def test_no_replace_race_reuses_exact_winner(self) -> None:
         payload = b"winner"
