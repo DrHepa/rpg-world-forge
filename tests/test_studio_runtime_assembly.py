@@ -842,6 +842,122 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         output = self.root / "source-count-overflow-output"
         source_directory = self.source / "src/isoworld"
         regular_info = (source_directory / "__init__.py").lstat()
+        if assembly._is_windows_native_host():
+            original_entries_windows = assembly._WindowsDirectoryChain.directory_entries
+            original_retain_windows = assembly._WindowsDirectoryChain.retain_regular
+            original_read_windows = assembly._WindowsDirectoryChain.read_regular
+            fake_authorizations = 0
+            fake_reads = 0
+
+            def is_source_directory(
+                guard: assembly._WindowsDirectoryChain,
+                handle: int,
+            ) -> bool:
+                if handle == guard.leaf:
+                    return False
+                bindings = {binding.handle: binding for binding in guard.bindings}
+                current = handle
+                parts: list[str] = []
+                while current != guard.leaf:
+                    binding = bindings.get(current)
+                    if binding is None:
+                        return False
+                    parts.append(binding.name)
+                    current = binding.parent
+                return tuple(reversed(parts)) == ("src", "isoworld")
+
+            def directory_entries_windows(
+                guard: assembly._WindowsDirectoryChain,
+                handle: int,
+            ) -> tuple[assembly._WindowsDirectoryEntry, ...]:
+                rows = original_entries_windows(guard, handle)
+                if is_source_directory(guard, handle):
+                    return (
+                        *rows,
+                        *(
+                            assembly._WindowsDirectoryEntry(
+                                name=f"mocked-{index:05d}.py",
+                                is_directory=False,
+                                is_reparse=False,
+                                file_id=10_000_000 + index,
+                            )
+                            for index in range(16_389)
+                        ),
+                    )
+                return rows
+
+            def retain_regular_windows(
+                guard: assembly._WindowsDirectoryChain,
+                parent: int,
+                name: str,
+                logical_path: Path,
+                **kwargs: object,
+            ) -> assembly._WindowsRetainedRegular:
+                nonlocal fake_authorizations
+                if name.startswith("mocked-"):
+                    fake_authorizations += 1
+                    return assembly._WindowsRetainedRegular(
+                        logical_path=logical_path,
+                        parent=parent,
+                        name=name,
+                        handle=-fake_authorizations,
+                        state=assembly._WindowsHandleState(
+                            identity=(
+                                guard.anchor_identity[0],
+                                10_000_000 + fake_authorizations,
+                            ),
+                            size=0,
+                            nlink=1,
+                            is_directory=False,
+                            is_reparse=False,
+                        ),
+                    )
+                return original_retain_windows(
+                    guard,
+                    parent,
+                    name,
+                    logical_path,
+                    **kwargs,
+                )
+
+            def tracked_read_windows(
+                guard: assembly._WindowsDirectoryChain,
+                opened: assembly._WindowsRetainedRegular,
+                **kwargs: object,
+            ) -> bytes:
+                nonlocal fake_reads
+                if opened.name.startswith("mocked-"):
+                    fake_reads += 1
+                    return b""
+                return original_read_windows(guard, opened, **kwargs)
+
+            with (
+                mock.patch.object(
+                    assembly._WindowsDirectoryChain,
+                    "directory_entries",
+                    new=directory_entries_windows,
+                ),
+                mock.patch.object(
+                    assembly._WindowsDirectoryChain,
+                    "retain_regular",
+                    new=retain_regular_windows,
+                ),
+                mock.patch.object(
+                    assembly._WindowsDirectoryChain,
+                    "read_regular",
+                    new=tracked_read_windows,
+                ),
+                self.assertRaisesRegex(
+                    assembly.RuntimeAssemblyError,
+                    "output_limit_exceeded",
+                ),
+            ):
+                assembly.assemble_runtime_resources(plan, output)
+            self.assertFalse(output.exists())
+            self.assertEqual(fake_reads, 0)
+            self.assertLess(fake_authorizations, 16_389)
+            return
+
         original_entries = assembly._PosixSourceGuard.directory_entries
         original_retain = assembly._PosixSourceGuard.retain_regular
         original_read = assembly._PosixSourceGuard.read_regular
@@ -1667,6 +1783,185 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             assembly._scan_tree(forest)
         self.assertEqual(scanned, [forest])
 
+    def test_native_windows_scan_tree_uses_retained_handle_identities(self) -> None:
+        root = self.root / "windows-handle-scan"
+        root.mkdir()
+
+        class Api:
+            states = {
+                1: assembly._WindowsHandleState((17, 1), 0, 1, True, False),
+                2: assembly._WindowsHandleState((17, 2), 7, 1, False, False),
+                3: assembly._WindowsHandleState((17, 3), 0, 1, True, False),
+            }
+
+            def state(self, handle: int, _field: str) -> assembly._WindowsHandleState:
+                return self.states[handle]
+
+        class Guard:
+            def __init__(self) -> None:
+                self.api = Api()
+                self.leaf = 1
+                self.closed = False
+
+            def directory_entries(
+                self,
+                handle: int,
+            ) -> tuple[assembly._WindowsDirectoryEntry, ...]:
+                if handle == 1:
+                    return (
+                        assembly._WindowsDirectoryEntry("payload.bin", False, False, 2),
+                        assembly._WindowsDirectoryEntry("nested", True, False, 3),
+                    )
+                if handle == 3:
+                    return ()
+                raise AssertionError(handle)
+
+            def retain_directory(
+                self,
+                _parent: int,
+                name: str,
+                **kwargs: object,
+            ) -> int:
+                if name != "nested" or kwargs["expected_file_id"] != 3:
+                    raise AssertionError((name, kwargs))
+                return 3
+
+            def retain_regular(
+                self,
+                _parent: int,
+                name: str,
+                logical_path: Path,
+                **kwargs: object,
+            ) -> assembly._WindowsRetainedRegular:
+                if name != "payload.bin" or kwargs["expected_file_id"] != 2:
+                    raise AssertionError((name, kwargs))
+                return assembly._WindowsRetainedRegular(
+                    logical_path,
+                    1,
+                    name,
+                    2,
+                    self.api.states[2],
+                )
+
+            def require_bindings(self) -> None:
+                return None
+
+            def close(self) -> None:
+                self.closed = True
+
+        guard = Guard()
+        with (
+            mock.patch.object(assembly, "_is_windows_native_host", return_value=True),
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                return_value=guard,
+            ),
+            mock.patch.object(
+                assembly.os,
+                "scandir",
+                side_effect=AssertionError("path-based enumeration is forbidden"),
+            ),
+        ):
+            files, directories = assembly._scan_tree(root)
+
+        self.assertEqual((17, 2), files["payload.bin"].identity)
+        self.assertEqual((17, 3), directories["nested"].identity)
+        self.assertNotIn(
+            (0, 0),
+            {files["payload.bin"].identity, directories["nested"].identity},
+        )
+        self.assertTrue(guard.closed)
+
+    def test_windows_standalone_verification_blocks_manifest_mutation_before_read(
+        self,
+    ) -> None:
+        output = self._assemble(name="windows-manifest-write-gap")
+        manifest_path = output / assembly.PACKAGE_MANIFEST_NAME
+        original = manifest_path.read_bytes()
+        mutated = original.replace(b"linux-x64", b"linux-x65", 1)
+        self.assertEqual(len(original), len(mutated))
+        self.assertNotEqual(original, mutated)
+        initial_files, initial_directories = assembly._scan_tree(output)
+        guard_active = False
+        mutation_attempted = False
+        mutation_blocked = False
+
+        @contextlib.contextmanager
+        def retained_scan(
+            _root: Path,
+            *,
+            share_write: bool,
+        ):
+            nonlocal guard_active
+            self.assertFalse(share_write)
+            self.assertFalse(guard_active)
+            guard_active = True
+            try:
+                yield initial_files, initial_directories
+            finally:
+                guard_active = False
+
+        def authorize(path: Path, **_kwargs: object) -> assembly._WindowsHandleState:
+            info = path.stat()
+            return assembly._WindowsHandleState(
+                (info.st_dev, info.st_ino),
+                info.st_size,
+                info.st_nlink,
+                False,
+                False,
+            )
+
+        def read_windows(path: Path, **kwargs: object) -> bytes:
+            nonlocal mutation_attempted, mutation_blocked
+            payload = path.read_bytes()
+            if path == manifest_path and not mutation_attempted:
+                mutation_attempted = True
+                if guard_active:
+                    mutation_blocked = True
+                else:
+                    manifest_path.write_bytes(mutated)
+            expected_size = kwargs.get("expected_size")
+            expected_sha256 = kwargs.get("expected_sha256")
+            if expected_size is not None and len(payload) != expected_size:
+                assembly._fail("file_size_mismatch", "output")
+            if (
+                expected_sha256 is not None
+                and hashlib.sha256(payload).hexdigest() != expected_sha256
+            ):
+                assembly._fail("file_digest_mismatch", "output")
+            return payload
+
+        with (
+            mock.patch.object(assembly, "_is_windows_native_host", return_value=True),
+            mock.patch.object(
+                assembly,
+                "_retained_windows_tree_scan",
+                side_effect=retained_scan,
+            ),
+            mock.patch.object(
+                assembly,
+                "_authorize_pinned_regular_windows",
+                side_effect=authorize,
+            ),
+            mock.patch.object(
+                assembly,
+                "_read_pinned_regular_windows",
+                side_effect=read_windows,
+            ),
+            mock.patch.object(
+                assembly,
+                "_scan_tree",
+                return_value=(initial_files, initial_directories),
+            ),
+        ):
+            verified = assembly.verify_runtime_tree(output)
+
+        self.assertEqual("linux-x64", verified["target_id"])
+        self.assertTrue(mutation_attempted)
+        self.assertTrue(mutation_blocked)
+        self.assertEqual(original, manifest_path.read_bytes())
+
     def test_tree_verification_rejects_every_unowned_or_changed_entry_kind(self) -> None:
         mutations: list[tuple[str, Callable[[Path, dict[str, object]], None]]] = [
             (
@@ -2236,6 +2531,286 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                 self.assertEqual(caught.exception.code, expected)
                 api.close.assert_not_called()
 
+    def test_windows_output_readers_share_retained_writer_without_admitting_writers(
+        self,
+    ) -> None:
+        class FakeVoid:
+            def __init__(self, value: object = None) -> None:
+                self.value = value
+
+        class FakeHandle:
+            def __init__(self, value: object = None) -> None:
+                self.value = value
+
+        def make_api() -> tuple[assembly._WindowsOutputApi, list[tuple[int, int]]]:
+            api = object.__new__(assembly._WindowsOutputApi)
+            api.ctypes = SimpleNamespace(
+                byref=lambda value: value,
+                cast=lambda value, _kind: SimpleNamespace(
+                    value=value.value if isinstance(value, FakeHandle) else value
+                ),
+                c_void_p=FakeVoid,
+                create_unicode_buffer=lambda value: value,
+                pointer=lambda value: value,
+                sizeof=lambda _value: 1,
+            )
+            api.wintypes = SimpleNamespace(HANDLE=FakeHandle, LPWSTR=object)
+            api.UnicodeString = lambda *_args: object()
+            api.ObjectAttributes = lambda *_args: object()
+            api.IoStatusBlock = lambda: object()
+            calls: list[tuple[int, int]] = []
+            opened: list[tuple[int, int]] = []
+
+            def nt_create(
+                output: FakeHandle,
+                access: int,
+                _attributes: object,
+                _io_status: object,
+                _allocation: object,
+                _file_attributes: int,
+                share: int,
+                _disposition: int,
+                _options: int,
+                _ea: object,
+                _ea_length: int,
+            ) -> int:
+                calls.append((access, share))
+                for existing_access, existing_share in opened:
+                    if (
+                        access & api.GENERIC_READ
+                        and not existing_share & api.FILE_SHARE_READ
+                        or access & api.GENERIC_WRITE
+                        and not existing_share & api.FILE_SHARE_WRITE
+                        or existing_access & api.GENERIC_READ
+                        and not share & api.FILE_SHARE_READ
+                        or existing_access & api.GENERIC_WRITE
+                        and not share & api.FILE_SHARE_WRITE
+                    ):
+                        return 0xC0000043 - (1 << 32)
+                opened.append((access, share))
+                output.value = 70 + len(opened)
+                return 0
+
+            api.NtCreateFile = nt_create
+            api.state = lambda _handle, _field: assembly._WindowsHandleState(
+                (7, 70 + len(opened)),
+                0,
+                1,
+                False,
+                False,
+            )
+            api.close = mock.Mock()
+            return api, calls
+
+        owned_api, owned_calls = make_api()
+        owned_api.relative(
+            7,
+            "retained-writer.bin",
+            directory=False,
+            create=True,
+            field="output",
+        )
+        owned_api.relative(
+            7,
+            "verification-reader.bin",
+            directory=False,
+            create=False,
+            readable=True,
+            share_write=True,
+            field="output",
+        )
+        with self.assertRaises(assembly.RuntimeAssemblyError) as owned_writer:
+            owned_api.relative(
+                7,
+                "third-writer.bin",
+                directory=False,
+                create=True,
+                field="output",
+            )
+        self.assertEqual("output_create_failed", owned_writer.exception.code)
+
+        writer_access, writer_share = owned_calls[0]
+        reader_access, reader_share = owned_calls[1]
+        self.assertTrue(writer_access & owned_api.GENERIC_WRITE)
+        self.assertEqual(owned_api.FILE_SHARE_READ, writer_share)
+        self.assertTrue(reader_access & owned_api.GENERIC_READ)
+        self.assertEqual(
+            owned_api.FILE_SHARE_READ | owned_api.FILE_SHARE_WRITE,
+            reader_share,
+        )
+        self.assertFalse(writer_share & owned_api.FILE_SHARE_WRITE)
+
+        standalone_api, standalone_calls = make_api()
+        standalone_api.relative(
+            7,
+            "standalone-reader.bin",
+            directory=False,
+            create=False,
+            readable=True,
+            share_write=False,
+            field="output",
+        )
+        with self.assertRaises(assembly.RuntimeAssemblyError) as standalone_writer:
+            standalone_api.relative(
+                7,
+                "third-writer.bin",
+                directory=False,
+                create=True,
+                field="output",
+            )
+        self.assertEqual("output_create_failed", standalone_writer.exception.code)
+        self.assertEqual(
+            standalone_api.FILE_SHARE_READ,
+            standalone_calls[0][1],
+        )
+
+    def test_windows_directory_readers_deny_namespace_writers_by_mode(self) -> None:
+        class FakeVoid:
+            def __init__(self, value: object = None) -> None:
+                self.value = value
+
+        class FakeHandle:
+            def __init__(self, value: object = None) -> None:
+                self.value = value
+
+        def make_api() -> tuple[assembly._WindowsOutputApi, list[tuple[int, int]]]:
+            api = object.__new__(assembly._WindowsOutputApi)
+            api.ctypes = SimpleNamespace(
+                byref=lambda value: value,
+                cast=lambda value, _kind: SimpleNamespace(
+                    value=value.value if isinstance(value, FakeHandle) else value
+                ),
+                c_void_p=FakeVoid,
+                create_unicode_buffer=lambda value: value,
+                pointer=lambda value: value,
+                sizeof=lambda _value: 1,
+            )
+            api.wintypes = SimpleNamespace(HANDLE=FakeHandle, LPWSTR=object)
+            api.UnicodeString = lambda *_args: object()
+            api.ObjectAttributes = lambda *_args: object()
+            api.IoStatusBlock = lambda: object()
+            calls: list[tuple[int, int]] = []
+            opened: list[tuple[int, int]] = []
+            read_access = api.FILE_LIST_DIRECTORY | api.FILE_READ_ATTRIBUTES
+            write_access = api.FILE_ADD_FILE | api.FILE_ADD_SUBDIRECTORY | api.FILE_WRITE_ATTRIBUTES
+
+            def nt_create(
+                output: FakeHandle,
+                access: int,
+                _attributes: object,
+                _io_status: object,
+                _allocation: object,
+                _file_attributes: int,
+                share: int,
+                _disposition: int,
+                _options: int,
+                _ea: object,
+                _ea_length: int,
+            ) -> int:
+                calls.append((access, share))
+                for existing_access, existing_share in opened:
+                    if (
+                        access & read_access
+                        and not existing_share & api.FILE_SHARE_READ
+                        or access & write_access
+                        and not existing_share & api.FILE_SHARE_WRITE
+                        or existing_access & read_access
+                        and not share & api.FILE_SHARE_READ
+                        or existing_access & write_access
+                        and not share & api.FILE_SHARE_WRITE
+                    ):
+                        return 0xC0000043 - (1 << 32)
+                opened.append((access, share))
+                output.value = 90 + len(opened)
+                return 0
+
+            api.NtCreateFile = nt_create
+            api.state = lambda _handle, _field: assembly._WindowsHandleState(
+                (9, 90 + len(opened)),
+                0,
+                1,
+                True,
+                False,
+            )
+            api.close = mock.Mock()
+            return api, calls
+
+        creator_api, creator_calls = make_api()
+        creator_api.relative(
+            7,
+            "created",
+            directory=True,
+            create=True,
+            field="output",
+        )
+        with self.assertRaises(assembly.RuntimeAssemblyError) as creator_writer:
+            creator_api.relative(
+                7,
+                "namespace-writer",
+                directory=True,
+                create=False,
+                writable=True,
+                failure_code="output_create_failed",
+                field="output",
+            )
+        self.assertEqual("output_create_failed", creator_writer.exception.code)
+        self.assertEqual(creator_api.FILE_SHARE_READ, creator_calls[0][1])
+
+        standalone_api, standalone_calls = make_api()
+        standalone_api.relative(
+            7,
+            "standalone-reader",
+            directory=True,
+            create=False,
+            share_write=False,
+            field="output",
+        )
+        with self.assertRaises(assembly.RuntimeAssemblyError) as standalone_writer:
+            standalone_api.relative(
+                7,
+                "namespace-writer",
+                directory=True,
+                create=False,
+                writable=True,
+                failure_code="output_create_failed",
+                field="output",
+            )
+        self.assertEqual("output_create_failed", standalone_writer.exception.code)
+        self.assertEqual(standalone_api.FILE_SHARE_READ, standalone_calls[0][1])
+
+        owned_api, owned_calls = make_api()
+        owned_api.relative(
+            7,
+            "retained-creator",
+            directory=True,
+            create=True,
+            field="output",
+        )
+        owned_api.relative(
+            7,
+            "owned-reader",
+            directory=True,
+            create=False,
+            share_write=True,
+            field="output",
+        )
+        with self.assertRaises(assembly.RuntimeAssemblyError) as owned_writer:
+            owned_api.relative(
+                7,
+                "namespace-writer",
+                directory=True,
+                create=False,
+                writable=True,
+                failure_code="output_create_failed",
+                field="output",
+            )
+        self.assertEqual("output_create_failed", owned_writer.exception.code)
+        self.assertEqual(owned_api.FILE_SHARE_READ, owned_calls[0][1])
+        self.assertEqual(
+            owned_api.FILE_SHARE_READ | owned_api.FILE_SHARE_WRITE,
+            owned_calls[1][1],
+        )
+
     def test_windows_directory_entries_bound_paginated_rows_including_dots(
         self,
     ) -> None:
@@ -2307,6 +2882,21 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             api.directory_entries(7, "forge_source_root")
         self.assertEqual("output_limit_exceeded", caught.exception.code)
         self.assertEqual([1, 2], calls)
+
+    def test_windows_output_directory_query_uses_output_contract(self) -> None:
+        api, calls = _windows_directory_query_api(
+            [(0xC0000001 - (1 << 32), b"")],
+        )
+        chain = object.__new__(assembly._WindowsDirectoryChain)
+        chain.api = api
+        chain.field = "output"
+
+        with self.assertRaises(assembly.RuntimeAssemblyError) as caught:
+            chain.directory_entries(7)
+
+        self.assertEqual("output_tree_unsafe", caught.exception.code)
+        self.assertEqual("output", caught.exception.field)
+        self.assertEqual([1], calls)
 
     def test_windows_directory_entries_reject_nonprogress_and_bad_offsets(
         self,
@@ -2962,8 +3552,6 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         self,
     ) -> None:
         source_directory = self.source / "src/isoworld"
-        _write(source_directory / "A.py", b"A")
-        _write(source_directory / "a.py", b"a")
         original_scandir = assembly.os.scandir
 
         def exercise(mode: str, expected: str) -> None:
@@ -2975,6 +3563,7 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                     self._next_handle = 101
                     self.handle_paths = {self.leaf: path}
                     self.regular_paths: dict[int, Path] = {}
+                    self.synthetic_payloads: dict[int, bytes] = {}
 
                 def retain_directory(
                     self,
@@ -2993,24 +3582,33 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                 ) -> tuple[assembly._WindowsDirectoryEntry, ...]:
                     directory = self.handle_paths[handle]
                     with original_scandir(directory) as entries:
-                        rows = list(entries)
-                    if directory == source_directory:
-                        priority = {"A.py": 0, "a.py": 1}
-                        rows.sort(
-                            key=lambda entry: (
-                                priority.get(entry.name, 2),
-                                os.fsencode(entry.name),
+                        rows = tuple(
+                            assembly._WindowsDirectoryEntry(
+                                entry.name,
+                                entry.is_dir(follow_symlinks=False),
+                                entry.is_symlink(),
+                                entry.inode(),
                             )
+                            for entry in entries
+                            if entry.name not in {"A.py", "a.py"}
                         )
-                    return tuple(
-                        assembly._WindowsDirectoryEntry(
-                            entry.name,
-                            entry.is_dir(follow_symlinks=False),
-                            entry.is_symlink(),
-                            entry.inode(),
+                    if directory == source_directory:
+                        return (
+                            assembly._WindowsDirectoryEntry(
+                                "A.py",
+                                False,
+                                False,
+                                13_000_001,
+                            ),
+                            assembly._WindowsDirectoryEntry(
+                                "a.py",
+                                False,
+                                False,
+                                13_000_002,
+                            ),
+                            *rows,
                         )
-                        for entry in rows
-                    )
+                    return rows
 
                 def retain_regular(
                     self,
@@ -3025,7 +3623,13 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                     path = self.handle_paths[parent] / name
                     handle = self._next_handle
                     self._next_handle += 1
-                    self.regular_paths[handle] = path
+                    synthetic = {"A.py": b"A", "a.py": b"a"}.get(name)
+                    if synthetic is None:
+                        self.regular_paths[handle] = path
+                        size = path.stat().st_size
+                    else:
+                        self.synthetic_payloads[handle] = synthetic
+                        size = len(synthetic)
                     return assembly._WindowsRetainedRegular(
                         logical_path,
                         parent,
@@ -3033,7 +3637,7 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                         handle,
                         assembly._WindowsHandleState(
                             (13, handle),
-                            path.stat().st_size,
+                            size,
                             1,
                             False,
                             False,
@@ -3046,6 +3650,8 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                     **_kwargs: object,
                 ) -> bytes:
                     events.append(("read", opened.name))
+                    if opened.handle in self.synthetic_payloads:
+                        return self.synthetic_payloads[opened.handle]
                     return self.regular_paths[opened.handle].read_bytes()
 
                 def require_bindings(self) -> None:

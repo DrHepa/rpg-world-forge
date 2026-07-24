@@ -23,7 +23,8 @@ import tarfile
 import time
 import unicodedata
 import zipfile
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, NoReturn
@@ -505,6 +506,7 @@ def _read_pinned_regular(
     max_bytes: int,
     expected_size: int | None = None,
     expected_sha256: str | None = None,
+    windows_share_write: bool = False,
 ) -> bytes:
     if _is_windows_native_host():
         return _read_pinned_regular_windows(
@@ -513,6 +515,7 @@ def _read_pinned_regular(
             max_bytes=max_bytes,
             expected_size=expected_size,
             expected_sha256=expected_sha256,
+            share_write=windows_share_write,
         )
     absolute = _lexical_absolute(path, field)
     parents = _directory_chain(absolute.parent, field)
@@ -3861,6 +3864,7 @@ class _WindowsOutputApi:
         create: bool,
         writable: bool = False,
         readable: bool = False,
+        share_write: bool = False,
         missing_code: str | None = None,
         failure_code: str | None = None,
         field: str,
@@ -3890,7 +3894,12 @@ class _WindowsOutputApi:
                 access |= (
                     self.FILE_ADD_FILE | self.FILE_ADD_SUBDIRECTORY | self.FILE_WRITE_ATTRIBUTES
                 )
-            share = self.FILE_SHARE_READ | self.FILE_SHARE_WRITE
+            share = self.FILE_SHARE_READ
+            if not create and not writable and share_write:
+                # Owned-output verification readers must coexist with the
+                # retained creator. Creator and standalone directory handles
+                # deny every later namespace writer.
+                share |= self.FILE_SHARE_WRITE
             options = (
                 self.FILE_DIRECTORY_FILE
                 | self.FILE_OPEN_REPARSE_POINT
@@ -3906,11 +3915,13 @@ class _WindowsOutputApi:
                 | (self.FILE_WRITE_ATTRIBUTES if create else 0)
                 | self.SYNCHRONIZE
             )
-            share = (
-                self.FILE_SHARE_READ
-                if create or readable
-                else self.FILE_SHARE_READ | self.FILE_SHARE_WRITE
-            )
+            share = self.FILE_SHARE_READ
+            if not create and share_write:
+                # Owned-output verification must share the retained creator's
+                # existing write access. The creator still denies every later
+                # writer. Standalone readers leave this disabled and therefore
+                # deny writers themselves.
+                share |= self.FILE_SHARE_WRITE
             options = (
                 self.FILE_NON_DIRECTORY_FILE
                 | self.FILE_OPEN_REPARSE_POINT
@@ -3985,6 +3996,8 @@ class _WindowsOutputApi:
         self,
         handle: int,
         field: str,
+        *,
+        unsafe_code: str = "forge_material_unsafe",
     ) -> tuple[_WindowsDirectoryEntry, ...]:
         entries: list[_WindowsDirectoryEntry] = []
         seen_names: set[str] = set()
@@ -4017,16 +4030,16 @@ class _WindowsOutputApi:
             if status_code == self.STATUS_NO_MORE_FILES:
                 break
             if status < 0:
-                _fail("forge_material_unsafe", field)
+                _fail(unsafe_code, field)
             returned = int(io_status.Information)
             if returned <= 0 or returned > len(buffer):
-                _fail("forge_material_unsafe", field)
+                _fail(unsafe_code, field)
             offset = 0
             page_rows: list[_WindowsDirectoryEntry] = []
             while True:
                 remaining = returned - offset
                 if remaining < self.DIRECTORY_INFORMATION_HEADER.size:
-                    _fail("forge_material_unsafe", field)
+                    _fail(unsafe_code, field)
                 row = self.DIRECTORY_INFORMATION_HEADER.unpack_from(buffer, offset)
                 next_offset = int(row[0])
                 attributes = int(row[8])
@@ -4037,7 +4050,7 @@ class _WindowsOutputApi:
                     or name_bytes % 2
                     or name_bytes > remaining - self.DIRECTORY_INFORMATION_HEADER.size
                 ):
-                    _fail("forge_material_unsafe", field)
+                    _fail(unsafe_code, field)
                 name_start = offset + self.DIRECTORY_INFORMATION_HEADER.size
                 try:
                     name = bytes(buffer[name_start : name_start + name_bytes]).decode(
@@ -4045,9 +4058,9 @@ class _WindowsOutputApi:
                         "strict",
                     )
                 except UnicodeError:
-                    _fail("forge_material_unsafe", field)
+                    _fail(unsafe_code, field)
                 if not name:
-                    _fail("forge_material_unsafe", field)
+                    _fail(unsafe_code, field)
                 if file_id == 0 and name not in {".", ".."}:
                     _fail("filesystem_identity_unavailable", field)
                 page_rows.append(
@@ -4062,10 +4075,10 @@ class _WindowsOutputApi:
                 aligned_record_size = (record_size + 7) & ~7
                 if next_offset == 0:
                     if remaining < record_size or remaining > aligned_record_size:
-                        _fail("forge_material_unsafe", field)
+                        _fail(unsafe_code, field)
                     break
                 if next_offset != aligned_record_size or next_offset >= remaining:
-                    _fail("forge_material_unsafe", field)
+                    _fail(unsafe_code, field)
                 offset += next_offset
             page_names = {entry.name for entry in page_rows}
             if (
@@ -4073,7 +4086,7 @@ class _WindowsOutputApi:
                 or len(page_names) != len(page_rows)
                 or page_names.intersection(seen_names)
             ):
-                _fail("forge_material_unsafe", field)
+                _fail(unsafe_code, field)
             if parsed_rows + len(page_rows) > MAX_OUTPUT_NODES:
                 _fail("output_limit_exceeded", "output")
             parsed_rows += len(page_rows)
@@ -4120,11 +4133,14 @@ class _WindowsDirectoryChain:
         field: str,
         *,
         writable_leaf: bool = True,
+        share_write: bool = False,
         missing_code: str | None = None,
         unsafe_code: str | None = None,
     ) -> None:
         self.api = _windows_output_api()
         self.field = field
+        self.share_write = share_write
+        self.writable_leaf = writable_leaf
         absolute = _lexical_absolute(path, field)
         windows = PureWindowsPath(os.fspath(absolute))
         if not windows.is_absolute() or not windows.anchor:
@@ -4146,6 +4162,7 @@ class _WindowsDirectoryChain:
                     directory=True,
                     create=False,
                     writable=writable_leaf and index == len(components) - 1,
+                    share_write=share_write,
                     missing_code=missing_code,
                     failure_code=unsafe_code,
                     field=field,
@@ -4188,6 +4205,7 @@ class _WindowsDirectoryChain:
             directory=True,
             create=False,
             writable=False,
+            share_write=getattr(self, "share_write", False),
             missing_code=missing_code,
             failure_code=unsafe_code,
             field=self.field,
@@ -4220,7 +4238,12 @@ class _WindowsDirectoryChain:
                 )
 
     def directory_entries(self, handle: int) -> tuple[_WindowsDirectoryEntry, ...]:
-        return self.api.directory_entries(handle, self.field)
+        unsafe_code = "output_tree_unsafe" if self.field == "output" else "forge_material_unsafe"
+        return self.api.directory_entries(
+            handle,
+            self.field,
+            unsafe_code=unsafe_code,
+        )
 
     def retain_regular(
         self,
@@ -4239,6 +4262,7 @@ class _WindowsDirectoryChain:
             directory=False,
             create=False,
             readable=readable,
+            share_write=getattr(self, "share_write", False),
             missing_code=missing_code,
             failure_code=unsafe_code,
             field=self.field,
@@ -4322,6 +4346,7 @@ class _WindowsDirectoryChain:
             opened.name,
             directory=False,
             create=False,
+            share_write=getattr(self, "share_write", False),
             field=self.field,
         )
         try:
@@ -4361,6 +4386,14 @@ class _WindowsDirectoryChain:
                 binding.name,
                 directory=binding.is_directory,
                 create=False,
+                share_write=(
+                    getattr(self, "share_write", False)
+                    or (
+                        binding.is_directory
+                        and binding.handle == getattr(self, "root_handle", -1)
+                        and getattr(self, "writable_leaf", False)
+                    )
+                ),
                 field=self.field,
             )
             try:
@@ -4405,6 +4438,7 @@ def _open_pinned_regular_windows(
     *,
     field: str,
     readable: bool,
+    share_write: bool = False,
     max_bytes: int | None = None,
     expected_size: int | None = None,
     size_guard: Callable[[int], None] | None = None,
@@ -4412,13 +4446,14 @@ def _open_pinned_regular_windows(
     unsafe_code: str = "file_unsafe",
 ) -> tuple[Path, _WindowsDirectoryChain, int, _WindowsHandleState]:
     absolute = _lexical_absolute(path, field)
-    chain = _WindowsDirectoryChain(
-        absolute.parent,
-        field,
-        writable_leaf=False,
-        missing_code="unsafe_parent",
-        unsafe_code="unsafe_parent",
-    )
+    chain_options: dict[str, object] = {
+        "writable_leaf": False,
+        "missing_code": "unsafe_parent",
+        "unsafe_code": "unsafe_parent",
+    }
+    if share_write:
+        chain_options["share_write"] = True
+    chain = _WindowsDirectoryChain(absolute.parent, field, **chain_options)
     handle = -1
     try:
         handle = chain.api.relative(
@@ -4427,6 +4462,7 @@ def _open_pinned_regular_windows(
             directory=False,
             create=False,
             readable=readable,
+            share_write=share_write,
             missing_code=missing_code,
             failure_code=unsafe_code,
             field=field,
@@ -4461,6 +4497,7 @@ def _confirm_pinned_regular_windows(
         directory=False,
         create=False,
         readable=False,
+        share_write=getattr(chain, "share_write", False),
         field=field,
     )
     try:
@@ -4478,6 +4515,7 @@ def _authorize_pinned_regular_windows(
     path: Path,
     *,
     field: str,
+    share_write: bool = False,
     missing_code: str = "file_missing",
     unsafe_code: str = "file_unsafe",
 ) -> _WindowsHandleState:
@@ -4485,6 +4523,7 @@ def _authorize_pinned_regular_windows(
         path,
         field=field,
         readable=False,
+        share_write=share_write,
         missing_code=missing_code,
         unsafe_code=unsafe_code,
     )
@@ -4546,6 +4585,7 @@ def _read_pinned_regular_windows(
     expected_size: int | None = None,
     expected_sha256: str | None = None,
     size_guard: Callable[[int], None] | None = None,
+    share_write: bool = False,
     missing_code: str = "file_missing",
     unsafe_code: str = "file_unsafe",
 ) -> bytes:
@@ -4553,6 +4593,7 @@ def _read_pinned_regular_windows(
         path,
         field=field,
         readable=True,
+        share_write=share_write,
         max_bytes=max_bytes,
         expected_size=expected_size,
         size_guard=size_guard,
@@ -4981,6 +5022,7 @@ class _WindowsOwnedOutput:
                 binding.name,
                 directory=binding.is_directory,
                 create=False,
+                share_write=True,
                 field="output",
             )
             try:
@@ -5220,6 +5262,7 @@ class _WindowsPublishedFile:
             self.destination.name,
             directory=False,
             create=False,
+            share_write=True,
             field=self.field,
         )
         try:
@@ -5278,7 +5321,7 @@ def assemble_runtime_resources(plan: AssemblyPlan, output_root: Path) -> Assembl
             ).values()
         )
         owner._require_all_bindings()
-        verified = verify_runtime_tree(output_root)
+        verified = verify_runtime_tree(output_root, _owned_output=True)
         owner._require_all_bindings()
         if verified != manifest:
             _fail("output_verification_failed", "output")
@@ -5290,10 +5333,159 @@ def assemble_runtime_resources(plan: AssemblyPlan, output_root: Path) -> Assembl
     )
 
 
+def _windows_scan_state(state: _WindowsHandleState) -> _FileState:
+    return _FileState(
+        identity=state.identity,
+        size=state.size,
+        mtime_ns=0,
+        ctime_ns=0,
+        mode_type=stat.S_IFDIR if state.is_directory else stat.S_IFREG,
+        nlink=state.nlink,
+    )
+
+
+@contextmanager
+def _retained_windows_tree_scan(
+    root: Path,
+    *,
+    share_write: bool,
+) -> Iterator[tuple[dict[str, _FileState], dict[str, _FileState]]]:
+    guard = _WindowsDirectoryChain(
+        root,
+        "output",
+        writable_leaf=False,
+        share_write=share_write,
+        missing_code="file_missing",
+        unsafe_code="output_tree_unsafe",
+    )
+    files: dict[str, _FileState] = {}
+    directories: dict[str, _FileState] = {}
+    inventories: dict[PurePosixPath, tuple[_WindowsDirectoryEntry, ...]] = {}
+    retained_directories: dict[PurePosixPath, int] = {
+        PurePosixPath("."): guard.leaf,
+    }
+    namespace = _output_namespace_budget("output_limit_exceeded", "output")
+    stack: list[PurePosixPath] = [PurePosixPath(".")]
+
+    def require_current() -> None:
+        guard.require_bindings()
+        for relative, handle in retained_directories.items():
+            try:
+                current = tuple(guard.directory_entries(handle))
+            except RuntimeAssemblyError:
+                raise
+            except OSError:
+                _fail("output_tree_unsafe", "output")
+            try:
+                current = tuple(
+                    sorted(
+                        current,
+                        key=lambda entry: entry.name.encode("utf-8", "strict"),
+                    )
+                )
+            except UnicodeError:
+                _fail("output_tree_unsafe", "output")
+            if current != inventories[relative]:
+                _fail("filesystem_identity_changed", "output")
+        guard.require_bindings()
+
+    try:
+        while stack:
+            relative = stack.pop()
+            current_handle = retained_directories[relative]
+            try:
+                entries = tuple(guard.directory_entries(current_handle))
+            except RuntimeAssemblyError:
+                raise
+            except OSError:
+                _fail("output_tree_unsafe", "output")
+            if len(entries) > MAX_OUTPUT_NODES:
+                _fail("output_limit_exceeded", "output")
+            if len({entry.name for entry in entries}) != len(entries):
+                _fail("output_tree_unsafe", "output")
+            try:
+                ordered = tuple(
+                    sorted(
+                        entries,
+                        key=lambda entry: entry.name.encode("utf-8", "strict"),
+                    )
+                )
+            except UnicodeError:
+                _fail("output_tree_unsafe", "output")
+            inventories[relative] = ordered
+            child_directories: list[PurePosixPath] = []
+            for entry in ordered:
+                child_relative = (
+                    PurePosixPath(entry.name)
+                    if relative == PurePosixPath(".")
+                    else relative / entry.name
+                )
+                portable = _portable_path(child_relative.as_posix(), "output")
+                logical_path = root.joinpath(*child_relative.parts)
+                if entry.is_reparse:
+                    _fail("output_tree_unsafe", "output")
+                if entry.is_directory:
+                    namespace.add_directory(portable)
+                    handle = guard.retain_directory(
+                        current_handle,
+                        entry.name,
+                        missing_code="output_tree_unsafe",
+                        unsafe_code="output_tree_unsafe",
+                        expected_file_id=entry.file_id,
+                    )
+                    state = guard.api.state(handle, "output")
+                    if state.is_reparse or not state.is_directory:
+                        _fail("output_tree_unsafe", "output")
+                    retained_directories[child_relative] = handle
+                    directories[portable] = _windows_scan_state(state)
+                    child_directories.append(child_relative)
+                    continue
+                namespace.add_file(portable)
+                retained = guard.retain_regular(
+                    current_handle,
+                    entry.name,
+                    logical_path,
+                    readable=False,
+                    missing_code="output_tree_unsafe",
+                    unsafe_code="output_tree_unsafe",
+                    expected_file_id=entry.file_id,
+                )
+                if (
+                    retained.state.is_reparse
+                    or retained.state.is_directory
+                    or retained.state.nlink != 1
+                ):
+                    _fail("output_tree_unsafe", "output")
+                files[portable] = _windows_scan_state(retained.state)
+            stack.extend(reversed(child_directories))
+
+        require_current()
+        yield files, directories
+        require_current()
+    finally:
+        _attempt_cleanups(
+            (guard.close,),
+            context="Windows output-tree scan cleanup failed",
+        )
+
+
+def _scan_tree_windows(
+    root: Path,
+    *,
+    share_write: bool,
+) -> tuple[dict[str, _FileState], dict[str, _FileState]]:
+    with _retained_windows_tree_scan(root, share_write=share_write) as scanned:
+        return scanned
+
+
 def _scan_tree(
     root: Path,
+    *,
+    windows_share_write: bool = False,
 ) -> tuple[dict[str, _FileState], dict[str, _FileState]]:
     root = _lexical_absolute(root, "output")
+    if _is_windows_native_host():
+        return _scan_tree_windows(root, share_write=windows_share_write)
     chain = _directory_chain(root, "output")
     files: dict[str, _FileState] = {}
     directories: dict[str, _FileState] = {}
@@ -5348,18 +5540,55 @@ def _scan_tree(
     return files, directories
 
 
-def verify_runtime_tree(output_root: Path) -> dict[str, Any]:
+def verify_runtime_tree(
+    output_root: Path,
+    *,
+    _owned_output: bool = False,
+) -> dict[str, Any]:
     """Verify an assembled tree against its canonical package manifest."""
 
     root = _lexical_absolute(output_root, "output")
-    try:
-        manifest_initial = _state((root / PACKAGE_MANIFEST_NAME).lstat())
-    except OSError:
-        _fail("file_missing", "manifest")
+    if _is_windows_native_host():
+        with _retained_windows_tree_scan(
+            root,
+            share_write=_owned_output,
+        ) as windows_scan:
+            return _verify_runtime_tree_transaction(
+                root,
+                owned_output=_owned_output,
+                windows_scan=windows_scan,
+            )
+    return _verify_runtime_tree_transaction(
+        root,
+        owned_output=_owned_output,
+        windows_scan=None,
+    )
+
+
+def _verify_runtime_tree_transaction(
+    root: Path,
+    *,
+    owned_output: bool,
+    windows_scan: tuple[dict[str, _FileState], dict[str, _FileState]] | None,
+) -> dict[str, Any]:
+    if _is_windows_native_host():
+        manifest_initial = _windows_scan_state(
+            _authorize_pinned_regular_windows(
+                root / PACKAGE_MANIFEST_NAME,
+                field="manifest",
+                share_write=owned_output,
+            )
+        )
+    else:
+        try:
+            manifest_initial = _state((root / PACKAGE_MANIFEST_NAME).lstat())
+        except OSError:
+            _fail("file_missing", "manifest")
     manifest_bytes = _read_pinned_regular(
         root / PACKAGE_MANIFEST_NAME,
         field="manifest",
         max_bytes=MAX_PACKAGE_MANIFEST_BYTES,
+        windows_share_write=owned_output,
     )
     try:
         manifest = load_strict_json_bytes(
@@ -5377,6 +5606,7 @@ def verify_runtime_tree(output_root: Path) -> dict[str, Any]:
             root.joinpath(*PurePosixPath(NORMALIZATION_PACKAGE_PATH).parts),
             field="normalization",
             max_bytes=NORMALIZATION_SIZE,
+            windows_share_write=owned_output,
         )
         if _manifest_uses_linux_pbs(manifest)
         else None
@@ -5386,6 +5616,7 @@ def verify_runtime_tree(output_root: Path) -> dict[str, Any]:
             root / RUNTIME_SOURCES_PACKAGE_PATH,
             field="runtime_sources",
             max_bytes=RUNTIME_SOURCES_SIZE,
+            windows_share_write=owned_output,
         )
         if type(manifest) is dict
         and manifest.get("assembly_kind") == "verified_development_runtime"
@@ -5409,7 +5640,9 @@ def verify_runtime_tree(output_root: Path) -> dict[str, Any]:
         if normalization_payload is not None
         else None
     )
-    actual_files, actual_directories = _scan_tree(root)
+    actual_files, actual_directories = (
+        windows_scan if windows_scan is not None else _scan_tree(root)
+    )
     _validate_portable_path_aliases(
         actual_files,
         normalization=normalization,
@@ -5427,6 +5660,7 @@ def verify_runtime_tree(output_root: Path) -> dict[str, Any]:
             max_bytes=MAX_ARCHIVE_MEMBER_BYTES,
             expected_size=entry["size"],
             expected_sha256=entry["sha256"],
+            windows_share_write=owned_output,
         )
         total += len(payload)
         if total > MAX_OUTPUT_BYTES:
@@ -5437,20 +5671,36 @@ def verify_runtime_tree(output_root: Path) -> dict[str, Any]:
             mode = stat.S_IMODE(root.joinpath(*PurePosixPath(entry["path"]).parts).lstat().st_mode)
             if mode != entry["mode"]:
                 _fail("output_mode_mismatch", "output")
-    try:
-        manifest_final = (root / PACKAGE_MANIFEST_NAME).lstat()
-    except OSError:
+    if _is_windows_native_host():
+        manifest_final = _windows_scan_state(
+            _authorize_pinned_regular_windows(
+                root / PACKAGE_MANIFEST_NAME,
+                field="manifest",
+                share_write=owned_output,
+            )
+        )
+        final_files, final_directories = _scan_tree(
+            root,
+            windows_share_write=owned_output,
+        )
+        if final_files != actual_files or final_directories != actual_directories:
+            _fail("filesystem_identity_changed", "output")
+    else:
+        try:
+            manifest_final_info = (root / PACKAGE_MANIFEST_NAME).lstat()
+        except OSError:
+            _fail("filesystem_identity_changed", "output")
+        manifest_final = _state(manifest_final_info)
+        for records in (actual_directories, actual_files):
+            for relative, expected in records.items():
+                try:
+                    current = root.joinpath(*PurePosixPath(relative).parts).lstat()
+                except OSError:
+                    _fail("filesystem_identity_changed", "output")
+                if _is_link_or_reparse(current) or _state(current) != expected:
+                    _fail("filesystem_identity_changed", "output")
+    if manifest_final != manifest_initial:
         _fail("filesystem_identity_changed", "output")
-    if _state(manifest_final) != manifest_initial:
-        _fail("filesystem_identity_changed", "output")
-    for records in (actual_directories, actual_files):
-        for relative, expected in records.items():
-            try:
-                current = root.joinpath(*PurePosixPath(relative).parts).lstat()
-            except OSError:
-                _fail("filesystem_identity_changed", "output")
-            if _is_link_or_reparse(current) or _state(current) != expected:
-                _fail("filesystem_identity_changed", "output")
     return manifest
 
 
