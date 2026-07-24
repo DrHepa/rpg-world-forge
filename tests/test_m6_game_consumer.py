@@ -53,6 +53,12 @@ WORLDPACK = ROOT / "content/compiled/foundation.worldpack.json"
 M6_FIXTURES = ROOT / "examples/m6-contracts"
 
 
+def _subprocess_environment() -> dict[str, str]:
+    environment = dict(os.environ)
+    environment["PYTHONUTF8"] = "1"
+    return environment
+
+
 class M6GameConsumerTests(unittest.TestCase):
     @staticmethod
     def _reseal_catalog_tip(
@@ -581,11 +587,33 @@ class M6GameConsumerTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, "-I", "run_game.py", *arguments],
             cwd=game,
-            env={"PYTHONUTF8": "1"},
+            env=_subprocess_environment(),
             capture_output=True,
             text=True,
             check=False,
         )
+
+    @staticmethod
+    def _open_regular_test_descriptor(root: Path) -> int:
+        path = root / "descriptor.bin"
+        path.write_bytes(b"descriptor")
+        return os.open(path, os.O_RDONLY)
+
+    def test_subprocess_environment_preserves_windows_home_contract(self) -> None:
+        windows_environment = {
+            "HOMEDRIVE": "C:",
+            "HOMEPATH": "\\Users\\runneradmin",
+            "PATH": "C:\\Windows\\System32",
+            "SYSTEMROOT": "C:\\Windows",
+            "USERPROFILE": "C:\\Users\\runneradmin",
+        }
+        with patch.dict(os.environ, windows_environment, clear=True):
+            environment = _subprocess_environment()
+        self.assertEqual(
+            windows_environment,
+            {key: environment[key] for key in windows_environment},
+        )
+        self.assertEqual("1", environment["PYTHONUTF8"])
 
     def test_owned_bundle_copy_uses_portable_directory_flush(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1030,10 +1058,12 @@ class M6GameConsumerTests(unittest.TestCase):
                 separators=(",", ":"),
             ).encode("utf-8")
             payload["content_hash"] = hashlib.sha256(encoded).hexdigest()
-            (game_data / "compositions.lock.json").write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            catalog_path = game_data / "compositions.lock.json"
+            catalog_bytes = (
+                json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            catalog_path.write_bytes(catalog_bytes)
+            self.assertEqual(canonical_json_bytes(payload), catalog_path.read_bytes())
             self.assertEqual((), load_composed_catalog(root))
 
     def test_multiple_imports_append_immutable_catalog_generations(self) -> None:
@@ -1071,8 +1101,11 @@ class M6GameConsumerTests(unittest.TestCase):
                     )
                 ),
             )
-            base = json.loads((game / "game_data/compositions.lock.json").read_bytes())
+            base_path = game / "game_data/compositions.lock.json"
+            base_bytes = base_path.read_bytes()
+            base = json.loads(base_bytes)
             self.assertEqual([], base["entries"])
+            self.assertEqual(canonical_json_bytes(base), base_bytes)
 
     def test_same_world_hash_allows_multiple_verified_composed_variants(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1127,7 +1160,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     str(package),
                 ],
                 cwd=game,
-                env={"PYTHONUTF8": "1"},
+                env=_subprocess_environment(),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -1214,7 +1247,7 @@ class M6GameConsumerTests(unittest.TestCase):
             verified = subprocess.run(
                 [sys.executable, "-I", "scripts/verify_game.py"],
                 cwd=game,
-                env={"PYTHONUTF8": "1"},
+                env=_subprocess_environment(),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -1237,7 +1270,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     str(package),
                 ],
                 cwd=game,
-                env={"PYTHONUTF8": "1"},
+                env=_subprocess_environment(),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -1873,7 +1906,7 @@ class M6GameConsumerTests(unittest.TestCase):
 
     def test_composed_bundle_descriptor_cleanup_preserves_primary_identity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            descriptor = os.open(Path(directory), os.O_RDONLY)
+            descriptor = self._open_regular_test_descriptor(Path(directory))
             original_close = os.close
             primary = composed_bundle_module.ComposedBundleError("bundle primary")
             cleanup = OSError("bundle close\ncleanup")
@@ -1899,7 +1932,7 @@ class M6GameConsumerTests(unittest.TestCase):
 
     def test_composed_bundle_descriptor_cleanup_only_is_contract_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            descriptor = os.open(Path(directory), os.O_RDONLY)
+            descriptor = self._open_regular_test_descriptor(Path(directory))
             original_close = os.close
             cleanup = OSError("bundle cleanup-only")
             try:
@@ -1917,7 +1950,7 @@ class M6GameConsumerTests(unittest.TestCase):
 
     def test_composed_game_descriptor_cleanup_preserves_primary_identity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            descriptor = os.open(Path(directory), os.O_RDONLY)
+            descriptor = self._open_regular_test_descriptor(Path(directory))
             original_close = os.close
             primary = ComposedGameError("game primary")
             cleanup = OSError("game close\ncleanup")
@@ -1943,7 +1976,7 @@ class M6GameConsumerTests(unittest.TestCase):
 
     def test_composed_game_descriptor_cleanup_only_is_contract_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            descriptor = os.open(Path(directory), os.O_RDONLY)
+            descriptor = self._open_regular_test_descriptor(Path(directory))
             original_close = os.close
             cleanup = OSError("game cleanup-only")
             try:
@@ -1961,7 +1994,7 @@ class M6GameConsumerTests(unittest.TestCase):
 
     def test_game_control_descriptor_cleanup_preserves_primary_identity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            descriptor = os.open(Path(directory), os.O_RDONLY)
+            descriptor = self._open_regular_test_descriptor(Path(directory))
             original_close = os.close
             primary = game_control_io_module.GameControlIOError("control primary")
             cleanup = OSError("control close\ncleanup")
@@ -1987,7 +2020,7 @@ class M6GameConsumerTests(unittest.TestCase):
 
     def test_game_control_descriptor_cleanup_only_is_contract_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            descriptor = os.open(Path(directory), os.O_RDONLY)
+            descriptor = self._open_regular_test_descriptor(Path(directory))
             original_close = os.close
             cleanup = OSError("control cleanup-only")
             try:
@@ -2156,7 +2189,7 @@ class M6GameConsumerTests(unittest.TestCase):
                 raise cleanup
 
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             expected_identity = (1, 2)
             with (
                 patch.object(
@@ -2312,7 +2345,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     str(root / "render-ghost.zip"),
                 ],
                 cwd=game,
-                env={"PYTHONUTF8": "1"},
+                env=_subprocess_environment(),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -2493,7 +2526,7 @@ class M6GameConsumerTests(unittest.TestCase):
             verified = subprocess.run(
                 [sys.executable, "-I", "scripts/verify_game.py"],
                 cwd=game,
-                env={"PYTHONUTF8": "1"},
+                env=_subprocess_environment(),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -2511,7 +2544,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     str(package),
                 ],
                 cwd=game,
-                env={"PYTHONUTF8": "1"},
+                env=_subprocess_environment(),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -2530,7 +2563,7 @@ class M6GameConsumerTests(unittest.TestCase):
                 title="M6 Consumer",
                 source_revision="test",
             )
-            environment = {"PYTHONUTF8": "1"}
+            environment = _subprocess_environment()
             headless = subprocess.run(
                 [sys.executable, "-I", "run_game.py", "--headless-ticks", "0"],
                 cwd=game,
@@ -2632,7 +2665,7 @@ class M6GameConsumerTests(unittest.TestCase):
             verified = subprocess.run(
                 [sys.executable, "-I", "scripts/verify_game.py"],
                 cwd=game,
-                env={"PYTHONUTF8": "1"},
+                env=_subprocess_environment(),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -2648,7 +2681,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     str(package),
                 ],
                 cwd=game,
-                env={"PYTHONUTF8": "1"},
+                env=_subprocess_environment(),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -2759,6 +2792,12 @@ class M6GameConsumerTests(unittest.TestCase):
             create_game_project(game, game_id="recovery_game", title="Recovery Game")
             from worldforge import composed_game as module
 
+            catalog_path = game / "game_data/compositions.lock.json"
+            catalog_bytes = catalog_path.read_bytes()
+            self.assertEqual(
+                canonical_json_bytes(json.loads(catalog_bytes)),
+                catalog_bytes,
+            )
             publish = module.publish_directory_noreplace
 
             def move_then_raise(source: Path, destination: Path):
@@ -2779,7 +2818,8 @@ class M6GameConsumerTests(unittest.TestCase):
                     expected_bundle_hash=bundle_hash,
                 )
             self.assertFalse((game / ".composed-import.journal.json").exists())
-            catalog = json.loads((game / "game_data/compositions.lock.json").read_bytes())
+            self.assertEqual(catalog_bytes, catalog_path.read_bytes())
+            catalog = json.loads(catalog_bytes)
             self.assertEqual([], catalog["entries"])
             recovered = import_composed_bundle(
                 bundle,
