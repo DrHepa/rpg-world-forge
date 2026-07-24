@@ -143,6 +143,10 @@ _READ_TEST_HOOK: _ReadHook | None = None
 _WRITE_TEST_HOOK: _ReadHook | None = None
 
 
+def _is_windows_native_host() -> bool:
+    return os.name == "nt"
+
+
 class RuntimeAssemblyError(ValueError):
     """A redacted, machine-readable assembly contract failure."""
 
@@ -432,6 +436,14 @@ def _read_pinned_regular(
     expected_size: int | None = None,
     expected_sha256: str | None = None,
 ) -> bytes:
+    if _is_windows_native_host():
+        return _read_pinned_regular_windows(
+            path,
+            field=field,
+            max_bytes=max_bytes,
+            expected_size=expected_size,
+            expected_sha256=expected_sha256,
+        )
     absolute = _lexical_absolute(path, field)
     parents = _directory_chain(absolute.parent, field)
     try:
@@ -1609,6 +1621,43 @@ def _read_archive_payload(spec: ArchiveSpec) -> tuple[_PayloadFile, ...]:
     return tuple(selected)
 
 
+def _authorize_forge_material_windows(path: Path) -> _WindowsHandleState:
+    return _authorize_pinned_regular_windows(
+        path,
+        field="forge_source_root",
+        missing_code="forge_material_missing",
+        unsafe_code="forge_material_unsafe",
+    )
+
+
+def _open_forge_material_windows(
+    path: Path,
+) -> tuple[Path, _WindowsDirectoryChain, int, _WindowsHandleState]:
+    return _open_pinned_regular_windows(
+        path,
+        field="forge_source_root",
+        readable=True,
+        missing_code="forge_material_missing",
+        unsafe_code="forge_material_unsafe",
+    )
+
+
+def _read_forge_material_windows(
+    path: Path,
+    *,
+    max_bytes: int,
+    budget: _PackageOutputBudget,
+) -> bytes:
+    return _read_pinned_regular_windows(
+        path,
+        field="forge_source_root",
+        max_bytes=max_bytes,
+        size_guard=budget.require_payload_capacity,
+        missing_code="forge_material_missing",
+        unsafe_code="forge_material_unsafe",
+    )
+
+
 def _source_files(
     source_root: Path,
     target_id: str,
@@ -1616,6 +1665,7 @@ def _source_files(
 ) -> tuple[_PayloadFile, ...]:
     root = _lexical_absolute(source_root, "forge_source_root")
     root_chain = _directory_chain(root, "forge_source_root")
+    windows_native = _is_windows_native_host()
     site_packages = (
         f"runtime/python/{target_id}/Lib/site-packages"
         if target_id == "win32-x64"
@@ -1646,76 +1696,151 @@ def _source_files(
     for source, destination, suffixes in specifications:
         destination = _portable_path(destination, "forge_source_root")
         budget.add_directory(destination)
+        retained_directories: list[_WindowsDirectoryChain] = []
         try:
-            info = source.lstat()
-        except OSError:
-            _fail("forge_material_missing", "forge_source_root")
-        if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
-            _fail("forge_material_unsafe", "forge_source_root")
-        stack: list[tuple[Path, PurePosixPath]] = [(source, PurePosixPath("."))]
-        while stack:
-            current, relative = stack.pop()
-            child_directories: list[tuple[bytes, Path, PurePosixPath]] = []
-            try:
-                with os.scandir(current) as entries:
-                    for entry in entries:
-                        child_relative = (
-                            PurePosixPath(entry.name)
-                            if relative == PurePosixPath(".")
-                            else relative / entry.name
-                        )
-                        output_path = _portable_path(
-                            f"{destination}/{child_relative.as_posix()}",
-                            "forge_source_root",
-                        )
-                        budget.preflight_path(output_path)
-                        entry_info = entry.stat(follow_symlinks=False)
-                        if _is_link_or_reparse(entry_info):
-                            _fail("forge_material_unsafe", "forge_source_root")
-                        source_file = Path(entry.path)
-                        if stat.S_ISDIR(entry_info.st_mode):
-                            budget.add_directory(output_path)
-                            if entry.name != "__pycache__":
-                                child_directories.append(
-                                    (
-                                        os.fsencode(entry.name),
+            if windows_native:
+                source_guard = _WindowsDirectoryChain(
+                    source,
+                    "forge_source_root",
+                    writable_leaf=False,
+                    missing_code="forge_material_missing",
+                    unsafe_code="forge_material_unsafe",
+                )
+                retained_directories.append(source_guard)
+            else:
+                try:
+                    info = source.lstat()
+                except OSError:
+                    _fail("forge_material_missing", "forge_source_root")
+                if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+                    _fail("forge_material_unsafe", "forge_source_root")
+                source_guard = None
+            stack: list[tuple[Path, PurePosixPath, _WindowsDirectoryChain | None]] = [
+                (source, PurePosixPath("."), source_guard)
+            ]
+            while stack:
+                current, relative, current_guard = stack.pop()
+                child_directories: list[
+                    tuple[
+                        bytes,
+                        Path,
+                        PurePosixPath,
+                        _WindowsDirectoryChain | None,
+                    ]
+                ] = []
+                try:
+                    if current_guard is not None:
+                        current_guard.require_bindings()
+                    with os.scandir(current) as entries:
+                        for entry in entries:
+                            child_relative = (
+                                PurePosixPath(entry.name)
+                                if relative == PurePosixPath(".")
+                                else relative / entry.name
+                            )
+                            output_path = _portable_path(
+                                f"{destination}/{child_relative.as_posix()}",
+                                "forge_source_root",
+                            )
+                            budget.preflight_path(output_path)
+                            entry_info = entry.stat(follow_symlinks=False)
+                            if _is_link_or_reparse(entry_info):
+                                _fail("forge_material_unsafe", "forge_source_root")
+                            source_file = Path(entry.path)
+                            if stat.S_ISDIR(entry_info.st_mode):
+                                if windows_native:
+                                    child_guard = _WindowsDirectoryChain(
                                         source_file,
-                                        child_relative,
+                                        "forge_source_root",
+                                        writable_leaf=False,
+                                        missing_code="forge_material_unsafe",
+                                        unsafe_code="forge_material_unsafe",
                                     )
+                                    retained_directories.append(child_guard)
+                                else:
+                                    child_guard = None
+                                budget.add_directory(output_path)
+                                if entry.name != "__pycache__":
+                                    child_directories.append(
+                                        (
+                                            os.fsencode(entry.name),
+                                            source_file,
+                                            child_relative,
+                                            child_guard,
+                                        )
+                                    )
+                                continue
+                            pinned_file: (
+                                tuple[
+                                    Path,
+                                    _WindowsDirectoryChain,
+                                    int,
+                                    _WindowsHandleState,
+                                ]
+                                | None
+                            ) = None
+                            try:
+                                if windows_native:
+                                    if source_file.suffix in suffixes:
+                                        pinned_file = _open_forge_material_windows(source_file)
+                                    else:
+                                        _authorize_forge_material_windows(source_file)
+                                elif not (
+                                    stat.S_ISREG(entry_info.st_mode) and entry_info.st_nlink == 1
+                                ):
+                                    _fail("forge_material_unsafe", "forge_source_root")
+                                budget.add_file_path(output_path)
+                                if (
+                                    source_file.suffix == ".pyc"
+                                    or "__pycache__" in source_file.parts
+                                ):
+                                    _fail("forge_bytecode_forbidden", "forge_source_root")
+                                if source_file.suffix not in suffixes:
+                                    continue
+                                max_bytes = min(
+                                    MAX_MANIFEST_BYTES,
+                                    budget.remaining_bytes,
                                 )
-                            continue
-                        if not (stat.S_ISREG(entry_info.st_mode) and entry_info.st_nlink == 1):
-                            _fail("forge_material_unsafe", "forge_source_root")
-                        budget.add_file_path(output_path)
-                        if source_file.suffix == ".pyc" or "__pycache__" in source_file.parts:
-                            _fail("forge_bytecode_forbidden", "forge_source_root")
-                        if source_file.suffix not in suffixes:
-                            continue
-                        budget.require_payload_capacity(entry_info.st_size)
-                        key = _path_key(output_path)
-                        if key in aliases:
-                            _fail("forge_material_collision", "forge_source_root")
-                        aliases.add(key)
-                        payload = _read_pinned_regular(
-                            source_file,
-                            field="forge_source_root",
-                            max_bytes=min(
-                                MAX_MANIFEST_BYTES,
-                                budget.remaining_bytes,
-                            ),
-                        )
-                        budget.add_payload_bytes(len(payload))
-                        result.append(_PayloadFile(output_path, payload, 0o644))
-            except RuntimeAssemblyError:
-                raise
-            except OSError:
-                _fail("forge_material_unsafe", "forge_source_root")
-            for _, child, child_relative in sorted(
-                child_directories,
-                key=lambda item: item[0],
-                reverse=True,
-            ):
-                stack.append((child, child_relative))
+                                if windows_native:
+                                    assert pinned_file is not None
+                                    budget.require_payload_capacity(pinned_file[3].size)
+                                else:
+                                    budget.require_payload_capacity(entry_info.st_size)
+                                key = _path_key(output_path)
+                                if key in aliases:
+                                    _fail("forge_material_collision", "forge_source_root")
+                                aliases.add(key)
+                                if windows_native:
+                                    assert pinned_file is not None
+                                    if pinned_file[3].size > max_bytes:
+                                        _fail("file_unsafe", "forge_source_root")
+                                    payload = _read_open_pinned_regular_windows(pinned_file)
+                                else:
+                                    payload = _read_pinned_regular(
+                                        source_file,
+                                        field="forge_source_root",
+                                        max_bytes=max_bytes,
+                                    )
+                                budget.add_payload_bytes(len(payload))
+                                result.append(_PayloadFile(output_path, payload, 0o644))
+                            finally:
+                                if pinned_file is not None:
+                                    _close_open_pinned_regular_windows(pinned_file)
+                    if current_guard is not None:
+                        current_guard.require_bindings()
+                except RuntimeAssemblyError:
+                    raise
+                except OSError:
+                    _fail("forge_material_unsafe", "forge_source_root")
+                for _, child, child_relative, child_guard in sorted(
+                    child_directories,
+                    key=lambda item: item[0],
+                    reverse=True,
+                ):
+                    stack.append((child, child_relative, child_guard))
+        finally:
+            while retained_directories:
+                retained_directories.pop().close()
     for source_name, destination_name in (
         ("LICENSE", "LICENSE"),
         ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
@@ -1731,22 +1856,29 @@ def _source_files(
             _fail("forge_material_collision", "forge_source_root")
         aliases.add(key)
         source_path = root / source_name
-        try:
-            source_info = source_path.lstat()
-        except OSError:
-            _fail("forge_material_missing", "forge_source_root")
-        if (
-            _is_link_or_reparse(source_info)
-            or not stat.S_ISREG(source_info.st_mode)
-            or source_info.st_nlink != 1
-        ):
-            _fail("forge_material_unsafe", "forge_source_root")
-        budget.require_payload_capacity(source_info.st_size)
-        payload = _read_pinned_regular(
-            source_path,
-            field="forge_source_root",
-            max_bytes=min(MAX_MANIFEST_BYTES, budget.remaining_bytes),
-        )
+        if windows_native:
+            payload = _read_forge_material_windows(
+                source_path,
+                max_bytes=min(MAX_MANIFEST_BYTES, budget.remaining_bytes),
+                budget=budget,
+            )
+        else:
+            try:
+                source_info = source_path.lstat()
+            except OSError:
+                _fail("forge_material_missing", "forge_source_root")
+            if (
+                _is_link_or_reparse(source_info)
+                or not stat.S_ISREG(source_info.st_mode)
+                or source_info.st_nlink != 1
+            ):
+                _fail("forge_material_unsafe", "forge_source_root")
+            budget.require_payload_capacity(source_info.st_size)
+            payload = _read_pinned_regular(
+                source_path,
+                field="forge_source_root",
+                max_bytes=min(MAX_MANIFEST_BYTES, budget.remaining_bytes),
+            )
         budget.add_payload_bytes(len(payload))
         result.append(_PayloadFile(output_path, payload, 0o644))
     _require_directory_chain(root_chain, "forge_source_root")
@@ -2565,6 +2697,7 @@ class _WindowsOutputApi:
     FILE_READ_ATTRIBUTES = 0x0080
     FILE_WRITE_ATTRIBUTES = 0x0100
     SYNCHRONIZE = 0x00100000
+    GENERIC_READ = 0x80000000
     GENERIC_WRITE = 0x40000000
     FILE_SHARE_READ = 0x00000001
     FILE_SHARE_WRITE = 0x00000002
@@ -2582,7 +2715,10 @@ class _WindowsOutputApi:
     FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
     OPEN_EXISTING = 3
     OBJ_CASE_INSENSITIVE = 0x00000040
+    STATUS_NO_SUCH_FILE = 0xC000000F
+    STATUS_OBJECT_NAME_NOT_FOUND = 0xC0000034
     STATUS_OBJECT_NAME_COLLISION = 0xC0000035
+    STATUS_OBJECT_PATH_NOT_FOUND = 0xC000003A
 
     def __init__(self) -> None:
         try:
@@ -2699,6 +2835,16 @@ class _WindowsOutputApi:
         ]
         self.WriteFile.restype = self.wintypes.BOOL
 
+        self.ReadFile = self.kernel32.ReadFile
+        self.ReadFile.argtypes = [
+            self.wintypes.HANDLE,
+            self.wintypes.LPVOID,
+            self.wintypes.DWORD,
+            self.ctypes.POINTER(self.wintypes.DWORD),
+            self.wintypes.LPVOID,
+        ]
+        self.ReadFile.restype = self.wintypes.BOOL
+
         self.FlushFileBuffers = self.kernel32.FlushFileBuffers
         self.FlushFileBuffers.argtypes = [self.wintypes.HANDLE]
         self.FlushFileBuffers.restype = self.wintypes.BOOL
@@ -2788,6 +2934,9 @@ class _WindowsOutputApi:
         directory: bool,
         create: bool,
         writable: bool = False,
+        readable: bool = False,
+        missing_code: str | None = None,
+        failure_code: str | None = None,
         field: str,
     ) -> int:
         if not name or name in {".", ".."} or "/" in name or "\\" in name or "\x00" in name:
@@ -2826,11 +2975,16 @@ class _WindowsOutputApi:
         else:
             access = (
                 (self.GENERIC_WRITE if create else 0)
+                | (self.GENERIC_READ if readable else 0)
                 | self.FILE_READ_ATTRIBUTES
                 | (self.FILE_WRITE_ATTRIBUTES if create else 0)
                 | self.SYNCHRONIZE
             )
-            share = self.FILE_SHARE_READ if create else self.FILE_SHARE_READ | self.FILE_SHARE_WRITE
+            share = (
+                self.FILE_SHARE_READ
+                if create or readable
+                else self.FILE_SHARE_READ | self.FILE_SHARE_WRITE
+            )
             options = (
                 self.FILE_NON_DIRECTORY_FILE
                 | self.FILE_OPEN_REPARSE_POINT
@@ -2854,12 +3008,22 @@ class _WindowsOutputApi:
             )
         )
         if status < 0:
-            if create and (status & 0xFFFFFFFF) == self.STATUS_OBJECT_NAME_COLLISION:
+            status_code = status & 0xFFFFFFFF
+            if create and status_code == self.STATUS_OBJECT_NAME_COLLISION:
                 _fail("output_exists", field, exit_code=2)
-            _fail(
-                "output_create_failed" if create else "filesystem_identity_changed",
-                field,
-            )
+            if (
+                not create
+                and missing_code is not None
+                and status_code
+                in {
+                    self.STATUS_NO_SUCH_FILE,
+                    self.STATUS_OBJECT_NAME_NOT_FOUND,
+                    self.STATUS_OBJECT_PATH_NOT_FOUND,
+                }
+            ):
+                _fail(missing_code, field)
+            default_failure = "output_create_failed" if create else "filesystem_identity_changed"
+            _fail(failure_code or default_failure, field)
         value = self.ctypes.cast(output, self.ctypes.c_void_p).value
         if value is None:
             _fail("secure_primitive_unavailable", field)
@@ -2868,8 +3032,28 @@ class _WindowsOutputApi:
             result,
             directory=directory,
             field=field,
-            failure_code=("output_create_failed" if create else "filesystem_identity_changed"),
+            failure_code=(
+                failure_code
+                or ("output_create_failed" if create else "filesystem_identity_changed")
+            ),
         )
+
+    def read(self, handle: int, count: int, field: str) -> bytes:
+        if not 1 <= count <= READ_CHUNK_BYTES:
+            _fail("file_unsafe", field)
+        buffer = (self.ctypes.c_ubyte * count)()
+        received = self.wintypes.DWORD()
+        if not self.ReadFile(
+            self.wintypes.HANDLE(handle),
+            buffer,
+            count,
+            self.ctypes.byref(received),
+            None,
+        ):
+            _fail("file_unsafe", field)
+        if received.value > count:
+            _fail("file_unsafe", field)
+        return bytes(buffer[: received.value])
 
     def write(self, handle: int, payload: bytes, field: str) -> None:
         offset = 0
@@ -2903,7 +3087,15 @@ def _windows_output_api() -> _WindowsOutputApi:
 
 
 class _WindowsDirectoryChain:
-    def __init__(self, path: Path, field: str) -> None:
+    def __init__(
+        self,
+        path: Path,
+        field: str,
+        *,
+        writable_leaf: bool = True,
+        missing_code: str | None = None,
+        unsafe_code: str | None = None,
+    ) -> None:
         self.api = _windows_output_api()
         self.field = field
         absolute = _lexical_absolute(path, field)
@@ -2925,7 +3117,9 @@ class _WindowsDirectoryChain:
                     component,
                     directory=True,
                     create=False,
-                    writable=index == len(components) - 1,
+                    writable=writable_leaf and index == len(components) - 1,
+                    missing_code=missing_code,
+                    failure_code=unsafe_code,
                     field=field,
                 )
                 state = self.api.state(handle, field)
@@ -2984,6 +3178,176 @@ class _WindowsDirectoryChain:
         while self.handles:
             self.api.close(self.handles.pop())
         self.bindings.clear()
+
+
+def _open_pinned_regular_windows(
+    path: Path,
+    *,
+    field: str,
+    readable: bool,
+    max_bytes: int | None = None,
+    expected_size: int | None = None,
+    size_guard: Callable[[int], None] | None = None,
+    missing_code: str = "file_missing",
+    unsafe_code: str = "file_unsafe",
+) -> tuple[Path, _WindowsDirectoryChain, int, _WindowsHandleState]:
+    absolute = _lexical_absolute(path, field)
+    chain = _WindowsDirectoryChain(
+        absolute.parent,
+        field,
+        writable_leaf=False,
+        missing_code="unsafe_parent",
+        unsafe_code="unsafe_parent",
+    )
+    handle = -1
+    try:
+        handle = chain.api.relative(
+            chain.leaf,
+            absolute.name,
+            directory=False,
+            create=False,
+            readable=readable,
+            missing_code=missing_code,
+            failure_code=unsafe_code,
+            field=field,
+        )
+        state = chain.api.state(handle, field)
+        if state.is_reparse or state.is_directory or state.nlink != 1 or state.size < 0:
+            _fail(unsafe_code, field)
+        if size_guard is not None:
+            size_guard(state.size)
+        if max_bytes is not None and state.size > max_bytes:
+            _fail("file_unsafe", field)
+        if expected_size is not None and state.size != expected_size:
+            _fail("file_size_mismatch", field)
+        return absolute, chain, handle, state
+    except BaseException:
+        if handle >= 0:
+            chain.api.close(handle)
+        chain.close()
+        raise
+
+
+def _confirm_pinned_regular_windows(
+    absolute: Path,
+    chain: _WindowsDirectoryChain,
+    handle: int,
+    expected: _WindowsHandleState,
+    field: str,
+) -> None:
+    if chain.api.state(handle, field) != expected:
+        _fail("filesystem_identity_changed", field)
+    rebound = chain.api.relative(
+        chain.leaf,
+        absolute.name,
+        directory=False,
+        create=False,
+        readable=False,
+        field=field,
+    )
+    try:
+        if chain.api.state(rebound, field) != expected:
+            _fail("filesystem_identity_changed", field)
+        chain.require_bindings()
+    finally:
+        chain.api.close(rebound)
+
+
+def _authorize_pinned_regular_windows(
+    path: Path,
+    *,
+    field: str,
+    missing_code: str = "file_missing",
+    unsafe_code: str = "file_unsafe",
+) -> _WindowsHandleState:
+    absolute, chain, handle, state = _open_pinned_regular_windows(
+        path,
+        field=field,
+        readable=False,
+        missing_code=missing_code,
+        unsafe_code=unsafe_code,
+    )
+    try:
+        _confirm_pinned_regular_windows(absolute, chain, handle, state, field)
+        return state
+    finally:
+        _close_open_pinned_regular_windows((absolute, chain, handle, state))
+
+
+def _close_open_pinned_regular_windows(
+    opened: tuple[Path, _WindowsDirectoryChain, int, _WindowsHandleState],
+) -> None:
+    _absolute, chain, handle, _state = opened
+    try:
+        chain.api.close(handle)
+    finally:
+        chain.close()
+
+
+def _read_open_pinned_regular_windows(
+    opened: tuple[Path, _WindowsDirectoryChain, int, _WindowsHandleState],
+    *,
+    expected_sha256: str | None = None,
+) -> bytes:
+    absolute, chain, handle, before = opened
+    field = chain.field
+    try:
+        _invoke_read_hook(absolute, "after_lstat")
+    except OSError:
+        _fail("filesystem_identity_changed", field)
+    payload = bytearray()
+    digest = hashlib.sha256()
+    while len(payload) < before.size:
+        chunk = chain.api.read(
+            handle,
+            min(READ_CHUNK_BYTES, before.size - len(payload)),
+            field,
+        )
+        if not chunk:
+            _fail("file_truncated", field)
+        payload.extend(chunk)
+        digest.update(chunk)
+    if chain.api.read(handle, 1, field):
+        _fail("file_size_mismatch", field)
+    try:
+        _invoke_read_hook(absolute, "before_recheck")
+    except OSError:
+        _fail("filesystem_identity_changed", field)
+    _confirm_pinned_regular_windows(absolute, chain, handle, before, field)
+    actual_sha256 = digest.hexdigest()
+    if expected_sha256 is not None and actual_sha256 != expected_sha256:
+        _fail("file_digest_mismatch", field)
+    return bytes(payload)
+
+
+def _read_pinned_regular_windows(
+    path: Path,
+    *,
+    field: str,
+    max_bytes: int,
+    expected_size: int | None = None,
+    expected_sha256: str | None = None,
+    size_guard: Callable[[int], None] | None = None,
+    missing_code: str = "file_missing",
+    unsafe_code: str = "file_unsafe",
+) -> bytes:
+    opened = _open_pinned_regular_windows(
+        path,
+        field=field,
+        readable=True,
+        max_bytes=max_bytes,
+        expected_size=expected_size,
+        size_guard=size_guard,
+        missing_code=missing_code,
+        unsafe_code=unsafe_code,
+    )
+    try:
+        return _read_open_pinned_regular_windows(
+            opened,
+            expected_sha256=expected_sha256,
+        )
+    finally:
+        _close_open_pinned_regular_windows(opened)
 
 
 def _write_owned_file_at(

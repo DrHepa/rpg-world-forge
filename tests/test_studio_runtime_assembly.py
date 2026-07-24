@@ -206,6 +206,57 @@ def _set_first_zip_flag(source: Path, destination: Path) -> None:
     destination.write_bytes(payload)
 
 
+class _FakeWindowsReadApi:
+    def __init__(self, payload: bytes, *, nlink: int = 1) -> None:
+        self.payload = payload
+        self.offset = 0
+        self.rebound = False
+        self.closed: list[int] = []
+        self.relative_calls: list[dict[str, object]] = []
+        self.retained_state = assembly._WindowsHandleState(
+            identity=(7, 11),
+            size=len(payload),
+            nlink=nlink,
+            is_directory=False,
+            is_reparse=False,
+        )
+
+    def relative(self, parent: int, name: str, **kwargs: object) -> int:
+        self.relative_calls.append({"parent": parent, "name": name, **kwargs})
+        return 41 if len(self.relative_calls) == 1 else 42
+
+    def state(self, handle: int, _field: str) -> assembly._WindowsHandleState:
+        if handle == 42 and self.rebound:
+            return replace(self.retained_state, identity=(7, 12))
+        return self.retained_state
+
+    def read(self, _handle: int, count: int, _field: str) -> bytes:
+        chunk = self.payload[self.offset : self.offset + count]
+        self.offset += len(chunk)
+        return chunk
+
+    def close(self, handle: int) -> None:
+        self.closed.append(handle)
+
+
+class _FakeWindowsReadChain:
+    def __init__(self, api: _FakeWindowsReadApi) -> None:
+        self.api = api
+        self.field = "forge_source_root"
+        self.leaf = 31
+        self.parent_rebound = False
+        self.bindings_checked = False
+        self.closed = False
+
+    def require_bindings(self) -> None:
+        self.bindings_checked = True
+        if self.parent_rebound:
+            assembly._fail("filesystem_identity_changed", "forge_source_root")
+
+    def close(self) -> None:
+        self.closed = True
+
+
 class StudioRuntimeAssemblyTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="rwf-studio-assembly-")
@@ -1781,6 +1832,663 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                     assembly.verify_runtime_zip(archive)["target_id"],
                     target_id,
                 )
+
+    def test_windows_native_pinned_read_uses_retained_handle_bytes_and_name_binding(
+        self,
+    ) -> None:
+        payload = b"native pinned payload"
+        candidate = self.root / "native-input.txt"
+        api = _FakeWindowsReadApi(payload)
+        chain = _FakeWindowsReadChain(api)
+        with mock.patch.object(
+            assembly,
+            "_WindowsDirectoryChain",
+            return_value=chain,
+        ) as chain_factory:
+            self.assertEqual(
+                assembly._read_pinned_regular_windows(
+                    candidate,
+                    field="forge_source_root",
+                    max_bytes=len(payload),
+                    expected_size=len(payload),
+                    expected_sha256=_sha256(payload),
+                ),
+                payload,
+            )
+        chain_factory.assert_called_once_with(
+            candidate.parent,
+            "forge_source_root",
+            writable_leaf=False,
+            missing_code="unsafe_parent",
+            unsafe_code="unsafe_parent",
+        )
+        self.assertEqual(
+            [call["readable"] for call in api.relative_calls],
+            [True, False],
+        )
+        self.assertTrue(chain.bindings_checked)
+        self.assertTrue(chain.closed)
+        self.assertEqual(api.closed, [42, 41])
+
+        api = _FakeWindowsReadApi(payload)
+        chain = _FakeWindowsReadChain(api)
+
+        def rebind_name(_path: Path, phase: str) -> None:
+            if phase == "before_recheck":
+                api.rebound = True
+
+        assembly._READ_TEST_HOOK = rebind_name
+        with (
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                return_value=chain,
+            ),
+            self.assertRaisesRegex(
+                assembly.RuntimeAssemblyError,
+                "filesystem_identity_changed",
+            ),
+        ):
+            assembly._read_pinned_regular_windows(
+                candidate,
+                field="forge_source_root",
+                max_bytes=len(payload),
+            )
+        assembly._READ_TEST_HOOK = None
+        self.assertTrue(chain.closed)
+        self.assertEqual(api.closed, [42, 41])
+
+    def test_windows_native_pinned_read_rejects_hardlinks_and_parent_rebinding(
+        self,
+    ) -> None:
+        payload = b"native pinned payload"
+        candidate = self.root / "native-input.txt"
+        api = _FakeWindowsReadApi(payload, nlink=2)
+        chain = _FakeWindowsReadChain(api)
+        with (
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                return_value=chain,
+            ),
+            self.assertRaisesRegex(assembly.RuntimeAssemblyError, "file_unsafe"),
+        ):
+            assembly._read_pinned_regular_windows(
+                candidate,
+                field="forge_source_root",
+                max_bytes=len(payload),
+            )
+        self.assertTrue(chain.closed)
+        self.assertEqual(api.closed, [41])
+
+        api = _FakeWindowsReadApi(payload)
+        chain = _FakeWindowsReadChain(api)
+
+        def rebind_parent(_path: Path, phase: str) -> None:
+            if phase == "before_recheck":
+                chain.parent_rebound = True
+
+        assembly._READ_TEST_HOOK = rebind_parent
+        with (
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                return_value=chain,
+            ),
+            self.assertRaisesRegex(
+                assembly.RuntimeAssemblyError,
+                "filesystem_identity_changed",
+            ),
+        ):
+            assembly._read_pinned_regular_windows(
+                candidate,
+                field="forge_source_root",
+                max_bytes=len(payload),
+            )
+        assembly._READ_TEST_HOOK = None
+        self.assertTrue(chain.bindings_checked)
+        self.assertTrue(chain.closed)
+        self.assertEqual(api.closed, [42, 41])
+
+    def test_windows_native_pinned_read_preserves_exact_open_size_and_limit_errors(
+        self,
+    ) -> None:
+        payload = b"native pinned payload"
+        candidate = self.root / "native-input.txt"
+
+        class MissingApi(_FakeWindowsReadApi):
+            def relative(self, parent: int, name: str, **kwargs: object) -> int:
+                self.relative_calls.append({"parent": parent, "name": name, **kwargs})
+                code = kwargs.get("missing_code", "wrong_missing_code")
+                raise assembly.RuntimeAssemblyError(str(code), "forge_source_root")
+
+        api = MissingApi(payload)
+        chain = _FakeWindowsReadChain(api)
+        with (
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                return_value=chain,
+            ),
+            self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+        ):
+            assembly._read_pinned_regular_windows(
+                candidate,
+                field="forge_source_root",
+                max_bytes=len(payload),
+            )
+        self.assertEqual(caught.exception.code, "file_missing")
+        self.assertTrue(chain.closed)
+
+        api = _FakeWindowsReadApi(payload)
+        chain = _FakeWindowsReadChain(api)
+        with (
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                return_value=chain,
+            ),
+            self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+        ):
+            assembly._read_pinned_regular_windows(
+                candidate,
+                field="forge_source_root",
+                max_bytes=len(payload),
+                expected_size=len(payload) - 1,
+            )
+        self.assertEqual(caught.exception.code, "file_size_mismatch")
+
+        api = _FakeWindowsReadApi(payload)
+        chain = _FakeWindowsReadChain(api)
+
+        def reject_output_size(_size: int) -> None:
+            assembly._fail("output_limit_exceeded", "output")
+
+        with (
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                return_value=chain,
+            ),
+            self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+        ):
+            assembly._read_pinned_regular_windows(
+                candidate,
+                field="forge_source_root",
+                max_bytes=len(payload),
+                size_guard=reject_output_size,
+            )
+        self.assertEqual(caught.exception.code, "output_limit_exceeded")
+        self.assertEqual(api.offset, 0)
+
+    def test_windows_relative_open_distinguishes_missing_from_unsafe(self) -> None:
+        class FakeVoid:
+            def __init__(self, value: object = None) -> None:
+                self.value = value
+
+        class FakeHandle:
+            def __init__(self, value: object = None) -> None:
+                self.value = value
+
+        def api_with_status(status: int) -> assembly._WindowsOutputApi:
+            api = object.__new__(assembly._WindowsOutputApi)
+            api.ctypes = SimpleNamespace(
+                byref=lambda value: value,
+                cast=lambda value, _kind: SimpleNamespace(
+                    value=value.value if isinstance(value, FakeHandle) else value
+                ),
+                c_void_p=FakeVoid,
+                create_unicode_buffer=lambda value: value,
+                pointer=lambda value: value,
+                sizeof=lambda _value: 1,
+            )
+            api.wintypes = SimpleNamespace(HANDLE=FakeHandle, LPWSTR=object)
+            api.UnicodeString = lambda *_args: object()
+            api.ObjectAttributes = lambda *_args: object()
+            api.IoStatusBlock = lambda: object()
+            api.NtCreateFile = lambda *_args: status
+            api.close = mock.Mock()
+            return api
+
+        for status, expected in (
+            (0xC0000034 - (1 << 32), "file_missing"),
+            (0xC00000BA - (1 << 32), "file_unsafe"),
+        ):
+            with self.subTest(expected=expected):
+                api = api_with_status(status)
+                with self.assertRaises(assembly.RuntimeAssemblyError) as caught:
+                    api.relative(
+                        7,
+                        "leaf",
+                        directory=False,
+                        create=False,
+                        missing_code="file_missing",
+                        failure_code="file_unsafe",
+                        field="forge_source_root",
+                    )
+                self.assertEqual(caught.exception.code, expected)
+                api.close.assert_not_called()
+
+    def test_windows_source_enumeration_defers_regular_metadata_to_native_reads(
+        self,
+    ) -> None:
+        original_scandir = assembly.os.scandir
+        read_paths: list[Path] = []
+
+        class EnumeratedEntry:
+            def __init__(self, entry: os.DirEntry[str]) -> None:
+                self.name = entry.name
+                self.path = entry.path
+                self._entry = entry
+
+            def stat(self, *, follow_symlinks: bool = True) -> object:
+                self.assert_no_follow(follow_symlinks)
+                info = self._entry.stat(follow_symlinks=False)
+                return SimpleNamespace(
+                    st_mode=info.st_mode,
+                    st_nlink=99,
+                    st_size=info.st_size,
+                    st_file_attributes=getattr(info, "st_file_attributes", 0),
+                )
+
+            @staticmethod
+            def assert_no_follow(follow_symlinks: bool) -> None:
+                if follow_symlinks:
+                    raise AssertionError("enumeration followed a link")
+
+        def enumerated_scandir(path: os.PathLike[str] | str) -> object:
+            with original_scandir(path) as entries:
+                wrapped = [EnumeratedEntry(entry) for entry in entries]
+            return contextlib.nullcontext(iter(wrapped))
+
+        def native_read(path: Path, **kwargs: object) -> bytes:
+            read_paths.append(path)
+            payload = path.read_bytes()
+            size_guard = kwargs.get("size_guard")
+            self.assertTrue(callable(size_guard))
+            assert callable(size_guard)
+            size_guard(len(payload))
+            return payload
+
+        def native_open(
+            path: Path,
+        ) -> tuple[Path, object, int, assembly._WindowsHandleState]:
+            payload = path.read_bytes()
+            return (
+                path,
+                object(),
+                1,
+                assembly._WindowsHandleState(
+                    identity=(5, len(read_paths) + 1),
+                    size=len(payload),
+                    nlink=1,
+                    is_directory=False,
+                    is_reparse=False,
+                ),
+            )
+
+        def native_open_read(opened: tuple[object, ...]) -> bytes:
+            path = opened[0]
+            assert isinstance(path, Path)
+            return native_read(
+                path,
+                size_guard=lambda _size: None,
+            )
+
+        class DirectoryGuard:
+            def require_bindings(self) -> None:
+                return None
+
+            def close(self) -> None:
+                return None
+
+        with (
+            mock.patch.object(assembly, "_is_windows_native_host", return_value=True),
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                side_effect=lambda *_args, **_kwargs: DirectoryGuard(),
+            ),
+            mock.patch.object(assembly.os, "scandir", side_effect=enumerated_scandir),
+            mock.patch.object(
+                assembly,
+                "_read_pinned_regular_windows",
+                side_effect=native_read,
+            ),
+            mock.patch.object(
+                assembly,
+                "_open_forge_material_windows",
+                side_effect=native_open,
+            ),
+            mock.patch.object(
+                assembly,
+                "_read_open_pinned_regular_windows",
+                side_effect=native_open_read,
+            ),
+            mock.patch.object(
+                assembly,
+                "_close_open_pinned_regular_windows",
+            ),
+        ):
+            files = assembly._source_files(
+                self.source,
+                "win32-x64",
+                assembly._PackageOutputBudget(),
+            )
+        packaged = {item.path: item.payload for item in files}
+        share = "runtime/python/win32-x64/share/rpg-world-forge"
+        self.assertEqual(packaged[f"{share}/LICENSE"], b"MIT synthetic fixture\n")
+        self.assertEqual(
+            packaged[f"{share}/THIRD_PARTY_NOTICES.md"],
+            b"synthetic only\n",
+        )
+        self.assertIn(self.source / "src/isoworld/__init__.py", read_paths)
+        self.assertIn(self.source / "LICENSE", read_paths)
+        self.assertIn(self.source / "THIRD_PARTY_NOTICES.md", read_paths)
+
+    def test_windows_source_traversal_pins_child_before_empty_junction_swap(
+        self,
+    ) -> None:
+        source_directory = self.source / "src/isoworld"
+        optional = source_directory / "optional"
+        _write(optional / "kept.py", b"KEPT = True\n")
+        original_scandir = assembly.os.scandir
+        swapped = False
+        guards: list[object] = []
+
+        class EnumeratedEntry:
+            def __init__(self, entry: os.DirEntry[str]) -> None:
+                self.name = entry.name
+                self.path = entry.path
+                self._entry = entry
+
+            def stat(self, *, follow_symlinks: bool = True) -> object:
+                if follow_symlinks:
+                    raise AssertionError("enumeration followed a link")
+                info = self._entry.stat(follow_symlinks=False)
+                return SimpleNamespace(
+                    st_mode=info.st_mode,
+                    st_nlink=99,
+                    st_size=info.st_size,
+                    st_file_attributes=getattr(info, "st_file_attributes", 0),
+                )
+
+        class DirectoryGuard:
+            def __init__(self, path: Path) -> None:
+                self.path = path
+                self.closed = False
+
+            def require_bindings(self) -> None:
+                if self.path == optional and swapped:
+                    assembly._fail(
+                        "filesystem_identity_changed",
+                        "forge_source_root",
+                    )
+
+            def close(self) -> None:
+                self.closed = True
+
+        def guard_factory(path: Path, _field: str, **_kwargs: object) -> DirectoryGuard:
+            if path == optional and swapped:
+                raise AssertionError("child directory was not pinned when queued")
+            guard = DirectoryGuard(path)
+            guards.append(guard)
+            return guard
+
+        @contextlib.contextmanager
+        def enumerated_scandir(path: os.PathLike[str] | str):
+            nonlocal swapped
+            current = Path(path)
+            if current == optional and swapped:
+                yield iter(())
+                return
+            with original_scandir(path) as entries:
+                wrapped = [EnumeratedEntry(entry) for entry in entries]
+            yield iter(wrapped)
+            if current == source_directory:
+                swapped = True
+
+        def native_read(
+            path: Path,
+            *,
+            size_guard: Callable[[int], None] | None = None,
+            **_kwargs: object,
+        ) -> bytes:
+            payload = path.read_bytes()
+            if size_guard is not None:
+                size_guard(len(payload))
+            return payload
+
+        def native_open(
+            path: Path,
+        ) -> tuple[Path, object, int, assembly._WindowsHandleState]:
+            payload = path.read_bytes()
+            return (
+                path,
+                object(),
+                1,
+                assembly._WindowsHandleState(
+                    identity=(9, len(payload)),
+                    size=len(payload),
+                    nlink=1,
+                    is_directory=False,
+                    is_reparse=False,
+                ),
+            )
+
+        with (
+            mock.patch.object(assembly, "_is_windows_native_host", return_value=True),
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                side_effect=guard_factory,
+            ),
+            mock.patch.object(assembly.os, "scandir", side_effect=enumerated_scandir),
+            mock.patch.object(
+                assembly,
+                "_read_pinned_regular",
+                side_effect=native_read,
+            ),
+            mock.patch.object(
+                assembly,
+                "_read_pinned_regular_windows",
+                side_effect=native_read,
+            ),
+            mock.patch.object(
+                assembly,
+                "_open_forge_material_windows",
+                side_effect=native_open,
+            ),
+            mock.patch.object(
+                assembly,
+                "_read_open_pinned_regular_windows",
+                side_effect=lambda opened: Path(opened[0]).read_bytes(),
+            ),
+            mock.patch.object(
+                assembly,
+                "_close_open_pinned_regular_windows",
+            ),
+            self.assertRaisesRegex(
+                assembly.RuntimeAssemblyError,
+                "filesystem_identity_changed",
+            ),
+        ):
+            assembly._source_files(
+                self.source,
+                "win32-x64",
+                assembly._PackageOutputBudget(),
+            )
+        self.assertTrue(swapped)
+        self.assertTrue(any(getattr(guard, "path", None) == optional for guard in guards))
+        self.assertTrue(all(getattr(guard, "closed", False) for guard in guards))
+
+    def test_windows_source_authorization_and_capacity_precede_casefold_collision(
+        self,
+    ) -> None:
+        source_directory = self.source / "src/isoworld"
+        _write(source_directory / "A.py", b"A")
+        _write(source_directory / "a.py", b"a")
+        original_scandir = assembly.os.scandir
+
+        class DirectoryGuard:
+            def require_bindings(self) -> None:
+                return None
+
+            def close(self) -> None:
+                return None
+
+        def ordered_scandir(path: os.PathLike[str] | str) -> object:
+            with original_scandir(path) as entries:
+                rows = list(entries)
+            if Path(path) == source_directory:
+                priority = {"A.py": 0, "a.py": 1}
+                rows.sort(key=lambda entry: (priority.get(entry.name, 2), os.fsencode(entry.name)))
+            return contextlib.nullcontext(iter(rows))
+
+        def exercise(mode: str, expected: str) -> None:
+            events: list[tuple[str, str]] = []
+
+            def native_open(
+                path: Path,
+            ) -> tuple[Path, object, int, assembly._WindowsHandleState]:
+                events.append(("authorize", path.name))
+                if mode == "unsafe" and path.name == "a.py":
+                    assembly._fail("forge_material_unsafe", "forge_source_root")
+                return (
+                    path,
+                    object(),
+                    1,
+                    assembly._WindowsHandleState(
+                        identity=(13, len(events)),
+                        size=path.stat().st_size,
+                        nlink=1,
+                        is_directory=False,
+                        is_reparse=False,
+                    ),
+                )
+
+            def native_read(opened: tuple[object, ...]) -> bytes:
+                path = opened[0]
+                assert isinstance(path, Path)
+                events.append(("read", path.name))
+                return path.read_bytes()
+
+            def native_close(opened: tuple[object, ...]) -> None:
+                path = opened[0]
+                assert isinstance(path, Path)
+                events.append(("close", path.name))
+
+            limit = 1 if mode == "capacity" else assembly.MAX_OUTPUT_BYTES
+            with (
+                mock.patch.object(assembly, "_is_windows_native_host", return_value=True),
+                mock.patch.object(
+                    assembly,
+                    "_WindowsDirectoryChain",
+                    side_effect=lambda *_args, **_kwargs: DirectoryGuard(),
+                ),
+                mock.patch.object(assembly.os, "scandir", side_effect=ordered_scandir),
+                mock.patch.object(
+                    assembly,
+                    "_open_forge_material_windows",
+                    side_effect=native_open,
+                ),
+                mock.patch.object(
+                    assembly,
+                    "_read_open_pinned_regular_windows",
+                    side_effect=native_read,
+                ),
+                mock.patch.object(
+                    assembly,
+                    "_close_open_pinned_regular_windows",
+                    side_effect=native_close,
+                ),
+                mock.patch.object(assembly, "MAX_OUTPUT_BYTES", limit),
+                self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+            ):
+                assembly._source_files(
+                    self.source,
+                    "win32-x64",
+                    assembly._PackageOutputBudget(),
+                )
+            self.assertEqual(caught.exception.code, expected)
+            self.assertEqual(
+                events[:4],
+                [
+                    ("authorize", "A.py"),
+                    ("read", "A.py"),
+                    ("close", "A.py"),
+                    ("authorize", "a.py"),
+                ],
+            )
+            self.assertNotIn(("read", "a.py"), events)
+            if mode != "unsafe":
+                self.assertIn(("close", "a.py"), events)
+
+        for mode, expected in (
+            ("capacity", "output_limit_exceeded"),
+            ("unsafe", "forge_material_unsafe"),
+            ("collision", "forge_material_collision"),
+        ):
+            with self.subTest(mode=mode):
+                exercise(mode, expected)
+
+    @unittest.skipUnless(os.name == "nt", "requires native Windows handles")
+    def test_native_windows_pinned_reads_reject_hardlinks_and_retained_swaps(
+        self,
+    ) -> None:
+        parent = self.root / "native-read-parent"
+        parent.mkdir()
+        candidate = parent / "source.py"
+        payload = b"VALUE = 1\n"
+        _write(candidate, payload)
+        self.assertEqual(
+            assembly._read_pinned_regular(
+                candidate,
+                field="forge_source_root",
+                max_bytes=len(payload),
+                expected_size=len(payload),
+                expected_sha256=_sha256(payload),
+            ),
+            payload,
+        )
+
+        alias = parent / "source-alias.py"
+        os.link(candidate, alias)
+        with self.assertRaisesRegex(assembly.RuntimeAssemblyError, "file_unsafe"):
+            assembly._read_pinned_regular(
+                candidate,
+                field="forge_source_root",
+                max_bytes=len(payload),
+            )
+        alias.unlink()
+
+        displaced = self.root / "native-read-displaced"
+        blocked = False
+
+        def attempt_parent_swap(path: Path, phase: str) -> None:
+            nonlocal blocked
+            if path != candidate or phase != "after_lstat":
+                return
+            try:
+                parent.rename(displaced)
+            except OSError:
+                blocked = True
+                assembly._fail("filesystem_identity_changed", "forge_source_root")
+            raise AssertionError("Windows allowed a retained input parent replacement")
+
+        assembly._READ_TEST_HOOK = attempt_parent_swap
+        with self.assertRaisesRegex(
+            assembly.RuntimeAssemblyError,
+            "filesystem_identity_changed",
+        ):
+            assembly._read_pinned_regular(
+                candidate,
+                field="forge_source_root",
+                max_bytes=len(payload),
+            )
+        assembly._READ_TEST_HOOK = None
+        self.assertTrue(blocked)
+        self.assertFalse(displaced.exists())
 
     @unittest.skipUnless(os.name == "nt", "requires native Windows handles")
     def test_native_windows_retained_handles_block_after_write_parent_swaps(
