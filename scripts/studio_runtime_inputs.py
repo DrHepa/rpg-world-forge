@@ -125,12 +125,27 @@ class _FileDispositionInformation(ctypes.Structure):
     _fields_ = [("delete_file", ctypes.c_ubyte)]
 
 
-class _FileRenameInformation(ctypes.Structure):
+class _IoStatusValue(ctypes.Union):
     _fields_ = [
-        ("replace_if_exists", ctypes.c_int),
+        ("status", ctypes.c_int32),
+        ("pointer", ctypes.c_void_p),
+    ]
+
+
+class _IoStatusBlock(ctypes.Structure):
+    _anonymous_ = ("value",)
+    _fields_ = [
+        ("value", _IoStatusValue),
+        ("information", ctypes.c_size_t),
+    ]
+
+
+class _NtFileRenameInformation(ctypes.Structure):
+    _fields_ = [
+        ("replace_if_exists", ctypes.c_ubyte),
         ("root_directory", ctypes.c_void_p),
         ("filename_length", ctypes.c_uint32),
-        ("filename", ctypes.c_wchar * 1),
+        ("filename", ctypes.c_uint16 * 1),
     ]
 
 
@@ -156,6 +171,7 @@ class _WindowsApi:
     _DELETE = 0x00010000
     _FILE_READ_ATTRIBUTES = 0x00000080
     _FILE_LIST_DIRECTORY = 0x00000001
+    _FILE_TRAVERSE = 0x00000020
     _SYNCHRONIZE = 0x00100000
     _SHARE_READ = 0x00000001
     _SHARE_WRITE = 0x00000002
@@ -168,13 +184,17 @@ class _WindowsApi:
     _FILE_FLAG_SEQUENTIAL_SCAN = 0x08000000
     _INVALID_HANDLE = ctypes.c_void_p(-1).value
     _DUPLICATE_SAME_ACCESS = 0x00000002
-    _FILE_RENAME_INFO = 3
+    _FILE_RENAME_INFORMATION = 10
     _FILE_DISPOSITION_INFO = 4
 
     def __init__(self) -> None:
         try:
             self.kernel32 = ctypes.WinDLL(  # type: ignore[attr-defined]
                 "kernel32",
+                use_last_error=True,
+            )
+            self.ntdll = ctypes.WinDLL(  # type: ignore[attr-defined]
+                "ntdll",
                 use_last_error=True,
             )
         except (AttributeError, OSError):
@@ -224,6 +244,21 @@ class _WindowsApi:
             ctypes.c_uint32,
         ]
         self.set_information.restype = ctypes.c_int
+        try:
+            self.nt_set_information = self.ntdll.NtSetInformationFile
+            self.nt_status_to_dos_error = self.ntdll.RtlNtStatusToDosError
+        except AttributeError:
+            raise RuntimeInputsError("secure_primitive_unavailable", "cache") from None
+        self.nt_set_information.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(_IoStatusBlock),
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.c_int,
+        ]
+        self.nt_set_information.restype = ctypes.c_int32
+        self.nt_status_to_dos_error.argtypes = [ctypes.c_int32]
+        self.nt_status_to_dos_error.restype = ctypes.c_uint32
 
     def _open(
         self,
@@ -261,7 +296,10 @@ class _WindowsApi:
     def open_directory(self, path: Path) -> int:
         handle = self._open(
             path,
-            access=self._FILE_LIST_DIRECTORY | self._FILE_READ_ATTRIBUTES | self._SYNCHRONIZE,
+            access=self._FILE_LIST_DIRECTORY
+            | self._FILE_TRAVERSE
+            | self._FILE_READ_ATTRIBUTES
+            | self._SYNCHRONIZE,
             disposition=self._OPEN_EXISTING,
             flags=self._FILE_FLAG_BACKUP_SEMANTICS | self._FILE_FLAG_OPEN_REPARSE_POINT,
         )
@@ -345,38 +383,63 @@ class _WindowsApi:
         self,
         handle: int,
         directory_handle: int,
-        destination: Path,
+        destination_name: str,
     ) -> None:
-        if not destination.is_absolute():
+        if not _portable_component(destination_name):
             raise RuntimeInputsError("secure_primitive_unavailable", "cache")
-        parent_before = self.info(directory_handle)
+        try:
+            parent_before = self.info(directory_handle)
+        except RuntimeInputsError:
+            raise RuntimeInputsError("cache_parent_changed", "cache") from None
         if not parent_before.directory or parent_before.reparse:
             raise RuntimeInputsError("cache_parent_changed", "cache")
-        encoded = str(destination).encode("utf-16-le")
-        offset = _FileRenameInformation.filename.offset
+        encoded = destination_name.encode("utf-16-le")
+        offset = _NtFileRenameInformation.filename.offset
         buffer = ctypes.create_string_buffer(
             max(
-                ctypes.sizeof(_FileRenameInformation),
+                ctypes.sizeof(_NtFileRenameInformation),
                 offset + len(encoded),
             )
         )
-        information = _FileRenameInformation.from_buffer(buffer)
+        information = _NtFileRenameInformation.from_buffer(buffer)
         information.replace_if_exists = False
-        information.root_directory = None
+        information.root_directory = directory_handle
         information.filename_length = len(encoded)
         ctypes.memmove(ctypes.addressof(buffer) + offset, encoded, len(encoded))
-        if self.set_information(
-            ctypes.c_void_p(handle),
-            self._FILE_RENAME_INFO,
-            buffer,
-            len(buffer),
-        ):
-            if self.info(directory_handle) != parent_before:
+        io_status = _IoStatusBlock()
+        status = ctypes.c_int32(
+            int(
+                self.nt_set_information(
+                    ctypes.c_void_p(handle),
+                    ctypes.byref(io_status),
+                    buffer,
+                    len(buffer),
+                    self._FILE_RENAME_INFORMATION,
+                )
+            )
+        ).value
+        if status >= 0:
+            try:
+                parent_after = self.info(directory_handle)
+            except RuntimeInputsError:
+                raise RuntimeInputsError("cache_parent_changed", "cache") from None
+            if (
+                not parent_after.directory
+                or parent_after.reparse
+                or parent_after.identity != parent_before.identity
+            ):
                 raise RuntimeInputsError("cache_parent_changed", "cache")
             return
-        error = ctypes.get_last_error()
+        try:
+            error = int(self.nt_status_to_dos_error(status))
+        except Exception:
+            raise RuntimeInputsError("secure_primitive_unavailable", "cache") from None
         if error in {80, 183}:
-            raise FileExistsError
+            raise FileExistsError(
+                error,
+                "destination already exists",
+                destination_name,
+            )
         raise RuntimeInputsError("secure_primitive_unavailable", "cache")
 
     def delete_on_close(self, handle: int) -> None:
@@ -564,6 +627,7 @@ class _WindowsOwnedFile:
     token: str
     name: str
     handle: int
+    published: bool = False
 
 
 @dataclass(frozen=True)
@@ -1057,6 +1121,10 @@ class _Directory:
             owned = self._windows_owned.get(identity)
             if owned is None or owned.token != name:
                 return "preserved"
+            if owned.published:
+                self._windows_owned.pop(identity)
+                _WINDOWS_API.close(owned.handle)
+                return "preserved"
             try:
                 guard_info = self.windows_owned_info(identity, name)
                 current = self.windows_owned_named_info(identity, name)
@@ -1203,9 +1271,15 @@ class _Directory:
         current_name: str,
     ) -> None:
         owned = self._require_windows_owned(identity, token)
-        if owned.name != previous_name:
+        if (
+            owned.name != previous_name
+            or owned.published
+            or previous_name == current_name
+            or not _portable_component(current_name)
+        ):
             raise RuntimeInputsError("cache_entry_unsafe", "cache")
         owned.name = current_name
+        owned.published = True
 
     def release_windows_owned(
         self,
@@ -2013,7 +2087,7 @@ def _publish_no_replace(
         _WINDOWS_API.rename_no_replace(
             guard,
             directory.windows_handles[-1],
-            directory.path / destination_name,
+            destination_name,
         )
         directory.rebind_windows_owned(
             temporary_identity,

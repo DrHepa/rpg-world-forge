@@ -171,11 +171,12 @@ class FakeWindowsHandleApi:
         self,
         handle: int,
         directory_handle: int,
-        destination: Path,
+        destination_name: str,
     ) -> None:
         source = self._paths[handle]
-        if destination.parent != self._paths[directory_handle]:
-            raise AssertionError("destination escaped its retained parent")
+        if not runtime_inputs._portable_component(destination_name):
+            raise AssertionError("destination is not one portable component")
+        destination = self._paths[directory_handle] / destination_name
         if destination.exists():
             raise FileExistsError
         source.rename(destination)
@@ -217,7 +218,7 @@ def _write_cache(cache: Path, artifact: InputArtifact, payload: bytes) -> Path:
 
 
 class StudioRuntimeInputsTests(unittest.TestCase):
-    def test_windows_rename_uses_absolute_win32_request_and_retained_parent(
+    def test_windows_rename_uses_parent_bound_nt_request_and_retained_parent(
         self,
     ) -> None:
         api = object.__new__(runtime_inputs._WindowsApi)
@@ -230,30 +231,71 @@ class StudioRuntimeInputsTests(unittest.TestCase):
         api.info = lambda _handle: parent
         calls: list[tuple[object, ...]] = []
 
-        def set_information(*args: object) -> int:
+        def nt_set_information(*args: object) -> int:
             calls.append(args)
-            return 1
+            return 0
 
-        api.set_information = set_information
-        destination = Path.cwd() / "runtime-cache/input.bin"
+        api.nt_set_information = nt_set_information
+        api.nt_status_to_dos_error = lambda _status: 317
 
-        api.rename_no_replace(71, 73, destination)
+        api.rename_no_replace(71, 73, "input.bin")
 
         self.assertEqual(1, len(calls))
-        source_handle, information_class, payload, _size = calls[0]
+        source_handle, io_status, payload, _size, information_class = calls[0]
         self.assertEqual(71, source_handle.value)
-        self.assertEqual(api._FILE_RENAME_INFO, information_class)
-        rename = runtime_inputs._FileRenameInformation.from_buffer(payload)
+        self.assertIsNotNone(io_status)
+        self.assertEqual(api._FILE_RENAME_INFORMATION, information_class)
+        rename = runtime_inputs._NtFileRenameInformation.from_buffer(payload)
         self.assertFalse(rename.replace_if_exists)
-        self.assertIsNone(rename.root_directory)
-        offset = runtime_inputs._FileRenameInformation.filename.offset
+        self.assertEqual(73, rename.root_directory)
+        offset = runtime_inputs._NtFileRenameInformation.filename.offset
         self.assertEqual(
-            str(destination),
+            "input.bin",
             runtime_inputs.ctypes.string_at(
                 runtime_inputs.ctypes.addressof(payload) + offset,
                 rename.filename_length,
             ).decode("utf-16-le"),
         )
+
+    def test_windows_rename_maps_ntstatus_and_rejects_changed_parent(self) -> None:
+        api = object.__new__(runtime_inputs._WindowsApi)
+        parent = runtime_inputs._WindowsHandleInfo(
+            identity=(17, 41),
+            attributes=0x10,
+            link_count=1,
+            size=0,
+        )
+        api.info = lambda _handle: parent
+        collision_status = runtime_inputs.ctypes.c_int32(0xC0000035).value
+        api.nt_set_information = lambda *_args: collision_status
+        mapped: list[int] = []
+
+        def map_status(status: int) -> int:
+            mapped.append(status)
+            return 183
+
+        api.nt_status_to_dos_error = map_status
+        with self.assertRaises(FileExistsError):
+            api.rename_no_replace(71, 73, "input.bin")
+        self.assertEqual([collision_status], mapped)
+
+        changed = runtime_inputs._WindowsHandleInfo(
+            identity=(17, 42),
+            attributes=0x10,
+            link_count=1,
+            size=0,
+        )
+        states = iter((parent, changed))
+        api.info = lambda _handle: next(states)
+        api.nt_set_information = lambda *_args: 0
+        with self.assertRaises(RuntimeInputsError) as caught:
+            api.rename_no_replace(71, 73, "input.bin")
+        self.assertEqual("cache_parent_changed", caught.exception.code)
+
+        api.info = lambda _handle: parent
+        with self.assertRaises(RuntimeInputsError) as invalid:
+            api.rename_no_replace(71, 73, "../escape")
+        self.assertEqual("secure_primitive_unavailable", invalid.exception.code)
 
     def test_windows_owner_seals_writers_and_only_reopen_adds_delete_sharing(
         self,
@@ -1124,6 +1166,45 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                 self.assertEqual(destination.read_bytes(), payload)
                 self.assertEqual(parent.cleanup_owned(name, identity), "preserved")
                 self.assertEqual(fake_windows.compatible_opens, [temporary, destination])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_owned_temp_mock_preserves_post_publish_failure_evidence(self) -> None:
+        payload = b"published failure evidence"
+        fake_windows = FakeWindowsHandleApi()
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                runtime_inputs._open_windows_directory(cache, (), create=True) as parent,
+            ):
+                descriptor, name, identity = parent.create_temporary()
+                os.write(descriptor, payload)
+                os.fsync(descriptor)
+                os.close(descriptor)
+                temporary = parent.path / name
+                destination = parent.path / "published.bin"
+
+                with (
+                    patch(
+                        "scripts.studio_runtime_inputs._sync_parent",
+                        side_effect=(
+                            None,
+                            RuntimeInputsError("sync_failed", "cache"),
+                        ),
+                    ),
+                    self.assertRaises(RuntimeInputsError) as caught,
+                ):
+                    runtime_inputs._publish_no_replace(
+                        parent,
+                        name,
+                        destination.name,
+                        identity,
+                    )
+
+                self.assertEqual("sync_failed", caught.exception.code)
+                self.assertEqual(parent.cleanup_owned(name, identity), "preserved")
+                self.assertFalse(temporary.exists())
+                self.assertEqual(destination.read_bytes(), payload)
 
     @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
     def test_windows_owned_temp_mock_preserves_mismatched_winner(self) -> None:
