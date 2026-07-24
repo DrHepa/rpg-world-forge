@@ -2155,6 +2155,36 @@ class M6GameConsumerTests(unittest.TestCase):
         self.assertTrue(any("GLB close cleanup" in note for note in notes))
         self.assertTrue(all("\n" not in note for note in notes))
 
+    def test_glb_descriptor_read_requests_binary_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resource.glb"
+            payload = b"glTF\x1a\r\nbinary"
+            path.write_bytes(payload)
+            binary_flag = 0x8000
+            opened_flags: list[int] = []
+            original_open = os.open
+
+            def record_open(target: object, flags: int, *args: object, **kwargs: object) -> int:
+                opened_flags.append(flags)
+                return original_open(
+                    target,
+                    flags & ~binary_flag,
+                    *args,
+                    **kwargs,
+                )
+
+            with (
+                patch.object(gltf_module.os, "O_BINARY", binary_flag, create=True),
+                patch.object(gltf_module.os, "open", side_effect=record_open),
+            ):
+                self.assertEqual(
+                    payload,
+                    gltf_module._read_regular_file(path, max_bytes=len(payload)),  # noqa: SLF001
+                )
+
+        self.assertEqual(1, len(opened_flags))
+        self.assertTrue(opened_flags[0] & binary_flag)
+
     def test_glb_descriptor_cleanup_only_is_glb_error(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "resource.glb"
