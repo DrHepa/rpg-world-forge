@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
+import os
 import shutil
+import sys
 import tempfile
 import unittest
 import wave
 from pathlib import Path
 from unittest.mock import patch
 
+import worldforge.directory_publish as directory_publish_module
 from isoworld.content.loader import load_worldpack
 from worldforge.bundle import (
     BUNDLE_FORMAT,
     CATALOG_FORMAT,
+    IMPORT_JOURNAL,
     BundleError,
     export_runtime_bundle,
     import_runtime_bundle,
@@ -43,6 +48,28 @@ def _write_wav(path: Path) -> None:
         target.setsampwidth(2)
         target.setframerate(22050)
         target.writeframes(b"\x00\x00" * 64)
+
+
+def _linux_retained_directory_delete_error(root: Path) -> int | None:
+    if not sys.platform.startswith("linux") or os.name != "posix":
+        return None
+    probe = root / "retained-delete-probe"
+    probe.mkdir()
+    (probe / "nonempty").write_bytes(b"probe")
+    descriptor = os.open(
+        probe,
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        return directory_publish_module._posix_unlink_descriptor_raw(  # noqa: SLF001
+            descriptor,
+            directory=True,
+        )
+    finally:
+        os.close(descriptor)
 
 
 def _write_worldpack(root: Path, world_id: str = "modly_foundation") -> Path:
@@ -362,6 +389,38 @@ class RuntimeBundleTests(unittest.TestCase):
                 bundle.manifest["required_runtime_features"],
             )
 
+    def test_unsorted_runtime_features_fail_before_stage_on_linux_einval(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            if _linux_retained_directory_delete_error(root) != errno.EINVAL:
+                self.skipTest("host retained-FD directory deletion does not return EINVAL")
+            source = root / "source"
+            source.mkdir()
+            payload = build_worldpack(
+                load_source_project(ROOT / "examples/foundation/source/manifest.json")
+            )
+            payload["runtime_requirements"]["required_features"].reverse()
+            payload["content_hash"] = canonical_payload_hash(payload)
+            worldpack = source / "unsorted.worldpack.json"
+            worldpack.write_bytes(json.dumps(payload).encode("utf-8"))
+            renderpack = _write_renderpack(source, worldpack)
+            licenses = root / "licenses"
+            licenses.mkdir()
+            (licenses / "LICENSE.txt").write_text("CC0-1.0\n", encoding="utf-8")
+            destination = root / "unsorted-features"
+
+            with self.assertRaisesRegex(BundleError, "must be sorted"):
+                export_runtime_bundle(
+                    worldpack,
+                    renderpack,
+                    destination,
+                    release_id="1.0.0",
+                    licenses_directory=licenses,
+                )
+
+            self.assertFalse(destination.exists())
+            self.assertEqual([], list(root.glob(".unsorted-features.export-*")))
+
     def test_export_rejects_mutable_release_authoring_metadata_and_symlinks(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -389,27 +448,65 @@ class RuntimeBundleTests(unittest.TestCase):
             raw["provider"] = "not-runtime-safe"
             raw["content_hash"] = canonical_payload_hash(raw)
             renderpack.write_bytes(json.dumps(raw).encode("utf-8"))
+            provider_destination = root / "provider-bundle"
             with self.assertRaisesRegex(BundleError, "provider metadata"):
                 export_runtime_bundle(
                     worldpack,
                     renderpack,
-                    root / "provider-bundle",
+                    provider_destination,
                     release_id="1.0.0",
                     licenses_directory=licenses,
                 )
+            self.assertFalse(provider_destination.exists())
+            self.assertEqual([], list(root.glob(".provider-bundle.export-*")))
 
             raw.pop("provider")
             raw["content_hash"] = canonical_payload_hash(raw)
             renderpack.write_bytes(json.dumps(raw).encode("utf-8"))
             (licenses / "unsafe-link.txt").symlink_to(licenses / "CONTENT-LICENSE.txt")
+            symlink_destination = root / "symlink-bundle"
             with self.assertRaisesRegex(BundleError, "symlink"):
                 export_runtime_bundle(
                     worldpack,
                     renderpack,
-                    root / "symlink-bundle",
+                    symlink_destination,
                     release_id="1.0.0",
                     licenses_directory=licenses,
                 )
+            self.assertFalse(symlink_destination.exists())
+            self.assertEqual([], list(root.glob(".symlink-bundle.export-*")))
+
+    def test_linux_einval_export_cleanup_preserves_primary_publication_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            if _linux_retained_directory_delete_error(root) != errno.EINVAL:
+                self.skipTest("host retained-FD directory deletion does not return EINVAL")
+            worldpack, renderpack, licenses = _fixture(root / "fixture")
+            destination = root / "invalid-bundle"
+
+            with (
+                patch(
+                    "worldforge.bundle.publish_directory_noreplace",
+                    side_effect=FileExistsError(errno.EEXIST, "injected collision"),
+                ),
+                self.assertRaisesRegex(BundleError, "destination already exists") as raised,
+            ):
+                export_runtime_bundle(
+                    worldpack,
+                    renderpack,
+                    destination,
+                    release_id="1.0.0",
+                    licenses_directory=licenses,
+                )
+
+            self.assertFalse(destination.exists())
+            stages = list(root.glob(".invalid-bundle.export-*"))
+            self.assertEqual(1, len(stages))
+            self.assertTrue(stages[0].is_dir())
+            self.assertIn(
+                "Identity-bound POSIX descriptor deletion is unavailable",
+                "\n".join(getattr(raised.exception, "__notes__", ())),
+            )
 
     def test_license_payloads_are_text_only_and_reserved_controls_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -417,25 +514,31 @@ class RuntimeBundleTests(unittest.TestCase):
             worldpack, renderpack, licenses = _fixture(root / "fixture")
             binary = licenses / "NOTICE.dll"
             binary.write_bytes(b"MZ\x00")
+            binary_destination = root / "binary-license"
             with self.assertRaisesRegex(BundleError, "license.*extension"):
                 export_runtime_bundle(
                     worldpack,
                     renderpack,
-                    root / "binary-license",
+                    binary_destination,
                     release_id="1.0.0",
                     licenses_directory=licenses,
                 )
+            self.assertFalse(binary_destination.exists())
+            self.assertEqual([], list(root.glob(".binary-license.export-*")))
             binary.unlink()
             reserved = licenses / "AGENTS.md"
             reserved.write_text("agent instructions\n", encoding="utf-8")
+            reserved_destination = root / "reserved-license"
             with self.assertRaisesRegex(BundleError, "authoring-only path"):
                 export_runtime_bundle(
                     worldpack,
                     renderpack,
-                    root / "reserved-license",
+                    reserved_destination,
                     release_id="1.0.0",
                     licenses_directory=licenses,
                 )
+            self.assertFalse(reserved_destination.exists())
+            self.assertEqual([], list(root.glob(".reserved-license.export-*")))
             reserved.unlink()
 
             bundle = export_runtime_bundle(
@@ -551,14 +654,17 @@ class RuntimeBundleTests(unittest.TestCase):
             renderpack_raw["assets"][0]["files"][0]["sha256"] = _sha256(source_asset)
             renderpack_raw["content_hash"] = canonical_payload_hash(renderpack_raw)
             renderpack.write_bytes(json.dumps(renderpack_raw).encode("utf-8"))
+            false_destination = root / "false-export"
             with self.assertRaisesRegex(BundleError, "declared media type"):
                 export_runtime_bundle(
                     worldpack,
                     renderpack,
-                    root / "false-export",
+                    false_destination,
                     release_id="1.0.0",
                     licenses_directory=licenses,
                 )
+            self.assertFalse(false_destination.exists())
+            self.assertEqual([], list(root.glob(".false-export.export-*")))
 
             bundle = _export(root, "valid-bundle")
             asset = bundle.root / "assets/neutral_sfx/00_audio.wav"
@@ -698,18 +804,44 @@ class RuntimeBundleTests(unittest.TestCase):
             bundle = _export(root, "bundle")
             game = _game(root)
             catalog_before = (game / "game_data/worlds.lock.json").read_bytes()
-            with patch("worldforge.bundle._write_catalog_atomic", side_effect=OSError("disk full")):
-                with self.assertRaisesRegex(OSError, "disk full"):
+            primary = OSError("disk full")
+            with patch("worldforge.bundle._write_catalog_atomic", side_effect=primary):
+                with self.assertRaisesRegex(OSError, "disk full") as raised:
                     import_runtime_bundle(
                         bundle.root,
                         game,
                         expected_bundle_hash=bundle.bundle_hash,
                     )
+            self.assertIs(primary, raised.exception)
             self.assertEqual(
                 catalog_before,
                 (game / "game_data/worlds.lock.json").read_bytes(),
             )
-            self.assertFalse(game.joinpath("game_data/worlds").exists())
+            destination = game / "game_data/worlds/modly_foundation/1.0.0"
+            self.assertTrue(destination.is_dir())
+            journal_path = game / IMPORT_JOURNAL
+            self.assertTrue(journal_path.is_file())
+            journal = json.loads(journal_path.read_bytes())
+            self.assertEqual("ready", journal["state"])
+            temporary = game / journal["temporary"]
+            self.assertFalse(temporary.exists())
+            self.assertIn(
+                "catalog roll-forward on retry",
+                "\n".join(getattr(raised.exception, "__notes__", ())),
+            )
+
+            recovered = import_runtime_bundle(
+                bundle.root,
+                game,
+                expected_bundle_hash=bundle.bundle_hash,
+            )
+
+            self.assertEqual(destination.resolve(), recovered.resolve())
+            self.assertFalse(journal_path.exists())
+            catalog = json.loads((game / "game_data/worlds.lock.json").read_bytes())
+            self.assertEqual(1, len(catalog["releases"]))
+            self.assertEqual(bundle.bundle_hash, catalog["releases"][0]["bundle_hash"])
+            self.assertEqual([], list(destination.parent.glob(".1.0.0.rollback-*")))
             self.assertFalse(game.joinpath(".isoworld-mutation.lock").exists())
 
     def test_import_refuses_a_concurrent_or_stale_exclusive_lock(self) -> None:

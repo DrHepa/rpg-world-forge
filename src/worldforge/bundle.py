@@ -736,8 +736,9 @@ def _validate_file_records(raw: Any, context: str) -> list[dict[str, Any]]:
     return records
 
 
-def _validate_manifest(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    manifest = _exact_keys(raw, _MANIFEST_KEYS, "bundle manifest")
+def _validate_manifest_runtime_metadata(manifest: dict[str, Any]) -> None:
+    """Validate manifest fields derived only from loaded runtime documents."""
+
     if manifest["format"] != BUNDLE_FORMAT or manifest["format_version"] != BUNDLE_FORMAT_VERSION:
         raise BundleError("Unknown runtime bundle format")
     _validate_world_id(manifest["world_id"])
@@ -768,6 +769,11 @@ def _validate_manifest(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
         or features != sorted(set(features))
     ):
         raise BundleError("required_runtime_features must be a sorted unique list of IDs")
+
+
+def _validate_manifest(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    manifest = _exact_keys(raw, _MANIFEST_KEYS, "bundle manifest")
+    _validate_manifest_runtime_metadata(manifest)
     files = _validate_file_records(manifest["files"], "files")
     licenses = _validate_file_records(manifest["licenses"], "licenses")
     if any(not record["path"].startswith("licenses/") for record in licenses):
@@ -783,11 +789,10 @@ def _validate_manifest(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], list[
     return files, licenses
 
 
-def _stage_runtime_payload(
+def _load_runtime_payload_sources(
     worldpack_path: Path,
     renderpack_path: Path,
-    stage: Path,
-) -> tuple[WorldPack, RenderPack, dict[str, Any], dict[str, Any], dict[str, str]]:
+) -> tuple[WorldPack, RenderPack, dict[str, Any], dict[str, Any]]:
     if worldpack_path.is_symlink() or renderpack_path.is_symlink():
         raise BundleError("Worldpack and renderpack inputs may not be symlinks")
     worldpack_raw = _read_json(
@@ -804,21 +809,40 @@ def _stage_runtime_payload(
     _scan_json_runtime_boundary(renderpack_raw, "source renderpack")
     _validate_worldpack_envelope(worldpack_raw, "source worldpack")
     _validate_renderpack_shape(renderpack_raw, "source renderpack")
+    _runtime_features(worldpack_raw)
     try:
         source_worldpack = load_worldpack(worldpack_path)
         source_renderpack = load_renderpack(renderpack_path, source_worldpack)
     except (WorldPackError, RenderPackError) as exc:
         raise BundleError(f"Source runtime content is invalid: {exc}") from exc
+    return source_worldpack, source_renderpack, worldpack_raw, renderpack_raw
+
+
+def _stage_runtime_payload(
+    worldpack_path: Path,
+    renderpack_path: Path,
+    stage: Path,
+) -> tuple[WorldPack, RenderPack, dict[str, Any], dict[str, Any], dict[str, str]]:
+    source_worldpack, source_renderpack, worldpack_raw, renderpack_raw = (
+        _load_runtime_payload_sources(worldpack_path, renderpack_path)
+    )
     try:
-        return _stage_runtime_payload_from_loaded(
+        result = _stage_runtime_payload_from_loaded(
             stage,
             source_worldpack,
             source_renderpack,
             worldpack_raw,
             renderpack_raw,
         )
-    finally:
+    except BaseException as original_error:
+        try:
+            source_renderpack.close()
+        except RenderPackError as cleanup_error:
+            original_error.add_note(f"Source renderpack cleanup failed: {cleanup_error}")
+        raise
+    else:
         source_renderpack.close()
+        return result
 
 
 def _stage_runtime_payload_from_loaded(
@@ -902,13 +926,13 @@ def _stage_runtime_payload_from_loaded(
     )
 
 
-def _copy_licenses(licenses_directory: Path, stage: Path) -> dict[str, str]:
+def _license_sources(licenses_directory: Path) -> list[tuple[Path, str, str]]:
     files, _ = _walk_regular_files(licenses_directory, "license directory")
     if not files:
         raise BundleError("The runtime bundle requires at least one license file")
     if len(files) > MAX_BUNDLE_FILES - 3:
         raise BundleError("The license directory contains too many files for one bundle")
-    result: dict[str, str] = {}
+    result: list[tuple[Path, str, str]] = []
     folded_paths: set[str] = set()
     for source in files:
         relative_source = source.relative_to(licenses_directory).as_posix()
@@ -917,15 +941,99 @@ def _copy_licenses(licenses_directory: Path, stage: Path) -> dict[str, str]:
         if relative.casefold() in folded_paths:
             raise BundleError(f"License paths collide on case-insensitive platforms: {relative}")
         folded_paths.add(relative.casefold())
+        media_type = _license_media_type(source)
+        info = source.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise BundleError(f"license directory contains a mutable or special file: {source}")
+        record = {
+            "path": relative,
+            "sha256": "0" * 64,
+            "size": info.st_size,
+            "media_type": media_type,
+        }
+        _validate_license_record(record, f"license source {relative}")
+        if media_type == "application/json":
+            document = _read_json(
+                source,
+                limit=MAX_LICENSE_BYTES,
+                context=f"license source {relative}",
+            )
+            _scan_json_runtime_boundary(document, relative)
+            result.append((source, relative, media_type))
+            continue
+        try:
+            text = source.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise BundleError(f"License notice is not UTF-8 text: {relative}") from exc
+        if "\x00" in text:
+            raise BundleError(f"License notice contains NUL bytes: {relative}")
+        result.append((source, relative, media_type))
+    return result
+
+
+def _copy_licenses(licenses_directory: Path, stage: Path) -> dict[str, str]:
+    sources = _license_sources(licenses_directory)
+    result: dict[str, str] = {}
+    for source, relative, media_type in sources:
         destination = stage / PurePosixPath(relative)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
-        result[relative] = _license_media_type(source)
+        result[relative] = media_type
         _verify_license_payload(
             stage,
-            _file_record(stage, relative, result[relative]),
+            _file_record(stage, relative, media_type),
         )
     return result
+
+
+def _preflight_runtime_bundle_inputs(
+    worldpack_path: Path,
+    renderpack_path: Path,
+    licenses_directory: Path,
+    release_id: str,
+) -> None:
+    """Reject all source-contract errors before allocating a private export stage."""
+
+    source_worldpack, source_renderpack, worldpack_raw, renderpack_raw = (
+        _load_runtime_payload_sources(
+            worldpack_path,
+            renderpack_path,
+        )
+    )
+    try:
+        _validate_manifest_runtime_metadata(
+            {
+                "format": BUNDLE_FORMAT,
+                "format_version": BUNDLE_FORMAT_VERSION,
+                "world_id": source_worldpack.world_id,
+                "release_id": release_id,
+                "source_hashes": {
+                    "worldpack_content_hash": source_worldpack.content_hash,
+                    "renderpack_content_hash": renderpack_raw["content_hash"],
+                },
+                "worldpack": {
+                    "path": "worldpack.json",
+                    "format_version": source_worldpack.format_version,
+                    "content_hash": source_worldpack.content_hash,
+                },
+                "renderpack": {
+                    "path": "renderpack.json",
+                    "format_version": renderpack_raw["format_version"],
+                    "content_hash": source_renderpack.content_hash,
+                    "world_content_hash": source_renderpack.world_content_hash,
+                },
+                "required_runtime_features": _runtime_features(worldpack_raw),
+            }
+        )
+        _license_sources(licenses_directory)
+    except BaseException as original_error:
+        try:
+            source_renderpack.close()
+        except RenderPackError as cleanup_error:
+            original_error.add_note(f"Source renderpack cleanup failed: {cleanup_error}")
+        raise
+    else:
+        source_renderpack.close()
 
 
 def export_runtime_bundle(
@@ -946,6 +1054,15 @@ def export_runtime_bundle(
         )
     except ValueError as exc:
         raise BundleError(str(exc)) from exc
+    source_worldpack_path = Path(worldpack_path)
+    source_renderpack_path = Path(renderpack_path)
+    source_licenses_directory = Path(licenses_directory)
+    _preflight_runtime_bundle_inputs(
+        source_worldpack_path,
+        source_renderpack_path,
+        source_licenses_directory,
+        release_id,
+    )
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     stage = destination_path.parent / f".{destination_path.name}.export-{uuid.uuid4().hex}"
     if stage.exists():
@@ -956,12 +1073,12 @@ def export_runtime_bundle(
     verified: VerifiedRuntimeBundle | None = None
     try:
         worldpack, renderpack, worldpack_raw, source_renderpack_raw, asset_media = (
-            _stage_runtime_payload(Path(worldpack_path), Path(renderpack_path), stage)
+            _stage_runtime_payload(source_worldpack_path, source_renderpack_path, stage)
         )
         bundled_renderpack_hash = renderpack.content_hash
         bundled_world_content_hash = renderpack.world_content_hash
         renderpack.close()
-        license_media = _copy_licenses(Path(licenses_directory), stage)
+        license_media = _copy_licenses(source_licenses_directory, stage)
         media_types = {
             "worldpack.json": "application/json",
             "renderpack.json": "application/json",
@@ -1027,14 +1144,15 @@ def export_runtime_bundle(
                     verify=lambda candidate: None,
                 )
             except DirectoryPublishError as cleanup_error:
-                raise BundleError(
-                    f"Bundle export failed and staged cleanup could not complete: {cleanup_error}"
-                ) from original_error
+                original_error.add_note(
+                    "Bundle export staged cleanup could not complete; "
+                    f"private stage retained at {stage}: {cleanup_error}"
+                )
         if snapshot_cleanup_error is not None:
-            raise BundleError(
-                "Bundle export failed and verified snapshot cleanup could not complete: "
+            original_error.add_note(
+                "Bundle export verified snapshot cleanup could not complete: "
                 f"{snapshot_cleanup_error}"
-            ) from original_error
+            )
         raise
 
 
@@ -1669,20 +1787,29 @@ def _journal_path(root: Path, relative: str) -> Path:
     return root / PurePosixPath(relative)
 
 
+def _journal_bundle_release(
+    path: Path,
+    identity: DirectoryIdentity,
+    bundle_hash: str,
+) -> dict[str, Any]:
+    try:
+        if directory_identity(path, context="journalled bundle") != identity:
+            raise BundleError("Journalled bundle directory identity changed")
+        with verify_runtime_bundle(path, expected_bundle_hash=bundle_hash) as verified:
+            release = _catalog_release(verified)
+        if directory_identity(path, context="journalled bundle") != identity:
+            raise BundleError("Journalled bundle directory changed during verification")
+    except DirectoryPublishError as exc:
+        raise BundleError(str(exc)) from exc
+    return release
+
+
 def _verify_journal_bundle(
     path: Path,
     identity: DirectoryIdentity,
     bundle_hash: str,
 ) -> None:
-    try:
-        if directory_identity(path, context="journalled bundle") != identity:
-            raise BundleError("Journalled bundle directory identity changed")
-        with verify_runtime_bundle(path, expected_bundle_hash=bundle_hash):
-            pass
-        if directory_identity(path, context="journalled bundle") != identity:
-            raise BundleError("Journalled bundle directory changed during verification")
-    except DirectoryPublishError as exc:
-        raise BundleError(str(exc)) from exc
+    _journal_bundle_release(path, identity, bundle_hash)
 
 
 def _rollback_journal_bundle(
@@ -1704,6 +1831,42 @@ def _rollback_journal_bundle(
         raise BundleError(f"Could not safely roll back bundle import: {exc}") from exc
 
 
+def _roll_forward_published_journal_bundle(
+    root: Path,
+    journal: dict[str, Any],
+    catalog_before: dict[str, Any],
+    destination: Path,
+    identity: DirectoryIdentity,
+) -> Path:
+    """Commit the exact catalog transaction for one verified published journal."""
+
+    release = _journal_bundle_release(destination, identity, journal["bundle_hash"])
+    if (
+        release["world_id"] != journal["world_id"]
+        or release["release_id"] != journal["release_id"]
+        or release["path"] != journal["destination"]
+    ):
+        raise BundleError("Journalled bundle metadata disagrees with its destination")
+    releases = _validate_catalog_document(catalog_before)
+    updated_releases = [*releases, release]
+    updated_releases.sort(key=lambda item: (item["world_id"], item["release_id"]))
+    catalog_after = {
+        "format": CATALOG_FORMAT,
+        "format_version": CATALOG_FORMAT_VERSION,
+        "releases": updated_releases,
+    }
+    _validate_catalog_document(catalog_after)
+    if _sha256_bytes(_pretty_json(catalog_after)) != journal["catalog_after_hash"]:
+        raise BundleError("Recovered catalog transaction disagrees with its journal")
+    _write_catalog_atomic(root / WORLD_CATALOG, catalog_after)
+    _, written_hash = _catalog_snapshot(root)
+    if written_hash != journal["catalog_after_hash"]:
+        raise BundleError("Recovered catalog transaction did not commit exactly")
+    _verify_journal_bundle(destination, identity, journal["bundle_hash"])
+    _remove_import_journal(root, journal)
+    return destination
+
+
 def _remove_created_directories(root: Path, records: list[dict[str, Any]]) -> None:
     for record in reversed(records):
         identity = _identity_from_document(
@@ -1720,7 +1883,7 @@ def _recover_import_journal(root: Path) -> Path | None:
     journal = _read_import_journal(root)
     if journal is None:
         return None
-    _, catalog_hash = _catalog_snapshot(root)
+    catalog, catalog_hash = _catalog_snapshot(root)
     identity = _identity_from_document(
         journal["directory_identity"],
         "journal directory_identity",
@@ -1742,8 +1905,16 @@ def _recover_import_journal(root: Path) -> Path | None:
         raise BundleError("Bundle import journal has both staged and published directories")
     if journal["state"] == "copying" and destination_exists:
         raise BundleError("Copying bundle import journal unexpectedly has a published directory")
+    if journal["state"] == "ready" and destination_exists:
+        return _roll_forward_published_journal_bundle(
+            root,
+            journal,
+            catalog,
+            destination,
+            identity,
+        )
 
-    rollback = destination if destination_exists else temporary if temporary_exists else None
+    rollback = temporary if temporary_exists else None
     if rollback is not None:
         if journal["state"] == "ready":
             _rollback_journal_bundle(rollback, identity, journal["bundle_hash"])
@@ -1951,6 +2122,7 @@ def _import_verified_bundle(
     temporary = world_root / f".{verified.release_id}.import-{operation_id}"
     temporary_identity: DirectoryIdentity | None = None
     journal: dict[str, Any] | None = None
+    catalog_commit_failed = False
     try:
         temporary.mkdir()
         temporary_identity = directory_identity(temporary, context="staged bundle import")
@@ -1988,17 +2160,29 @@ def _import_verified_bundle(
         if published_identity != temporary_identity:
             raise BundleError("Published bundle identity disagrees with its journal")
         _verify_journal_bundle(destination, temporary_identity, verified.bundle_hash)
-        _write_catalog_atomic(root / WORLD_CATALOG, catalog_after)
+        try:
+            _write_catalog_atomic(root / WORLD_CATALOG, catalog_after)
+        except BaseException as catalog_error:
+            catalog_commit_failed = True
+            catalog_error.add_note(
+                "Verified published bundle and exact ready journal retained for "
+                "catalog roll-forward on retry"
+            )
+            raise
         _remove_import_journal(root, journal)
         return destination
     except Exception as original_error:
+        if catalog_commit_failed:
+            raise
         if journal is not None and (root / IMPORT_JOURNAL).exists():
+            recovered: Path | None = None
             try:
                 recovered = _recover_import_journal(root)
             except Exception as recovery_error:
-                raise BundleError(
-                    f"Bundle import failed and recovery could not complete: {recovery_error}"
-                ) from original_error
+                original_error.add_note(
+                    "Bundle import recovery could not complete; "
+                    f"journalled internal evidence retained: {recovery_error}"
+                )
             if recovered == destination:
                 return destination
         elif temporary_identity is not None and temporary.exists():
@@ -2010,9 +2194,10 @@ def _import_verified_bundle(
                 )
                 _remove_created_directories(root, created)
             except Exception as cleanup_error:
-                raise BundleError(
-                    f"Bundle import failed and staged cleanup could not complete: {cleanup_error}"
-                ) from original_error
+                original_error.add_note(
+                    "Bundle import staged cleanup could not complete; "
+                    f"private stage retained at {temporary}: {cleanup_error}"
+                )
         else:
             _remove_created_directories(root, created)
         raise

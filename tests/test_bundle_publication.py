@@ -582,18 +582,13 @@ class BundlePublicationTests(unittest.TestCase):
                 return original_publish(source, target)
 
             linux_fail_closed = sys.platform.startswith("linux") and os.name == "posix"
-            expected_error = (
-                "staged cleanup could not complete"
-                if linux_fail_closed
-                else "destination already exists"
-            )
             with (
                 patch.object(
                     bundle_module,
                     "publish_directory_noreplace",
                     side_effect=race,
                 ),
-                self.assertRaisesRegex(BundleError, expected_error),
+                self.assertRaisesRegex(BundleError, "destination already exists") as raised,
             ):
                 export_runtime_bundle(
                     worldpack,
@@ -609,6 +604,11 @@ class BundlePublicationTests(unittest.TestCase):
             )
             stages = list(root.glob(".bundle.export-*"))
             self.assertEqual(1 if linux_fail_closed else 0, len(stages))
+            if linux_fail_closed:
+                self.assertIn(
+                    "Identity-bound POSIX descriptor deletion is unavailable",
+                    "\n".join(getattr(raised.exception, "__notes__", ())),
+                )
 
     def test_catalog_failure_rolls_back_only_the_owned_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -616,20 +616,14 @@ class BundlePublicationTests(unittest.TestCase):
             bundle, game = self._bundle_and_game(root)
             catalog = game / "game_data/worlds.lock.json"
             before = catalog.read_bytes()
-            linux_fail_closed = sys.platform.startswith("linux") and os.name == "posix"
-            expected_error = (
-                "recovery could not complete" if linux_fail_closed else "injected catalog failure"
-            )
+            primary = OSError("injected catalog failure")
             with (
                 patch.object(
                     bundle_module,
                     "_write_catalog_atomic",
-                    side_effect=OSError("injected catalog failure"),
+                    side_effect=primary,
                 ),
-                self.assertRaisesRegex(
-                    BundleError if linux_fail_closed else OSError,
-                    expected_error,
-                ),
+                self.assertRaisesRegex(OSError, "injected catalog failure") as raised,
             ):
                 import_runtime_bundle(
                     bundle.root,
@@ -637,12 +631,18 @@ class BundlePublicationTests(unittest.TestCase):
                     expected_bundle_hash=bundle.bundle_hash,
                 )
 
+            self.assertIs(primary, raised.exception)
             self.assertEqual(before, catalog.read_bytes())
             destination = game / "game_data/worlds/modly_foundation/1.0.0"
-            self.assertEqual(linux_fail_closed, destination.exists())
-            self.assertEqual(linux_fail_closed, (game / IMPORT_JOURNAL).exists())
-            self.assertEqual([], list((game / "game_data").rglob("*.import-*")))
+            self.assertTrue(destination.is_dir())
+            self.assertTrue((game / IMPORT_JOURNAL).is_file())
+            stages = list((game / "game_data").rglob("*.import-*"))
+            self.assertEqual(0, len(stages))
             self.assertEqual([], list(destination.parent.glob(".1.0.0.rollback-*")))
+            self.assertIn(
+                "catalog roll-forward on retry",
+                "\n".join(getattr(raised.exception, "__notes__", ())),
+            )
 
     def test_interrupted_publication_is_recovered_before_retry(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -650,26 +650,15 @@ class BundlePublicationTests(unittest.TestCase):
             bundle, game = self._bundle_and_game(root)
             destination = self._leave_published_crash(bundle, game)
 
-            linux_fail_closed = sys.platform.startswith("linux") and os.name == "posix"
-            if linux_fail_closed:
-                with self.assertRaisesRegex(BundleError, "deletion is unavailable"):
-                    import_runtime_bundle(
-                        bundle.root,
-                        game,
-                        expected_bundle_hash=bundle.bundle_hash,
-                    )
-                self.assertTrue(destination.is_dir())
-                self.assertTrue((game / IMPORT_JOURNAL).exists())
-            else:
-                recovered = import_runtime_bundle(
-                    bundle.root,
-                    game,
-                    expected_bundle_hash=bundle.bundle_hash,
-                )
-                self.assertEqual(destination.resolve(), recovered.resolve())
-                self.assertFalse((game / IMPORT_JOURNAL).exists())
+            recovered = import_runtime_bundle(
+                bundle.root,
+                game,
+                expected_bundle_hash=bundle.bundle_hash,
+            )
+            self.assertEqual(destination.resolve(), recovered.resolve())
+            self.assertFalse((game / IMPORT_JOURNAL).exists())
             catalog = json.loads((game / "game_data/worlds.lock.json").read_text(encoding="utf-8"))
-            self.assertEqual(0 if linux_fail_closed else 1, len(catalog["releases"]))
+            self.assertEqual(1, len(catalog["releases"]))
             self.assertEqual([], list(destination.parent.glob(".1.0.0.rollback-*")))
 
     def test_recovery_preserves_a_hash_mismatched_directory(self) -> None:
@@ -700,8 +689,14 @@ class BundlePublicationTests(unittest.TestCase):
             destination.mkdir()
             marker = destination / "concurrent.txt"
             marker.write_text("do not delete\n", encoding="utf-8")
+            journal = json.loads((game / IMPORT_JOURNAL).read_text(encoding="utf-8"))
+            temporary = game / journal["temporary"]
+            self.assertFalse(temporary.exists())
 
-            with self.assertRaisesRegex(BundleError, "identity.*matches|no longer matches"):
+            with self.assertRaisesRegex(
+                BundleError,
+                "identity.*matches|no longer matches|identity changed",
+            ):
                 import_runtime_bundle(
                     bundle.root,
                     game,
@@ -710,6 +705,7 @@ class BundlePublicationTests(unittest.TestCase):
 
             self.assertEqual("do not delete\n", marker.read_text(encoding="utf-8"))
             self.assertTrue(owned.is_dir())
+            self.assertFalse(temporary.exists())
             self.assertTrue((game / IMPORT_JOURNAL).exists())
 
     def test_import_preserves_a_concurrent_destination_and_journal(self) -> None:
@@ -733,7 +729,7 @@ class BundlePublicationTests(unittest.TestCase):
                     "publish_directory_noreplace",
                     side_effect=race,
                 ),
-                self.assertRaisesRegex(BundleError, "recovery could not complete"),
+                self.assertRaisesRegex(BundleError, "Import destination already exists") as raised,
             ):
                 import_runtime_bundle(
                     bundle.root,
@@ -748,6 +744,10 @@ class BundlePublicationTests(unittest.TestCase):
             )
             self.assertTrue((game / IMPORT_JOURNAL).is_file())
             self.assertEqual(1, len(list(destination.parent.glob(".1.0.0.import-*"))))
+            self.assertIn(
+                "both staged and published directories",
+                "\n".join(getattr(raised.exception, "__notes__", ())),
+            )
 
     def test_interrupted_copy_is_recovered_before_retry(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
