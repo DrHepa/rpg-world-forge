@@ -122,15 +122,16 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Verify pinned Node and npm toolchain
         working-directory: apps/studio
-        run: >-
-          node -e
-          "const fs=require('node:fs');const path=require('node:path');
-          if(process.version!=='v24.14.1')process.exit(1);
-          const npm=process.platform==='win32'
-          ?path.join(path.dirname(process.execPath),'node_modules/npm/package.json')
-          :path.resolve(path.dirname(process.execPath),'../lib/node_modules/npm/package.json');
-          if(JSON.parse(fs.readFileSync(npm,'utf8')).version!=='11.13.0')
-          process.exit(1)"
+        shell: bash
+        run: |
+          test "$(node --version)" = "v24.14.1"
+          test "$(npm --version)" = "11.13.0"
+          npm_root="$(npm root --global)"
+          node -e '
+            const fs = require("node:fs");
+            const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            if (manifest.version !== "11.13.0") process.exit(1);
+          ' "${npm_root}/npm/package.json"
       - name: Install exact Studio dependencies
         working-directory: apps/studio
         run: npm ci

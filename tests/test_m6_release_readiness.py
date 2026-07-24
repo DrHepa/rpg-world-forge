@@ -89,8 +89,8 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
         self.assertIn('          - "3.11"\n          - "3.12"', studio)
         self.assertIn(f"uses: actions/setup-node@{SETUP_NODE_SHA}", studio)
         self.assertIn('node-version: "24.14.1"', studio)
-        self.assertIn("process.version!=='v24.14.1'", studio)
-        self.assertIn("!=='11.13.0'", studio)
+        self.assertIn('test "$(node --version)" = "v24.14.1"', studio)
+        self.assertIn('test "$(npm --version)" = "11.13.0"', studio)
         self.assertIn("cache-dependency-path: apps/studio/package-lock.json", studio)
 
         uses = re.findall(r"^\s*uses:\s*([^@\s]+)@([^\s]+)", workflow, re.MULTILINE)
@@ -134,11 +134,30 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
                 f"npm@{package_engines['npm']}"
             ),
         )
+        verify_step_name = "      - name: Verify pinned Node and npm toolchain\n"
+        verify_start = studio.index(verify_step_name)
+        verify_end = studio.index("      - name:", verify_start + len(verify_step_name))
+        verify_step = studio[verify_start:verify_end]
+        self.assertIn("        shell: bash\n", verify_step)
         self.assertEqual(
-            studio.count(f"process.version!=='v{package_engines['node']}'"),
+            verify_step.count(f'test "$(node --version)" = "v{package_engines["node"]}"'),
             1,
         )
-        self.assertEqual(studio.count(f"!=='{package_engines['npm']}'"), 1)
+        self.assertEqual(
+            verify_step.count(f'test "$(npm --version)" = "{package_engines["npm"]}"'),
+            1,
+        )
+        self.assertEqual(verify_step.count('npm_root="$(npm root --global)"'), 1)
+        self.assertEqual(
+            verify_step.count('"${npm_root}/npm/package.json"'),
+            1,
+        )
+        self.assertEqual(
+            verify_step.count(
+                f'if (manifest.version !== "{package_engines["npm"]}") process.exit(1);'
+            ),
+            1,
+        )
 
     def test_all_rows_bind_python_and_run_complete_studio_and_runtime_gates(self) -> None:
         studio = _studio_job(WORKFLOW.read_text(encoding="utf-8"))
