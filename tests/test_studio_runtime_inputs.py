@@ -171,10 +171,11 @@ class FakeWindowsHandleApi:
         self,
         handle: int,
         directory_handle: int,
-        destination_name: str,
+        destination: Path,
     ) -> None:
         source = self._paths[handle]
-        destination = self._paths[directory_handle] / destination_name
+        if destination.parent != self._paths[directory_handle]:
+            raise AssertionError("destination escaped its retained parent")
         if destination.exists():
             raise FileExistsError
         source.rename(destination)
@@ -216,6 +217,44 @@ def _write_cache(cache: Path, artifact: InputArtifact, payload: bytes) -> Path:
 
 
 class StudioRuntimeInputsTests(unittest.TestCase):
+    def test_windows_rename_uses_absolute_win32_request_and_retained_parent(
+        self,
+    ) -> None:
+        api = object.__new__(runtime_inputs._WindowsApi)
+        parent = runtime_inputs._WindowsHandleInfo(
+            identity=(17, 41),
+            attributes=0x10,
+            link_count=1,
+            size=0,
+        )
+        api.info = lambda _handle: parent
+        calls: list[tuple[object, ...]] = []
+
+        def set_information(*args: object) -> int:
+            calls.append(args)
+            return 1
+
+        api.set_information = set_information
+        destination = Path.cwd() / "runtime-cache/input.bin"
+
+        api.rename_no_replace(71, 73, destination)
+
+        self.assertEqual(1, len(calls))
+        source_handle, information_class, payload, _size = calls[0]
+        self.assertEqual(71, source_handle.value)
+        self.assertEqual(api._FILE_RENAME_INFO, information_class)
+        rename = runtime_inputs._FileRenameInformation.from_buffer(payload)
+        self.assertFalse(rename.replace_if_exists)
+        self.assertIsNone(rename.root_directory)
+        offset = runtime_inputs._FileRenameInformation.filename.offset
+        self.assertEqual(
+            str(destination),
+            runtime_inputs.ctypes.string_at(
+                runtime_inputs.ctypes.addressof(payload) + offset,
+                rename.filename_length,
+            ).decode("utf-16-le"),
+        )
+
     def test_windows_owner_seals_writers_and_only_reopen_adds_delete_sharing(
         self,
     ) -> None:

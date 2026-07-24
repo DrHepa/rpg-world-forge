@@ -345,9 +345,14 @@ class _WindowsApi:
         self,
         handle: int,
         directory_handle: int,
-        destination_name: str,
+        destination: Path,
     ) -> None:
-        encoded = destination_name.encode("utf-16-le")
+        if not destination.is_absolute():
+            raise RuntimeInputsError("secure_primitive_unavailable", "cache")
+        parent_before = self.info(directory_handle)
+        if not parent_before.directory or parent_before.reparse:
+            raise RuntimeInputsError("cache_parent_changed", "cache")
+        encoded = str(destination).encode("utf-16-le")
         offset = _FileRenameInformation.filename.offset
         buffer = ctypes.create_string_buffer(
             max(
@@ -357,7 +362,7 @@ class _WindowsApi:
         )
         information = _FileRenameInformation.from_buffer(buffer)
         information.replace_if_exists = False
-        information.root_directory = ctypes.c_void_p(directory_handle)
+        information.root_directory = None
         information.filename_length = len(encoded)
         ctypes.memmove(ctypes.addressof(buffer) + offset, encoded, len(encoded))
         if self.set_information(
@@ -366,6 +371,8 @@ class _WindowsApi:
             buffer,
             len(buffer),
         ):
+            if self.info(directory_handle) != parent_before:
+                raise RuntimeInputsError("cache_parent_changed", "cache")
             return
         error = ctypes.get_last_error()
         if error in {80, 183}:
@@ -2006,7 +2013,7 @@ def _publish_no_replace(
         _WINDOWS_API.rename_no_replace(
             guard,
             directory.windows_handles[-1],
-            destination_name,
+            directory.path / destination_name,
         )
         directory.rebind_windows_owned(
             temporary_identity,
