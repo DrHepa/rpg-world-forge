@@ -7,9 +7,10 @@ import errno
 import os
 import stat
 import sys
-import uuid
-from collections.abc import Callable
-from pathlib import Path
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path, PurePath
 
 import isoworld.content.file_stat as file_stat_module
 from isoworld.content.file_stat import (
@@ -19,6 +20,11 @@ from isoworld.content.file_stat import (
     is_link_or_reparse,
     path_file_stat,
 )
+from isoworld.content.publication_journal import (
+    PublicationJournalError,
+    journal_frame,
+    recover_last_complete_payload,
+)
 
 DirectoryIdentity = tuple[int, int]
 
@@ -27,12 +33,355 @@ class DirectoryPublishError(OSError):
     """Raised when a directory cannot be published without replacement."""
 
 
+class DirectoryPublishIndeterminateError(DirectoryPublishError):
+    """Raised when a native publication mutated names but durability is unproven."""
+
+
+def _read_descriptor_bytes(descriptor: int, *, limit: int) -> bytes:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    payload = bytearray()
+    while len(payload) <= limit:
+        chunk = os.read(
+            descriptor,
+            min(1024 * 1024, limit + 1 - len(payload)),
+        )
+        if not chunk:
+            break
+        payload.extend(chunk)
+    if len(payload) > limit:
+        raise DirectoryPublishError("Append-only journal exceeds its byte limit")
+    return bytes(payload)
+
+
+def _last_complete_journal_payload(
+    payload: bytes,
+    *,
+    max_record_bytes: int,
+) -> bytes:
+    try:
+        return recover_last_complete_payload(
+            payload,
+            max_record_bytes=max_record_bytes,
+        )
+    except PublicationJournalError as exc:
+        raise DirectoryPublishError(str(exc)) from exc
+
+
+def _journal_frame(payload: bytes) -> bytes:
+    try:
+        return journal_frame(payload)
+    except PublicationJournalError as exc:
+        raise DirectoryPublishError(str(exc)) from exc
+
+
+def _write_descriptor_bytes(descriptor: int, payload: bytes) -> None:
+    view = memoryview(payload)
+    while view:
+        written = os.write(descriptor, view)
+        if written <= 0:
+            raise OSError("short append-only journal write")
+        view = view[written:]
+
+
+def _require_journal_binding(
+    path: Path,
+    descriptor: int,
+    expected_identity: DirectoryIdentity,
+) -> None:
+    retained = descriptor_file_stat(descriptor)
+    named = path_file_stat(path)
+    if (
+        is_link_or_reparse(retained)
+        or is_link_or_reparse(named)
+        or not stat.S_ISREG(retained.st_mode)
+        or not stat.S_ISREG(named.st_mode)
+        or retained.st_nlink != 1
+        or named.st_nlink != 1
+        or file_identity(retained) != expected_identity
+        or file_identity(named) != expected_identity
+    ):
+        raise DirectoryPublishError("Append-only journal path binding changed")
+
+
+def read_append_only_journal(
+    path: Path,
+    *,
+    max_record_bytes: int,
+    max_file_bytes: int,
+) -> tuple[bytes, DirectoryIdentity] | None:
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOINHERIT", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor: int | None = None
+    try:
+        try:
+            descriptor = os.open(path, flags)
+        except FileNotFoundError:
+            return None
+        retained = descriptor_file_stat(descriptor)
+        identity = file_identity(retained)
+        _require_journal_binding(path, descriptor, identity)
+        file_payload = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
+        _require_journal_binding(path, descriptor, identity)
+        return (
+            _last_complete_journal_payload(
+                file_payload,
+                max_record_bytes=max_record_bytes,
+            ),
+            identity,
+        )
+    except DirectoryPublishError:
+        raise
+    except OSError as exc:
+        raise DirectoryPublishError(f"Could not read append-only journal {path}: {exc}") from exc
+    finally:
+        if descriptor is not None:
+            _close_descriptors(((descriptor, "append-only journal descriptor cleanup"),))
+
+
+def create_append_only_journal(
+    path: Path,
+    payload: bytes,
+    *,
+    max_record_bytes: int,
+) -> DirectoryIdentity:
+    if not payload or len(payload) > max_record_bytes:
+        raise DirectoryPublishError("Append-only journal record exceeds its byte limit")
+    flags = (
+        os.O_RDWR
+        | os.O_CREAT
+        | os.O_EXCL
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOINHERIT", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, flags, 0o600)
+        retained = descriptor_file_stat(descriptor)
+        identity = file_identity(retained)
+        if (
+            is_link_or_reparse(retained)
+            or not stat.S_ISREG(retained.st_mode)
+            or retained.st_nlink != 1
+            or retained.st_size != 0
+        ):
+            raise DirectoryPublishError("New append-only journal is unsafe")
+        _write_descriptor_bytes(descriptor, payload)
+        os.fsync(descriptor)
+        _require_journal_binding(path, descriptor, identity)
+        if _read_descriptor_bytes(descriptor, limit=max_record_bytes) != payload:
+            raise DirectoryPublishError("New append-only journal bytes changed")
+        return identity
+    except (DirectoryPublishError, FileExistsError):
+        raise
+    except OSError as exc:
+        raise DirectoryPublishError(f"Could not create append-only journal {path}: {exc}") from exc
+    finally:
+        if descriptor is not None:
+            _close_descriptors(((descriptor, "new append-only journal descriptor cleanup"),))
+
+
+def append_append_only_journal(
+    path: Path,
+    *,
+    expected_identity: DirectoryIdentity,
+    expected_payload: bytes,
+    updated_payload: bytes,
+    max_record_bytes: int,
+    max_file_bytes: int,
+) -> DirectoryIdentity:
+    if not updated_payload or len(updated_payload) > max_record_bytes:
+        raise DirectoryPublishError("Append-only journal record exceeds its byte limit")
+    flags = (
+        os.O_RDWR
+        | os.O_APPEND
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOINHERIT", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, flags)
+        _require_journal_binding(path, descriptor, expected_identity)
+        before = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
+        if _last_complete_journal_payload(
+            before,
+            max_record_bytes=max_record_bytes,
+        ) != expected_payload or not (
+            before == expected_payload or before.endswith(_journal_frame(expected_payload))
+        ):
+            raise DirectoryPublishError("Append-only journal changed before transition")
+        _require_journal_binding(path, descriptor, expected_identity)
+        frame = _journal_frame(updated_payload)
+        if len(before) + len(frame) > max_file_bytes:
+            raise DirectoryPublishError("Append-only journal exceeds its byte limit")
+        os.lseek(descriptor, 0, os.SEEK_END)
+        _write_descriptor_bytes(descriptor, frame)
+        os.fsync(descriptor)
+        _require_journal_binding(path, descriptor, expected_identity)
+        after = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
+        if (
+            _last_complete_journal_payload(
+                after,
+                max_record_bytes=max_record_bytes,
+            )
+            != updated_payload
+        ):
+            raise DirectoryPublishError("Append-only journal transition is incomplete")
+        return expected_identity
+    except DirectoryPublishError:
+        raise
+    except OSError as exc:
+        raise DirectoryPublishError(f"Could not append journal transition {path}: {exc}") from exc
+    finally:
+        if descriptor is not None:
+            _close_descriptors(((descriptor, "append-only journal transition cleanup"),))
+
+
 _AT_REMOVEDIR = 0x200
 _AT_EMPTY_PATH = 0x1000
 
 
 class _FileDispositionInfo(ctypes.Structure):
     _fields_ = [("delete_file", ctypes.c_ubyte)]
+
+
+class _FileRenameInformation(ctypes.Structure):
+    _fields_ = [
+        ("replace_if_exists", ctypes.c_int),
+        ("root_directory", ctypes.c_void_p),
+        ("filename_length", ctypes.c_uint32),
+        ("filename", ctypes.c_wchar * 1),
+    ]
+
+
+_POSIX_DIRECTORY_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_CLOEXEC", 0)
+    | getattr(os, "O_DIRECTORY", 0)
+    | getattr(os, "O_NOFOLLOW", 0)
+)
+_POSIX_FILE_FLAGS = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+
+
+@dataclass
+class RetainedDirectory:
+    """One directory and its parent retained by identity-bound descriptors."""
+
+    path: Path
+    parent_fd: int
+    fd: int
+    parent_identity: DirectoryIdentity
+    identity: DirectoryIdentity
+
+    def require_binding(self) -> None:
+        _require_expected_directory(
+            path_file_stat(self.path.parent),
+            self.parent_identity,
+            context="retained directory parent path",
+        )
+        _require_expected_directory(
+            descriptor_file_stat(self.parent_fd),
+            self.parent_identity,
+            context="retained directory parent",
+        )
+        try:
+            named = os.stat(
+                self.path.name,
+                dir_fd=self.parent_fd,
+                follow_symlinks=False,
+            )
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Retained directory path binding changed: {self.path}: {exc}"
+            ) from exc
+        _require_expected_directory(
+            named,
+            self.identity,
+            context="retained directory path",
+        )
+        _require_expected_directory(
+            descriptor_file_stat(self.fd),
+            self.identity,
+            context="retained directory descriptor",
+        )
+
+    def close(self) -> None:
+        _close_descriptors(
+            (
+                (self.fd, "retained directory descriptor cleanup"),
+                (self.parent_fd, "retained directory parent cleanup"),
+            )
+        )
+
+
+@dataclass
+class DirectoryClaim:
+    """An exclusively-created destination retained through its parent and own FD."""
+
+    path: Path
+    parent_fd: int
+    fd: int
+    parent_identity: DirectoryIdentity
+    identity: DirectoryIdentity
+
+    def require_binding(self) -> None:
+        _require_expected_directory(
+            path_file_stat(self.path.parent),
+            self.parent_identity,
+            context="claimed destination parent path",
+        )
+        _require_expected_directory(
+            descriptor_file_stat(self.parent_fd),
+            self.parent_identity,
+            context="claimed destination parent",
+        )
+        try:
+            named = os.stat(
+                self.path.name,
+                dir_fd=self.parent_fd,
+                follow_symlinks=False,
+            )
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Claimed destination path binding changed: {self.path}: {exc}"
+            ) from exc
+        _require_expected_directory(
+            named,
+            self.identity,
+            context="claimed destination path",
+        )
+        _require_expected_directory(
+            descriptor_file_stat(self.fd),
+            self.identity,
+            context="claimed destination descriptor",
+        )
+
+    def fsync(self) -> None:
+        self.require_binding()
+        try:
+            os.fsync(self.fd)
+            os.fsync(self.parent_fd)
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not durably flush claimed destination {self.path}: {exc}"
+            ) from exc
+        self.require_binding()
+
+    def close(self) -> None:
+        _close_descriptors(
+            (
+                (self.fd, "claimed destination descriptor cleanup"),
+                (self.parent_fd, "claimed destination parent cleanup"),
+            )
+        )
 
 
 def _validated_directory_state(path: Path, *, context: str) -> FileStat:
@@ -229,13 +578,24 @@ def fsync_directory(path: Path, *, context: str) -> None:
         raise DirectoryPublishError(f"{context} identity changed after durable metadata flush")
 
 
-def _linux_rename_noreplace(source: Path, destination: Path) -> None:
+def _linux_rename_retained_noreplace(
+    retained: RetainedDirectory,
+    destination: Path,
+) -> DirectoryIdentity:
+    """Rename one validated stage name with Linux RENAME_NOREPLACE.
+
+    Linux does not provide a source-FD-bound rename primitive here. The retained
+    stage descriptor is post-mutation evidence; the source name remains subject
+    to a final pathname race that is detected, never described as prevented.
+    """
+
+    if retained.path.parent != destination.parent:
+        raise DirectoryPublishError("Linux directory publication must stay within one parent")
     try:
-        renameat2 = ctypes.CDLL(None, use_errno=True).renameat2
+        libc = ctypes.CDLL(None, use_errno=True)
+        renameat2 = libc.renameat2
     except (AttributeError, OSError) as exc:
-        raise DirectoryPublishError(
-            "Safe exclusive directory publication is unavailable on this Linux system"
-        ) from exc
+        raise DirectoryPublishError("Linux RENAME_NOREPLACE publication is unavailable") from exc
     renameat2.argtypes = [
         ctypes.c_int,
         ctypes.c_char_p,
@@ -244,84 +604,793 @@ def _linux_rename_noreplace(source: Path, destination: Path) -> None:
         ctypes.c_uint,
     ]
     renameat2.restype = ctypes.c_int
+
+    retained.require_binding()
+    try:
+        os.stat(
+            destination.name,
+            dir_fd=retained.parent_fd,
+            follow_symlinks=False,
+        )
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        raise DirectoryPublishError(
+            f"Could not inspect publication destination {destination}: {exc}"
+        ) from exc
+    else:
+        raise FileExistsError(errno.EEXIST, "destination already exists", destination)
+
+    ctypes.set_errno(0)
     if (
         renameat2(
-            -100,  # AT_FDCWD
-            os.fsencode(source),
-            -100,
-            os.fsencode(destination),
+            retained.parent_fd,
+            os.fsencode(retained.path.name),
+            retained.parent_fd,
+            os.fsencode(destination.name),
             1,  # RENAME_NOREPLACE
         )
-        == 0
+        != 0
     ):
-        return
-    error = ctypes.get_errno()
-    if error in {errno.EEXIST, errno.ENOTEMPTY}:
-        raise FileExistsError(error, "destination already exists", destination)
-    unsupported = {errno.EINVAL, errno.ENOSYS}
-    if hasattr(errno, "ENOTSUP"):
-        unsupported.add(errno.ENOTSUP)
-    if hasattr(errno, "EOPNOTSUPP"):
-        unsupported.add(errno.EOPNOTSUPP)
-    if error in unsupported:
+        error = ctypes.get_errno()
+        if error == errno.EEXIST:
+            raise FileExistsError(error, "destination already exists", destination)
+        if error in {
+            errno.ENOSYS,
+            errno.EINVAL,
+            getattr(errno, "ENOTSUP", errno.EINVAL),
+            getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+        }:
+            raise DirectoryPublishError("Linux RENAME_NOREPLACE publication is unavailable")
         raise DirectoryPublishError(
-            "Safe exclusive directory publication is unsupported by this Linux filesystem"
+            error,
+            f"Could not publish retained Linux directory: {os.strerror(error)}",
+            destination,
         )
-    raise DirectoryPublishError(error, os.strerror(error), destination)
+
+    def require_published_state(*, context: str) -> None:
+        _require_expected_directory(
+            descriptor_file_stat(retained.fd),
+            retained.identity,
+            context=f"{context} stage descriptor",
+        )
+        _require_expected_directory(
+            descriptor_file_stat(retained.parent_fd),
+            retained.parent_identity,
+            context=f"{context} parent descriptor",
+        )
+        _require_expected_directory(
+            path_file_stat(destination.parent),
+            retained.parent_identity,
+            context=f"{context} lexical parent",
+        )
+        _require_expected_directory(
+            os.stat(
+                destination.name,
+                dir_fd=retained.parent_fd,
+                follow_symlinks=False,
+            ),
+            retained.identity,
+            context=f"{context} destination through retained parent",
+        )
+        _require_expected_directory(
+            path_file_stat(destination),
+            retained.identity,
+            context=f"{context} logical destination",
+        )
+        try:
+            os.stat(
+                retained.path.name,
+                dir_fd=retained.parent_fd,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            raise DirectoryPublishError(f"{context} retained both stage and destination names")
+        try:
+            path_file_stat(retained.path)
+        except FileNotFoundError:
+            pass
+        else:
+            raise DirectoryPublishError(f"{context} retained the logical stage name")
+
+    try:
+        require_published_state(context="published Linux")
+        os.fsync(retained.fd)
+        os.fsync(retained.parent_fd)
+        require_published_state(context="durably published Linux")
+    except Exception as exc:
+        raise DirectoryPublishIndeterminateError(
+            "Linux directory publication outcome is indeterminate after "
+            f"RENAME_NOREPLACE; evidence retained at {retained.path} and {destination}: {exc}"
+        ) from exc
+    return retained.identity
 
 
-def _windows_rename_noreplace(source: Path, destination: Path) -> None:
+def _posix_mkdir_noreplace(parent_fd: int, name: str, mode: int) -> None:
+    os.mkdir(name, mode=mode, dir_fd=parent_fd)
+
+
+@contextmanager
+def open_expected_directory(
+    source: Path,
+    expected_identity: DirectoryIdentity,
+) -> Iterator[RetainedDirectory]:
+    """Open one expected Linux directory without trusting its name afterward."""
+
+    if (
+        not sys.platform.startswith("linux")
+        or os.name != "posix"
+        or os.open not in os.supports_dir_fd
+        or os.stat not in os.supports_dir_fd
+    ):
+        raise DirectoryPublishError(
+            "Identity-bound retained directory access is unavailable on this platform"
+        )
+    parent_fd: int | None = None
+    source_fd: int | None = None
+    try:
+        try:
+            parent_fd = os.open(source.parent, _POSIX_DIRECTORY_FLAGS)
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not retain publication source parent {source.parent}: {exc}"
+            ) from exc
+        try:
+            parent_info = descriptor_file_stat(parent_fd)
+            if is_link_or_reparse(parent_info) or not stat.S_ISDIR(parent_info.st_mode):
+                raise DirectoryPublishError("Publication source parent is not a real directory")
+            parent_identity = file_identity(parent_info)
+            source_fd = os.open(source.name, _POSIX_DIRECTORY_FLAGS, dir_fd=parent_fd)
+            _require_expected_directory(
+                descriptor_file_stat(source_fd),
+                expected_identity,
+                context="retained publication source",
+            )
+            retained = RetainedDirectory(
+                path=source,
+                parent_fd=parent_fd,
+                fd=source_fd,
+                parent_identity=parent_identity,
+                identity=expected_identity,
+            )
+            retained.require_binding()
+        except DirectoryPublishError:
+            raise
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not retain publication source {source}: {exc}"
+            ) from exc
+        yield retained
+    finally:
+        descriptors: list[tuple[int, str]] = []
+        if source_fd is not None:
+            descriptors.append((source_fd, "retained publication source cleanup"))
+        if parent_fd is not None:
+            descriptors.append((parent_fd, "retained publication source parent cleanup"))
+        _close_descriptors(tuple(descriptors))
+
+
+@contextmanager
+def claim_directory_noreplace(
+    destination: Path,
+    *,
+    expected_parent_identity: DirectoryIdentity | None = None,
+) -> Iterator[DirectoryClaim]:
+    """Exclusively create and retain one Linux destination directory."""
+
+    if (
+        not sys.platform.startswith("linux")
+        or os.name != "posix"
+        or os.mkdir not in os.supports_dir_fd
+        or os.open not in os.supports_dir_fd
+        or os.stat not in os.supports_dir_fd
+    ):
+        raise DirectoryPublishError(
+            "Identity-bound exclusive destination claims are unavailable on this platform"
+        )
+    if expected_parent_identity is None:
+        expected_parent_identity = directory_identity(
+            destination.parent,
+            context="publication destination parent",
+        )
+    parent_fd: int | None = None
+    destination_fd: int | None = None
+    try:
+        try:
+            parent_fd = os.open(destination.parent, _POSIX_DIRECTORY_FLAGS)
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not retain publication destination parent {destination.parent}: {exc}"
+            ) from exc
+        try:
+            parent_info = descriptor_file_stat(parent_fd)
+            if is_link_or_reparse(parent_info) or not stat.S_ISDIR(parent_info.st_mode):
+                raise DirectoryPublishError(
+                    "Publication destination parent is not a real directory"
+                )
+            parent_identity = file_identity(parent_info)
+            if parent_identity != expected_parent_identity:
+                raise DirectoryPublishError("Publication destination parent identity changed")
+            try:
+                _posix_mkdir_noreplace(parent_fd, destination.name, 0o700)
+            except FileExistsError as exc:
+                raise FileExistsError(
+                    errno.EEXIST,
+                    "destination already exists",
+                    destination,
+                ) from exc
+            destination_fd = os.open(
+                destination.name,
+                _POSIX_DIRECTORY_FLAGS,
+                dir_fd=parent_fd,
+            )
+            destination_info = descriptor_file_stat(destination_fd)
+            if is_link_or_reparse(destination_info) or not stat.S_ISDIR(destination_info.st_mode):
+                raise DirectoryPublishError("Claimed destination is not a real directory")
+            claim = DirectoryClaim(
+                path=destination,
+                parent_fd=parent_fd,
+                fd=destination_fd,
+                parent_identity=parent_identity,
+                identity=file_identity(destination_info),
+            )
+            claim.require_binding()
+        except (DirectoryPublishError, FileExistsError):
+            raise
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not claim publication destination {destination}: {exc}"
+            ) from exc
+        yield claim
+    finally:
+        descriptors: list[tuple[int, str]] = []
+        if destination_fd is not None:
+            descriptors.append((destination_fd, "claimed publication destination cleanup"))
+        if parent_fd is not None:
+            descriptors.append((parent_fd, "claimed publication destination parent cleanup"))
+        _close_descriptors(tuple(descriptors))
+
+
+def _stable_source_state(info: FileStat) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_mode,
+        info.st_nlink,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
+def _copy_regular_file_noreplace(
+    source_fd: int,
+    destination_fd: int,
+    name: str,
+    before: FileStat,
+) -> None:
+    source_file: int | None = None
+    destination_file: int | None = None
+    try:
+        source_file = os.open(name, _POSIX_FILE_FLAGS, dir_fd=source_fd)
+        opened = descriptor_file_stat(source_file)
+        if (
+            is_link_or_reparse(opened)
+            or not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or file_identity(opened) != file_identity(before)
+        ):
+            raise DirectoryPublishError(f"Publication source file identity changed: {name!r}")
+        destination_file = os.open(
+            name,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            stat.S_IMODE(opened.st_mode),
+            dir_fd=destination_fd,
+        )
+        while True:
+            chunk = os.read(source_file, 1024 * 1024)
+            if not chunk:
+                break
+            view = memoryview(chunk)
+            while view:
+                written = os.write(destination_file, view)
+                if written <= 0:
+                    raise DirectoryPublishError(f"Could not copy publication source file: {name!r}")
+                view = view[written:]
+        os.fchmod(destination_file, stat.S_IMODE(opened.st_mode))
+        os.fsync(destination_file)
+        after = descriptor_file_stat(source_file)
+        named_after = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+        if _stable_source_state(opened) != _stable_source_state(after) or _stable_source_state(
+            opened
+        ) != _stable_source_state(named_after):
+            raise DirectoryPublishError(f"Publication source file changed while copying: {name!r}")
+        copied = descriptor_file_stat(destination_file)
+        named_copied = os.stat(
+            name,
+            dir_fd=destination_fd,
+            follow_symlinks=False,
+        )
+        if (
+            not stat.S_ISREG(copied.st_mode)
+            or copied.st_nlink != 1
+            or copied.st_size != opened.st_size
+            or stat.S_IMODE(copied.st_mode) != stat.S_IMODE(opened.st_mode)
+            or file_identity(named_copied) != file_identity(copied)
+            or _stable_source_state(named_copied) != _stable_source_state(copied)
+        ):
+            raise DirectoryPublishError(
+                f"Published file does not match its source metadata: {name!r}"
+            )
+    except DirectoryPublishError:
+        raise
+    except OSError as exc:
+        raise DirectoryPublishError(
+            f"Could not copy publication source file {name!r}: {exc}"
+        ) from exc
+    finally:
+        descriptors: list[tuple[int, str]] = []
+        if destination_file is not None:
+            descriptors.append((destination_file, "published file descriptor cleanup"))
+        if source_file is not None:
+            descriptors.append((source_file, "publication source file cleanup"))
+        _close_descriptors(tuple(descriptors))
+
+
+def _copy_retained_tree(source_fd: int, destination_fd: int) -> None:
+    try:
+        with os.scandir(source_fd) as entries:
+            names = sorted(entry.name for entry in entries)
+    except OSError as exc:
+        raise DirectoryPublishError(f"Could not enumerate publication source: {exc}") from exc
+
+    for name in names:
+        try:
+            before = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not inspect publication source entry {name!r}: {exc}"
+            ) from exc
+        if stat.S_ISLNK(before.st_mode):
+            raise DirectoryPublishError(f"Publication source contains a symbolic link: {name!r}")
+        if stat.S_ISREG(before.st_mode):
+            if before.st_nlink != 1:
+                raise DirectoryPublishError(
+                    f"Publication source contains a hard-linked file: {name!r}"
+                )
+            _copy_regular_file_noreplace(
+                source_fd,
+                destination_fd,
+                name,
+                before,
+            )
+            continue
+        if not stat.S_ISDIR(before.st_mode):
+            raise DirectoryPublishError(f"Publication source contains a special file: {name!r}")
+
+        source_child: int | None = None
+        destination_child: int | None = None
+        try:
+            source_child = os.open(
+                name,
+                _POSIX_DIRECTORY_FLAGS,
+                dir_fd=source_fd,
+            )
+            opened = descriptor_file_stat(source_child)
+            _require_expected_directory(
+                opened,
+                file_identity(before),
+                context=f"publication source directory {name!r}",
+            )
+            os.mkdir(
+                name,
+                mode=0o700,
+                dir_fd=destination_fd,
+            )
+            destination_child = os.open(
+                name,
+                _POSIX_DIRECTORY_FLAGS,
+                dir_fd=destination_fd,
+            )
+            _copy_retained_tree(source_child, destination_child)
+            os.fchmod(destination_child, stat.S_IMODE(opened.st_mode))
+            os.fsync(destination_child)
+            copied_child = descriptor_file_stat(destination_child)
+            named_copied_child = os.stat(
+                name,
+                dir_fd=destination_fd,
+                follow_symlinks=False,
+            )
+            if file_identity(named_copied_child) != file_identity(
+                copied_child
+            ) or _stable_source_state(named_copied_child) != _stable_source_state(copied_child):
+                raise DirectoryPublishError(
+                    f"Published directory identity changed while copying: {name!r}"
+                )
+            after = descriptor_file_stat(source_child)
+            named_after = os.stat(
+                name,
+                dir_fd=source_fd,
+                follow_symlinks=False,
+            )
+            if _stable_source_state(opened) != _stable_source_state(after) or _stable_source_state(
+                opened
+            ) != _stable_source_state(named_after):
+                raise DirectoryPublishError(
+                    f"Publication source directory changed while copying: {name!r}"
+                )
+        except DirectoryPublishError:
+            raise
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not copy publication source directory {name!r}: {exc}"
+            ) from exc
+        finally:
+            descriptors = []
+            if destination_child is not None:
+                descriptors.append((destination_child, "published directory descriptor cleanup"))
+            if source_child is not None:
+                descriptors.append((source_child, "publication source directory cleanup"))
+            _close_descriptors(tuple(descriptors))
+
+
+def copy_retained_tree_noreplace(
+    source: RetainedDirectory,
+    destination: DirectoryClaim,
+) -> DirectoryIdentity:
+    """Copy an immutable retained tree into an empty claimed destination."""
+
+    destination.require_binding()
+    source_info = descriptor_file_stat(source.fd)
+    _copy_retained_tree(source.fd, destination.fd)
+    os.fchmod(destination.fd, stat.S_IMODE(source_info.st_mode))
+    try:
+        os.fsync(destination.fd)
+    except OSError as exc:
+        raise DirectoryPublishError(
+            f"Could not durably flush published directory {destination.path}: {exc}"
+        ) from exc
+    if _stable_source_state(source_info) != _stable_source_state(descriptor_file_stat(source.fd)):
+        raise DirectoryPublishError("Publication source directory changed while copying")
+    destination.fsync()
+    return destination.identity
+
+
+def _windows_rename_noreplace(
+    source: Path,
+    destination: Path,
+    *,
+    source_identity: DirectoryIdentity,
+    parent_identity: DirectoryIdentity,
+) -> DirectoryIdentity:
     win_dll = getattr(ctypes, "WinDLL", None)
     if win_dll is None:
         raise DirectoryPublishError(
             "Safe exclusive directory publication is unavailable on this Windows system"
         )
     kernel32 = win_dll("kernel32", use_last_error=True)
-    move_file = kernel32.MoveFileExW
-    move_file.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
-    move_file.restype = ctypes.c_int
-    movefile_write_through = 0x00000008
-    if move_file(str(source), str(destination), movefile_write_through):
-        return
-    get_last_error = getattr(ctypes, "get_last_error", None)
-    error = get_last_error() if get_last_error is not None else 0
-    if error in {80, 183}:  # ERROR_FILE_EXISTS, ERROR_ALREADY_EXISTS
-        raise FileExistsError(error, "destination already exists", destination)
-    if error == 5:  # ERROR_ACCESS_DENIED can be Windows' directory-collision result.
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    ]
+    create_file.restype = ctypes.c_void_p
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [ctypes.c_void_p]
+    close_handle.restype = ctypes.c_int
+    invalid_handle = ctypes.c_void_p(-1).value
+
+    def open_directory(path: Path, *, delete: bool) -> int:
+        access = 0x80000000 | 0x40000000 | 0x00100000
+        if delete:
+            access |= 0x00010000
+        handle = create_file(
+            str(path),
+            access,
+            0x00000001,  # share reads only; block writes and deletion
+            None,
+            3,
+            0x02000000 | 0x00200000,
+            None,
+        )
+        if handle in {None, invalid_handle}:
+            error = ctypes.get_last_error()
+            raise DirectoryPublishError(
+                f"Could not retain Windows publication directory {path}: "
+                f"{_windows_error_detail(error)}"
+            )
+        return int(handle)
+
+    def open_tree_entry(path: Path, *, directory: bool) -> int:
+        flags = 0x00200000
+        if directory:
+            flags |= 0x02000000
+        handle = create_file(
+            str(path),
+            0x80000000 | 0x40000000 | 0x00100000,
+            0x00000001,  # share reads only; block writes and deletion
+            None,
+            3,
+            flags,
+            None,
+        )
+        if handle in {None, invalid_handle}:
+            error = ctypes.get_last_error()
+            raise DirectoryPublishError(
+                f"Could not retain Windows publication payload {path}: "
+                f"{_windows_error_detail(error)}"
+            )
+        return int(handle)
+
+    def tree_snapshot(root: Path) -> dict[str, tuple[DirectoryIdentity, int, int, int, int]]:
+        def fail_walk(error: OSError) -> None:
+            raise DirectoryPublishError(
+                f"Could not inspect Windows publication payload tree: {error}"
+            ) from error
+
+        result: dict[str, tuple[DirectoryIdentity, int, int, int, int]] = {}
+        for current, directory_names, file_names in os.walk(
+            root,
+            topdown=True,
+            onerror=fail_walk,
+            followlinks=False,
+        ):
+            directory_names.sort()
+            file_names.sort()
+            current_path = Path(current)
+            for name, directory in (
+                *((name, True) for name in directory_names),
+                *((name, False) for name in file_names),
+            ):
+                path = current_path / name
+                info = path_file_stat(path)
+                expected_type = (
+                    stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
+                )
+                if (
+                    is_link_or_reparse(info)
+                    or not expected_type
+                    or (not directory and info.st_nlink != 1)
+                ):
+                    raise DirectoryPublishError(f"Windows publication payload is unsafe: {path}")
+                result[path.relative_to(root).as_posix()] = (
+                    file_identity(info),
+                    stat.S_IFMT(info.st_mode),
+                    info.st_nlink,
+                    info.st_size,
+                    info.st_mtime_ns,
+                )
+        return result
+
+    source_handle: int | None = None
+    parent_handle: int | None = None
+    payload_handles: list[tuple[str, int, bool]] = []
+    try:
+        source_handle = open_directory(source, delete=True)
+        _require_expected_directory(
+            file_stat_module._windows_handle_stat(source_handle),  # noqa: SLF001
+            source_identity,
+            context="retained Windows publication source",
+        )
+        parent_handle = open_directory(destination.parent, delete=False)
+        _require_expected_directory(
+            file_stat_module._windows_handle_stat(parent_handle),  # noqa: SLF001
+            parent_identity,
+            context="retained Windows publication parent",
+        )
+        expected_tree = tree_snapshot(source)
+        for relative, expected in sorted(expected_tree.items()):
+            payload_path = source / PurePath(*relative.split("/"))
+            directory = expected[1] == stat.S_IFDIR
+            handle = open_tree_entry(payload_path, directory=directory)
+            payload_handles.append((relative, handle, directory))
+            opened = file_stat_module._windows_handle_stat(handle)  # noqa: SLF001
+            if (
+                is_link_or_reparse(opened)
+                or file_identity(opened) != expected[0]
+                or stat.S_IFMT(opened.st_mode) != expected[1]
+                or opened.st_nlink != expected[2]
+                or opened.st_size != expected[3]
+                or opened.st_mtime_ns != expected[4]
+            ):
+                raise DirectoryPublishError(
+                    f"Windows publication payload identity changed: {relative}"
+                )
+        if tree_snapshot(source) != expected_tree:
+            raise DirectoryPublishError(
+                "Windows publication payload tree changed while retaining handles"
+            )
+
+        flush_file_buffers = kernel32.FlushFileBuffers
+        flush_file_buffers.argtypes = [ctypes.c_void_p]
+        flush_file_buffers.restype = ctypes.c_int
+
+        def flush_handle(handle: int, context: str) -> None:
+            if not flush_file_buffers(ctypes.c_void_p(handle)):
+                error = ctypes.get_last_error()
+                raise DirectoryPublishError(
+                    f"Could not durably flush {context}: {_windows_error_detail(error)}"
+                )
+
+        for relative, handle, directory in sorted(
+            payload_handles,
+            key=lambda item: (
+                item[2],
+                -len(PurePath(*item[0].split("/")).parts) if item[2] else 0,
+                item[0],
+            ),
+        ):
+            flush_handle(
+                handle,
+                f"Windows publication {'directory' if directory else 'payload'} {relative}",
+            )
+        if tree_snapshot(source) != expected_tree:
+            raise DirectoryPublishError(
+                "Windows publication payload tree changed before handle-bound rename"
+            )
+
+        encoded = destination.name.encode("utf-16-le")
+        offset = _FileRenameInformation.filename.offset
+        buffer = ctypes.create_string_buffer(
+            max(ctypes.sizeof(_FileRenameInformation), offset + len(encoded))
+        )
+        information = _FileRenameInformation.from_buffer(buffer)
+        information.replace_if_exists = False
+        information.root_directory = ctypes.c_void_p(parent_handle)
+        information.filename_length = len(encoded)
+        ctypes.memmove(ctypes.addressof(buffer) + offset, encoded, len(encoded))
+
+        set_information = kernel32.SetFileInformationByHandle
+        set_information.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+        ]
+        set_information.restype = ctypes.c_int
+        if not set_information(
+            ctypes.c_void_p(source_handle),
+            3,  # FileRenameInfo
+            buffer,
+            len(buffer),
+        ):
+            error = ctypes.get_last_error()
+            if error in {80, 183}:
+                raise FileExistsError(
+                    error,
+                    "destination already exists",
+                    destination,
+                )
+            if error == 5:
+                try:
+                    path_file_stat(destination)
+                except OSError:
+                    pass
+                else:
+                    raise FileExistsError(
+                        error,
+                        "destination already exists",
+                        destination,
+                    ) from None
+            raise DirectoryPublishError(
+                error,
+                _windows_error_detail(error),
+                destination,
+            )
+        published_info = file_stat_module._windows_handle_stat(source_handle)  # noqa: SLF001
+        _require_expected_directory(
+            published_info,
+            source_identity,
+            context="renamed Windows publication source",
+        )
+        for handle, context in (
+            (source_handle, "published Windows directory"),
+            (parent_handle, "Windows publication parent"),
+        ):
+            flush_handle(handle, context)
         try:
-            destination.lstat()
-        except OSError:
-            pass
-        else:
-            raise FileExistsError(error, "destination already exists", destination)
-    detail = _windows_error_detail(error)
-    raise DirectoryPublishError(error, detail, destination)
+            destination_info = path_file_stat(destination)
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not validate published Windows directory {destination}: {exc}"
+            ) from exc
+        _require_expected_directory(
+            destination_info,
+            source_identity,
+            context="published Windows destination",
+        )
+        if tree_snapshot(destination) != expected_tree:
+            raise DirectoryPublishError(
+                "Published Windows payload tree changed during handle-bound rename"
+            )
+        return file_identity(published_info)
+    finally:
+        primary = sys.exception()
+        cleanup_error: DirectoryPublishError | None = None
+        for handle, context in (
+            *(
+                (
+                    handle,
+                    f"Windows publication payload handle cleanup for {relative}",
+                )
+                for relative, handle, _directory in reversed(payload_handles)
+            ),
+            (source_handle, "Windows publication source handle cleanup"),
+            (parent_handle, "Windows publication parent handle cleanup"),
+        ):
+            if handle is None:
+                continue
+            if not close_handle(ctypes.c_void_p(handle)):
+                error = ctypes.get_last_error()
+                detail = f"{context} failed: {_windows_error_detail(error)}"
+                if primary is not None:
+                    primary.add_note(detail)
+                elif cleanup_error is not None:
+                    cleanup_error.add_note(detail)
+                else:
+                    cleanup_error = DirectoryPublishError(detail)
+        if cleanup_error is not None:
+            raise cleanup_error
 
 
-def publish_directory_noreplace(source: Path, destination: Path) -> DirectoryIdentity:
-    """Atomically move a directory to an absent destination or fail closed."""
+def publish_directory_noreplace(
+    source: Path,
+    destination: Path,
+    *,
+    expected_source_identity: DirectoryIdentity,
+) -> DirectoryIdentity:
+    """Publish one directory with supported native no-replace semantics."""
 
-    source_identity = directory_identity(source, context="publication source")
-    if source.parent != destination.parent:
-        raise DirectoryPublishError("Directory publication must stay within one parent")
-    parent_identity = directory_identity(source.parent, context="publication parent")
-    if destination.exists() or destination.is_symlink():
-        raise FileExistsError(errno.EEXIST, "destination already exists", destination)
+    source_identity = expected_source_identity
+    linux_publication = False
 
     if sys.platform.startswith("linux") and os.name == "posix":
-        _linux_rename_noreplace(source, destination)
+        with open_expected_directory(source, source_identity) as retained:
+            parent_identity = retained.parent_identity
+            published_identity = _linux_rename_retained_noreplace(retained, destination)
+            linux_publication = True
     elif os.name == "nt":
-        _windows_rename_noreplace(source, destination)
+        if source.parent != destination.parent:
+            raise DirectoryPublishError("Windows directory publication must stay within one parent")
+        parent_identity = directory_identity(source.parent, context="publication parent")
+        if destination.exists() or destination.is_symlink():
+            raise FileExistsError(errno.EEXIST, "destination already exists", destination)
+        published_identity = _windows_rename_noreplace(
+            source,
+            destination,
+            source_identity=source_identity,
+            parent_identity=parent_identity,
+        )
     else:
         raise DirectoryPublishError(
             "Safe exclusive directory publication is supported only on Linux and Windows"
         )
 
-    published_identity = directory_identity(destination, context="published directory")
-    if published_identity != source_identity:
-        raise DirectoryPublishError("Published directory identity changed unexpectedly")
-    if directory_identity(destination.parent, context="publication parent") != parent_identity:
-        raise DirectoryPublishError("Publication parent identity changed unexpectedly")
+    try:
+        if published_identity != source_identity:
+            raise DirectoryPublishError("Published directory identity changed unexpectedly")
+        if directory_identity(destination.parent, context="publication parent") != parent_identity:
+            raise DirectoryPublishError("Publication parent identity changed unexpectedly")
+        if directory_identity(destination, context="published directory") != source_identity:
+            raise DirectoryPublishError("Published directory identity changed unexpectedly")
+    except DirectoryPublishError as exc:
+        if linux_publication:
+            raise DirectoryPublishIndeterminateError(
+                "Linux directory publication outcome became indeterminate after "
+                f"RENAME_NOREPLACE; evidence retained at {source} and {destination}: {exc}"
+            ) from exc
+        raise
     return published_identity
 
 
@@ -395,19 +1464,12 @@ def _posix_preflight_directory_deletion(
         _raise_posix_descriptor_deletion_error(directory_error)
     if directory_error not in {errno.ENOTEMPTY, errno.EEXIST}:
         _raise_posix_descriptor_deletion_error(directory_error)
-    if not recursive:
-        raise DirectoryPublishError("Claimed empty directory is no longer empty")
-
-    file_error = _posix_unlink_descriptor_raw(descriptor, directory=False)
-    if file_error is None:
+    if recursive:
         raise DirectoryPublishError(
-            "POSIX descriptor deletion unexpectedly removed a directory as a regular file"
+            "Refusing to mutate a non-empty retained directory without a "
+            "pre-recorded retained child snapshot"
         )
-    if _posix_descriptor_deletion_unavailable(file_error):
-        _raise_posix_descriptor_deletion_error(file_error)
-    if file_error != errno.EISDIR:
-        _raise_posix_descriptor_deletion_error(file_error)
-    return False
+    raise DirectoryPublishError("Claimed empty directory is no longer empty")
 
 
 def _posix_remove_directory_contents(descriptor: int) -> None:
@@ -552,7 +1614,6 @@ def _posix_remove_claimed_directory(
             recursive=recursive,
         ):
             return
-        _posix_remove_directory_contents(claim_descriptor)
         _posix_unlink_descriptor(claim_descriptor, directory=True)
     except DirectoryPublishError:
         raise
@@ -717,42 +1778,19 @@ def _windows_remove_claimed_directory(
         directory=True,
     )
     try:
-        if recursive:
-            try:
-                children = tuple(sorted(path.iterdir(), key=lambda child: child.name))
-            except OSError as exc:
+        try:
+            has_children = next(path.iterdir(), None) is not None
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not inspect claimed Windows directory {path}: {exc}"
+            ) from exc
+        if has_children:
+            if recursive:
                 raise DirectoryPublishError(
-                    f"Could not enumerate guarded Windows directory {path}: {exc}"
-                ) from exc
-            for child in children:
-                info = path_file_stat(child)
-                if is_link_or_reparse(info):
-                    raise DirectoryPublishError(
-                        f"Guarded Windows cleanup entry became a reparse point: {child}"
-                    )
-                identity = file_identity(info)
-                if stat.S_ISDIR(info.st_mode):
-                    _windows_remove_claimed_directory(
-                        child,
-                        identity,
-                        recursive=True,
-                    )
-                elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
-                    _windows_remove_claimed_file(child, identity)
-                else:
-                    raise DirectoryPublishError(
-                        f"Guarded Windows cleanup entry is not owned: {child}"
-                    )
-        else:
-            try:
-                if next(path.iterdir(), None) is not None:
-                    raise DirectoryPublishError(
-                        "Claimed empty Windows directory is no longer empty"
-                    )
-            except OSError as exc:
-                raise DirectoryPublishError(
-                    f"Could not inspect claimed empty Windows directory {path}: {exc}"
-                ) from exc
+                    "Refusing to mutate a non-empty retained directory without a "
+                    "pre-recorded retained child snapshot"
+                )
+            raise DirectoryPublishError("Claimed empty Windows directory is no longer empty")
         _require_expected_directory(
             file_stat_module._windows_handle_stat(handle),  # noqa: SLF001
             expected_identity,
@@ -820,14 +1858,9 @@ def quarantine_and_remove_owned_directory(
         raise DirectoryPublishError(
             "Identity-bound directory removal is supported only on Linux and Windows"
         )
-    quarantine = path.parent / f".{path.name}.rollback-{uuid.uuid4().hex}"
-    moved_identity = publish_directory_noreplace(path, quarantine)
-    if moved_identity != expected_identity:
-        raise DirectoryPublishError("Quarantined directory identity no longer matches its journal")
-    verify(quarantine)
     _remove_claimed_directory(
-        quarantine.parent,
-        quarantine.name,
+        path.parent,
+        path.name,
         expected_identity,
         recursive=True,
     )
@@ -871,18 +1904,14 @@ def remove_owned_empty_directory(path: Path, expected_identity: DirectoryIdentit
         raise DirectoryPublishError(
             "Identity-bound directory removal is supported only on Linux and Windows"
         )
-    quarantine = path.parent / f".{path.name}.empty-cleanup-{uuid.uuid4().hex}"
     try:
-        moved_identity = publish_directory_noreplace(path, quarantine)
+        _remove_claimed_directory(
+            path.parent,
+            path.name,
+            expected_identity,
+            recursive=False,
+        )
     except DirectoryPublishError as exc:
         if isinstance(exc.__cause__, FileNotFoundError):
             return
         raise
-    if moved_identity != expected_identity:
-        raise DirectoryPublishError("Claimed directory identity no longer matches its journal")
-    _remove_claimed_directory(
-        quarantine.parent,
-        quarantine.name,
-        expected_identity,
-        recursive=False,
-    )

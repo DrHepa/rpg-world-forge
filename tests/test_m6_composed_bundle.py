@@ -7,7 +7,6 @@ import json
 import os
 import shutil
 import stat
-import sys
 import tempfile
 import unittest
 import uuid
@@ -38,6 +37,10 @@ M6_FIXTURES = ROOT / "examples/m6-contracts"
 
 
 def _read(path: Path) -> dict[str, object]:
+    if path.name.endswith(".composed-bundle.journal.json"):
+        loaded = composed_module._read_journal_record(path)  # noqa: SLF001
+        assert loaded is not None
+        return loaded[0]
     value = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(value, dict)
     return value
@@ -89,16 +92,6 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
             source.mkdir()
             parent_identity = (41, 101)
             published_identity = (41, (1 << 96) + 503)
-            legacy_source_identity = (41, 17)
-            legacy_destination_identity = (41, 23)
-            real_lstat = Path.lstat
-
-            def unstable_lstat(path: Path):
-                if path == source:
-                    return self._directory_state(legacy_source_identity)
-                if path == destination:
-                    return self._directory_state(legacy_destination_identity)
-                return real_lstat(path)
 
             def audited_stat(path: str | Path):
                 candidate = path
@@ -108,12 +101,46 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     return self._directory_state(published_identity)
                 raise FileNotFoundError(candidate)
 
-            def move(source_path: Path, destination_path: Path) -> None:
-                source_path.rename(destination_path)
+            class _CreateFile:
+                argtypes: object = None
+                restype: object = None
 
-            self.assertNotEqual(legacy_source_identity, legacy_destination_identity)
+                def __init__(self) -> None:
+                    self.calls: list[tuple[object, ...]] = []
+
+                def __call__(self, *args: object) -> int:
+                    self.calls.append(args)
+                    return 901 if args[0] == str(source) else 902
+
+            class _SetInformation:
+                argtypes: object = None
+                restype: object = None
+
+                def __init__(self) -> None:
+                    self.calls: list[tuple[object, ...]] = []
+
+                def __call__(self, *args: object) -> int:
+                    self.calls.append(args)
+                    source.rename(destination)
+                    return 1
+
+            create_file = _CreateFile()
+            set_information = _SetInformation()
+            flush = _FakeWindowsCall(1)
+            close = _FakeWindowsCall(1)
+            kernel32 = SimpleNamespace(
+                CreateFileW=create_file,
+                SetFileInformationByHandle=set_information,
+                FlushFileBuffers=flush,
+                CloseHandle=close,
+            )
+
+            def handle_stat(handle: int):
+                return self._directory_state(
+                    published_identity if handle == 901 else parent_identity
+                )
+
             with (
-                patch.object(Path, "lstat", autospec=True, side_effect=unstable_lstat),
                 patch.object(
                     directory_publish_module,
                     "path_file_stat",
@@ -123,18 +150,322 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 patch.object(directory_publish_module.sys, "platform", "win32"),
                 patch.object(directory_publish_module.os, "name", "nt"),
                 patch.object(
-                    directory_publish_module,
-                    "_windows_rename_noreplace",
-                    side_effect=move,
+                    directory_publish_module.ctypes,
+                    "WinDLL",
+                    create=True,
+                    return_value=kernel32,
+                ),
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    side_effect=handle_stat,
                 ),
             ):
                 result = directory_publish_module.publish_directory_noreplace(
                     source,
                     destination,
+                    expected_source_identity=published_identity,
                 )
 
             self.assertEqual(published_identity, result)
             self.assertTrue(destination.is_dir())
+            self.assertEqual([str(source), str(parent)], [call[0] for call in create_file.calls])
+            self.assertEqual([0x00000001, 0x00000001], [call[2] for call in create_file.calls])
+            self.assertEqual(1, len(set_information.calls))
+            source_handle, information_class, payload, _size = set_information.calls[0]
+            self.assertEqual(901, source_handle.value)
+            self.assertEqual(3, information_class)
+            rename = directory_publish_module._FileRenameInformation.from_buffer(  # noqa: SLF001
+                payload
+            )
+            self.assertFalse(rename.replace_if_exists)
+            self.assertEqual(902, rename.root_directory)
+            self.assertEqual([901, 902], [call[0].value for call in flush.calls])
+
+    def test_windows_publication_flushes_files_and_deep_directories_before_rename(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "stage"
+            destination = parent / "published"
+            (source / "nested/deeper").mkdir(parents=True)
+            (source / "root.txt").write_text("root\n", encoding="utf-8")
+            (source / "nested/child.txt").write_text("child\n", encoding="utf-8")
+            (source / "nested/deeper/grand.txt").write_text("grand\n", encoding="utf-8")
+            real_path_file_stat = directory_publish_module.path_file_stat
+            paths = (
+                parent,
+                source,
+                source / "nested",
+                source / "nested/child.txt",
+                source / "nested/deeper",
+                source / "nested/deeper/grand.txt",
+                source / "root.txt",
+            )
+            states = {path: real_path_file_stat(path) for path in paths}
+            source_identity = (
+                states[source].st_dev,
+                states[source].st_ino,
+            )
+            parent_identity = (
+                states[parent].st_dev,
+                states[parent].st_ino,
+            )
+            handles: dict[int, Path] = {}
+            events: list[tuple[str, str]] = []
+
+            class CreateFile:
+                argtypes: object = None
+                restype: object = None
+
+                def __init__(self) -> None:
+                    self.calls: list[tuple[object, ...]] = []
+
+                def __call__(self, *args: object) -> int:
+                    self.calls.append(args)
+                    path = Path(str(args[0]))
+                    handle = 900 + len(handles)
+                    handles[handle] = path
+                    events.append(("open", path.relative_to(parent).as_posix() or "."))
+                    return handle
+
+            class SetInformation:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, *args: object) -> int:
+                    events.append(("rename", destination.name))
+                    source.rename(destination)
+                    return 1
+
+            class Flush:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, handle: object) -> int:
+                    value = int(handle.value)
+                    path = handles[value]
+                    events.append(("flush", path.relative_to(parent).as_posix() or "."))
+                    return 1
+
+            close = _FakeWindowsCall(1)
+            create_file = CreateFile()
+            set_information = SetInformation()
+            flush = Flush()
+            kernel32 = SimpleNamespace(
+                CreateFileW=create_file,
+                SetFileInformationByHandle=set_information,
+                FlushFileBuffers=flush,
+                CloseHandle=close,
+            )
+
+            def handle_stat(handle: int):
+                return states[handles[handle]]
+
+            def audited_stat(path: str | Path):
+                candidate = Path(path)
+                if candidate == destination or destination in candidate.parents:
+                    candidate = source / candidate.relative_to(destination)
+                return states[candidate]
+
+            with (
+                patch.object(
+                    directory_publish_module,
+                    "path_file_stat",
+                    side_effect=audited_stat,
+                ),
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "WinDLL",
+                    create=True,
+                    return_value=kernel32,
+                ),
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    side_effect=handle_stat,
+                ),
+            ):
+                published = directory_publish_module._windows_rename_noreplace(  # noqa: SLF001
+                    source,
+                    destination,
+                    source_identity=source_identity,
+                    parent_identity=parent_identity,
+                )
+
+            self.assertEqual(source_identity, published)
+            self.assertEqual(
+                [
+                    ("flush", "stage/nested/child.txt"),
+                    ("flush", "stage/nested/deeper/grand.txt"),
+                    ("flush", "stage/root.txt"),
+                    ("flush", "stage/nested/deeper"),
+                    ("flush", "stage/nested"),
+                    ("rename", "published"),
+                    ("flush", "stage"),
+                    ("flush", "."),
+                ],
+                [event for event in events if event[0] != "open"],
+            )
+            self.assertTrue(all(call[2] == 0x00000001 for call in create_file.calls))
+            self.assertEqual(len(handles), len(close.calls))
+
+    def test_windows_payload_flush_failure_closes_all_handles_without_rename(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "stage"
+            destination = parent / "published"
+            (source / "nested").mkdir(parents=True)
+            (source / "nested/child.txt").write_text("child\n", encoding="utf-8")
+            real_path_file_stat = directory_publish_module.path_file_stat
+            paths = (
+                parent,
+                source,
+                source / "nested",
+                source / "nested/child.txt",
+            )
+            states = {path: real_path_file_stat(path) for path in paths}
+            handles: dict[int, Path] = {}
+
+            class CreateFile:
+                argtypes: object = None
+                restype: object = None
+
+                def __init__(self) -> None:
+                    self.calls: list[tuple[object, ...]] = []
+
+                def __call__(self, *args: object) -> int:
+                    self.calls.append(args)
+                    path = Path(str(args[0]))
+                    handle = 930 + len(handles)
+                    handles[handle] = path
+                    return handle
+
+            class Flush:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, handle: object) -> int:
+                    path = handles[int(handle.value)]
+                    return 0 if path == source / "nested" else 1
+
+            create_file = CreateFile()
+            set_information = _FakeWindowsCall(1)
+            close = _FakeWindowsCall(1)
+            kernel32 = SimpleNamespace(
+                CreateFileW=create_file,
+                SetFileInformationByHandle=set_information,
+                FlushFileBuffers=Flush(),
+                CloseHandle=close,
+            )
+
+            def audited_stat(path: str | Path):
+                return states[Path(path)]
+
+            with (
+                patch.object(
+                    directory_publish_module,
+                    "path_file_stat",
+                    side_effect=audited_stat,
+                ),
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "WinDLL",
+                    create=True,
+                    return_value=kernel32,
+                ),
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "get_last_error",
+                    create=True,
+                    return_value=5,
+                ),
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    side_effect=lambda handle: states[handles[handle]],
+                ),
+                self.assertRaisesRegex(
+                    DirectoryPublishError,
+                    "durably flush.*nested",
+                ),
+            ):
+                directory_publish_module._windows_rename_noreplace(  # noqa: SLF001
+                    source,
+                    destination,
+                    source_identity=(
+                        states[source].st_dev,
+                        states[source].st_ino,
+                    ),
+                    parent_identity=(
+                        states[parent].st_dev,
+                        states[parent].st_ino,
+                    ),
+                )
+
+            self.assertTrue(source.is_dir())
+            self.assertFalse(destination.exists())
+            self.assertEqual([], set_information.calls)
+            self.assertEqual(len(handles), len(close.calls))
+            self.assertTrue(all(call[2] == 0x00000001 for call in create_file.calls))
+
+    def test_windows_replaced_source_handle_is_rejected_before_rename(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "stage"
+            destination = parent / "published"
+            source.mkdir()
+            expected_identity = (61, 701)
+            foreign_identity = (61, 702)
+            parent_identity = (61, 703)
+            create_file = _FakeWindowsCall(901)
+            close = _FakeWindowsCall(1)
+            set_information = _FakeWindowsCall(1)
+            kernel32 = SimpleNamespace(
+                CreateFileW=create_file,
+                CloseHandle=close,
+                SetFileInformationByHandle=set_information,
+            )
+
+            def audited_stat(path: str | Path):
+                if path == parent:
+                    return self._directory_state(parent_identity)
+                raise FileNotFoundError(path)
+
+            with (
+                patch.object(
+                    directory_publish_module,
+                    "path_file_stat",
+                    side_effect=audited_stat,
+                ),
+                patch.object(directory_publish_module.sys, "platform", "win32"),
+                patch.object(directory_publish_module.os, "name", "nt"),
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "WinDLL",
+                    create=True,
+                    return_value=kernel32,
+                ),
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    return_value=self._directory_state(foreign_identity),
+                ),
+                self.assertRaisesRegex(DirectoryPublishError, "identity changed"),
+            ):
+                directory_publish_module.publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=expected_identity,
+                )
+
+            self.assertTrue(source.is_dir())
+            self.assertFalse(destination.exists())
+            self.assertEqual([], set_information.calls)
+            self.assertEqual([901], [call[0].value for call in close.calls])
 
     def test_windows_disposition_uses_one_byte_boolean_abi(self) -> None:
         disposition_type = directory_publish_module._FileDispositionInfo  # noqa: SLF001
@@ -429,6 +760,22 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
         try:
             self.assertEqual(first.bundle_hash, second.bundle_hash)
             self.assertEqual(_tree_bytes(first_root), _tree_bytes(second_root))
+            self.assertEqual(
+                [],
+                [
+                    path
+                    for path in first_root.parent.glob(f".{first_root.name}.composed-*")
+                    if len(path.name.rsplit("-", 1)[-1]) == 32
+                ],
+            )
+            self.assertEqual(
+                [],
+                [
+                    path
+                    for path in second_root.parent.glob(f".{second_root.name}.composed-*")
+                    if len(path.name.rsplit("-", 1)[-1]) == 32
+                ],
+            )
             self.assertIs(self.adapter_value, first.registered.adapter_value)
             self.assertTrue(first.verification.compatible)
             self.assertIsNotNone(first.renderpack)
@@ -625,20 +972,11 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
         journal_path = composed_module._journal_path(destination)
         journal_path.write_bytes(canonical_json_bytes(journal))
 
-        linux_fail_closed = sys.platform.startswith("linux") and os.name == "posix"
-        if linux_fail_closed:
-            with self.assertRaisesRegex(ComposedBundleError, "deletion is unavailable"):
-                self._build("recovery", destination=destination)
-            self.assertTrue(stage.is_dir())
-            self.assertTrue(journal_path.is_file())
-            self.assertEqual([], list(stage.parent.glob(f".{stage.name}.rollback-*")))
-        else:
-            built = self._build("recovery", destination=destination)
-            try:
-                self.assertFalse(stage.exists())
-                self.assertFalse(journal_path.exists())
-            finally:
-                built.close()
+        with self.assertRaisesRegex(ComposedBundleError, "incomplete"):
+            self._build("recovery", destination=destination)
+        self.assertTrue(stage.is_dir())
+        self.assertTrue(journal_path.is_file())
+        self.assertEqual([], list(stage.parent.glob(f".{stage.name}.rollback-*")))
 
     def test_ready_destination_recovery_reflushes_before_journal_cleanup(self) -> None:
         destination = self.work / f"durability-recovery-{uuid.uuid4().hex}"
@@ -689,53 +1027,104 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
                 registry=self.registry,
             )
         reflush.assert_called_once_with(destination)
-        self.assertFalse(journal_path.exists())
+        committed = composed_module._read_journal_record(journal_path)  # noqa: SLF001
+        self.assertIsNotNone(committed)
+        assert committed is not None
+        self.assertEqual("committed", committed[0]["state"])
 
-    def test_injected_publication_failure_rolls_back_only_owned_stage(self) -> None:
+    def test_injected_population_failure_preserves_journalled_private_stage(self) -> None:
         destination = self.work / f"failure-{uuid.uuid4().hex}"
         with (
             patch.object(
                 composed_module,
-                "publish_directory_noreplace",
-                side_effect=DirectoryPublishError("injected"),
+                "_capture_source",
+                side_effect=DirectoryPublishError("injected population failure"),
             ),
-            self.assertRaisesRegex(ComposedBundleError, "injected"),
+            self.assertRaisesRegex(ComposedBundleError, "injected population failure"),
         ):
             self._build("failure", destination=destination)
         self.assertFalse(destination.exists())
-        linux_fail_closed = sys.platform.startswith("linux") and os.name == "posix"
+        self.assertTrue(composed_module._journal_path(destination).exists())
         self.assertEqual(
-            linux_fail_closed,
-            composed_module._journal_path(destination).exists(),
+            "copying",
+            _read(composed_module._journal_path(destination))["state"],
         )
         stages = [
             path
             for path in destination.parent.glob(f".{destination.name}.composed-*")
             if len(path.name.rsplit("-", 1)[-1]) == 32
         ]
-        self.assertEqual(1 if linux_fail_closed else 0, len(stages))
-        if stages:
-            self.assertEqual([], list(stages[0].parent.glob(f".{stages[0].name}.rollback-*")))
+        self.assertEqual(1, len(stages))
+
+    def test_stage_parent_flush_failure_blocks_ready_and_preserves_stage(self) -> None:
+        destination = self.work / f"stage-parent-fsync-{uuid.uuid4().hex}"
+        flush_directory = composed_module._fsync_directory  # noqa: SLF001
+        injected = False
+
+        def fail_completed_stage_parent(path: Path) -> None:
+            nonlocal injected
+            stages = tuple(destination.parent.glob(f".{destination.name}.composed-*"))
+            if (
+                not injected
+                and path == destination.parent
+                and any((stage / COMPOSED_BUNDLE_MANIFEST).is_file() for stage in stages)
+            ):
+                injected = True
+                raise ComposedBundleError("injected stage parent flush failure")
+            flush_directory(path)
+
+        with (
+            patch.object(
+                composed_module,
+                "_fsync_directory",
+                side_effect=fail_completed_stage_parent,
+            ),
+            self.assertRaisesRegex(
+                ComposedBundleError,
+                "stage parent flush failure",
+            ),
+        ):
+            self._build("stage-parent-fsync", destination=destination)
+
+        self.assertTrue(injected)
+        self.assertFalse(destination.exists())
+        journal_path = composed_module._journal_path(destination)  # noqa: SLF001
+        self.assertTrue(journal_path.is_file())
+        self.assertEqual("copying", _read(journal_path)["state"])
+        stages = tuple(
+            path
+            for path in destination.parent.glob(f".{destination.name}.composed-*")
+            if path.is_dir()
+        )
+        self.assertEqual(1, len(stages))
+        self.assertTrue((stages[0] / COMPOSED_BUNDLE_MANIFEST).is_file())
 
     def test_move_then_raise_preserves_ready_journal_until_matching_recovery(
         self,
     ) -> None:
-        def move_then_raise(source: Path, destination: Path) -> None:
-            source.rename(destination)
-            raise DirectoryPublishError("injected post-move verification failure")
-
+        write_journal = composed_module._write_journal
         for platform in ("linux_x86_64", "windows_x86_64"):
             with self.subTest(platform=platform):
                 destination = self.work / f"moved-{platform}-{uuid.uuid4().hex}"
+
+                def fail_ready(
+                    path: Path,
+                    document: dict[str, object],
+                    **kwargs: object,
+                ) -> tuple[int, int]:
+                    if not kwargs["create"] and document["state"] == "ready":
+                        raise KeyboardInterrupt("injected post-copy process loss")
+                    return write_journal(path, document, **kwargs)
+
                 with (
                     patch.object(
                         composed_module,
-                        "publish_directory_noreplace",
-                        side_effect=move_then_raise,
+                        "_write_journal",
+                        side_effect=fail_ready,
                     ),
                     self.assertRaisesRegex(
-                        ComposedBundleError,
-                        "post-move verification failure",
+                        KeyboardInterrupt,
+                        "post-copy process loss",
                     ),
                 ):
                     self._build(
@@ -750,12 +1139,14 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
                     journal["stage_identity"]["device"],
                     journal["stage_identity"]["inode"],
                 )
-                self.assertEqual("ready", journal["state"])
+                self.assertEqual("copying", journal["state"])
+                stage = destination.parent / journal["stage_name"]
                 self.assertEqual(
                     expected_identity,
-                    directory_identity(destination, context="moved destination"),
+                    directory_identity(stage, context="complete private stage"),
                 )
-                self.assertFalse(destination.parent.joinpath(journal["stage_name"]).exists())
+                self.assertFalse(destination.exists())
+                self.assertTrue(journal["stage_name"].startswith(f".{destination.name}.composed-"))
 
                 with self.assertRaisesRegex(ComposedBundleError, "already exists"):
                     self._build(
@@ -763,78 +1154,134 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
                         destination=destination,
                         platform=platform,
                     )
-                self.assertFalse(journal_path.exists())
+                committed = composed_module._read_journal_record(  # noqa: SLF001
+                    journal_path
+                )
+                self.assertIsNotNone(committed)
+                assert committed is not None
+                self.assertEqual("committed", committed[0]["state"])
                 with verify_composed_runtime_bundle(
                     destination,
-                    expected_bundle_hash=journal["bundle_hash"],
+                    expected_bundle_hash=_read(destination / COMPOSED_BUNDLE_MANIFEST)[
+                        "bundle_hash"
+                    ],
                     platform=platform,
                     runtime_api_version="0.5.0",
                     registry=self.registry,
                 ):
                     pass
 
-    def test_move_then_raise_recovery_preserves_mismatched_destinations(self) -> None:
-        def move_then_raise(source: Path, destination: Path) -> None:
-            source.rename(destination)
-            raise DirectoryPublishError("injected post-move verification failure")
-
+    def test_post_copy_recovery_preserves_mismatched_destinations(self) -> None:
+        write_journal = composed_module._write_journal
         for mismatch in ("content", "identity"):
             with self.subTest(mismatch=mismatch):
                 destination = self.work / f"mismatch-{mismatch}-{uuid.uuid4().hex}"
+
+                def fail_ready(
+                    path: Path,
+                    document: dict[str, object],
+                    **kwargs: object,
+                ) -> tuple[int, int]:
+                    if not kwargs["create"] and document["state"] == "ready":
+                        raise KeyboardInterrupt("injected post-copy process loss")
+                    return write_journal(path, document, **kwargs)
+
                 with (
                     patch.object(
                         composed_module,
-                        "publish_directory_noreplace",
-                        side_effect=move_then_raise,
+                        "_write_journal",
+                        side_effect=fail_ready,
                     ),
-                    self.assertRaises(ComposedBundleError),
+                    self.assertRaises(KeyboardInterrupt),
                 ):
                     self._build(f"mismatch-{mismatch}", destination=destination)
                 journal_path = composed_module._journal_path(destination)
                 journal_before = journal_path.read_bytes()
+                journal = _read(journal_path)
+                stage = destination.parent / journal["stage_name"]
 
                 if mismatch == "content":
-                    marker = destination / "licenses/NOTICE.txt"
+                    marker = stage / "licenses/NOTICE.txt"
                     marker.write_text("replacement content\n", encoding="utf-8")
                 else:
-                    shutil.rmtree(destination)
-                    destination.mkdir()
-                    marker = destination / "replacement.txt"
+                    shutil.rmtree(stage)
+                    stage.mkdir()
+                    marker = stage / "replacement.txt"
                     marker.write_text("replacement directory\n", encoding="utf-8")
 
                 with self.assertRaises(ComposedBundleError):
                     self._build(f"retry-{mismatch}", destination=destination)
                 self.assertEqual(journal_before, journal_path.read_bytes())
-                self.assertTrue(destination.exists())
+                self.assertFalse(destination.exists())
+                self.assertTrue(stage.exists())
                 self.assertTrue(marker.exists())
 
-    def test_publication_failure_never_infers_rollback_from_missing_stage(self) -> None:
-        destination = self.work / f"missing-stage-{uuid.uuid4().hex}"
+    def test_journal_transition_never_replaces_foreign_bytes(self) -> None:
+        destination = self.work / f"journal-cas-{uuid.uuid4().hex}"
+        operation_id = uuid.uuid4().hex
+        stage = destination.parent / f".{destination.name}.composed-{operation_id}"
+        stage.mkdir()
+        identity = directory_identity(stage, context="CAS test stage")
+        current = composed_module._journal_document(
+            operation_id=operation_id,
+            state="copying",
+            stage=stage,
+            destination=destination,
+            stage_identity=identity,
+            platform="linux_x86_64",
+            runtime_api_version="0.5.0",
+            bundle_hash=None,
+        )
+        updated = composed_module._journal_document(
+            operation_id=operation_id,
+            state="ready",
+            stage=stage,
+            destination=destination,
+            stage_identity=identity,
+            platform="linux_x86_64",
+            runtime_api_version="0.5.0",
+            bundle_hash="0" * 64,
+        )
+        path = composed_module._journal_path(destination)
+        prior_identity = composed_module._write_journal(path, current, create=True)
+        owned = path.with_name(f"{path.name}.owned")
+        foreign = b'{"foreign":true}\n'
+        real_lseek = os.lseek
+        swapped = False
 
-        def remove_then_raise(source: Path, _destination: Path) -> None:
-            shutil.rmtree(source)
-            raise DirectoryPublishError("injected ambiguous publication failure")
+        def swap_before_final_check(
+            descriptor: int,
+            offset: int,
+            whence: int,
+        ) -> int:
+            nonlocal swapped
+            if not swapped:
+                path.rename(owned)
+                path.write_bytes(foreign)
+                swapped = True
+            return real_lseek(descriptor, offset, whence)
 
         with (
             patch.object(
-                composed_module,
-                "publish_directory_noreplace",
-                side_effect=remove_then_raise,
+                composed_module.os,
+                "lseek",
+                side_effect=swap_before_final_check,
             ),
             self.assertRaisesRegex(
                 ComposedBundleError,
-                "ambiguous publication failure",
+                "changed before transition|path binding changed",
             ),
         ):
-            self._build("missing-stage", destination=destination)
-
-        journal_path = composed_module._journal_path(destination)
-        journal_before = journal_path.read_bytes()
-        self.assertEqual("ready", _read(journal_path)["state"])
-        self.assertFalse(destination.exists())
-        with self.assertRaisesRegex(ComposedBundleError, "ambiguous"):
-            self._build("missing-stage-retry", destination=destination)
-        self.assertEqual(journal_before, journal_path.read_bytes())
+            composed_module._write_journal(
+                path,
+                updated,
+                create=False,
+                expected_document=current,
+                expected_identity=prior_identity,
+            )
+        self.assertTrue(swapped)
+        self.assertEqual(foreign, path.read_bytes())
+        self.assertEqual(canonical_json_bytes(current), owned.read_bytes())
 
     def test_manifest_rejects_casefold_prefix_collisions_and_false_selection(
         self,

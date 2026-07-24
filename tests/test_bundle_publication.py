@@ -22,7 +22,86 @@ from worldforge.directory_publish import DirectoryPublishError, publish_director
 from worldforge.game_scaffold import create_game_project
 
 
+def _read_import_journal(path: Path) -> dict[str, object]:
+    loaded = bundle_module._read_import_journal_record(path)  # noqa: SLF001
+    assert loaded is not None
+    return loaded[0]
+
+
 class BundlePublicationTests(unittest.TestCase):
+    def test_append_only_journal_recovers_after_a_partial_transition_tail(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "publication.journal"
+            intent = b'{"state":"intent"}\n'
+            copying = b'{"state":"copying"}\n'
+            committed = b'{"state":"committed"}\n'
+            identity = directory_publish_module.create_append_only_journal(
+                path,
+                intent,
+                max_record_bytes=1024,
+            )
+            directory_publish_module.append_append_only_journal(
+                path,
+                expected_identity=identity,
+                expected_payload=intent,
+                updated_payload=copying,
+                max_record_bytes=1024,
+                max_file_bytes=16 * 1024,
+            )
+            partial = directory_publish_module._journal_frame(  # noqa: SLF001
+                b'{"state":"ready"}\n'
+            )
+            with path.open("ab") as target:
+                target.write(partial[: len(partial) // 2])
+                target.flush()
+                os.fsync(target.fileno())
+
+            recovered = directory_publish_module.read_append_only_journal(
+                path,
+                max_record_bytes=1024,
+                max_file_bytes=16 * 1024,
+            )
+            self.assertIsNotNone(recovered)
+            assert recovered is not None
+            self.assertEqual(copying, recovered[0])
+            interrupted_bytes = path.read_bytes()
+
+            with (
+                patch.object(
+                    directory_publish_module.os,
+                    "replace",
+                    side_effect=AssertionError("journal transition used pathname replace"),
+                ),
+                patch.object(
+                    directory_publish_module.os,
+                    "unlink",
+                    side_effect=AssertionError("journal transition used pathname unlink"),
+                ),
+                self.assertRaisesRegex(
+                    DirectoryPublishError,
+                    "changed before transition",
+                ),
+            ):
+                directory_publish_module.append_append_only_journal(
+                    path,
+                    expected_identity=identity,
+                    expected_payload=copying,
+                    updated_payload=committed,
+                    max_record_bytes=1024,
+                    max_file_bytes=16 * 1024,
+                )
+
+            terminal = directory_publish_module.read_append_only_journal(
+                path,
+                max_record_bytes=1024,
+                max_file_bytes=16 * 1024,
+            )
+            self.assertIsNotNone(terminal)
+            assert terminal is not None
+            self.assertEqual(copying, terminal[0])
+            self.assertEqual(identity, terminal[1])
+            self.assertEqual(interrupted_bytes, path.read_bytes())
+
     def _run_posix_close_failure(
         self,
         failing_roles: set[str],
@@ -246,17 +325,16 @@ class BundlePublicationTests(unittest.TestCase):
                 patch.object(
                     directory_publish_module,
                     "_posix_unlink_descriptor_raw",
-                    side_effect=[
-                        errno.ENOTEMPTY,
-                        errno.EISDIR,
-                        None,
-                        None,
-                    ],
+                    return_value=errno.ENOTEMPTY,
                 ) as unlink_descriptor,
                 patch.object(
                     directory_publish_module,
                     "_verify_posix_descriptor_deleted",
                 ) as verify_deleted,
+                self.assertRaisesRegex(
+                    DirectoryPublishError,
+                    "pre-recorded retained child snapshot",
+                ),
             ):
                 directory_publish_module.quarantine_and_remove_owned_directory(
                     created,
@@ -264,11 +342,9 @@ class BundlePublicationTests(unittest.TestCase):
                     verify=lambda _candidate: None,
                 )
 
-            self.assertEqual(
-                [True, False, False, True],
-                [call.kwargs["directory"] for call in unlink_descriptor.call_args_list],
-            )
-            self.assertEqual(2, verify_deleted.call_count)
+            unlink_descriptor.assert_called_once()
+            self.assertTrue(unlink_descriptor.call_args.kwargs["directory"])
+            verify_deleted.assert_not_called()
             self.assertEqual("owned\n", (created / "owned.txt").read_text(encoding="utf-8"))
             self.assertEqual([], list(root.glob(".created.*")))
 
@@ -417,6 +493,78 @@ class BundlePublicationTests(unittest.TestCase):
             self.assertEqual("owned\n", (created / "owned.txt").read_text(encoding="utf-8"))
             self.assertEqual([], list(root.glob(".created.rollback-*")))
 
+    def test_windows_cleanup_child_injection_preserves_original_journal_path(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            created = root / "created"
+            created.mkdir()
+            expected_identity = directory_publish_module.directory_identity(
+                created,
+                context="created directory",
+            )
+            child = created / "injected.txt"
+            verified: list[Path] = []
+
+            def inject_after_root_handle(
+                path: Path,
+                identity: tuple[int, int],
+                *,
+                directory: bool,
+            ) -> int:
+                self.assertEqual(created, path)
+                self.assertEqual(expected_identity, identity)
+                self.assertTrue(directory)
+                child.write_text("preserve injected evidence\n", encoding="utf-8")
+                return 123
+
+            with (
+                patch.object(directory_publish_module.os, "name", "nt"),
+                patch.object(
+                    directory_publish_module,
+                    "directory_identity",
+                    return_value=expected_identity,
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_windows_open_delete_handle",
+                    side_effect=inject_after_root_handle,
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_windows_close_cleanup_handle",
+                ) as close_handle,
+                patch.object(
+                    directory_publish_module,
+                    "_windows_mark_handle_for_deletion",
+                ) as mark_for_deletion,
+                patch.object(
+                    directory_publish_module,
+                    "publish_directory_noreplace",
+                ) as rename_to_quarantine,
+                self.assertRaisesRegex(
+                    DirectoryPublishError,
+                    "pre-recorded retained child snapshot",
+                ),
+            ):
+                directory_publish_module.quarantine_and_remove_owned_directory(
+                    created,
+                    expected_identity,
+                    verify=lambda candidate: verified.append(candidate),
+                )
+
+            self.assertEqual([created], verified)
+            close_handle.assert_called_once_with(123)
+            mark_for_deletion.assert_not_called()
+            rename_to_quarantine.assert_not_called()
+            self.assertTrue(created.is_dir())
+            self.assertEqual(
+                "preserve injected evidence\n",
+                child.read_text(encoding="utf-8"),
+            )
+            self.assertEqual([], list(root.glob(".created.rollback-*")))
+
     def test_empty_directory_cleanup_claim_preserves_a_foreign_replacement(
         self,
     ) -> None:
@@ -473,18 +621,7 @@ class BundlePublicationTests(unittest.TestCase):
             }
             self.assertIn(foreign_identity, remaining_identities)
 
-    def test_windows_access_denied_is_a_collision_only_when_destination_exists(self) -> None:
-        class _MoveFile:
-            argtypes: object = None
-            restype: object = None
-
-            def __call__(self, source: str, destination: str, flags: int) -> int:
-                del source, destination, flags
-                return 0
-
-        class _Kernel32:
-            MoveFileExW = _MoveFile()
-
+    def test_windows_existing_destination_fails_before_native_rename(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source"
@@ -492,45 +629,244 @@ class BundlePublicationTests(unittest.TestCase):
             destination = root / "destination"
             destination.mkdir()
             with (
+                patch.object(directory_publish_module.sys, "platform", "win32"),
+                patch.object(directory_publish_module.os, "name", "nt"),
                 patch.object(
-                    directory_publish_module.ctypes,
-                    "WinDLL",
-                    return_value=_Kernel32(),
-                    create=True,
-                ),
-                patch.object(
-                    directory_publish_module.ctypes,
-                    "get_last_error",
-                    return_value=5,
-                    create=True,
+                    directory_publish_module,
+                    "directory_identity",
+                    return_value=(1, 2),
                 ),
                 self.assertRaises(FileExistsError),
             ):
-                directory_publish_module._windows_rename_noreplace(source, destination)
+                directory_publish_module.publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=(1, 2),
+                )
+            self.assertTrue(source.is_dir())
+            self.assertTrue(destination.is_dir())
 
-            destination.rmdir()
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux retained-FD publication",
+    )
+    def test_final_claim_source_replacement_and_destination_collision_touch_neither(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "owned.txt").write_text("owned\n", encoding="utf-8")
+            displaced = root / "owned-source"
+            foreign = root / "foreign"
+            foreign.mkdir()
+            (foreign / "foreign.txt").write_text("foreign\n", encoding="utf-8")
+            destination = root / "destination"
+            destination.mkdir()
+            (destination / "public.txt").write_text("public\n", encoding="utf-8")
+            expected = directory_publish_module.directory_identity(
+                source,
+                context="recorded publication source",
+            )
+            require_binding = directory_publish_module.RetainedDirectory.require_binding
+            calls = 0
+
+            def replace_before_rename(retained: object) -> None:
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    source.rename(displaced)
+                    foreign.rename(source)
+                require_binding(retained)
+
             with (
                 patch.object(
-                    directory_publish_module.ctypes,
-                    "WinDLL",
-                    return_value=_Kernel32(),
-                    create=True,
+                    directory_publish_module.RetainedDirectory,
+                    "require_binding",
+                    new=replace_before_rename,
                 ),
-                patch.object(
-                    directory_publish_module.ctypes,
-                    "get_last_error",
-                    return_value=5,
-                    create=True,
-                ),
-                patch.object(
-                    directory_publish_module.ctypes,
-                    "FormatError",
-                    return_value="Access is denied",
-                    create=True,
-                ),
-                self.assertRaisesRegex(DirectoryPublishError, "Access is denied"),
+                self.assertRaisesRegex(DirectoryPublishError, "binding|identity"),
             ):
-                directory_publish_module._windows_rename_noreplace(source, destination)
+                publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=expected,
+                )
+
+            self.assertEqual(
+                "foreign\n",
+                (source / "foreign.txt").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                "owned\n",
+                (displaced / "owned.txt").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                ["public.txt"],
+                sorted(path.name for path in destination.iterdir()),
+            )
+            self.assertEqual(
+                "public\n",
+                (destination / "public.txt").read_text(encoding="utf-8"),
+            )
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux retained-FD publication",
+    )
+    def test_source_replacement_after_retention_fails_without_moving_either_tree(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "owned.txt").write_text("owned\n", encoding="utf-8")
+            displaced = root / "owned-source"
+            foreign = root / "foreign"
+            foreign.mkdir()
+            (foreign / "foreign.txt").write_text("foreign\n", encoding="utf-8")
+            destination = root / "destination"
+            expected = directory_publish_module.directory_identity(
+                source,
+                context="recorded publication source",
+            )
+            require_binding = directory_publish_module.RetainedDirectory.require_binding
+            calls = 0
+
+            def replace_before_rename(retained: object) -> None:
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    source.rename(displaced)
+                    foreign.rename(source)
+                require_binding(retained)
+
+            with (
+                patch.object(
+                    directory_publish_module.RetainedDirectory,
+                    "require_binding",
+                    new=replace_before_rename,
+                ),
+                self.assertRaisesRegex(DirectoryPublishError, "binding|identity"),
+            ):
+                publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=expected,
+                )
+
+            self.assertEqual(
+                "foreign\n",
+                (source / "foreign.txt").read_text(encoding="utf-8"),
+            )
+            self.assertFalse(destination.exists())
+            self.assertEqual(
+                "owned\n",
+                (displaced / "owned.txt").read_text(encoding="utf-8"),
+            )
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux retained-FD publication",
+    )
+    def test_recorded_source_replacement_before_open_fails_without_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            (source / "owned.txt").write_text("owned\n", encoding="utf-8")
+            expected = directory_publish_module.directory_identity(
+                source,
+                context="recorded publication source",
+            )
+            displaced = root / "owned-source"
+            source.rename(displaced)
+            source.mkdir()
+            (source / "foreign.txt").write_text("foreign\n", encoding="utf-8")
+            destination = root / "destination"
+
+            with self.assertRaisesRegex(
+                DirectoryPublishError,
+                "identity changed",
+            ):
+                publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=expected,
+                )
+
+            self.assertEqual(
+                "foreign\n",
+                (source / "foreign.txt").read_text(encoding="utf-8"),
+            )
+            self.assertFalse(destination.exists())
+            self.assertEqual(
+                "owned\n",
+                (displaced / "owned.txt").read_text(encoding="utf-8"),
+            )
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux retained-directory descriptors",
+    )
+    def test_retained_source_setup_failure_closes_every_opened_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            source.mkdir()
+            opened: list[int] = []
+            close_descriptors = directory_publish_module._close_descriptors  # noqa: SLF001
+
+            def tracked_close(descriptors: tuple[tuple[int, str], ...]) -> None:
+                opened.extend(descriptor for descriptor, _context in descriptors)
+                close_descriptors(descriptors)
+
+            with (
+                patch.object(
+                    directory_publish_module,
+                    "_close_descriptors",
+                    side_effect=tracked_close,
+                ),
+                self.assertRaisesRegex(DirectoryPublishError, "identity changed"),
+            ):
+                with directory_publish_module.open_expected_directory(source, (-1, -1)):
+                    self.fail("identity mismatch must fail before yield")
+
+            self.assertGreaterEqual(len(opened), 2)
+            for descriptor in opened:
+                with self.assertRaises(OSError):
+                    os.fstat(descriptor)
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux retained-directory descriptors",
+    )
+    def test_destination_collision_setup_closes_parent_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            destination = root / "destination"
+            destination.mkdir()
+            opened: list[int] = []
+            close_descriptors = directory_publish_module._close_descriptors  # noqa: SLF001
+
+            def tracked_close(descriptors: tuple[tuple[int, str], ...]) -> None:
+                opened.extend(descriptor for descriptor, _context in descriptors)
+                close_descriptors(descriptors)
+
+            with (
+                patch.object(
+                    directory_publish_module,
+                    "_close_descriptors",
+                    side_effect=tracked_close,
+                ),
+                self.assertRaises(FileExistsError),
+            ):
+                with directory_publish_module.claim_directory_noreplace(destination):
+                    self.fail("destination collision must fail before yield")
+
+            self.assertEqual(1, len(opened))
+            with self.assertRaises(OSError):
+                os.fstat(opened[0])
 
     def _bundle_and_game(self, root: Path) -> tuple[object, Path]:
         game = root / "game"
@@ -544,6 +880,175 @@ class BundlePublicationTests(unittest.TestCase):
             licenses_directory=licenses,
         )
         return bundle, game
+
+    def test_successful_linux_export_leaves_no_sibling_source_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, _game = self._bundle_and_game(root)
+            try:
+                self.assertEqual([], list(root.glob(".bundle.export-*")))
+            finally:
+                bundle.close()
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux direct-claim payload durability",
+    )
+    def test_linux_export_fsyncs_each_payload_before_claim_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worldpack, renderpack, licenses = _write_fixture(root / "fixture")
+            destination = root / "bundle"
+            flushed: list[str] = []
+            fsync_payload = bundle_module._fsync_regular_payload  # noqa: SLF001
+
+            def record_payload(descriptor: int, relative: str) -> None:
+                fsync_payload(descriptor, relative)
+                flushed.append(relative)
+
+            with patch.object(
+                bundle_module,
+                "_fsync_regular_payload",
+                side_effect=record_payload,
+            ):
+                bundle = export_runtime_bundle(
+                    worldpack,
+                    renderpack,
+                    destination,
+                    release_id="1.0.0",
+                    licenses_directory=licenses,
+                )
+
+            try:
+                expected = tuple(
+                    sorted(
+                        {
+                            bundle_module.BUNDLE_MANIFEST,
+                            *(record["path"] for record in bundle.manifest["files"]),
+                        }
+                    )
+                )
+                self.assertEqual(expected, tuple(flushed))
+                self.assertEqual(len(expected), len(set(flushed)))
+            finally:
+                bundle.close()
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux direct-claim payload inventory",
+    )
+    def test_linux_export_accepts_portable_file_directory_prefixes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worldpack, renderpack, licenses = _write_fixture(root / "fixture")
+            (licenses / "foo.txt").write_text("top-level notice\n", encoding="utf-8")
+            (licenses / "foo").mkdir()
+            (licenses / "foo/bar.txt").write_text("nested notice\n", encoding="utf-8")
+
+            bundle = export_runtime_bundle(
+                worldpack,
+                renderpack,
+                root / "bundle",
+                release_id="1.0.0",
+                licenses_directory=licenses,
+            )
+            try:
+                license_paths = {record["path"] for record in bundle.manifest["licenses"]}
+                self.assertIn("licenses/foo.txt", license_paths)
+                self.assertIn("licenses/foo/bar.txt", license_paths)
+            finally:
+                bundle.close()
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux direct-claim cleanup semantics",
+    )
+    def test_linux_directory_publish_error_preserves_private_stage(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worldpack, renderpack, licenses = _write_fixture(root / "fixture")
+            destination = root / "bundle"
+            with (
+                patch.object(
+                    bundle_module,
+                    "publish_directory_noreplace",
+                    side_effect=DirectoryPublishError("injected publish failure"),
+                ),
+                self.assertRaisesRegex(BundleError, "injected publish failure") as raised,
+            ):
+                export_runtime_bundle(
+                    worldpack,
+                    renderpack,
+                    destination,
+                    release_id="1.0.0",
+                    licenses_directory=licenses,
+                )
+
+            notes = "\n".join(getattr(raised.exception, "__notes__", ()))
+            self.assertIn("private bundle export stage retained", notes)
+            self.assertFalse(destination.exists())
+            self.assertEqual(1, len(list(root.glob(".bundle.export-*"))))
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux direct-claim payload durability",
+    )
+    def test_linux_payload_fsync_failure_retains_exact_recovery_destination(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worldpack, renderpack, licenses = _write_fixture(root / "fixture")
+            destination = root / "bundle"
+            fsync_payload = bundle_module._fsync_regular_payload  # noqa: SLF001
+            injected = False
+
+            def fail_first_regular_file(descriptor: int, relative: str) -> None:
+                nonlocal injected
+                if not injected:
+                    injected = True
+                    with patch.object(
+                        bundle_module.os,
+                        "fsync",
+                        side_effect=OSError(
+                            errno.EIO,
+                            "injected payload fsync failure",
+                        ),
+                    ):
+                        fsync_payload(descriptor, relative)
+                    return
+                fsync_payload(descriptor, relative)
+
+            with (
+                patch.object(
+                    bundle_module,
+                    "_fsync_regular_payload",
+                    side_effect=fail_first_regular_file,
+                ),
+                self.assertRaisesRegex(
+                    BundleError,
+                    "durably flush bundle payload",
+                ) as raised,
+            ):
+                export_runtime_bundle(
+                    worldpack,
+                    renderpack,
+                    destination,
+                    release_id="1.0.0",
+                    licenses_directory=licenses,
+                )
+
+            self.assertTrue(injected)
+            self.assertFalse(destination.exists())
+            stages = list(root.glob(".bundle.export-*"))
+            self.assertEqual(1, len(stages))
+            self.assertTrue((stages[0] / bundle_module.BUNDLE_MANIFEST).is_file())
+            self.assertIn(
+                "private bundle export stage retained",
+                "\n".join(getattr(raised.exception, "__notes__", ())),
+            )
 
     def _leave_published_crash(self, bundle: object, game: Path) -> Path:
         with (
@@ -572,23 +1077,26 @@ class BundlePublicationTests(unittest.TestCase):
             canonical_destination = destination.resolve(strict=False)
             original_publish = bundle_module.publish_directory_noreplace
 
-            def race(source: Path, target: Path) -> tuple[int, int]:
+            def race(
+                source: Path,
+                target: Path,
+                **kwargs: object,
+            ) -> tuple[int, int]:
                 if target.resolve(strict=False) == canonical_destination:
                     target.mkdir()
                     (target / "concurrent.txt").write_text(
                         "preserve me\n",
                         encoding="utf-8",
                     )
-                return original_publish(source, target)
+                return original_publish(source, target, **kwargs)
 
-            linux_fail_closed = sys.platform.startswith("linux") and os.name == "posix"
             with (
                 patch.object(
                     bundle_module,
                     "publish_directory_noreplace",
                     side_effect=race,
                 ),
-                self.assertRaisesRegex(BundleError, "destination already exists") as raised,
+                self.assertRaisesRegex(BundleError, "destination already exists"),
             ):
                 export_runtime_bundle(
                     worldpack,
@@ -603,12 +1111,7 @@ class BundlePublicationTests(unittest.TestCase):
                 (destination / "concurrent.txt").read_text(encoding="utf-8"),
             )
             stages = list(root.glob(".bundle.export-*"))
-            self.assertEqual(1 if linux_fail_closed else 0, len(stages))
-            if linux_fail_closed:
-                self.assertIn(
-                    "Identity-bound POSIX descriptor deletion is unavailable",
-                    "\n".join(getattr(raised.exception, "__notes__", ())),
-                )
+            self.assertEqual(1, len(stages))
 
     def test_catalog_failure_rolls_back_only_the_owned_bundle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -656,10 +1159,101 @@ class BundlePublicationTests(unittest.TestCase):
                 expected_bundle_hash=bundle.bundle_hash,
             )
             self.assertEqual(destination.resolve(), recovered.resolve())
-            self.assertFalse((game / IMPORT_JOURNAL).exists())
+            self.assertEqual(
+                "committed",
+                _read_import_journal(game / IMPORT_JOURNAL)["state"],
+            )
             catalog = json.loads((game / "game_data/worlds.lock.json").read_text(encoding="utf-8"))
             self.assertEqual(1, len(catalog["releases"]))
             self.assertEqual([], list(destination.parent.glob(".1.0.0.rollback-*")))
+
+    def test_copying_destination_is_promoted_after_post_copy_process_loss(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, game = self._bundle_and_game(root)
+            replace_journal = bundle_module._replace_import_journal
+
+            def interrupt_ready(
+                game_root: Path,
+                current: dict[str, object],
+                updated: dict[str, object],
+            ) -> None:
+                if current["state"] == "copying" and updated["state"] == "ready":
+                    raise KeyboardInterrupt("injected post-copy process loss")
+                replace_journal(game_root, current, updated)
+
+            with (
+                patch.object(
+                    bundle_module,
+                    "_replace_import_journal",
+                    side_effect=interrupt_ready,
+                ),
+                self.assertRaisesRegex(KeyboardInterrupt, "post-copy process loss"),
+            ):
+                import_runtime_bundle(
+                    bundle.root,
+                    game,
+                    expected_bundle_hash=bundle.bundle_hash,
+                )
+
+            journal = _read_import_journal(game / IMPORT_JOURNAL)
+            self.assertEqual("copying", journal["state"])
+            destination = game / journal["destination"]
+            temporary = game / journal["temporary"]
+            self.assertFalse(destination.exists())
+            self.assertTrue(temporary.is_dir())
+            recovered = import_runtime_bundle(
+                bundle.root,
+                game,
+                expected_bundle_hash=bundle.bundle_hash,
+            )
+            self.assertEqual(destination, recovered)
+            self.assertEqual(
+                "committed",
+                _read_import_journal(game / IMPORT_JOURNAL)["state"],
+            )
+
+    def test_import_journal_transition_never_replaces_foreign_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "game_data").mkdir()
+            path = root / IMPORT_JOURNAL
+            current = {"state": "copying"}
+            updated = {"state": "ready"}
+            path.write_bytes(bundle_module._pretty_json(current))
+            owned = path.with_name("owned-journal.json")
+            foreign = b'{"foreign":true}\n'
+            real_lseek = os.lseek
+            swapped = False
+
+            def swap_before_final_check(
+                descriptor: int,
+                offset: int,
+                whence: int,
+            ) -> int:
+                nonlocal swapped
+                if not swapped:
+                    path.rename(owned)
+                    path.write_bytes(foreign)
+                    swapped = True
+                return real_lseek(descriptor, offset, whence)
+
+            with (
+                patch.object(
+                    bundle_module.os,
+                    "lseek",
+                    side_effect=swap_before_final_check,
+                ),
+                self.assertRaisesRegex(
+                    BundleError,
+                    "changed before state transition|path binding changed",
+                ),
+            ):
+                bundle_module._replace_import_journal(root, current, updated)
+
+            self.assertTrue(swapped)
+            self.assertEqual(foreign, path.read_bytes())
+            self.assertEqual(bundle_module._pretty_json(current), owned.read_bytes())
 
     def test_recovery_preserves_a_hash_mismatched_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -689,7 +1283,7 @@ class BundlePublicationTests(unittest.TestCase):
             destination.mkdir()
             marker = destination / "concurrent.txt"
             marker.write_text("do not delete\n", encoding="utf-8")
-            journal = json.loads((game / IMPORT_JOURNAL).read_text(encoding="utf-8"))
+            journal = _read_import_journal(game / IMPORT_JOURNAL)
             temporary = game / journal["temporary"]
             self.assertFalse(temporary.exists())
 
@@ -714,14 +1308,18 @@ class BundlePublicationTests(unittest.TestCase):
             bundle, game = self._bundle_and_game(root)
             original_publish = bundle_module.publish_directory_noreplace
 
-            def race(source: Path, target: Path) -> tuple[int, int]:
+            def race(
+                source: Path,
+                target: Path,
+                **kwargs: object,
+            ) -> tuple[int, int]:
                 if target.name == "1.0.0":
                     target.mkdir()
                     (target / "concurrent.txt").write_text(
                         "preserve me\n",
                         encoding="utf-8",
                     )
-                return original_publish(source, target)
+                return original_publish(source, target, **kwargs)
 
             with (
                 patch.object(
@@ -743,7 +1341,10 @@ class BundlePublicationTests(unittest.TestCase):
                 (destination / "concurrent.txt").read_text(encoding="utf-8"),
             )
             self.assertTrue((game / IMPORT_JOURNAL).is_file())
-            self.assertEqual(1, len(list(destination.parent.glob(".1.0.0.import-*"))))
+            self.assertEqual(
+                1,
+                len(list(destination.parent.glob(".1.0.0.import-*"))),
+            )
             self.assertIn(
                 "both staged and published directories",
                 "\n".join(getattr(raised.exception, "__notes__", ())),
@@ -777,29 +1378,26 @@ class BundlePublicationTests(unittest.TestCase):
                     expected_bundle_hash=bundle.bundle_hash,
                 )
 
-            journal = json.loads((game / IMPORT_JOURNAL).read_text(encoding="utf-8"))
+            journal = _read_import_journal(game / IMPORT_JOURNAL)
             self.assertEqual("copying", journal["state"])
-            linux_fail_closed = sys.platform.startswith("linux") and os.name == "posix"
-            if linux_fail_closed:
-                with self.assertRaisesRegex(BundleError, "deletion is unavailable"):
-                    import_runtime_bundle(
-                        bundle.root,
-                        game,
-                        expected_bundle_hash=bundle.bundle_hash,
-                    )
-                stage = game / journal["temporary"]
-                self.assertTrue(stage.is_dir())
-                self.assertEqual("partial\n", (stage / "partial.txt").read_text(encoding="utf-8"))
-                self.assertTrue((game / IMPORT_JOURNAL).exists())
-                self.assertEqual([], list(stage.parent.glob(f".{stage.name}.rollback-*")))
-            else:
-                recovered = import_runtime_bundle(
+            destination = game / journal["destination"]
+            temporary = game / journal["temporary"]
+            with self.assertRaisesRegex(
+                BundleError,
+                "missing bundle.manifest.json|tree mismatch",
+            ):
+                import_runtime_bundle(
                     bundle.root,
                     game,
                     expected_bundle_hash=bundle.bundle_hash,
                 )
-                self.assertTrue(recovered.is_dir())
-                self.assertFalse((game / IMPORT_JOURNAL).exists())
+            self.assertFalse(destination.exists())
+            self.assertTrue(temporary.is_dir())
+            self.assertEqual(
+                "partial\n",
+                (temporary / "partial.txt").read_text(encoding="utf-8"),
+            )
+            self.assertTrue((game / IMPORT_JOURNAL).exists())
 
     def test_interrupted_prepublish_stage_is_recovered_before_retry(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -807,10 +1405,14 @@ class BundlePublicationTests(unittest.TestCase):
             bundle, game = self._bundle_and_game(root)
             original_publish = bundle_module.publish_directory_noreplace
 
-            def interrupt(source: Path, target: Path) -> tuple[int, int]:
+            def interrupt(
+                source: Path,
+                target: Path,
+                **kwargs: object,
+            ) -> tuple[int, int]:
                 if target.name == "1.0.0":
                     raise KeyboardInterrupt("simulated prepublish process loss")
-                return original_publish(source, target)
+                return original_publish(source, target, **kwargs)
 
             with (
                 patch.object(
@@ -828,28 +1430,316 @@ class BundlePublicationTests(unittest.TestCase):
 
             self.assertTrue((game / IMPORT_JOURNAL).is_file())
             self.assertEqual(
-                1, len(list((game / "game_data/worlds/modly_foundation").glob(".*.import-*")))
+                1,
+                len(list((game / "game_data/worlds/modly_foundation").glob(".*.import-*"))),
             )
-            linux_fail_closed = sys.platform.startswith("linux") and os.name == "posix"
-            if linux_fail_closed:
-                with self.assertRaisesRegex(BundleError, "deletion is unavailable"):
+            recovered = import_runtime_bundle(
+                bundle.root,
+                game,
+                expected_bundle_hash=bundle.bundle_hash,
+            )
+            self.assertTrue(recovered.is_dir())
+            self.assertEqual(
+                "committed",
+                _read_import_journal(game / IMPORT_JOURNAL)["state"],
+            )
+
+    def test_legacy_import_persists_empty_intent_before_creating_ancestors(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, game = self._bundle_and_game(root)
+            write_journal = bundle_module._write_import_journal  # noqa: SLF001
+            flush_directory = bundle_module.fsync_directory
+            events: list[str] = []
+
+            def record_flush(path: Path, *, context: str) -> None:
+                events.append(context)
+                flush_directory(path, context=context)
+
+            def assert_intent_precedes_directories(
+                path: Path,
+                journal: dict[str, object],
+            ) -> None:
+                self.assertEqual("intent", journal["state"])
+                self.assertEqual([], journal["created_directories"])
+                self.assertFalse((game / "game_data/worlds").exists())
+                write_journal(path, journal)
+                self.assertTrue(path.is_file())
+
+            try:
+                with (
+                    patch.object(
+                        bundle_module,
+                        "fsync_directory",
+                        side_effect=record_flush,
+                    ),
+                    patch.object(
+                        bundle_module,
+                        "_write_import_journal",
+                        side_effect=assert_intent_precedes_directories,
+                    ),
+                ):
+                    imported = import_runtime_bundle(
+                        bundle.root,
+                        game,
+                        expected_bundle_hash=bundle.bundle_hash,
+                    )
+
+                self.assertTrue(imported.is_dir())
+                self.assertLess(
+                    events.index("bundle import journal parent"),
+                    events.index("created bundle import ancestor"),
+                )
+                committed = _read_import_journal(game / IMPORT_JOURNAL)
+                self.assertEqual("committed", committed["state"])
+                self.assertTrue(committed["created_directories"])
+            finally:
+                bundle.close()
+
+    def test_legacy_intent_recovery_accepts_only_exact_empty_derived_ancestors(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, game = self._bundle_and_game(root)
+            flush_directory = bundle_module.fsync_directory
+            injected = False
+
+            def interrupt_first_ancestor_parent(path: Path, *, context: str) -> None:
+                nonlocal injected
+                if (
+                    not injected
+                    and context == "bundle import ancestor parent"
+                    and path == game / "game_data"
+                ):
+                    injected = True
+                    raise OSError("injected empty ancestor interruption")
+                flush_directory(path, context=context)
+
+            try:
+                with (
+                    patch.object(
+                        bundle_module,
+                        "fsync_directory",
+                        side_effect=interrupt_first_ancestor_parent,
+                    ),
+                    self.assertRaisesRegex(
+                        OSError,
+                        "empty ancestor interruption",
+                    ),
+                ):
                     import_runtime_bundle(
                         bundle.root,
                         game,
                         expected_bundle_hash=bundle.bundle_hash,
                     )
-                self.assertTrue((game / IMPORT_JOURNAL).exists())
-                stages = list((game / "game_data/worlds/modly_foundation").glob(".*.import-*"))
-                self.assertEqual(1, len(stages))
-                self.assertEqual([], list(stages[0].parent.glob(f".{stages[0].name}.rollback-*")))
-            else:
-                recovered = import_runtime_bundle(
+
+                self.assertTrue(injected)
+                worlds = game / "game_data/worlds"
+                self.assertTrue(worlds.is_dir())
+                self.assertEqual([], list(worlds.iterdir()))
+                self.assertEqual(
+                    "committed",
+                    _read_import_journal(game / IMPORT_JOURNAL)["state"],
+                )
+
+                imported = import_runtime_bundle(
                     bundle.root,
                     game,
                     expected_bundle_hash=bundle.bundle_hash,
                 )
-                self.assertTrue(recovered.is_dir())
-                self.assertFalse((game / IMPORT_JOURNAL).exists())
+                self.assertTrue(imported.is_dir())
+                self.assertEqual(
+                    [],
+                    bundle_module._audit_game_repository_for_import(game),  # noqa: SLF001
+                )
+            finally:
+                bundle.close()
+
+    def test_legacy_intent_recovery_preserves_nonempty_derived_ancestor_evidence(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, game = self._bundle_and_game(root)
+            world_root = game / "game_data/worlds/modly_foundation"
+            flush_directory = bundle_module.fsync_directory
+            injected = False
+
+            def inject_foreign_ancestor_content(path: Path, *, context: str) -> None:
+                nonlocal injected
+                if (
+                    not injected
+                    and context == "created bundle import ancestor"
+                    and path == world_root
+                ):
+                    (world_root / "foreign.txt").write_text(
+                        "preserve\n",
+                        encoding="utf-8",
+                    )
+                    injected = True
+                    raise OSError("injected nonempty ancestor interruption")
+                flush_directory(path, context=context)
+
+            try:
+                with (
+                    patch.object(
+                        bundle_module,
+                        "fsync_directory",
+                        side_effect=inject_foreign_ancestor_content,
+                    ),
+                    self.assertRaisesRegex(
+                        OSError,
+                        "nonempty ancestor interruption",
+                    ),
+                ):
+                    import_runtime_bundle(
+                        bundle.root,
+                        game,
+                        expected_bundle_hash=bundle.bundle_hash,
+                    )
+
+                self.assertTrue(injected)
+                self.assertEqual(
+                    "preserve\n",
+                    (world_root / "foreign.txt").read_text(encoding="utf-8"),
+                )
+                self.assertEqual(
+                    "intent",
+                    _read_import_journal(game / IMPORT_JOURNAL)["state"],
+                )
+            finally:
+                bundle.close()
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux post-mutation publication evidence",
+    )
+    def test_linux_stage_swap_after_validation_is_indeterminate_and_never_commits(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, game = self._bundle_and_game(root)
+            foreign = root / "foreign-stage"
+            foreign.mkdir()
+            (foreign / "foreign.txt").write_text("foreign\n", encoding="utf-8")
+            require_binding = directory_publish_module.RetainedDirectory.require_binding
+            calls: dict[Path, int] = {}
+            displaced: Path | None = None
+
+            def swap_after_validation(retained: object) -> None:
+                nonlocal displaced
+                require_binding(retained)
+                path = retained.path
+                if not path.name.startswith(".1.0.0.import-"):
+                    return
+                calls[path] = calls.get(path, 0) + 1
+                if calls[path] != 4:
+                    return
+                displaced = path.with_name(f"{path.name}.owned")
+                path.rename(displaced)
+                foreign.rename(path)
+
+            try:
+                with (
+                    patch.object(
+                        directory_publish_module.RetainedDirectory,
+                        "require_binding",
+                        new=swap_after_validation,
+                    ),
+                    self.assertRaisesRegex(
+                        BundleError,
+                        "indeterminate after RENAME_NOREPLACE",
+                    ),
+                ):
+                    import_runtime_bundle(
+                        bundle.root,
+                        game,
+                        expected_bundle_hash=bundle.bundle_hash,
+                    )
+
+                self.assertIsNotNone(displaced)
+                assert displaced is not None
+                destination = game / "game_data/worlds/modly_foundation/1.0.0"
+                self.assertEqual(
+                    "foreign\n",
+                    (destination / "foreign.txt").read_text(encoding="utf-8"),
+                )
+                self.assertTrue((displaced / bundle_module.BUNDLE_MANIFEST).is_file())
+                journal = _read_import_journal(game / IMPORT_JOURNAL)
+                self.assertEqual("ready", journal["state"])
+                catalog = json.loads(
+                    (game / "game_data/worlds.lock.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual([], catalog["releases"])
+            finally:
+                bundle.close()
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux post-mutation publication evidence",
+    )
+    def test_linux_lexical_parent_swap_after_rename_is_indeterminate_and_never_commits(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, game = self._bundle_and_game(root)
+            world_root = game / "game_data/worlds/modly_foundation"
+            destination = world_root / "1.0.0"
+            displaced_parent = world_root.with_name("modly_foundation-owned")
+            real_fsync = directory_publish_module.os.fsync
+            swapped = False
+
+            def swap_parent_before_post_flush(descriptor: int) -> None:
+                nonlocal swapped
+                if not swapped and destination.exists():
+                    world_root.rename(displaced_parent)
+                    world_root.mkdir()
+                    (world_root / "sentinel.txt").write_text(
+                        "foreign-parent\n",
+                        encoding="utf-8",
+                    )
+                    swapped = True
+                real_fsync(descriptor)
+
+            try:
+                with (
+                    patch.object(
+                        directory_publish_module.os,
+                        "fsync",
+                        side_effect=swap_parent_before_post_flush,
+                    ),
+                    self.assertRaisesRegex(
+                        BundleError,
+                        "indeterminate after RENAME_NOREPLACE",
+                    ),
+                ):
+                    import_runtime_bundle(
+                        bundle.root,
+                        game,
+                        expected_bundle_hash=bundle.bundle_hash,
+                    )
+
+                self.assertTrue(swapped)
+                self.assertEqual(
+                    "foreign-parent\n",
+                    (world_root / "sentinel.txt").read_text(encoding="utf-8"),
+                )
+                self.assertTrue(
+                    (displaced_parent / "1.0.0" / bundle_module.BUNDLE_MANIFEST).is_file()
+                )
+                journal = _read_import_journal(game / IMPORT_JOURNAL)
+                self.assertEqual("ready", journal["state"])
+                catalog = json.loads(
+                    (game / "game_data/worlds.lock.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual([], catalog["releases"])
+            finally:
+                bundle.close()
 
     def test_unsupported_platform_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -857,6 +1747,10 @@ class BundlePublicationTests(unittest.TestCase):
             source = root / "source"
             source.mkdir()
             destination = root / "destination"
+            expected = directory_publish_module.directory_identity(
+                source,
+                context="unsupported publication source",
+            )
             with (
                 patch.object(directory_publish_module.sys, "platform", "darwin"),
                 patch.object(directory_publish_module.os, "name", "posix"),
@@ -865,7 +1759,11 @@ class BundlePublicationTests(unittest.TestCase):
                     "supported only on Linux and Windows",
                 ),
             ):
-                publish_directory_noreplace(source, destination)
+                publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=expected,
+                )
             self.assertTrue(source.is_dir())
             self.assertFalse(destination.exists())
 

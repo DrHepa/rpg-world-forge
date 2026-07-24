@@ -15,12 +15,14 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+import worldforge.bundle as bundle_module
 import worldforge.game_control_io as game_control_io_module
 import worldforge.game_scaffold as game_scaffold_module
 from isoworld import __version__ as ISOWORLD_VERSION
 from isoworld.content.composed_catalog import ComposedCatalogError
 from isoworld.content.loader import load_worldpack
 from isoworld.content.models import RUNTIME_API_VERSION, SUPPORTED_RUNTIME_FEATURES
+from isoworld.content.publication_journal import canonical_journal_record, journal_frame
 from worldforge.bundle import (
     BundleError,
     export_runtime_bundle,
@@ -1227,6 +1229,20 @@ class GameScaffoldTests(unittest.TestCase):
                 generated_tests.returncode,
                 generated_tests.stdout + generated_tests.stderr,
             )
+            package = root / "bundle-game.zip"
+            packaged = _run_game_script(
+                game,
+                str(game / "scripts/package_game.py"),
+                "--output",
+                str(package),
+                cwd=outside,
+            )
+            self.assertEqual(0, packaged.returncode, packaged.stdout + packaged.stderr)
+            with zipfile.ZipFile(package) as archive:
+                self.assertNotIn(
+                    "game_data/bundle-import.journal.json",
+                    archive.namelist(),
+                )
 
             extra = imported / "assets/empty"
             extra.mkdir()
@@ -1237,6 +1253,86 @@ class GameScaffoldTests(unittest.TestCase):
             )
             self.assertNotEqual(0, tampered.returncode)
             self.assertIn("directory tree", tampered.stderr)
+
+    def test_active_partial_and_foreign_bundle_journals_block_audit_and_package(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            game = root / "game"
+            create_game_project(game, game_id="journal_game", title="Journal Game")
+            worldpack, renderpack, licenses = _write_fixture(root / "fixture")
+            bundle = export_runtime_bundle(
+                worldpack,
+                renderpack,
+                root / "bundle",
+                release_id="1.0.0",
+                licenses_directory=licenses,
+            )
+            import_runtime_bundle(
+                bundle.root,
+                game,
+                expected_bundle_hash=bundle.bundle_hash,
+            )
+            journal = game / bundle_module.IMPORT_JOURNAL
+            terminal_bytes = journal.read_bytes()
+            loaded = bundle_module._read_import_journal_record(journal)  # noqa: SLF001
+            self.assertIsNotNone(loaded)
+            assert loaded is not None
+            terminal_record = loaded[0]
+            operation_id = "f" * 32
+            active_record = {
+                **terminal_record,
+                "operation_id": operation_id,
+                "state": "intent",
+                "catalog_before_hash": terminal_record["catalog_after_hash"],
+                "temporary": (
+                    f"game_data/worlds/{terminal_record['world_id']}/"
+                    f".{terminal_record['release_id']}.import-{operation_id}"
+                ),
+                "directory_identity": None,
+                "created_directories": [],
+            }
+            active_frame = journal_frame(canonical_journal_record(active_record))
+            cases = (
+                ("active_publication_journal", terminal_bytes + active_frame),
+                ("partial_publication_journal", terminal_bytes + active_frame[:31]),
+                ("invalid_publication_journal", b'{"foreign":true}\n'),
+            )
+            outside = root / "outside"
+            outside.mkdir()
+            for rule, payload in cases:
+                with self.subTest(rule=rule):
+                    journal.write_bytes(payload)
+                    findings = audit_game_repository(game)
+                    self.assertTrue(
+                        any(
+                            finding.path == Path(bundle_module.IMPORT_JOURNAL)
+                            and finding.rule == rule
+                            for finding in findings
+                        ),
+                        findings,
+                    )
+                    verified = _run_game_script(
+                        game,
+                        str(game / "scripts/verify_game.py"),
+                        cwd=outside,
+                    )
+                    self.assertEqual(1, verified.returncode, verified.stdout + verified.stderr)
+                    self.assertIn("JOURNAL_", verified.stderr)
+                    self.assertNotIn("Traceback", verified.stderr)
+                    package = root / f"{rule}.zip"
+                    packaged = _run_game_script(
+                        game,
+                        str(game / "scripts/package_game.py"),
+                        "--output",
+                        str(package),
+                        cwd=outside,
+                    )
+                    self.assertEqual(2, packaged.returncode, packaged.stdout + packaged.stderr)
+                    self.assertIn("JOURNAL_", packaged.stderr)
+                    self.assertNotIn("Traceback", packaged.stderr)
+                    self.assertFalse(package.exists())
 
     def test_runtime_update_prechecks_every_installed_world_and_rolls_back(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -13,7 +13,6 @@ import warnings
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Generic, TypeVar
@@ -45,9 +44,11 @@ from worldforge.assetpack import AssetPackError, verify_assetpack
 from worldforge.directory_publish import (
     DirectoryIdentity,
     DirectoryPublishError,
+    append_append_only_journal,
+    create_append_only_journal,
     directory_identity,
     publish_directory_noreplace,
-    quarantine_and_remove_owned_directory,
+    read_append_only_journal,
 )
 from worldforge.directory_publish import (
     fsync_directory as _portable_fsync_directory,
@@ -235,12 +236,6 @@ def _close_descriptor(descriptor: int, *, context: str) -> None:
     except OSError as cleanup_error:
         if not note_cleanup_failure(primary, cleanup_error, context=context):
             raise ComposedBundleError(f"{context} failed: {cleanup_error}") from cleanup_error
-
-
-class _PublicationOutcome(Enum):
-    STAGE_OWNED = "stage_owned"
-    DESTINATION_OWNED = "destination_owned"
-    UNCERTAIN = "uncertain"
 
 
 def _immutable(value: object) -> object:
@@ -1538,7 +1533,7 @@ def _journal_document(
     state: str,
     stage: Path,
     destination: Path,
-    stage_identity: DirectoryIdentity,
+    stage_identity: DirectoryIdentity | None,
     platform: str,
     runtime_api_version: str,
     bundle_hash: str | None,
@@ -1550,7 +1545,7 @@ def _journal_document(
         "state": state,
         "stage_name": stage.name,
         "destination_name": destination.name,
-        "stage_identity": _identity_document(stage_identity),
+        "stage_identity": (None if stage_identity is None else _identity_document(stage_identity)),
         "platform": platform,
         "runtime_api_version": runtime_api_version,
         "bundle_hash": bundle_hash,
@@ -1568,7 +1563,7 @@ def _validate_journal(value: object, destination: Path) -> dict[str, Any]:
     operation_id = journal["operation_id"]
     if type(operation_id) is not str or re.fullmatch(r"[0-9a-f]{32}", operation_id) is None:
         raise ComposedBundleError("journal operation_id is invalid")
-    if journal["state"] not in {"copying", "ready"}:
+    if journal["state"] not in {"intent", "copying", "ready", "committed"}:
         raise ComposedBundleError("journal state is invalid")
     if journal["destination_name"] != destination.name:
         raise ComposedBundleError("journal destination identity is invalid")
@@ -1577,18 +1572,29 @@ def _validate_journal(value: object, destination: Path) -> dict[str, Any]:
         type(stage_name) is not str
         or "/" in stage_name
         or "\\" in stage_name
-        or not stage_name.startswith(f".{destination.name}.composed-")
+        or (
+            stage_name != destination.name
+            and not stage_name.startswith(f".{destination.name}.composed-")
+        )
         or not is_portable_path_component(stage_name)
     ):
         raise ComposedBundleError("journal stage name is invalid")
-    _identity_from_document(journal["stage_identity"], "journal/stage_identity")
+    if journal["state"] == "intent":
+        if journal["stage_identity"] is not None:
+            raise ComposedBundleError("intent journal must not claim a directory identity")
+    elif journal["state"] in {"copying", "ready"}:
+        _identity_from_document(journal["stage_identity"], "journal/stage_identity")
+    elif journal["stage_identity"] is not None:
+        _identity_from_document(journal["stage_identity"], "journal/stage_identity")
     if journal["platform"] not in PLATFORMS:
         raise ComposedBundleError("journal platform is invalid")
     _semver(journal["runtime_api_version"], "journal/runtime_api_version")
-    if journal["state"] == "copying":
+    if journal["state"] in {"intent", "copying"}:
         if journal["bundle_hash"] is not None:
-            raise ComposedBundleError("copying journal must not claim a bundle hash")
-    else:
+            raise ComposedBundleError("incomplete journal must not claim a bundle hash")
+    elif journal["state"] == "ready":
+        _digest(journal["bundle_hash"], "journal/bundle_hash")
+    elif journal["bundle_hash"] is not None:
         _digest(journal["bundle_hash"], "journal/bundle_hash")
     return journal
 
@@ -1598,106 +1604,117 @@ def _write_journal(
     document: dict[str, Any],
     *,
     create: bool,
+    expected_document: dict[str, Any] | None = None,
+    expected_identity: tuple[int, int] | None = None,
 ) -> tuple[int, int]:
     payload = canonical_json_bytes(document)
     if create:
-        flags = (
-            os.O_WRONLY
-            | os.O_CREAT
-            | os.O_EXCL
-            | getattr(os, "O_BINARY", 0)
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOINHERIT", 0)
-            | getattr(os, "O_NOFOLLOW", 0)
-        )
         try:
-            descriptor = os.open(path, flags, 0o600)
-        except FileExistsError as exc:
-            raise ComposedBundleError("composed bundle recovery journal already exists") from exc
-        try:
-            info = os.fstat(descriptor)
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-                raise ComposedBundleError("new composed bundle journal is unsafe")
-            view = memoryview(payload)
-            while view:
-                written = os.write(descriptor, view)
-                if written <= 0:
-                    raise OSError("short write")
-                view = view[written:]
-            os.fsync(descriptor)
-            identity = (info.st_dev, info.st_ino)
-        finally:
-            _close_descriptor(
-                descriptor,
-                context="composed bundle journal descriptor cleanup",
+            identity = create_append_only_journal(
+                path,
+                payload,
+                max_record_bytes=MAX_MANIFEST_BYTES,
             )
+        except FileExistsError as exc:
+            existing = _read_journal_record(path)
+            if existing is None or existing[0]["state"] != "committed":
+                raise ComposedBundleError(
+                    "composed bundle recovery journal already exists"
+                ) from exc
+            try:
+                identity = append_append_only_journal(
+                    path,
+                    expected_identity=existing[1],
+                    expected_payload=existing[2],
+                    updated_payload=payload,
+                    max_record_bytes=MAX_MANIFEST_BYTES,
+                    max_file_bytes=MAX_MANIFEST_BYTES * 16,
+                )
+            except DirectoryPublishError as append_error:
+                raise ComposedBundleError(str(append_error)) from append_error
+        except DirectoryPublishError as exc:
+            raise ComposedBundleError(str(exc)) from exc
         _fsync_directory(path.parent)
         return identity
 
-    temporary = path.parent / f".{path.name}.replace-{uuid.uuid4().hex}"
+    if expected_document is None or expected_identity is None:
+        raise ComposedBundleError(
+            "composed bundle journal transition requires exact prior identity and bytes"
+        )
+    loaded = _read_journal_record(path)
+    expected_payload = canonical_json_bytes(expected_document)
+    if (
+        loaded is None
+        or loaded[0] != expected_document
+        or loaded[1] != expected_identity
+        or loaded[2] != expected_payload
+    ):
+        raise ComposedBundleError("composed bundle journal changed before transition")
     try:
-        identity = _write_journal(temporary, document, create=True)
-        os.replace(temporary, path)
-        current = path.lstat()
-        if (current.st_dev, current.st_ino) != identity:
-            raise ComposedBundleError("replaced composed bundle journal changed identity")
-        _fsync_directory(path.parent)
-        return identity
-    finally:
-        try:
-            info = temporary.lstat()
-        except FileNotFoundError:
-            pass
-        else:
-            if stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
-                temporary.unlink()
+        return append_append_only_journal(
+            path,
+            expected_identity=expected_identity,
+            expected_payload=expected_payload,
+            updated_payload=payload,
+            max_record_bytes=MAX_MANIFEST_BYTES,
+            max_file_bytes=MAX_MANIFEST_BYTES * 16,
+        )
+    except DirectoryPublishError as exc:
+        raise ComposedBundleError(str(exc)) from exc
+
+
+def _read_journal_record(
+    path: Path,
+    destination: Path | None = None,
+) -> tuple[dict[str, Any], tuple[int, int], bytes] | None:
+    try:
+        loaded = read_append_only_journal(
+            path,
+            max_record_bytes=MAX_MANIFEST_BYTES,
+            max_file_bytes=MAX_MANIFEST_BYTES * 16,
+        )
+    except DirectoryPublishError as exc:
+        raise ComposedBundleError(str(exc)) from exc
+    if loaded is None:
+        return None
+    payload, identity = loaded
+    value = _decode(payload, source=path)
+    if destination is None:
+        if not isinstance(value, dict) or type(value.get("destination_name")) is not str:
+            raise ComposedBundleError("composed bundle journal destination is invalid")
+        destination = path.parent / value["destination_name"]
+    document = _validate_journal(value, destination)
+    if payload != canonical_json_bytes(document):
+        raise ComposedBundleError("composed bundle journal record is not canonical")
+    return document, identity, payload
 
 
 def _read_journal(
     path: Path,
     destination: Path,
 ) -> tuple[dict[str, Any], tuple[int, int]] | None:
-    try:
-        info = path.lstat()
-    except FileNotFoundError:
+    loaded = _read_journal_record(path, destination)
+    if loaded is None or loaded[0]["state"] == "committed":
         return None
-    except OSError as exc:
-        raise ComposedBundleError(f"Could not inspect composed bundle journal: {exc}") from exc
-    if (
-        stat.S_ISLNK(info.st_mode)
-        or not stat.S_ISREG(info.st_mode)
-        or info.st_nlink != 1
-        or info.st_size > MAX_MANIFEST_BYTES
-    ):
-        raise ComposedBundleError("composed bundle journal is unsafe")
-    payload = _read_bounded(
-        path,
-        limit=MAX_MANIFEST_BYTES,
-        context="composed bundle journal",
-    )
-    document = _validate_journal(_decode(payload, source=path), destination)
-    if payload != canonical_json_bytes(document):
-        raise ComposedBundleError("composed bundle journal is not canonical")
-    current = path.lstat()
-    identity = (info.st_dev, info.st_ino)
-    if (current.st_dev, current.st_ino) != identity:
-        raise ComposedBundleError("composed bundle journal changed while reading")
-    return document, identity
+    return loaded[0], loaded[1]
 
 
 def _remove_owned_journal(path: Path, identity: tuple[int, int]) -> None:
-    try:
-        current = path.lstat()
-    except FileNotFoundError:
+    loaded = _read_journal_record(path)
+    if loaded is None:
         return
-    if (
-        not stat.S_ISREG(current.st_mode)
-        or current.st_nlink != 1
-        or (current.st_dev, current.st_ino) != identity
-    ):
-        raise ComposedBundleError("refused to remove a replaced composed bundle journal")
-    path.unlink()
-    _fsync_directory(path.parent)
+    document, current_identity, _payload = loaded
+    if current_identity != identity:
+        raise ComposedBundleError("refused to commit a replaced composed bundle journal")
+    if document["state"] == "committed":
+        return
+    _write_journal(
+        path,
+        {**document, "state": "committed"},
+        create=False,
+        expected_document=document,
+        expected_identity=identity,
+    )
 
 
 def _verify_incomplete_stage(path: Path) -> None:
@@ -1727,6 +1744,52 @@ def _optional_directory_identity(
     return info.st_dev, info.st_ino
 
 
+def _recover_complete_destination_hash(
+    destination: Path,
+    *,
+    expected_identity: DirectoryIdentity,
+    platform: str,
+    runtime_api_version: str,
+    registry: StaticRuntimeAdapterRegistry[T],
+) -> str:
+    if (
+        _optional_directory_identity(
+            destination,
+            context="recoverable composed bundle destination",
+        )
+        != expected_identity
+    ):
+        raise ComposedBundleError("recoverable composed bundle destination identity changed")
+    manifest = validate_composed_runtime_bundle_manifest(
+        _decode(
+            _read_bounded(
+                destination / COMPOSED_BUNDLE_MANIFEST,
+                limit=MAX_MANIFEST_BYTES,
+                context="recoverable composed bundle manifest",
+            ),
+            source=COMPOSED_BUNDLE_MANIFEST,
+        )
+    )
+    bundle_hash = str(manifest["bundle_hash"])
+    with verify_composed_runtime_bundle(
+        destination,
+        expected_bundle_hash=bundle_hash,
+        platform=platform,
+        runtime_api_version=runtime_api_version,
+        registry=registry,
+    ):
+        pass
+    if (
+        _optional_directory_identity(
+            destination,
+            context="verified recoverable composed bundle destination",
+        )
+        != expected_identity
+    ):
+        raise ComposedBundleError("recoverable composed bundle destination identity changed")
+    return bundle_hash
+
+
 def _recover_journal(
     destination: Path,
     *,
@@ -1742,10 +1805,6 @@ def _recover_journal(
     if journal["platform"] != platform or journal["runtime_api_version"] != runtime_api_version:
         raise ComposedBundleError("existing journal targets a different platform or runtime API")
     stage = destination.parent / journal["stage_name"]
-    expected_identity = _identity_from_document(
-        journal["stage_identity"],
-        "journal/stage_identity",
-    )
     stage_identity = _optional_directory_identity(
         stage,
         context="recovery stage",
@@ -1755,105 +1814,140 @@ def _recover_journal(
         context="recovery destination",
     )
 
+    if journal["state"] == "intent":
+        if stage_identity is not None or destination_identity is not None:
+            raise ComposedBundleError(
+                "intent journal has an ambiguous claimed directory; "
+                "preserving journal and filesystem"
+            )
+        _remove_owned_journal(path, journal_identity)
+        return
+
+    expected_identity = _identity_from_document(
+        journal["stage_identity"],
+        "journal/stage_identity",
+    )
     if journal["state"] == "copying":
-        if destination_identity is not None or stage_identity is None:
+        recovery_source: Path | None = None
+        if stage == destination:
+            if destination_identity == expected_identity:
+                recovery_source = destination
+        elif stage_identity == expected_identity and destination_identity is None:
+            recovery_source = stage
+        elif destination_identity == expected_identity and stage_identity is None:
+            recovery_source = destination
+        if recovery_source is None:
             raise ComposedBundleError(
-                "incomplete journal state changed; preserving journal and filesystem"
+                "copying journal has ambiguous or changed evidence; "
+                "preserving journal and filesystem"
             )
-        if stage_identity != expected_identity:
-            raise ComposedBundleError(
-                "incomplete stage identity changed; preserving journal and filesystem"
-            )
-        quarantine_and_remove_owned_directory(
-            stage,
-            expected_identity,
-            verify=_verify_incomplete_stage,
-        )
-        if (
-            _optional_directory_identity(stage, context="cleaned incomplete stage") is not None
-            or _optional_directory_identity(
-                destination,
-                context="destination after incomplete cleanup",
-            )
-            is not None
-        ):
-            raise ComposedBundleError(
-                "publication paths changed after incomplete cleanup; preserving journal"
-            )
-        _remove_owned_journal(path, journal_identity)
-        return
-
-    bundle_hash = journal["bundle_hash"]
-    assert isinstance(bundle_hash, str)
-    if destination_identity is not None and stage_identity is None:
-        if destination_identity != expected_identity:
-            raise ComposedBundleError("published destination identity changed; preserving journal")
-        with verify_composed_runtime_bundle(
-            destination,
-            expected_bundle_hash=bundle_hash,
-            platform=platform,
-            runtime_api_version=runtime_api_version,
-            registry=registry,
-        ):
-            pass
-        _fsync_tree_directories(destination)
-        _fsync_directory(destination.parent)
-        with verify_composed_runtime_bundle(
-            destination,
-            expected_bundle_hash=bundle_hash,
-            platform=platform,
-            runtime_api_version=runtime_api_version,
-            registry=registry,
-        ):
-            pass
-        if (
-            _optional_directory_identity(
-                destination,
-                context="verified recovered destination",
-            )
-            != expected_identity
-            or _optional_directory_identity(stage, context="recovered absent stage") is not None
-        ):
-            raise ComposedBundleError(
-                "published destination changed after verification; preserving journal"
-            )
-        _remove_owned_journal(path, journal_identity)
-        return
-    if stage_identity is not None and destination_identity is None:
-        if stage_identity != expected_identity:
-            raise ComposedBundleError("ready stage identity changed; preserving journal")
-
-        def verify_ready(candidate: Path) -> None:
-            with verify_composed_runtime_bundle(
-                candidate,
-                expected_bundle_hash=bundle_hash,
+        try:
+            bundle_hash = _recover_complete_destination_hash(
+                recovery_source,
+                expected_identity=expected_identity,
                 platform=platform,
                 runtime_api_version=runtime_api_version,
                 registry=registry,
-            ):
-                pass
-
-        quarantine_and_remove_owned_directory(
-            stage,
-            expected_identity,
-            verify=verify_ready,
-        )
-        if (
-            _optional_directory_identity(stage, context="cleaned ready stage") is not None
-            or _optional_directory_identity(
-                destination,
-                context="destination after ready cleanup",
             )
-            is not None
-        ):
+        except (ComposedBundleError, OSError) as exc:
             raise ComposedBundleError(
-                "publication paths changed after ready cleanup; preserving journal"
+                "copying composed bundle stage is incomplete; preserving journal"
+            ) from exc
+        ready_journal = _journal_document(
+            operation_id=journal["operation_id"],
+            state="ready",
+            stage=stage,
+            destination=destination,
+            stage_identity=expected_identity,
+            platform=platform,
+            runtime_api_version=runtime_api_version,
+            bundle_hash=bundle_hash,
+        )
+        journal_identity = _write_journal(
+            path,
+            ready_journal,
+            create=False,
+            expected_document=journal,
+            expected_identity=journal_identity,
+        )
+        journal = ready_journal
+        stage_identity = _optional_directory_identity(
+            stage,
+            context="ready recovery stage",
+        )
+        destination_identity = _optional_directory_identity(
+            destination,
+            context="ready recovery destination",
+        )
+
+    bundle_hash = journal["bundle_hash"]
+    assert isinstance(bundle_hash, str)
+    if stage == destination:
+        if destination_identity != expected_identity:
+            raise ComposedBundleError(
+                "historical ready destination identity changed; preserving journal"
             )
-        _remove_owned_journal(path, journal_identity)
-        return
-    raise ComposedBundleError(
-        "ready journal has an ambiguous stage/destination state; preserving it"
-    )
+    elif stage_identity == expected_identity and destination_identity is None:
+        with verify_composed_runtime_bundle(
+            stage,
+            expected_bundle_hash=bundle_hash,
+            platform=platform,
+            runtime_api_version=runtime_api_version,
+            registry=registry,
+        ):
+            pass
+        try:
+            published_identity = publish_directory_noreplace(
+                stage,
+                destination,
+                expected_source_identity=expected_identity,
+            )
+        except (DirectoryPublishError, FileExistsError) as exc:
+            raise ComposedBundleError(
+                f"Could not recover ready composed bundle publication: {exc}"
+            ) from exc
+        if published_identity != expected_identity:
+            raise ComposedBundleError("recovered composed bundle publication identity changed")
+    elif destination_identity == expected_identity and stage_identity is None:
+        pass
+    else:
+        raise ComposedBundleError(
+            "ready journal has ambiguous or changed evidence; preserving journal"
+        )
+
+    with verify_composed_runtime_bundle(
+        destination,
+        expected_bundle_hash=bundle_hash,
+        platform=platform,
+        runtime_api_version=runtime_api_version,
+        registry=registry,
+    ):
+        pass
+    _fsync_tree_directories(destination)
+    _fsync_directory(destination.parent)
+    with verify_composed_runtime_bundle(
+        destination,
+        expected_bundle_hash=bundle_hash,
+        platform=platform,
+        runtime_api_version=runtime_api_version,
+        registry=registry,
+    ):
+        pass
+    if _optional_directory_identity(
+        destination,
+        context="verified recovered destination",
+    ) != expected_identity or (
+        stage != destination
+        and _optional_directory_identity(
+            stage,
+            context="recovered absent stage",
+        )
+        is not None
+    ):
+        raise ComposedBundleError(
+            "recovered publication changed after verification; preserving journal"
+        )
+    _remove_owned_journal(path, journal_identity)
 
 
 def _ensure_stage_parent(stage: Path, relative: PurePosixPath) -> Path:
@@ -2101,87 +2195,6 @@ def _license_targets(
     return tuple(sorted(results, key=lambda item: item[0]))
 
 
-def _publication_outcome(
-    stage: Path,
-    destination: Path,
-    *,
-    expected_identity: DirectoryIdentity,
-    expected_bundle_hash: str,
-    platform: str,
-    runtime_api_version: str,
-    registry: StaticRuntimeAdapterRegistry[T],
-) -> _PublicationOutcome:
-    """Classify a failed publication without following either path."""
-
-    try:
-        destination_identity = _optional_directory_identity(
-            destination,
-            context="failed publication destination",
-        )
-    except Exception:
-        return _PublicationOutcome.UNCERTAIN
-
-    if destination_identity == expected_identity:
-        try:
-            with verify_composed_runtime_bundle(
-                destination,
-                expected_bundle_hash=expected_bundle_hash,
-                platform=platform,
-                runtime_api_version=runtime_api_version,
-                registry=registry,
-            ):
-                pass
-        except Exception:
-            return _PublicationOutcome.UNCERTAIN
-        return _PublicationOutcome.DESTINATION_OWNED
-
-    try:
-        stage_identity = _optional_directory_identity(
-            stage,
-            context="failed publication stage",
-        )
-    except Exception:
-        return _PublicationOutcome.UNCERTAIN
-    if destination_identity is None and stage_identity == expected_identity:
-        return _PublicationOutcome.STAGE_OWNED
-    return _PublicationOutcome.UNCERTAIN
-
-
-def _cleanup_stage(
-    stage: Path,
-    identity: DirectoryIdentity,
-    *,
-    ready_hash: str | None,
-    platform: str,
-    runtime_api_version: str,
-    registry: StaticRuntimeAdapterRegistry[T],
-) -> bool:
-    current_identity = _optional_directory_identity(
-        stage,
-        context="cleanup stage",
-    )
-    if current_identity is None:
-        return False
-    if current_identity != identity:
-        raise ComposedBundleError("cleanup stage identity changed")
-
-    def verify(candidate: Path) -> None:
-        if ready_hash is None:
-            _verify_incomplete_stage(candidate)
-            return
-        with verify_composed_runtime_bundle(
-            candidate,
-            expected_bundle_hash=ready_hash,
-            platform=platform,
-            runtime_api_version=runtime_api_version,
-            registry=registry,
-        ):
-            pass
-
-    quarantine_and_remove_owned_directory(stage, identity, verify=verify)
-    return True
-
-
 def build_composed_runtime_bundle(
     capability_catalog_path: str | Path,
     presentation_profile_path: str | Path,
@@ -2251,21 +2264,42 @@ def build_composed_runtime_bundle(
             raise ComposedBundleError(str(exc)) from exc
 
         operation_id = uuid.uuid4().hex
-        stage = destination_path.parent / (f".{destination_path.name}.composed-{operation_id}")
-        stage.mkdir(mode=0o700)
-        stage_identity = directory_identity(stage, context="composed bundle stage")
+        stage_path = destination_path.parent / (f".{destination_path.name}.composed-{operation_id}")
+        stage = stage_path
+        stage_identity: DirectoryIdentity | None = None
         journal_path = _journal_path(destination_path)
         journal_identity: tuple[int, int] | None = None
+        journal_document: dict[str, Any] | None = None
         ready_hash: str | None = None
-        publication_started = False
         capture_owner: ResourceSnapshotOwner | None = None
         verified_stage: LoadedComposedRuntimeBundle[T] | None = None
         published_bundle: LoadedComposedRuntimeBundle[T] | None = None
         try:
+            intent_journal = _journal_document(
+                operation_id=operation_id,
+                state="intent",
+                stage=stage_path,
+                destination=destination_path,
+                stage_identity=None,
+                platform=platform,
+                runtime_api_version=runtime_api_version,
+                bundle_hash=None,
+            )
+            journal_identity = _write_journal(
+                journal_path,
+                intent_journal,
+                create=True,
+            )
+            journal_document = intent_journal
+            stage_path.mkdir(mode=0o700)
+            stage_identity = directory_identity(
+                stage_path,
+                context="composed bundle stage",
+            )
             copying_journal = _journal_document(
                 operation_id=operation_id,
                 state="copying",
-                stage=stage,
+                stage=stage_path,
                 destination=destination_path,
                 stage_identity=stage_identity,
                 platform=platform,
@@ -2275,8 +2309,12 @@ def build_composed_runtime_bundle(
             journal_identity = _write_journal(
                 journal_path,
                 copying_journal,
-                create=True,
+                create=False,
+                expected_document=journal_document,
+                expected_identity=journal_identity,
             )
+            journal_document = copying_journal
+            stage_view = stage
             capture_owner = ResourceSnapshotOwner()
             media_types: dict[str, str] = {}
             document_sources = (
@@ -2319,7 +2357,7 @@ def build_composed_runtime_bundle(
             catalog = validate_runtime_capability_catalog(
                 _decode(
                     _read_bounded(
-                        stage / CATALOG_PATH,
+                        stage_view / CATALOG_PATH,
                         limit=MAX_MANIFEST_BYTES,
                         context="staged capability catalog",
                     ),
@@ -2329,7 +2367,7 @@ def build_composed_runtime_bundle(
             profile = validate_runtime_presentation_profile(
                 _decode(
                     _read_bounded(
-                        stage / PROFILE_PATH,
+                        stage_view / PROFILE_PATH,
                         limit=MAX_MANIFEST_BYTES,
                         context="staged presentation profile",
                     ),
@@ -2339,7 +2377,7 @@ def build_composed_runtime_bundle(
             adapter = validate_runtime_adapter(
                 _decode(
                     _read_bounded(
-                        stage / ADAPTER_PATH,
+                        stage_view / ADAPTER_PATH,
                         limit=MAX_MANIFEST_BYTES,
                         context="staged runtime adapter",
                     ),
@@ -2349,7 +2387,7 @@ def build_composed_runtime_bundle(
             composition = validate_runtime_composition(
                 _decode(
                     _read_bounded(
-                        stage / COMPOSITION_PATH,
+                        stage_view / COMPOSITION_PATH,
                         limit=MAX_MANIFEST_BYTES,
                         context="staged runtime composition",
                     ),
@@ -2358,7 +2396,7 @@ def build_composed_runtime_bundle(
             )
             worldpack_raw = _decode(
                 _read_bounded(
-                    stage / WORLDPACK_PATH,
+                    stage_view / WORLDPACK_PATH,
                     limit=MAX_RUNTIME_JSON_BYTES,
                     context="staged worldpack",
                 ),
@@ -2386,7 +2424,7 @@ def build_composed_runtime_bundle(
                     )
                 renderpack_document = _decode(
                     _read_bounded(
-                        stage / RENDERPACK_PATH,
+                        stage_view / RENDERPACK_PATH,
                         limit=MAX_MANIFEST_BYTES,
                         context="staged renderpack",
                     ),
@@ -2408,7 +2446,7 @@ def build_composed_runtime_bundle(
                     )
                 assetpack_document = _decode(
                     _read_bounded(
-                        stage / ASSETPACK_PATH,
+                        stage_view / ASSETPACK_PATH,
                         limit=MAX_MANIFEST_BYTES,
                         context="staged assetpack",
                     ),
@@ -2436,7 +2474,7 @@ def build_composed_runtime_bundle(
 
             try:
                 registered = load_registered_runtime_composition(
-                    stage,
+                    stage_view,
                     capability_catalog_path=CATALOG_PATH,
                     presentation_profile_path=PROFILE_PATH,
                     runtime_adapter_path=ADAPTER_PATH,
@@ -2456,14 +2494,15 @@ def build_composed_runtime_bundle(
             media_types[REPORT_PATH] = "application/json"
 
             try:
-                worldpack = load_worldpack(stage / WORLDPACK_PATH)
+                worldpack = load_worldpack(stage_view / WORLDPACK_PATH)
             except (OSError, WorldPackError) as exc:
                 raise ComposedBundleError(f"staged worldpack is invalid: {exc}") from exc
             if worldpack_raw.get("format") != "isoworld.worldpack":
                 raise ComposedBundleError("staged worldpack format is invalid")
 
             files = [
-                _file_record(stage / path, path, media_types[path]) for path in sorted(media_types)
+                _file_record(stage_view / path, path, media_types[path])
+                for path in sorted(media_types)
             ]
             license_records = [record for record in files if record["path"].startswith("licenses/")]
             manifest: dict[str, Any] = {
@@ -2554,8 +2593,19 @@ def build_composed_runtime_bundle(
                 COMPOSED_BUNDLE_MANIFEST,
                 canonical_json_bytes(manifest),
             )
-            _fsync_tree_directories(stage)
             ready_hash = manifest["bundle_hash"]
+            _fsync_tree_directories(stage)
+            _fsync_directory(stage.parent)
+            if (
+                _optional_directory_identity(
+                    stage,
+                    context="durably staged composed bundle",
+                )
+                != stage_identity
+            ):
+                raise ComposedBundleError(
+                    "composed bundle stage identity changed before ready publication"
+                )
 
             verified_stage = verify_composed_runtime_bundle(
                 stage,
@@ -2566,24 +2616,33 @@ def build_composed_runtime_bundle(
             )
             verified_stage.close()
             verified_stage = None
+            assert stage_identity is not None
             ready_journal = _journal_document(
                 operation_id=operation_id,
                 state="ready",
-                stage=stage,
+                stage=stage_path,
                 destination=destination_path,
                 stage_identity=stage_identity,
                 platform=platform,
                 runtime_api_version=runtime_api_version,
                 bundle_hash=ready_hash,
             )
+            assert journal_document is not None
+            assert journal_identity is not None
             journal_identity = _write_journal(
                 journal_path,
                 ready_journal,
                 create=False,
+                expected_document=journal_document,
+                expected_identity=journal_identity,
             )
-            publication_started = True
+            journal_document = ready_journal
             try:
-                published_identity = publish_directory_noreplace(stage, destination_path)
+                published_identity = publish_directory_noreplace(
+                    stage,
+                    destination_path,
+                    expected_source_identity=stage_identity,
+                )
             except FileExistsError as exc:
                 raise ComposedBundleError(
                     f"bundle destination already exists: {destination_path}"
@@ -2605,9 +2664,9 @@ def build_composed_runtime_bundle(
                     destination_path,
                     context="verified published destination",
                 )
-                != stage_identity
+                != published_identity
                 or _optional_directory_identity(
-                    stage,
+                    stage_path,
                     context="published absent stage",
                 )
                 is not None
@@ -2637,56 +2696,11 @@ def build_composed_runtime_bundle(
                     published_bundle.close()
                 except ComposedBundleError as exc:
                     cleanup_errors.append(f"published snapshot cleanup: {exc}")
-            cleanup_owned_stage = True
-            if publication_started:
-                if ready_hash is None:
-                    cleanup_owned_stage = False
-                else:
-                    cleanup_owned_stage = (
-                        _publication_outcome(
-                            stage,
-                            destination_path,
-                            expected_identity=stage_identity,
-                            expected_bundle_hash=ready_hash,
-                            platform=platform,
-                            runtime_api_version=runtime_api_version,
-                            registry=registry,
-                        )
-                        is _PublicationOutcome.STAGE_OWNED
-                    )
-            if cleanup_owned_stage:
-                try:
-                    stage_removed = _cleanup_stage(
-                        stage,
-                        stage_identity,
-                        ready_hash=ready_hash,
-                        platform=platform,
-                        runtime_api_version=runtime_api_version,
-                        registry=registry,
-                    )
-                except (ComposedBundleError, OSError) as exc:
-                    cleanup_errors.append(f"stage cleanup: {exc}")
-                else:
-                    if stage_removed and journal_identity is not None:
-                        try:
-                            if (
-                                _optional_directory_identity(
-                                    stage,
-                                    context="removed cleanup stage",
-                                )
-                                is not None
-                                or _optional_directory_identity(
-                                    destination_path,
-                                    context="destination after stage cleanup",
-                                )
-                                is not None
-                            ):
-                                raise ComposedBundleError(
-                                    "publication paths changed after cleanup; preserving journal"
-                                )
-                            _remove_owned_journal(journal_path, journal_identity)
-                        except (ComposedBundleError, OSError) as exc:
-                            cleanup_errors.append(f"journal cleanup: {exc}")
+            if stage_identity is not None and (stage_path.exists() or stage_path.is_symlink()):
+                original.add_note(
+                    "Private composed bundle stage retained for deterministic recovery: "
+                    f"{stage_path}"
+                )
             if cleanup_errors:
                 note_cleanup_failure(
                     original,

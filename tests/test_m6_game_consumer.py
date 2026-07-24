@@ -13,6 +13,7 @@ import tempfile
 import unittest
 import zipfile
 from collections.abc import Callable
+from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
@@ -25,6 +26,7 @@ import isoworld.content.gltf as gltf_module
 import isoworld.content.resource_snapshot as resource_snapshot_module
 import worldforge.composed_bundle as composed_bundle_module
 import worldforge.composed_game as composed_game_module
+import worldforge.directory_publish as directory_publish_module
 import worldforge.game_control_io as game_control_io_module
 from isoworld.content.composed_catalog import (
     CATALOG_GENERATION_NAME,
@@ -36,6 +38,11 @@ from isoworld.content.composed_catalog import (
     verify_composed_release,
 )
 from isoworld.content.loader import load_worldpack
+from isoworld.content.publication_journal import (
+    audit_publication_journals,
+    canonical_journal_record,
+    journal_frame,
+)
 from isoworld.render.composition_plan import build_composition_plan
 from isoworld.render.pyray_2_5d import PYRAY_2_5D_REGISTRY
 from isoworld.runtime_adapter import RuntimeAdapterKey, StaticRuntimeAdapterRegistry
@@ -43,6 +50,7 @@ from tests.test_m6_pyray_2_5d import _composition
 from worldforge.assetpack import build_assetpack
 from worldforge.composed_bundle import build_composed_runtime_bundle
 from worldforge.composed_game import ComposedGameError, import_composed_bundle
+from worldforge.game_boundary import audit_game_repository
 from worldforge.game_scaffold import create_game_project
 from worldforge.integrity import canonical_json_bytes, canonical_payload_hash
 from worldforge.renderpack import build_renderpack
@@ -816,40 +824,29 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="staged_bundle_durability",
                 title="Staged Bundle Durability",
             )
-            flush = composed_game_module.fsync_directory
+            copy_into_claim = composed_game_module._copy_owned_bundle_into_claim
 
-            def fail_stage_root(path: Path, *, context: str) -> None:
-                if context == "composed bundle directory" and any(
-                    part.startswith(".") and f"import-{bundle_hash}" in part for part in path.parts
-                ):
-                    raise OSError("injected staged bundle flush failure")
-                flush(path, context=context)
+            def copy_then_fail(*args: object, **kwargs: object) -> None:
+                copy_into_claim(*args, **kwargs)
+                raise OSError("injected claimed bundle flush failure")
 
-            for attempt in ("initial", "recovery"):
-                with (
-                    self.subTest(attempt=attempt),
-                    patch.object(
-                        composed_game_module,
-                        "fsync_directory",
-                        side_effect=fail_stage_root,
-                    ),
-                    self.assertRaisesRegex(OSError, "staged bundle flush failure"),
-                ):
-                    import_composed_bundle(
-                        bundle,
-                        game,
-                        expected_bundle_hash=bundle_hash,
-                    )
-                self.assertEqual(
-                    1,
-                    len(
-                        [
-                            path
-                            for path in (game / "game_data").rglob(".*.import-*")
-                            if path.is_dir()
-                        ]
-                    ),
+            with (
+                patch.object(
+                    composed_game_module,
+                    "_copy_owned_bundle_into_claim",
+                    side_effect=copy_then_fail,
+                ),
+                self.assertRaisesRegex(OSError, "claimed bundle flush failure"),
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
                 )
+            self.assertEqual(
+                1,
+                len([path for path in (game / "game_data").rglob(".*.import-*") if path.is_dir()]),
+            )
 
             imported = import_composed_bundle(
                 bundle,
@@ -870,28 +867,18 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="pre_stage_recovery",
                 title="Pre-stage Recovery",
             )
-            mkdir = Path.mkdir
-            injected = False
-
-            def fail_stage_mkdir(
-                path: Path,
-                mode: int = 0o777,
-                parents: bool = False,
-                exist_ok: bool = False,
-            ) -> None:
-                nonlocal injected
-                if (
-                    not injected
-                    and path.name.startswith(".")
-                    and f"import-{bundle_hash}" in path.name
-                ):
-                    injected = True
-                    raise OSError("injected composed stage mkdir failure")
-                mkdir(path, mode=mode, parents=parents, exist_ok=exist_ok)
-
             with (
-                patch.object(Path, "mkdir", new=fail_stage_mkdir),
-                self.assertRaisesRegex(OSError, "composed stage mkdir failure"),
+                patch.object(
+                    composed_game_module,
+                    "claim_directory_noreplace",
+                    side_effect=composed_game_module.DirectoryPublishError(
+                        "injected composed destination claim failure"
+                    ),
+                ),
+                self.assertRaisesRegex(
+                    ComposedGameError,
+                    "destination claim failure",
+                ),
             ):
                 import_composed_bundle(
                     bundle,
@@ -899,7 +886,6 @@ class M6GameConsumerTests(unittest.TestCase):
                     expected_bundle_hash=bundle_hash,
                 )
 
-            self.assertTrue(injected)
             self.assertFalse((game / "game_data/compositions").exists())
             imported = import_composed_bundle(
                 bundle,
@@ -908,8 +894,20 @@ class M6GameConsumerTests(unittest.TestCase):
             )
             self.assertTrue(imported.is_dir())
             self.assertEqual(1, len(load_composed_catalog(game)))
+            committed = composed_game_module._read_catalog_journal_record(game)  # noqa: SLF001
+            self.assertIsNotNone(committed)
+            assert committed is not None
+            self.assertEqual(1, committed[0]["format_version"])
+            self.assertEqual("committed", committed[0]["state"])
+            self.assertIsInstance(committed[0]["directory_identity"], dict)
+            journal_audit = audit_publication_journals(game)
+            self.assertEqual((), journal_audit.issues)
+            self.assertEqual(
+                ("game_data/.composed-catalog-publication.json",),
+                tuple(path.as_posix() for path in journal_audit.terminal_paths),
+            )
 
-    def test_first_import_stage_tree_uses_same_parent_publication_seam(self) -> None:
+    def test_first_import_uses_exclusive_destination_claim(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             bundle, bundle_hash = self._build_bundle(root)
@@ -919,18 +917,19 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="same_parent_publication",
                 title="Same-parent Publication",
             )
-            publish = composed_game_module.publish_directory_noreplace
-            calls: list[tuple[Path, Path]] = []
+            claim = composed_game_module.claim_directory_noreplace
+            calls: list[Path] = []
 
-            def record_publish(source: Path, destination: Path) -> tuple[int, int]:
-                if f"import-{bundle_hash}" in source.name:
-                    calls.append((source, destination))
-                return publish(source, destination)
+            @contextmanager
+            def record_claim(destination: Path, **kwargs: object):
+                calls.append(destination)
+                with claim(destination, **kwargs) as retained:
+                    yield retained
 
             with patch.object(
                 composed_game_module,
-                "publish_directory_noreplace",
-                side_effect=record_publish,
+                "claim_directory_noreplace",
+                side_effect=record_claim,
             ):
                 imported = import_composed_bundle(
                     bundle,
@@ -939,11 +938,66 @@ class M6GameConsumerTests(unittest.TestCase):
                 )
 
             self.assertTrue(imported.is_dir())
-            self.assertEqual(1, len(calls))
-            source, destination = calls[0]
-            self.assertEqual(source.parent, destination.parent)
-            self.assertEqual(game / "game_data", source.parent)
-            self.assertEqual(game / "game_data/compositions", destination)
+            self.assertGreaterEqual(len(calls), 2)
+            self.assertEqual(game / "game_data", calls[0].parent)
+            self.assertTrue(calls[0].name.startswith(".compositions.import-"))
+            self.assertEqual(
+                game / CATALOG_GENERATIONS_RELATIVE_PATH,
+                calls[-1].parent,
+            )
+
+    def test_first_missing_claim_revalidates_the_existing_game_data_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "game-data-parent-swap"
+            create_game_project(
+                game,
+                game_id="game_data_parent_swap",
+                title="Game Data Parent Swap",
+            )
+            game_data = game / "game_data"
+            displaced = game / "game_data-owned"
+            sentinel = game_data / "foreign.txt"
+            claim = composed_game_module.claim_directory_noreplace
+            swapped = False
+
+            @contextmanager
+            def swap_before_claim(destination: Path, **kwargs: object):
+                nonlocal swapped
+                if (
+                    destination.parent == game_data
+                    and destination.name.startswith(".compositions.import-")
+                    and not swapped
+                ):
+                    game_data.rename(displaced)
+                    game_data.mkdir()
+                    sentinel.write_bytes(b"foreign-game-data\n")
+                    swapped = True
+                with claim(destination, **kwargs) as retained:
+                    yield retained
+
+            with (
+                patch.object(
+                    composed_game_module,
+                    "claim_directory_noreplace",
+                    side_effect=swap_before_claim,
+                ),
+                self.assertRaisesRegex(
+                    ComposedGameError,
+                    "parent identity changed|ancestor identity changed",
+                ),
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            self.assertTrue(swapped)
+            self.assertEqual(b"foreign-game-data\n", sentinel.read_bytes())
+            self.assertEqual(["foreign.txt"], sorted(path.name for path in game_data.iterdir()))
+            self.assertTrue((displaced / "compositions.lock.json").is_file())
 
     def test_generation_stage_flush_failure_is_retried_before_publication(
         self,
@@ -957,39 +1011,36 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="generation_stage_durability",
                 title="Generation Stage Durability",
             )
-            flush = composed_game_module.fsync_directory
+            fsync_claim = composed_game_module.DirectoryClaim.fsync
+            injected = False
 
-            def fail_generation_stage(path: Path, *, context: str) -> None:
-                if context == "catalog generation stage":
-                    raise OSError("injected generation stage flush failure")
-                flush(path, context=context)
+            def fail_generation_claim(claim: object) -> None:
+                nonlocal injected
+                path = claim.path
+                if not injected and path.parent == game / CATALOG_GENERATIONS_RELATIVE_PATH:
+                    injected = True
+                    raise OSError("injected generation claim flush failure")
+                fsync_claim(claim)
 
-            for attempt in ("initial", "recovery"):
-                with (
-                    self.subTest(attempt=attempt),
-                    patch.object(
-                        composed_game_module,
-                        "fsync_directory",
-                        side_effect=fail_generation_stage,
-                    ),
-                    self.assertRaisesRegex(OSError, "generation stage flush failure"),
-                ):
-                    import_composed_bundle(
-                        bundle,
-                        game,
-                        expected_bundle_hash=bundle_hash,
-                    )
-                generations = game / CATALOG_GENERATIONS_RELATIVE_PATH
-                self.assertEqual(
-                    1,
-                    len(
-                        list(
-                            generations.glob(
-                                f"{composed_game_module.CATALOG_GENERATION_STAGE_PREFIX}*"
-                            )
-                        )
-                    ),
+            with (
+                patch.object(
+                    composed_game_module.DirectoryClaim,
+                    "fsync",
+                    new=fail_generation_claim,
+                ),
+                self.assertRaisesRegex(OSError, "generation claim flush failure"),
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
                 )
+            self.assertTrue(injected)
+            generations = game / CATALOG_GENERATIONS_RELATIVE_PATH
+            stages = list(
+                generations.glob(f"{composed_game_module.CATALOG_GENERATION_STAGE_PREFIX}*")
+            )
+            self.assertEqual(1, len(stages))
 
             imported = import_composed_bundle(
                 bundle,
@@ -997,6 +1048,83 @@ class M6GameConsumerTests(unittest.TestCase):
                 expected_bundle_hash=bundle_hash,
             )
             self.assertTrue(imported.is_dir())
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux descriptor-relative catalog stages",
+    )
+    def test_catalog_mid_write_process_loss_preserves_exact_private_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "catalog-mid-write"
+            create_game_project(
+                game,
+                game_id="catalog_mid_write",
+                title="Catalog Mid Write",
+            )
+            interrupted = False
+
+            def write_partial_then_stop(
+                stage: Path,
+                payload: bytes,
+                *,
+                directory_descriptor: int | None,
+            ) -> None:
+                nonlocal interrupted
+                if directory_descriptor is None:
+                    self.fail("Linux catalog generation must be descriptor-relative")
+                descriptor = os.open(
+                    CATALOG_GENERATION_NAME,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0),
+                    0o600,
+                    dir_fd=directory_descriptor,
+                )
+                try:
+                    os.write(descriptor, payload[: max(1, len(payload) // 2)])
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+                interrupted = True
+                raise KeyboardInterrupt("injected catalog mid-write process loss")
+
+            with (
+                patch.object(
+                    composed_game_module,
+                    "_write_generation_payload",
+                    side_effect=write_partial_then_stop,
+                ),
+                self.assertRaisesRegex(KeyboardInterrupt, "catalog mid-write"),
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            self.assertTrue(interrupted)
+            journal = game / composed_game_module.CATALOG_PUBLICATION_JOURNAL
+            self.assertTrue(journal.is_file())
+            generation_directories = list((game / CATALOG_GENERATIONS_RELATIVE_PATH).iterdir())
+            self.assertEqual(1, len(generation_directories))
+            staged_payload = generation_directories[0] / CATALOG_GENERATION_NAME
+            self.assertTrue(staged_payload.is_file())
+            staged_bytes = staged_payload.read_bytes()
+
+            with self.assertRaisesRegex(
+                ComposedGameError,
+                "not exact|payload (?:hash|identity) changed",
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+            self.assertEqual(staged_bytes, staged_payload.read_bytes())
+            active = composed_game_module._read_catalog_journal_record(game)  # noqa: SLF001
+            self.assertIsNotNone(active)
+            assert active is not None
+            self.assertEqual("copying", active[0]["state"])
 
     def test_generation_root_flush_failure_is_retried_before_recovered_success(
         self,
@@ -1167,6 +1295,13 @@ class M6GameConsumerTests(unittest.TestCase):
             )
             self.assertEqual(0, packaged.returncode, packaged.stderr)
             self.assertTrue(package.is_file())
+            with zipfile.ZipFile(package) as archive:
+                names = set(archive.namelist())
+            self.assertNotIn(
+                "game_data/.composed-catalog-publication.json",
+                names,
+            )
+            self.assertNotIn("game_data/bundle-import.journal.json", names)
 
     def test_conflicting_world_hash_is_rejected_before_import_publication(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1197,6 +1332,49 @@ class M6GameConsumerTests(unittest.TestCase):
                     tuple((game / "game_data/compositions").rglob("composed-bundle.manifest.json"))
                 ),
             )
+
+    def test_orphan_import_stage_scan_uses_exact_operation_id_shape_not_bundle_hash(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "operation-id-orphan"
+            create_game_project(
+                game,
+                game_id="operation_id_orphan",
+                title="Operation ID Orphan",
+            )
+            import_composed_bundle(bundle, game, expected_bundle_hash=bundle_hash)
+            game_data = game / "game_data"
+
+            operation_id = "1" * 32
+            exact_stage = game_data / f".compositions.import-{operation_id}"
+            exact_stage.mkdir()
+            with self.assertRaisesRegex(
+                ComposedGameError,
+                "retains a staging directory",
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+            self.assertTrue(exact_stage.is_dir())
+            exact_stage.rmdir()
+
+            bundle_hash_stage = game_data / f".compositions.import-{bundle_hash}"
+            bundle_hash_stage.mkdir()
+            with self.assertRaisesRegex(
+                ComposedGameError,
+                "32 lowercase hex",
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+            self.assertTrue(bundle_hash_stage.is_dir())
 
     def test_foreign_world_hash_conflict_is_rejected_during_catalog_load(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1309,16 +1487,24 @@ class M6GameConsumerTests(unittest.TestCase):
             )
             publish = module.publish_directory_noreplace
 
-            def publish_then_signal(source: Path, destination: Path):
-                publish(source, destination)
-                raise FileExistsError(destination)
+            def move_then_stop(
+                source: Path,
+                destination: Path,
+                **kwargs: object,
+            ) -> tuple[int, int]:
+                publish(source, destination, **kwargs)
+                raise KeyboardInterrupt("injected post-rename process loss")
 
-            with patch.object(
-                module,
-                "publish_directory_noreplace",
-                side_effect=publish_then_signal,
+            with (
+                patch.object(
+                    module,
+                    "publish_directory_noreplace",
+                    side_effect=move_then_stop,
+                ),
+                self.assertRaisesRegex(KeyboardInterrupt, "post-rename"),
             ):
-                published = module._publish_catalog_generation(game, state, entries)
+                module._publish_catalog_generation(game, state, entries)
+            published = module._publish_catalog_generation(game, state, entries)
             self.assertEqual(2, len(published.entries))
 
     def test_concurrent_different_generations_fork_fail_closed(self) -> None:
@@ -1355,22 +1541,28 @@ class M6GameConsumerTests(unittest.TestCase):
             }
             competing_document["content_hash"] = canonical_payload_hash(competing_document)
             publish = module.publish_directory_noreplace
+            competing_written = False
 
-            def publish_competing(source: Path, destination: Path):
+            def publish_with_competing(
+                source: Path,
+                destination: Path,
+                **kwargs: object,
+            ) -> tuple[int, int]:
+                nonlocal competing_written
                 competing_path = destination.parent / competing_document["content_hash"]
-                competing_stage = destination.parent / ".test-competing-generation"
-                competing_stage.mkdir()
-                (competing_stage / CATALOG_GENERATION_NAME).write_bytes(
-                    canonical_json_bytes(competing_document)
-                )
-                publish(competing_stage, competing_path)
-                return publish(source, destination)
+                if not competing_written:
+                    competing_written = True
+                    competing_path.mkdir()
+                    (competing_path / CATALOG_GENERATION_NAME).write_bytes(
+                        canonical_json_bytes(competing_document)
+                    )
+                return publish(source, destination, **kwargs)
 
             with (
                 patch.object(
                     module,
                     "publish_directory_noreplace",
-                    side_effect=publish_competing,
+                    side_effect=publish_with_competing,
                 ),
                 self.assertRaisesRegex(ComposedGameError, "fork"),
             ):
@@ -1397,14 +1589,18 @@ class M6GameConsumerTests(unittest.TestCase):
             replacement: dict[str, Path | int] = {}
             publish = module.publish_directory_noreplace
 
-            def inject_foreign(source: Path, destination: Path):
+            def inject_foreign(
+                source: Path,
+                destination: Path,
+                **kwargs: object,
+            ) -> tuple[int, int]:
                 destination.mkdir()
                 target = destination / CATALOG_GENERATION_NAME
                 target.write_bytes(foreign)
                 target.chmod(0o640)
                 replacement["path"] = target
                 replacement["mode"] = stat.S_IMODE(target.stat().st_mode)
-                return publish(source, destination)
+                return publish(source, destination, **kwargs)
 
             with (
                 patch.object(
@@ -1420,7 +1616,172 @@ class M6GameConsumerTests(unittest.TestCase):
             self.assertEqual(foreign, target.read_bytes())
             self.assertEqual(replacement["mode"], stat.S_IMODE(target.stat().st_mode))
 
-    def test_generation_stage_directory_swap_is_rejected_without_touching_foreign(
+    def test_catalog_journal_transition_never_replaces_foreign_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            game = root / "catalog-journal-cas"
+            create_game_project(
+                game,
+                game_id="catalog_journal_cas",
+                title="Catalog Journal CAS",
+            )
+            document: dict[str, Any] = {
+                "format": composed_catalog_module.CATALOG_GENERATION_FORMAT,
+                "format_version": 1,
+                "previous_hash": "0" * 64,
+                "entries": [{"synthetic": True}],
+            }
+            document["content_hash"] = canonical_payload_hash(document)
+            generation_hash = str(document["content_hash"])
+            generation = game / CATALOG_GENERATIONS_RELATIVE_PATH / generation_hash
+            generation.parent.mkdir()
+            generation.mkdir()
+            identity = directory_publish_module.directory_identity(
+                generation,
+                context="catalog CAS generation",
+            )
+            operation_id = "1" * 32
+            current = composed_game_module._catalog_journal_document(
+                operation_id=operation_id,
+                state="copying",
+                generation_hash=generation_hash,
+                directory_identity_value=identity,
+                document=document,
+            )
+            updated = composed_game_module._catalog_journal_document(
+                operation_id=operation_id,
+                state="ready",
+                generation_hash=generation_hash,
+                directory_identity_value=identity,
+                document=document,
+            )
+            prior = composed_game_module._write_catalog_journal(
+                game,
+                current,
+                create=True,
+            )
+            path = game / composed_game_module.CATALOG_PUBLICATION_JOURNAL
+            owned = path.with_name(f"{path.name}.owned")
+            foreign = b'{"foreign":true}\n'
+            real_lseek = os.lseek
+            swapped = False
+
+            def swap_before_final_check(
+                descriptor: int,
+                offset: int,
+                whence: int,
+            ) -> int:
+                nonlocal swapped
+                if not swapped:
+                    path.rename(owned)
+                    path.write_bytes(foreign)
+                    swapped = True
+                return real_lseek(descriptor, offset, whence)
+
+            with (
+                patch.object(
+                    composed_game_module.os,
+                    "lseek",
+                    side_effect=swap_before_final_check,
+                ),
+                self.assertRaisesRegex(
+                    ComposedGameError,
+                    "changed before transition|path binding changed",
+                ),
+            ):
+                composed_game_module._write_catalog_journal(
+                    game,
+                    updated,
+                    create=False,
+                    expected=prior,
+                )
+
+            self.assertTrue(swapped)
+            self.assertEqual(foreign, path.read_bytes())
+            self.assertEqual(canonical_json_bytes(current), owned.read_bytes())
+
+    def test_active_partial_and_foreign_catalog_journals_block_audit_and_package(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle, bundle_hash = self._build_bundle(root)
+            game = root / "catalog-journal-policy"
+            create_game_project(
+                game,
+                game_id="catalog_journal_policy",
+                title="Catalog Journal Policy",
+            )
+            import_composed_bundle(bundle, game, expected_bundle_hash=bundle_hash)
+            journal = game / composed_game_module.CATALOG_PUBLICATION_JOURNAL
+            terminal_bytes = journal.read_bytes()
+            loaded = composed_game_module._read_catalog_journal_record(game)  # noqa: SLF001
+            self.assertIsNotNone(loaded)
+            assert loaded is not None
+            terminal_record = loaded[0]
+            active_document = {
+                **terminal_record["document"],
+                "previous_hash": terminal_record["generation_hash"],
+            }
+            active_document["content_hash"] = canonical_payload_hash(active_document)
+            active_record = {
+                **terminal_record,
+                "operation_id": "f" * 32,
+                "state": "intent",
+                "generation_hash": active_document["content_hash"],
+                "directory_identity": None,
+                "document": active_document,
+            }
+            active_frame = journal_frame(canonical_journal_record(active_record))
+            cases = (
+                ("active_publication_journal", terminal_bytes + active_frame),
+                ("partial_publication_journal", terminal_bytes + active_frame[:31]),
+                ("invalid_publication_journal", b'{"foreign":true}\n'),
+            )
+            for rule, payload in cases:
+                with self.subTest(rule=rule):
+                    journal.write_bytes(payload)
+                    findings = audit_game_repository(game)
+                    self.assertTrue(
+                        any(
+                            finding.path == composed_game_module.CATALOG_PUBLICATION_JOURNAL
+                            and finding.rule == rule
+                            for finding in findings
+                        ),
+                        findings,
+                    )
+                    verified = subprocess.run(
+                        [sys.executable, "-I", "scripts/verify_game.py"],
+                        cwd=game,
+                        env=_subprocess_environment(),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(1, verified.returncode, verified.stdout + verified.stderr)
+                    self.assertIn("JOURNAL_", verified.stderr)
+                    self.assertNotIn("Traceback", verified.stderr)
+                    package = root / f"{rule}.zip"
+                    packaged = subprocess.run(
+                        [
+                            sys.executable,
+                            "-I",
+                            "scripts/package_game.py",
+                            "--output",
+                            str(package),
+                        ],
+                        cwd=game,
+                        env=_subprocess_environment(),
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(2, packaged.returncode, packaged.stdout + packaged.stderr)
+                    self.assertIn("JOURNAL_", packaged.stderr)
+                    self.assertNotIn("Traceback", packaged.stderr)
+                    self.assertFalse(package.exists())
+
+    def test_generation_parent_swap_is_rejected_without_touching_foreign(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1436,36 +1797,38 @@ class M6GameConsumerTests(unittest.TestCase):
             from worldforge import composed_game as module
 
             state, entries = self._next_generation_entries(game)
-            foreign = root / "foreign-generation-stage"
-            foreign.mkdir()
-            sentinel = foreign / "sentinel.txt"
-            sentinel.write_bytes(b"foreign-stage\n")
-            publish = module.publish_directory_noreplace
-            observed: dict[str, Path] = {}
+            generations = game / CATALOG_GENERATIONS_RELATIVE_PATH
+            displaced = generations.with_name(f"{generations.name}.owned")
+            real_claim = directory_publish_module._posix_mkdir_noreplace
+            swapped = False
 
-            def swap_stage(source: Path, destination: Path):
-                displaced = source.with_name(f"{source.name}.owned")
-                source.rename(displaced)
-                try:
-                    os.symlink(foreign, source, target_is_directory=True)
-                except (NotImplementedError, OSError):
-                    self.skipTest("directory symlinks are unavailable")
-                observed["source"] = source
-                observed["destination"] = destination
-                return publish(source, destination)
+            def swap_parent(parent_fd: int, name: str, mode: int) -> None:
+                nonlocal swapped
+                generations.rename(displaced)
+                generations.mkdir()
+                (generations / "sentinel.txt").write_bytes(b"foreign-parent\n")
+                swapped = True
+                real_claim(parent_fd, name, mode)
 
             with (
                 patch.object(
-                    module,
-                    "publish_directory_noreplace",
-                    side_effect=swap_stage,
+                    directory_publish_module,
+                    "_posix_mkdir_noreplace",
+                    side_effect=swap_parent,
                 ),
-                self.assertRaises(OSError),
+                self.assertRaises((OSError, ComposedGameError)),
             ):
                 module._publish_catalog_generation(game, state, entries)
-            self.assertEqual(b"foreign-stage\n", sentinel.read_bytes())
-            self.assertTrue(observed["source"].is_symlink())
-            self.assertFalse(observed["destination"].exists())
+            self.assertTrue(swapped)
+            self.assertEqual(
+                b"foreign-parent\n",
+                (generations / "sentinel.txt").read_bytes(),
+            )
+            self.assertEqual(
+                [],
+                [path for path in generations.iterdir() if path.name != "sentinel.txt"],
+            )
+            self.assertTrue(any(path.is_dir() for path in displaced.iterdir()))
 
     def test_generation_destination_symlink_is_never_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1485,16 +1848,20 @@ class M6GameConsumerTests(unittest.TestCase):
             foreign.mkdir()
             sentinel = foreign / "sentinel.txt"
             sentinel.write_bytes(b"foreign-destination\n")
-            publish = module.publish_directory_noreplace
             observed: dict[str, Path] = {}
+            publish = module.publish_directory_noreplace
 
-            def inject_symlink(source: Path, destination: Path):
+            def inject_symlink(
+                source: Path,
+                destination: Path,
+                **kwargs: object,
+            ) -> tuple[int, int]:
                 try:
                     os.symlink(foreign, destination, target_is_directory=True)
                 except (NotImplementedError, OSError):
                     self.skipTest("directory symlinks are unavailable")
                 observed["destination"] = destination
-                return publish(source, destination)
+                return publish(source, destination, **kwargs)
 
             with (
                 patch.object(
@@ -1552,6 +1919,19 @@ class M6GameConsumerTests(unittest.TestCase):
                     directory_descriptor=directory_descriptor,
                 )
 
+            def simulate_windows_publish(
+                source: Path,
+                destination: Path,
+                **kwargs: object,
+            ) -> tuple[int, int]:
+                del kwargs
+                identity = module.directory_identity(
+                    source,
+                    context="simulated Windows publication source",
+                )
+                source.rename(destination)
+                return identity
+
             with (
                 patch.object(module, "_generation_platform", return_value="windows"),
                 patch.object(
@@ -1573,6 +1953,11 @@ class M6GameConsumerTests(unittest.TestCase):
                     module,
                     "_write_generation_payload",
                     side_effect=assert_pinned_write,
+                ),
+                patch.object(
+                    module,
+                    "publish_directory_noreplace",
+                    side_effect=simulate_windows_publish,
                 ),
             ):
                 published = module._publish_catalog_generation(game, state, entries)
@@ -2798,26 +3183,31 @@ class M6GameConsumerTests(unittest.TestCase):
                 canonical_json_bytes(json.loads(catalog_bytes)),
                 catalog_bytes,
             )
-            publish = module.publish_directory_noreplace
+            copy_into_claim = module._copy_owned_bundle_into_claim
 
-            def move_then_raise(source: Path, destination: Path):
-                publish(source, destination)
-                raise OSError("injected after directory move")
+            def copy_then_raise(*args: object, **kwargs: object) -> None:
+                copy_into_claim(*args, **kwargs)
+                raise OSError("injected after claimed directory copy")
 
             with (
                 patch.object(
                     module,
-                    "publish_directory_noreplace",
-                    side_effect=move_then_raise,
+                    "_copy_owned_bundle_into_claim",
+                    side_effect=copy_then_raise,
                 ),
-                self.assertRaisesRegex(OSError, "injected"),
+                self.assertRaisesRegex(OSError, "claimed directory copy"),
             ):
                 import_composed_bundle(
                     bundle,
                     game,
                     expected_bundle_hash=bundle_hash,
                 )
-            self.assertFalse((game / ".composed-import.journal.json").exists())
+            journal = game / composed_game_module.CATALOG_PUBLICATION_JOURNAL
+            self.assertTrue(journal.is_file())
+            active = module._read_catalog_journal_record(game)
+            self.assertIsNotNone(active)
+            assert active is not None
+            self.assertEqual("copying", active[0]["state"])
             self.assertEqual(catalog_bytes, catalog_path.read_bytes())
             catalog = json.loads(catalog_bytes)
             self.assertEqual([], catalog["entries"])
@@ -2827,11 +3217,14 @@ class M6GameConsumerTests(unittest.TestCase):
                 expected_bundle_hash=bundle_hash,
             )
             self.assertTrue(recovered.is_dir())
-            self.assertFalse((game / ".composed-import.journal.json").exists())
+            committed = module._read_catalog_journal_record(game)
+            self.assertIsNotNone(committed)
+            assert committed is not None
+            self.assertEqual("committed", committed[0]["state"])
             self.assertFalse((game / "game_data/.compositions.lock.json.lock").exists())
             self.assertEqual(1, len(load_composed_catalog(game)))
 
-    def test_raise_before_move_recovers_exact_staging_directory(self) -> None:
+    def test_raise_before_claim_copy_preserves_incomplete_destination(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             bundle, bundle_hash = self._build_bundle(root)
@@ -2842,10 +3235,10 @@ class M6GameConsumerTests(unittest.TestCase):
             with (
                 patch.object(
                     module,
-                    "publish_directory_noreplace",
-                    side_effect=OSError("injected before directory move"),
+                    "_copy_owned_bundle_into_claim",
+                    side_effect=OSError("injected before claimed directory copy"),
                 ),
-                self.assertRaisesRegex(OSError, "injected"),
+                self.assertRaisesRegex(OSError, "claimed directory copy"),
             ):
                 import_composed_bundle(
                     bundle,
@@ -2856,14 +3249,21 @@ class M6GameConsumerTests(unittest.TestCase):
                 path for path in (game / "game_data").rglob(".*.import-*") if path.is_dir()
             )
             self.assertEqual(1, len(stages))
-            recovered = import_composed_bundle(
-                bundle,
-                game,
-                expected_bundle_hash=bundle_hash,
+            incomplete = game / "game_data/compositions"
+            self.assertFalse(incomplete.exists())
+            with self.assertRaisesRegex(
+                ComposedGameError,
+                "incomplete|not exact|lost its exact|manifest",
+            ):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
+            self.assertEqual(
+                stages,
+                tuple(path for path in (game / "game_data").rglob(".*.import-*") if path.is_dir()),
             )
-            self.assertTrue(recovered.is_dir())
-            self.assertFalse(stages[0].exists())
-            self.assertEqual(1, len(load_composed_catalog(game)))
 
     def test_recoverable_stage_does_not_authorize_foreign_ancestor_tree(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -2876,13 +3276,19 @@ class M6GameConsumerTests(unittest.TestCase):
                 title="Foreign Stage Ancestor",
             )
 
+            copy_into_claim = composed_game_module._copy_owned_bundle_into_claim
+
+            def copy_then_raise(*args: object, **kwargs: object) -> None:
+                copy_into_claim(*args, **kwargs)
+                raise OSError("injected after private stage copy")
+
             with (
                 patch.object(
                     composed_game_module,
-                    "publish_directory_noreplace",
-                    side_effect=OSError("injected before directory move"),
+                    "_copy_owned_bundle_into_claim",
+                    side_effect=copy_then_raise,
                 ),
-                self.assertRaisesRegex(OSError, "injected"),
+                self.assertRaisesRegex(OSError, "private stage copy"),
             ):
                 import_composed_bundle(
                     bundle,
@@ -2890,12 +3296,9 @@ class M6GameConsumerTests(unittest.TestCase):
                     expected_bundle_hash=bundle_hash,
                 )
 
-            stages = tuple(
-                path for path in (game / "game_data").rglob(".*.import-*") if path.is_dir()
-            )
-            self.assertEqual(1, len(stages))
             foreign = game / "game_data/compositions"
             foreign.mkdir()
+            (foreign / "sentinel.txt").write_text("foreign\n", encoding="utf-8")
             foreign_identity = composed_game_module.directory_identity(
                 foreign,
                 context="foreign composition ancestor",
@@ -2903,7 +3306,7 @@ class M6GameConsumerTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 ComposedGameError,
-                "publication path is already occupied",
+                "publication root is occupied|ambiguous",
             ):
                 import_composed_bundle(
                     bundle,
@@ -2918,7 +3321,10 @@ class M6GameConsumerTests(unittest.TestCase):
                     context="foreign composition ancestor",
                 ),
             )
-            self.assertTrue(stages[0].is_dir())
+            self.assertEqual(
+                "foreign\n",
+                (foreign / "sentinel.txt").read_text(encoding="utf-8"),
+            )
 
     def test_catalog_manifest_and_payload_identity_swaps_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -3308,36 +3714,36 @@ class M6GameConsumerTests(unittest.TestCase):
             create_game_project(game, game_id="journal_replacement", title="Journal replacement")
             from worldforge import composed_game as module
 
-            publish = module.publish_directory_noreplace
+            copy_into_claim = module._copy_owned_bundle_into_claim
 
-            def move_then_raise(source: Path, destination: Path):
-                publish(source, destination)
-                raise OSError("injected after directory move")
+            def copy_then_raise(*args: object, **kwargs: object) -> None:
+                copy_into_claim(*args, **kwargs)
+                raise OSError("injected after claimed directory copy")
 
             with (
                 patch.object(
                     module,
-                    "publish_directory_noreplace",
-                    side_effect=move_then_raise,
+                    "_copy_owned_bundle_into_claim",
+                    side_effect=copy_then_raise,
                 ),
-                self.assertRaisesRegex(OSError, "injected"),
+                self.assertRaisesRegex(OSError, "claimed directory copy"),
             ):
                 import_composed_bundle(
                     bundle,
                     game,
                     expected_bundle_hash=bundle_hash,
                 )
-            control = game / ".composed-import.journal.json"
+            control = game / module.CATALOG_PUBLICATION_JOURNAL
             foreign = canonical_json_bytes({"foreign": True})
             control.write_bytes(foreign)
             control.chmod(0o640)
             foreign_mode = stat.S_IMODE(control.stat().st_mode)
-            imported = import_composed_bundle(
-                bundle,
-                game,
-                expected_bundle_hash=bundle_hash,
-            )
-            self.assertTrue(imported.is_dir())
+            with self.assertRaises(ComposedGameError):
+                import_composed_bundle(
+                    bundle,
+                    game,
+                    expected_bundle_hash=bundle_hash,
+                )
             self.assertEqual(foreign, control.read_bytes())
             self.assertEqual(foreign_mode, stat.S_IMODE(control.stat().st_mode))
 
@@ -3355,32 +3761,30 @@ class M6GameConsumerTests(unittest.TestCase):
                         game_id=f"recovery_{case}",
                         title=f"Recovery {case}",
                     )
-                    publish = module.publish_directory_noreplace
+                    copy_into_claim = module._copy_owned_bundle_into_claim
 
-                    def move_then_raise(
-                        source: Path,
-                        destination: Path,
-                        publish_exact=publish,
-                    ):
-                        publish_exact(source, destination)
-                        raise OSError("injected after directory move")
+                    def copy_then_raise(
+                        *args: object,
+                        copy_exact=copy_into_claim,
+                        **kwargs: object,
+                    ) -> None:
+                        copy_exact(*args, **kwargs)
+                        raise OSError("injected after claimed directory copy")
 
                     with (
                         patch.object(
                             module,
-                            "publish_directory_noreplace",
-                            side_effect=move_then_raise,
+                            "_copy_owned_bundle_into_claim",
+                            side_effect=copy_then_raise,
                         ),
-                        self.assertRaisesRegex(OSError, "injected"),
+                        self.assertRaisesRegex(OSError, "claimed directory copy"),
                     ):
                         import_composed_bundle(
                             bundle,
                             game,
                             expected_bundle_hash=bundle_hash,
                         )
-                    evidence = tuple(
-                        (game / "game_data/compositions").rglob("composed-bundle.manifest.json")
-                    )
+                    evidence = tuple((game / "game_data").rglob("composed-bundle.manifest.json"))
                     self.assertEqual(1, len(evidence))
                     target = (
                         game / "game_data/worlds.lock.json"
@@ -3396,9 +3800,7 @@ class M6GameConsumerTests(unittest.TestCase):
                         )
                     self.assertEqual(
                         evidence,
-                        tuple(
-                            (game / "game_data/compositions").rglob("composed-bundle.manifest.json")
-                        ),
+                        tuple((game / "game_data").rglob("composed-bundle.manifest.json")),
                     )
 
 

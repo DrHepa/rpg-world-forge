@@ -12,6 +12,7 @@ import wave
 from pathlib import Path
 from unittest.mock import patch
 
+import worldforge.bundle as bundle_module
 import worldforge.directory_publish as directory_publish_module
 from isoworld.content.loader import load_worldpack
 from worldforge.bundle import (
@@ -228,6 +229,118 @@ class RuntimeBundleTests(unittest.TestCase):
             any("verified bundle close failed" in note for note in caught.exception.__notes__)
         )
         self.assertEqual(1, verified.close_calls)
+
+    def test_verified_runtime_bundle_exit_keeps_body_primary_when_close_fails(
+        self,
+    ) -> None:
+        primary = RuntimeError("bundle context body failed")
+        cleanup = RuntimeError("bundle context cleanup failed")
+
+        class RenderpackOwner:
+            def close(self) -> None:
+                raise cleanup
+
+        verified = bundle_module.VerifiedRuntimeBundle(
+            Path("bundle"),
+            {},
+            object(),  # type: ignore[arg-type]
+            RenderpackOwner(),  # type: ignore[arg-type]
+        )
+        with self.assertRaises(RuntimeError) as raised:
+            with verified:
+                raise primary
+
+        self.assertIs(primary, raised.exception)
+        self.assertIn(
+            "bundle context cleanup failed",
+            "\n".join(getattr(primary, "__notes__", ())),
+        )
+
+    def test_runtime_bundle_verifier_keeps_validation_primary_when_close_fails(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle = _export(root, "bundle")
+            bundle_hash = bundle.bundle_hash
+            bundle_root = bundle.root
+            bundle.close()
+            primary = BundleError("injected verifier validation failure")
+            cleanup = RuntimeError("injected verifier cleanup failure")
+            load_renderpack = bundle_module.load_renderpack
+
+            class ClosingFailure:
+                def __init__(self, wrapped: object) -> None:
+                    self.wrapped = wrapped
+
+                def __getattr__(self, name: str) -> object:
+                    return getattr(self.wrapped, name)
+
+                def close(self) -> None:
+                    self.wrapped.close()
+                    raise cleanup
+
+            def load_with_failing_close(*args: object, **kwargs: object) -> ClosingFailure:
+                return ClosingFailure(load_renderpack(*args, **kwargs))
+
+            with (
+                patch.object(
+                    bundle_module,
+                    "load_renderpack",
+                    side_effect=load_with_failing_close,
+                ),
+                patch.object(
+                    bundle_module,
+                    "_finish_runtime_bundle_verification",
+                    side_effect=primary,
+                ),
+                self.assertRaises(BundleError) as raised,
+            ):
+                verify_runtime_bundle(
+                    bundle_root,
+                    expected_bundle_hash=bundle_hash,
+                )
+
+            self.assertIs(primary, raised.exception)
+            self.assertIs(cleanup, raised.exception.__cause__)
+            self.assertIn(
+                "injected verifier cleanup failure",
+                "\n".join(getattr(primary, "__notes__", ())),
+            )
+
+    def test_intent_journal_failure_creates_no_import_ancestors(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle = _export(root, "bundle")
+            game = _game(root)
+            primary = OSError("injected journal creation failure")
+            cleanup = BundleError("injected created-directory cleanup failure")
+            try:
+                with (
+                    patch.object(
+                        bundle_module,
+                        "_write_import_journal",
+                        side_effect=primary,
+                    ),
+                    patch.object(
+                        bundle_module,
+                        "_remove_created_directories",
+                        side_effect=cleanup,
+                    ) as cleanup_call,
+                    self.assertRaises(OSError) as raised,
+                ):
+                    import_runtime_bundle(
+                        bundle.root,
+                        game,
+                        expected_bundle_hash=bundle.bundle_hash,
+                    )
+            finally:
+                bundle.close()
+
+            self.assertIs(primary, raised.exception)
+            cleanup_call.assert_not_called()
+            self.assertEqual((), getattr(primary, "__notes__", ()))
+            self.assertFalse((game / "game_data/worlds").exists())
 
     def test_bundle_export_and_import_require_independent_repository_roots(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -476,20 +589,38 @@ class RuntimeBundleTests(unittest.TestCase):
             self.assertFalse(symlink_destination.exists())
             self.assertEqual([], list(root.glob(".symlink-bundle.export-*")))
 
-    def test_linux_einval_export_cleanup_preserves_primary_publication_error(self) -> None:
+    def test_linux_population_failure_retains_exact_private_stage_evidence(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            if _linux_retained_directory_delete_error(root) != errno.EINVAL:
-                self.skipTest("host retained-FD directory deletion does not return EINVAL")
+            if not sys.platform.startswith("linux") or os.name != "posix":
+                self.skipTest("Linux direct-claim export contract")
             worldpack, renderpack, licenses = _fixture(root / "fixture")
             destination = root / "invalid-bundle"
 
+            def fail_population(
+                _worldpack_path: Path,
+                _renderpack_path: Path,
+                _licenses_directory: Path,
+                output_root: Path,
+                _release_id: str,
+                *,
+                validation_root: Path | None = None,
+            ) -> dict[str, object]:
+                self.assertIsNone(validation_root)
+                (output_root / "partial.marker").write_text(
+                    "retained private-stage evidence\n",
+                    encoding="utf-8",
+                )
+                raise BundleError("injected population failure")
+
             with (
                 patch(
-                    "worldforge.bundle.publish_directory_noreplace",
-                    side_effect=FileExistsError(errno.EEXIST, "injected collision"),
+                    "worldforge.bundle._populate_runtime_bundle",
+                    side_effect=fail_population,
                 ),
-                self.assertRaisesRegex(BundleError, "destination already exists") as raised,
+                self.assertRaisesRegex(BundleError, "injected population failure") as raised,
             ):
                 export_runtime_bundle(
                     worldpack,
@@ -502,9 +633,12 @@ class RuntimeBundleTests(unittest.TestCase):
             self.assertFalse(destination.exists())
             stages = list(root.glob(".invalid-bundle.export-*"))
             self.assertEqual(1, len(stages))
-            self.assertTrue(stages[0].is_dir())
+            self.assertEqual(
+                "retained private-stage evidence\n",
+                (stages[0] / "partial.marker").read_text(encoding="utf-8"),
+            )
             self.assertIn(
-                "Identity-bound POSIX descriptor deletion is unavailable",
+                "Incomplete private bundle export stage retained for explicit inspection",
                 "\n".join(getattr(raised.exception, "__notes__", ())),
             )
 
@@ -821,7 +955,12 @@ class RuntimeBundleTests(unittest.TestCase):
             self.assertTrue(destination.is_dir())
             journal_path = game / IMPORT_JOURNAL
             self.assertTrue(journal_path.is_file())
-            journal = json.loads(journal_path.read_bytes())
+            loaded_journal = bundle_module._read_import_journal_record(  # noqa: SLF001
+                journal_path
+            )
+            self.assertIsNotNone(loaded_journal)
+            assert loaded_journal is not None
+            journal = loaded_journal[0]
             self.assertEqual("ready", journal["state"])
             temporary = game / journal["temporary"]
             self.assertFalse(temporary.exists())
@@ -837,12 +976,125 @@ class RuntimeBundleTests(unittest.TestCase):
             )
 
             self.assertEqual(destination.resolve(), recovered.resolve())
-            self.assertFalse(journal_path.exists())
+            committed_journal = bundle_module._read_import_journal_record(  # noqa: SLF001
+                journal_path
+            )
+            self.assertIsNotNone(committed_journal)
+            assert committed_journal is not None
+            self.assertEqual("committed", committed_journal[0]["state"])
             catalog = json.loads((game / "game_data/worlds.lock.json").read_bytes())
             self.assertEqual(1, len(catalog["releases"]))
             self.assertEqual(bundle.bundle_hash, catalog["releases"][0]["bundle_hash"])
             self.assertEqual([], list(destination.parent.glob(".1.0.0.rollback-*")))
             self.assertFalse(game.joinpath(".isoworld-mutation.lock").exists())
+
+    def test_catalog_atomic_write_flushes_file_then_replaces_then_flushes_parent(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            path = parent / "worlds.lock.json"
+            catalog = {
+                "format": CATALOG_FORMAT,
+                "format_version": 1,
+                "releases": [],
+            }
+            real_fsync = os.fsync
+            real_replace = os.replace
+            real_fsync_directory = bundle_module.fsync_directory
+            events: list[str] = []
+
+            def record_file_flush(descriptor: int) -> None:
+                events.append("file-flush")
+                real_fsync(descriptor)
+
+            def record_replace(source: Path, destination: Path) -> None:
+                events.append("replace")
+                real_replace(source, destination)
+
+            def record_parent_flush(directory_path: Path, *, context: str) -> None:
+                events.append("parent-flush")
+                real_fsync_directory(directory_path, context=context)
+
+            with (
+                patch.object(bundle_module.os, "fsync", side_effect=record_file_flush),
+                patch.object(bundle_module.os, "replace", side_effect=record_replace),
+                patch.object(
+                    bundle_module,
+                    "fsync_directory",
+                    side_effect=record_parent_flush,
+                ),
+            ):
+                bundle_module._write_catalog_atomic(path, catalog)  # noqa: SLF001
+
+            self.assertLess(events.index("file-flush"), events.index("replace"))
+            self.assertLess(events.index("replace"), events.index("parent-flush"))
+            self.assertEqual(canonical_json_bytes(catalog), path.read_bytes())
+
+    def test_catalog_parent_flush_failure_retains_ready_import_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle = _export(root, "bundle")
+            game = _game(root)
+            real_flush = bundle_module.fsync_directory
+
+            def fail_catalog_parent(path: Path, *, context: str) -> None:
+                if context == "world catalog parent":
+                    raise OSError("injected catalog parent flush failure")
+                real_flush(path, context=context)
+
+            with (
+                patch.object(
+                    bundle_module,
+                    "fsync_directory",
+                    side_effect=fail_catalog_parent,
+                ),
+                self.assertRaisesRegex(
+                    OSError,
+                    "catalog parent flush failure",
+                ),
+            ):
+                import_runtime_bundle(
+                    bundle.root,
+                    game,
+                    expected_bundle_hash=bundle.bundle_hash,
+                )
+
+            loaded = bundle_module._read_import_journal_record(  # noqa: SLF001
+                game / IMPORT_JOURNAL
+            )
+            self.assertIsNotNone(loaded)
+            assert loaded is not None
+            self.assertEqual("ready", loaded[0]["state"])
+            self.assertTrue((game / "game_data/worlds/modly_foundation/1.0.0").is_dir())
+
+    def test_catalog_cleanup_failure_is_not_allowed_to_replace_primary_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            path = parent / "worlds.lock.json"
+            catalog = {
+                "format": CATALOG_FORMAT,
+                "format_version": 1,
+                "releases": [],
+            }
+            primary = OSError("injected catalog replace failure")
+            cleanup = OSError("injected catalog temporary cleanup failure")
+            with (
+                patch.object(bundle_module.os, "replace", side_effect=primary),
+                patch.object(Path, "unlink", side_effect=cleanup),
+                self.assertRaisesRegex(
+                    OSError,
+                    "catalog replace failure",
+                ) as raised,
+            ):
+                bundle_module._write_catalog_atomic(path, catalog)  # noqa: SLF001
+
+            self.assertIs(primary, raised.exception)
+            self.assertIn(
+                "catalog temporary cleanup failed",
+                "\n".join(getattr(primary, "__notes__", ())).casefold(),
+            )
+            self.assertEqual(1, len(list(parent.glob(".worlds.lock.json.tmp-*"))))
 
     def test_import_refuses_a_concurrent_or_stale_exclusive_lock(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
