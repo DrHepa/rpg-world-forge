@@ -467,6 +467,10 @@ class Pyray3DSessionTests(unittest.TestCase):
             with (
                 patch("isoworld.render.pyray_3d.platform.machine", return_value="x86_64"),
                 patch("isoworld.render.pyray_3d.sys_platform_linux", return_value=True),
+                patch(
+                    "isoworld.render.pyray_3d.os",
+                    SimpleNamespace(name="posix", fstat=os.fstat),
+                ),
                 adapter.open_session(resolver, (asset,), (_binding_plan(),)) as session,
             ):
                 state = _render_state()
@@ -503,6 +507,10 @@ class Pyray3DSessionTests(unittest.TestCase):
             with (
                 patch("isoworld.render.pyray_3d.platform.machine", return_value="x86_64"),
                 patch("isoworld.render.pyray_3d.sys_platform_linux", return_value=True),
+                patch(
+                    "isoworld.render.pyray_3d.os",
+                    SimpleNamespace(name="posix", fstat=os.fstat),
+                ),
             ):
                 session = adapter.open_session(resolver, (asset,), (_binding_plan(),))
             del resolver

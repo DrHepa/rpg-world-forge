@@ -89,6 +89,82 @@ def _platform_name() -> str:
     return os.name
 
 
+def _windows_descriptor_from_handle(handle: int) -> int:
+    """Transfer one native Windows file handle into a binary CRT descriptor."""
+
+    import msvcrt
+
+    return msvcrt.open_osfhandle(
+        handle,
+        os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOINHERIT", 0),
+    )
+
+
+def _open_windows_source_descriptor(path: Path) -> int:
+    """Open an immutable source view by denying write and delete sharing."""
+
+    win_dll = getattr(ctypes, "WinDLL", None)
+    if win_dll is None:
+        raise OSError("Windows source-handle APIs are unavailable")
+    kernel32 = win_dll("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    ]
+    create_file.restype = ctypes.c_void_p
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [ctypes.c_void_p]
+    close_handle.restype = ctypes.c_int
+    handle = create_file(
+        str(path),
+        0x80000000,  # GENERIC_READ
+        0x00000001,  # FILE_SHARE_READ; deny writers and pathname replacement
+        None,
+        3,  # OPEN_EXISTING
+        0x00200000 | 0x08000000,  # OPEN_REPARSE_POINT | SEQUENTIAL_SCAN
+        None,
+    )
+    invalid_handle = ctypes.c_void_p(-1).value
+    if handle in {None, invalid_handle}:
+        error = ctypes.get_last_error()
+        raise OSError(error, ctypes.FormatError(error), str(path))
+
+    handle_value = int(handle)
+    try:
+        descriptor = _windows_descriptor_from_handle(handle_value)
+    except BaseException as conversion_error:
+        if not close_handle(ctypes.c_void_p(handle_value)):
+            close_error = ctypes.get_last_error()
+            conversion_error.add_note(
+                "Windows source-handle cleanup failed after descriptor conversion "
+                f"error: {ctypes.FormatError(close_error)}"
+            )
+        raise
+    try:
+        os.set_inheritable(descriptor, False)
+        if os.get_inheritable(descriptor):
+            raise OSError("Windows source descriptor remained inheritable")
+        return descriptor
+    except BaseException as validation_error:
+        try:
+            os.close(descriptor)
+        except OSError as close_error:
+            validation_error.add_note(f"Windows source descriptor cleanup failed: {close_error}")
+        raise
+
+
+def _open_source_descriptor(path: Path, flags: int) -> int:
+    if _platform_name() == "nt":
+        return _open_windows_source_descriptor(path)
+    return os.open(path, flags)
+
+
 @dataclass(frozen=True, slots=True)
 class _FileRecord:
     identity: _Identity
@@ -1769,7 +1845,12 @@ class ResourceSnapshotOwner:
                 | getattr(os, "O_NOINHERIT", 0)
                 | getattr(os, "O_NOFOLLOW", 0)
             )
-            source_descriptor = os.open(source, flags)
+            try:
+                source_descriptor = _open_source_descriptor(source, flags)
+            except OSError as exc:
+                raise ResourceSnapshotError(
+                    f"Could not open generic resource source: {source}: {exc}"
+                ) from exc
             before = descriptor_file_stat(source_descriptor)
             if (
                 _is_link_or_reparse(before)
@@ -1782,10 +1863,15 @@ class ResourceSnapshotOwner:
             digest = hashlib.sha256()
             total = 0
             while total < before.st_size:
-                chunk = os.read(
-                    source_descriptor,
-                    min(1024 * 1024, before.st_size - total),
-                )
+                try:
+                    chunk = os.read(
+                        source_descriptor,
+                        min(1024 * 1024, before.st_size - total),
+                    )
+                except OSError as exc:
+                    raise ResourceSnapshotError(
+                        f"Resource source changed while reading: {source}: {exc}"
+                    ) from exc
                 if not chunk:
                     raise ResourceSnapshotError(
                         f"Resource source ended before its captured size: {source}"
@@ -1802,7 +1888,13 @@ class ResourceSnapshotOwner:
                     if written <= 0:
                         raise OSError("Could not make progress while materializing resource")
                     offset += written
-            if os.read(source_descriptor, 1):
+            try:
+                trailing = os.read(source_descriptor, 1)
+            except OSError as exc:
+                raise ResourceSnapshotError(
+                    f"Resource source changed while reading: {source}: {exc}"
+                ) from exc
+            if trailing:
                 raise ResourceSnapshotError(
                     f"Resource source grew while it was being captured: {source}"
                 )

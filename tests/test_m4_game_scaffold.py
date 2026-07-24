@@ -15,6 +15,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+import worldforge.game_control_io as game_control_io_module
 import worldforge.game_scaffold as game_scaffold_module
 from isoworld import __version__ as ISOWORLD_VERSION
 from isoworld.content.composed_catalog import ComposedCatalogError
@@ -111,6 +112,54 @@ def _write_fixture(
 
 
 class GameScaffoldTests(unittest.TestCase):
+    def test_game_control_writer_requests_binary_mode_for_canonical_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "control.json"
+            payload = {"canonical": True}
+            host_binary_flag = getattr(os, "O_BINARY", 0)
+            binary_flag = 1 << 29
+            opened_flags: list[int] = []
+            delegated_flags: list[int] = []
+            real_open = os.open
+
+            def open_without_fake_flag(
+                path: object,
+                flags: int,
+                mode: int = 0o777,
+            ) -> int:
+                if Path(path) == target:
+                    opened_flags.append(flags)
+                    delegated_flags.append((flags & ~binary_flag) | host_binary_flag)
+                return real_open(
+                    path,
+                    (flags & ~binary_flag) | host_binary_flag,
+                    mode,
+                )
+
+            with (
+                patch.object(
+                    game_control_io_module.os,
+                    "O_BINARY",
+                    binary_flag,
+                    create=True,
+                ),
+                patch.object(
+                    game_control_io_module.os,
+                    "open",
+                    side_effect=open_without_fake_flag,
+                ),
+            ):
+                game_control_io_module.write_game_control_json(target, payload)
+
+            self.assertEqual(1, len(opened_flags))
+            self.assertEqual(1, len(delegated_flags))
+            self.assertTrue(opened_flags[0] & binary_flag)
+            self.assertEqual(
+                host_binary_flag,
+                delegated_flags[0] & host_binary_flag,
+            )
+            self.assertEqual(canonical_json_bytes(payload), target.read_bytes())
+
     def test_external_target_preserves_programmer_value_error_identity(self) -> None:
         primary = ValueError("target programmer error")
         with (

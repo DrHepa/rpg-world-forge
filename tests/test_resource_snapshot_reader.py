@@ -7,7 +7,8 @@ import tempfile
 import unittest
 from dataclasses import FrozenInstanceError, replace
 from pathlib import Path, PurePosixPath
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 import isoworld.content.resource_snapshot as snapshot_module
 from isoworld.content.file_stat import WindowsFileStat, descriptor_file_stat
@@ -363,6 +364,65 @@ class ResourceSnapshotReaderTests(unittest.TestCase):
         self.assertEqual(set(), set(owner._files))
         owner.close()
         self.assertEqual([], list(self.snapshot_parent.iterdir()))
+
+    def test_generic_materialization_normalizes_source_read_denial(self) -> None:
+        source_root = Path(self.temporary_directory.name) / "generic-read-denial"
+        source_root.mkdir()
+        source = source_root / "model.glb"
+        source.write_bytes(b"glTF")
+        owner = self._owner()
+
+        with (
+            patch.object(
+                snapshot_module.os,
+                "read",
+                side_effect=PermissionError("sharing violation"),
+            ),
+            self.assertRaisesRegex(ResourceSnapshotError, "changed while reading"),
+        ):
+            owner.materialize_file(
+                source_root,
+                PurePosixPath(source.name),
+                PurePosixPath("packs/assetpack/model.glb"),
+            )
+
+        self.assertEqual(set(), set(owner._files))
+        owner.close()
+        self.assertEqual([], list(self.snapshot_parent.iterdir()))
+
+    def test_windows_generic_source_handle_denies_write_and_delete_sharing(self) -> None:
+        source = Path(self.temporary_directory.name) / "windows-source.glb"
+        source.write_bytes(b"glTF")
+        descriptor = os.open(source, os.O_RDONLY)
+        create_file = Mock(return_value=123)
+        close_handle = Mock(return_value=1)
+        kernel32 = SimpleNamespace(
+            CreateFileW=create_file,
+            CloseHandle=close_handle,
+        )
+        try:
+            with (
+                patch.object(
+                    snapshot_module.ctypes,
+                    "WinDLL",
+                    return_value=kernel32,
+                    create=True,
+                ),
+                patch.object(
+                    snapshot_module,
+                    "_windows_descriptor_from_handle",
+                    return_value=descriptor,
+                ),
+            ):
+                opened = snapshot_module._open_windows_source_descriptor(source)
+
+            self.assertEqual(descriptor, opened)
+            self.assertEqual(0x00000001, create_file.call_args.args[2])
+            self.assertTrue(create_file.call_args.args[5] & 0x00200000)
+            self.assertFalse(os.get_inheritable(opened))
+            close_handle.assert_not_called()
+        finally:
+            os.close(descriptor)
 
     @unittest.skipUnless(os.name == "posix", "POSIX link and replacement semantics")
     def test_rejects_modified_replaced_symlinked_and_hardlinked_snapshots(self) -> None:
