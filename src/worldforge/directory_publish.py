@@ -262,6 +262,242 @@ class _FileRenameInformation(ctypes.Structure):
     ]
 
 
+_WindowsTreeState = tuple[DirectoryIdentity, int, int, int, int]
+
+
+@dataclass(frozen=True)
+class _WindowsPayloadHandle:
+    relative: str
+    handle: int
+    directory: bool
+    expected: _WindowsTreeState
+
+
+@dataclass
+class _WindowsRetainedTree:
+    source: Path
+    source_identity: DirectoryIdentity
+    parent_identity: DirectoryIdentity
+    source_handle: int
+    parent_handle: int
+    payload_handles: list[_WindowsPayloadHandle]
+    expected_tree: dict[str, _WindowsTreeState]
+    flush_file_buffers: Callable[[ctypes.c_void_p], int]
+    close_handle: Callable[[ctypes.c_void_p], int]
+    set_information: Callable[[ctypes.c_void_p, int, object, int], int]
+    namespace_mutated: bool = False
+
+    def _require_root_handles(self, *, context: str) -> None:
+        _require_expected_directory(
+            file_stat_module._windows_handle_stat(self.source_handle),  # noqa: SLF001
+            self.source_identity,
+            context=f"{context} source",
+        )
+        _require_expected_directory(
+            file_stat_module._windows_handle_stat(self.parent_handle),  # noqa: SLF001
+            self.parent_identity,
+            context=f"{context} parent",
+        )
+
+    def _require_payload_handles(self, *, context: str) -> None:
+        for retained in self.payload_handles:
+            opened = file_stat_module._windows_handle_stat(retained.handle)  # noqa: SLF001
+            expected = retained.expected
+            if (
+                is_link_or_reparse(opened)
+                or file_identity(opened) != expected[0]
+                or stat.S_IFMT(opened.st_mode) != expected[1]
+                or opened.st_nlink != expected[2]
+                or opened.st_size != expected[3]
+                or opened.st_mtime_ns != expected[4]
+            ):
+                raise DirectoryPublishError(
+                    f"{context} payload identity changed: {retained.relative}"
+                )
+
+    def _flush_handle(self, handle: int, context: str) -> None:
+        if not self.flush_file_buffers(ctypes.c_void_p(handle)):
+            error = ctypes.get_last_error()
+            raise DirectoryPublishError(
+                f"Could not durably flush {context}: {_windows_error_detail(error)}"
+            )
+
+    def flush_payload_tree(self) -> tuple[str, ...]:
+        self._require_root_handles(context="retained Windows publication")
+        self._require_payload_handles(context="retained Windows publication")
+        if _windows_tree_snapshot(self.source) != self.expected_tree:
+            raise DirectoryPublishError(
+                "Windows publication payload tree changed before durable flush"
+            )
+        ordered = sorted(
+            self.payload_handles,
+            key=lambda item: (
+                item.directory,
+                -len(PurePath(*item.relative.split("/")).parts) if item.directory else 0,
+                item.relative,
+            ),
+        )
+        for retained in ordered:
+            self._flush_handle(
+                retained.handle,
+                "Windows publication "
+                f"{'directory' if retained.directory else 'payload'} {retained.relative}",
+            )
+        self._require_payload_handles(context="durably retained Windows publication")
+        if _windows_tree_snapshot(self.source) != self.expected_tree:
+            raise DirectoryPublishError(
+                "Windows publication payload tree changed during durable flush"
+            )
+        self._flush_handle(self.source_handle, "Windows publication stage")
+        self._flush_handle(self.parent_handle, "Windows publication stage parent")
+        self._require_root_handles(context="durably retained Windows publication")
+        self._require_payload_handles(context="durably retained Windows publication")
+        if _windows_tree_snapshot(self.source) != self.expected_tree:
+            raise DirectoryPublishError(
+                "Windows publication payload tree changed after durable flush"
+            )
+        return tuple(retained.relative for retained in ordered if not retained.directory)
+
+    def rename_noreplace(self, destination: Path) -> DirectoryIdentity:
+        if self.source.parent != destination.parent:
+            raise DirectoryPublishError("Windows directory publication must stay within one parent")
+        if not destination.is_absolute():
+            raise DirectoryPublishError(
+                "Windows directory publication destination must be absolute"
+            )
+        self.flush_payload_tree()
+        self._require_root_handles(context="pre-rename Windows publication")
+        self._require_payload_handles(context="pre-rename Windows publication")
+        if _windows_tree_snapshot(self.source) != self.expected_tree:
+            raise DirectoryPublishError(
+                "Windows publication payload tree changed before handle-bound rename"
+            )
+        encoded = str(destination).encode("utf-16-le")
+        offset = _FileRenameInformation.filename.offset
+        buffer = ctypes.create_string_buffer(
+            max(ctypes.sizeof(_FileRenameInformation), offset + len(encoded))
+        )
+        information = _FileRenameInformation.from_buffer(buffer)
+        information.replace_if_exists = False
+        # SetFileInformationByHandle requires a fully-qualified name when used
+        # from Win32. A root-directory-relative FILE_RENAME_INFO request is an
+        # NT-native contract and is rejected here with ERROR_INVALID_PARAMETER.
+        information.root_directory = None
+        information.filename_length = len(encoded)
+        ctypes.memmove(ctypes.addressof(buffer) + offset, encoded, len(encoded))
+        if not self.set_information(
+            ctypes.c_void_p(self.source_handle),
+            3,  # FileRenameInfo
+            buffer,
+            len(buffer),
+        ):
+            error = ctypes.get_last_error()
+            if error in {80, 183}:
+                raise FileExistsError(
+                    error,
+                    "destination already exists",
+                    destination,
+                )
+            if error == 5:
+                try:
+                    path_file_stat(destination)
+                except OSError:
+                    pass
+                else:
+                    raise FileExistsError(
+                        error,
+                        "destination already exists",
+                        destination,
+                    ) from None
+            raise DirectoryPublishError(
+                error,
+                _windows_error_detail(error),
+                destination,
+            )
+
+        try:
+            self.namespace_mutated = True
+            self._require_root_handles(context="renamed Windows publication")
+            published_info = file_stat_module._windows_handle_stat(  # noqa: SLF001
+                self.source_handle
+            )
+            self._flush_handle(self.source_handle, "published Windows directory")
+            self._flush_handle(self.parent_handle, "Windows publication parent")
+            self._require_root_handles(context="durably published Windows publication")
+            try:
+                destination_info = path_file_stat(destination)
+            except OSError as exc:
+                raise DirectoryPublishError(
+                    f"Could not validate published Windows directory {destination}: {exc}"
+                ) from exc
+            _require_expected_directory(
+                destination_info,
+                self.source_identity,
+                context="published Windows destination",
+            )
+            if _windows_tree_snapshot(destination) != self.expected_tree:
+                raise DirectoryPublishError(
+                    "Published Windows payload tree changed during handle-bound rename"
+                )
+            try:
+                path_file_stat(self.source)
+            except FileNotFoundError:
+                pass
+            else:
+                raise DirectoryPublishError(
+                    "Published Windows directory retained its private stage name"
+                )
+            return file_identity(published_info)
+        except BaseException as exc:
+            if isinstance(exc, DirectoryPublishIndeterminateError):
+                raise
+            raise DirectoryPublishIndeterminateError(
+                "Windows directory publication outcome is indeterminate after "
+                "SetFileInformationByHandle; no rollback was attempted for "
+                f"{self.source} and {destination}: {exc}"
+            ) from exc
+
+    def close(self) -> None:
+        primary = sys.exception()
+        cleanup_error: DirectoryPublishError | None = None
+        for handle, context in (
+            *(
+                (
+                    retained.handle,
+                    f"Windows publication payload handle cleanup for {retained.relative}",
+                )
+                for retained in reversed(self.payload_handles)
+            ),
+            (self.source_handle, "Windows publication source handle cleanup"),
+            (self.parent_handle, "Windows publication parent handle cleanup"),
+        ):
+            if not self.close_handle(ctypes.c_void_p(handle)):
+                error = ctypes.get_last_error()
+                detail = f"{context} failed: {_windows_error_detail(error)}"
+                if primary is not None:
+                    primary.add_note(detail)
+                elif cleanup_error is not None:
+                    cleanup_error.add_note(detail)
+                else:
+                    cleanup_error = DirectoryPublishError(detail)
+        if (
+            primary is not None
+            and self.namespace_mutated
+            and not isinstance(primary, DirectoryPublishIndeterminateError)
+        ):
+            raise DirectoryPublishIndeterminateError(
+                "Windows directory publication outcome is indeterminate after "
+                "SetFileInformationByHandle and retained-handle cleanup"
+            ) from primary
+        if cleanup_error is not None:
+            if self.namespace_mutated:
+                raise DirectoryPublishIndeterminateError(
+                    "Windows directory publication outcome is indeterminate after "
+                    "SetFileInformationByHandle because retained-handle cleanup failed"
+                ) from cleanup_error
+            raise cleanup_error
+
+
 _POSIX_DIRECTORY_FLAGS = (
     os.O_RDONLY
     | getattr(os, "O_CLOEXEC", 0)
@@ -1062,17 +1298,58 @@ def copy_retained_tree_noreplace(
     return destination.identity
 
 
-def _windows_rename_noreplace(
+def _windows_tree_snapshot(root: Path) -> dict[str, _WindowsTreeState]:
+    def fail_walk(error: OSError) -> None:
+        raise DirectoryPublishError(
+            f"Could not inspect Windows publication payload tree: {error}"
+        ) from error
+
+    result: dict[str, _WindowsTreeState] = {}
+    root_type = type(root)
+    for current, directory_names, file_names in os.walk(
+        root,
+        topdown=True,
+        onerror=fail_walk,
+        followlinks=False,
+    ):
+        directory_names.sort()
+        file_names.sort()
+        current_path = root_type(current)
+        for name, directory in (
+            *((name, True) for name in directory_names),
+            *((name, False) for name in file_names),
+        ):
+            path = current_path / name
+            info = path_file_stat(path)
+            expected_type = stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
+            if (
+                is_link_or_reparse(info)
+                or not expected_type
+                or (not directory and info.st_nlink != 1)
+            ):
+                raise DirectoryPublishError(f"Windows publication payload is unsafe: {path}")
+            result[path.relative_to(root).as_posix()] = (
+                file_identity(info),
+                stat.S_IFMT(info.st_mode),
+                info.st_nlink,
+                info.st_size,
+                info.st_mtime_ns,
+            )
+    return result
+
+
+@contextmanager
+def _open_windows_retained_tree(
     source: Path,
-    destination: Path,
     *,
     source_identity: DirectoryIdentity,
     parent_identity: DirectoryIdentity,
-) -> DirectoryIdentity:
+    delete_source: bool,
+) -> Iterator[_WindowsRetainedTree]:
     win_dll = getattr(ctypes, "WinDLL", None)
     if win_dll is None:
         raise DirectoryPublishError(
-            "Safe exclusive directory publication is unavailable on this Windows system"
+            "Identity-bound Windows directory access is unavailable on this system"
         )
     kernel32 = win_dll("kernel32", use_last_error=True)
     create_file = kernel32.CreateFileW
@@ -1089,16 +1366,30 @@ def _windows_rename_noreplace(
     close_handle = kernel32.CloseHandle
     close_handle.argtypes = [ctypes.c_void_p]
     close_handle.restype = ctypes.c_int
+    flush_file_buffers = kernel32.FlushFileBuffers
+    flush_file_buffers.argtypes = [ctypes.c_void_p]
+    flush_file_buffers.restype = ctypes.c_int
+    set_information = kernel32.SetFileInformationByHandle
+    set_information.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+    ]
+    set_information.restype = ctypes.c_int
     invalid_handle = ctypes.c_void_p(-1).value
 
-    def open_directory(path: Path, *, delete: bool) -> int:
+    def open_directory(path: Path, *, delete: bool, share_write: bool) -> int:
         access = 0x80000000 | 0x40000000 | 0x00100000
         if delete:
             access |= 0x00010000
+        share = 0x00000001
+        if share_write:
+            share |= 0x00000002
         handle = create_file(
             str(path),
             access,
-            0x00000001,  # share reads only; block writes and deletion
+            share,
             None,
             3,
             0x02000000 | 0x00200000,
@@ -1116,10 +1407,16 @@ def _windows_rename_noreplace(
         flags = 0x00200000
         if directory:
             flags |= 0x02000000
+        share = 0x00000001
+        if delete_source:
+            # The retained descendants must permit the source-directory rename
+            # while continuing to deny every writer until publication and
+            # post-rename identity validation finish.
+            share |= 0x00000004
         handle = create_file(
             str(path),
             0x80000000 | 0x40000000 | 0x00100000,
-            0x00000001,  # share reads only; block writes and deletion
+            share,
             None,
             3,
             flags,
@@ -1133,68 +1430,47 @@ def _windows_rename_noreplace(
             )
         return int(handle)
 
-    def tree_snapshot(root: Path) -> dict[str, tuple[DirectoryIdentity, int, int, int, int]]:
-        def fail_walk(error: OSError) -> None:
-            raise DirectoryPublishError(
-                f"Could not inspect Windows publication payload tree: {error}"
-            ) from error
-
-        result: dict[str, tuple[DirectoryIdentity, int, int, int, int]] = {}
-        for current, directory_names, file_names in os.walk(
-            root,
-            topdown=True,
-            onerror=fail_walk,
-            followlinks=False,
-        ):
-            directory_names.sort()
-            file_names.sort()
-            current_path = Path(current)
-            for name, directory in (
-                *((name, True) for name in directory_names),
-                *((name, False) for name in file_names),
-            ):
-                path = current_path / name
-                info = path_file_stat(path)
-                expected_type = (
-                    stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
-                )
-                if (
-                    is_link_or_reparse(info)
-                    or not expected_type
-                    or (not directory and info.st_nlink != 1)
-                ):
-                    raise DirectoryPublishError(f"Windows publication payload is unsafe: {path}")
-                result[path.relative_to(root).as_posix()] = (
-                    file_identity(info),
-                    stat.S_IFMT(info.st_mode),
-                    info.st_nlink,
-                    info.st_size,
-                    info.st_mtime_ns,
-                )
-        return result
-
     source_handle: int | None = None
     parent_handle: int | None = None
-    payload_handles: list[tuple[str, int, bool]] = []
+    payload_handles: list[_WindowsPayloadHandle] = []
+    retained: _WindowsRetainedTree | None = None
     try:
-        source_handle = open_directory(source, delete=True)
+        source_handle = open_directory(
+            source,
+            delete=delete_source,
+            share_write=False,
+        )
         _require_expected_directory(
             file_stat_module._windows_handle_stat(source_handle),  # noqa: SLF001
             source_identity,
             context="retained Windows publication source",
         )
-        parent_handle = open_directory(destination.parent, delete=False)
+        parent_handle = open_directory(
+            source.parent,
+            delete=False,
+            # The native rename internally requests write access to its target
+            # directory. Retain identity and deletion exclusion while sharing
+            # that write access with the kernel's rename open.
+            share_write=True,
+        )
         _require_expected_directory(
             file_stat_module._windows_handle_stat(parent_handle),  # noqa: SLF001
             parent_identity,
             context="retained Windows publication parent",
         )
-        expected_tree = tree_snapshot(source)
+        expected_tree = _windows_tree_snapshot(source)
         for relative, expected in sorted(expected_tree.items()):
             payload_path = source / PurePath(*relative.split("/"))
             directory = expected[1] == stat.S_IFDIR
             handle = open_tree_entry(payload_path, directory=directory)
-            payload_handles.append((relative, handle, directory))
+            payload_handles.append(
+                _WindowsPayloadHandle(
+                    relative=relative,
+                    handle=handle,
+                    directory=directory,
+                    expected=expected,
+                )
+            )
             opened = file_stat_module._windows_handle_stat(handle)  # noqa: SLF001
             if (
                 is_link_or_reparse(opened)
@@ -1207,141 +1483,94 @@ def _windows_rename_noreplace(
                 raise DirectoryPublishError(
                     f"Windows publication payload identity changed: {relative}"
                 )
-        if tree_snapshot(source) != expected_tree:
+        if _windows_tree_snapshot(source) != expected_tree:
             raise DirectoryPublishError(
                 "Windows publication payload tree changed while retaining handles"
             )
-
-        flush_file_buffers = kernel32.FlushFileBuffers
-        flush_file_buffers.argtypes = [ctypes.c_void_p]
-        flush_file_buffers.restype = ctypes.c_int
-
-        def flush_handle(handle: int, context: str) -> None:
-            if not flush_file_buffers(ctypes.c_void_p(handle)):
-                error = ctypes.get_last_error()
-                raise DirectoryPublishError(
-                    f"Could not durably flush {context}: {_windows_error_detail(error)}"
-                )
-
-        for relative, handle, directory in sorted(
-            payload_handles,
-            key=lambda item: (
-                item[2],
-                -len(PurePath(*item[0].split("/")).parts) if item[2] else 0,
-                item[0],
-            ),
-        ):
-            flush_handle(
-                handle,
-                f"Windows publication {'directory' if directory else 'payload'} {relative}",
-            )
-        if tree_snapshot(source) != expected_tree:
-            raise DirectoryPublishError(
-                "Windows publication payload tree changed before handle-bound rename"
-            )
-
-        encoded = destination.name.encode("utf-16-le")
-        offset = _FileRenameInformation.filename.offset
-        buffer = ctypes.create_string_buffer(
-            max(ctypes.sizeof(_FileRenameInformation), offset + len(encoded))
+        retained = _WindowsRetainedTree(
+            source=source,
+            source_identity=source_identity,
+            parent_identity=parent_identity,
+            source_handle=source_handle,
+            parent_handle=parent_handle,
+            payload_handles=payload_handles,
+            expected_tree=expected_tree,
+            flush_file_buffers=flush_file_buffers,
+            close_handle=close_handle,
+            set_information=set_information,
         )
-        information = _FileRenameInformation.from_buffer(buffer)
-        information.replace_if_exists = False
-        information.root_directory = ctypes.c_void_p(parent_handle)
-        information.filename_length = len(encoded)
-        ctypes.memmove(ctypes.addressof(buffer) + offset, encoded, len(encoded))
-
-        set_information = kernel32.SetFileInformationByHandle
-        set_information.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int,
-            ctypes.c_void_p,
-            ctypes.c_uint32,
-        ]
-        set_information.restype = ctypes.c_int
-        if not set_information(
-            ctypes.c_void_p(source_handle),
-            3,  # FileRenameInfo
-            buffer,
-            len(buffer),
-        ):
-            error = ctypes.get_last_error()
-            if error in {80, 183}:
-                raise FileExistsError(
-                    error,
-                    "destination already exists",
-                    destination,
-                )
-            if error == 5:
-                try:
-                    path_file_stat(destination)
-                except OSError:
-                    pass
-                else:
-                    raise FileExistsError(
-                        error,
-                        "destination already exists",
-                        destination,
-                    ) from None
-            raise DirectoryPublishError(
-                error,
-                _windows_error_detail(error),
-                destination,
-            )
-        published_info = file_stat_module._windows_handle_stat(source_handle)  # noqa: SLF001
-        _require_expected_directory(
-            published_info,
-            source_identity,
-            context="renamed Windows publication source",
-        )
-        for handle, context in (
-            (source_handle, "published Windows directory"),
-            (parent_handle, "Windows publication parent"),
-        ):
-            flush_handle(handle, context)
-        try:
-            destination_info = path_file_stat(destination)
-        except OSError as exc:
-            raise DirectoryPublishError(
-                f"Could not validate published Windows directory {destination}: {exc}"
-            ) from exc
-        _require_expected_directory(
-            destination_info,
-            source_identity,
-            context="published Windows destination",
-        )
-        if tree_snapshot(destination) != expected_tree:
-            raise DirectoryPublishError(
-                "Published Windows payload tree changed during handle-bound rename"
-            )
-        return file_identity(published_info)
+        yield retained
     finally:
-        primary = sys.exception()
-        cleanup_error: DirectoryPublishError | None = None
-        for handle, context in (
-            *(
-                (
-                    handle,
-                    f"Windows publication payload handle cleanup for {relative}",
-                )
-                for relative, handle, _directory in reversed(payload_handles)
-            ),
-            (source_handle, "Windows publication source handle cleanup"),
-            (parent_handle, "Windows publication parent handle cleanup"),
-        ):
-            if handle is None:
-                continue
-            if not close_handle(ctypes.c_void_p(handle)):
-                error = ctypes.get_last_error()
-                detail = f"{context} failed: {_windows_error_detail(error)}"
-                if primary is not None:
-                    primary.add_note(detail)
-                elif cleanup_error is not None:
-                    cleanup_error.add_note(detail)
-                else:
-                    cleanup_error = DirectoryPublishError(detail)
-        if cleanup_error is not None:
-            raise cleanup_error
+        if retained is not None:
+            retained.close()
+        else:
+            primary = sys.exception()
+            cleanup_error: DirectoryPublishError | None = None
+            handles = (
+                *(
+                    (
+                        item.handle,
+                        f"Windows publication payload handle cleanup for {item.relative}",
+                    )
+                    for item in reversed(payload_handles)
+                ),
+                (source_handle, "Windows publication source handle cleanup"),
+                (parent_handle, "Windows publication parent handle cleanup"),
+            )
+            for handle, context in handles:
+                if handle is None:
+                    continue
+                if not close_handle(ctypes.c_void_p(handle)):
+                    error = ctypes.get_last_error()
+                    detail = f"{context} failed: {_windows_error_detail(error)}"
+                    if primary is not None:
+                        primary.add_note(detail)
+                    elif cleanup_error is not None:
+                        cleanup_error.add_note(detail)
+                    else:
+                        cleanup_error = DirectoryPublishError(detail)
+            if cleanup_error is not None:
+                raise cleanup_error
+
+
+def flush_windows_directory_tree(
+    source: Path,
+    *,
+    expected_source_identity: DirectoryIdentity,
+) -> tuple[str, ...]:
+    """Durably flush one exact Windows payload tree while retaining every handle."""
+
+    if os.name != "nt":
+        raise DirectoryPublishError(
+            "Identity-bound Windows directory durability is unavailable on this platform"
+        )
+    parent_identity = directory_identity(
+        source.parent,
+        context="Windows publication stage parent",
+    )
+    with _open_windows_retained_tree(
+        source,
+        source_identity=expected_source_identity,
+        parent_identity=parent_identity,
+        delete_source=False,
+    ) as retained:
+        return retained.flush_payload_tree()
+
+
+def _windows_rename_noreplace(
+    source: Path,
+    destination: Path,
+    *,
+    source_identity: DirectoryIdentity,
+    parent_identity: DirectoryIdentity,
+) -> DirectoryIdentity:
+    with _open_windows_retained_tree(
+        source,
+        source_identity=source_identity,
+        parent_identity=parent_identity,
+        delete_source=True,
+    ) as retained:
+        return retained.rename_noreplace(destination)
 
 
 def publish_directory_noreplace(
@@ -1354,6 +1583,7 @@ def publish_directory_noreplace(
 
     source_identity = expected_source_identity
     linux_publication = False
+    windows_publication = False
 
     if sys.platform.startswith("linux") and os.name == "posix":
         with open_expected_directory(source, source_identity) as retained:
@@ -1372,6 +1602,7 @@ def publish_directory_noreplace(
             source_identity=source_identity,
             parent_identity=parent_identity,
         )
+        windows_publication = True
     else:
         raise DirectoryPublishError(
             "Safe exclusive directory publication is supported only on Linux and Windows"
@@ -1389,6 +1620,12 @@ def publish_directory_noreplace(
             raise DirectoryPublishIndeterminateError(
                 "Linux directory publication outcome became indeterminate after "
                 f"RENAME_NOREPLACE; evidence retained at {source} and {destination}: {exc}"
+            ) from exc
+        if windows_publication:
+            raise DirectoryPublishIndeterminateError(
+                "Windows directory publication outcome became indeterminate after "
+                "SetFileInformationByHandle; no rollback was attempted for "
+                f"{source} and {destination}: {exc}"
             ) from exc
         raise
     return published_identity

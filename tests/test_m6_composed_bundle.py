@@ -82,6 +82,140 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
             st_file_attributes=0x10,
         )
 
+    def _assert_windows_post_rename_failure_is_indeterminate(
+        self,
+        failure: str,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "stage"
+            destination = parent / "published"
+            source.mkdir()
+            source_state = directory_publish_module.path_file_stat(source)
+            parent_state = directory_publish_module.path_file_stat(parent)
+            source_identity = (source_state.st_dev, source_state.st_ino)
+            parent_identity = (parent_state.st_dev, parent_state.st_ino)
+            handles: dict[int, Path] = {}
+            flush_counts: dict[int, int] = {}
+
+            class CreateFile:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, *args: object) -> int:
+                    path = Path(str(args[0]))
+                    handle = 880 + len(handles)
+                    handles[handle] = path
+                    return handle
+
+            class SetInformation:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, *_args: object) -> int:
+                    source.rename(destination)
+                    return 1
+
+            class Flush:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, handle: object) -> int:
+                    value = int(handle.value)
+                    flush_counts[value] = flush_counts.get(value, 0) + 1
+                    if failure == "flush" and handles[value] == source and flush_counts[value] == 2:
+                        return 0
+                    return 1
+
+            class Close:
+                argtypes: object = None
+                restype: object = None
+
+                def __init__(self) -> None:
+                    self.calls: list[int] = []
+
+                def __call__(self, handle: object) -> int:
+                    value = int(handle.value)
+                    self.calls.append(value)
+                    if failure in {"close", "validation_close"} and handles[value] == source:
+                        return 0
+                    return 1
+
+            close = Close()
+            kernel32 = SimpleNamespace(
+                CreateFileW=CreateFile(),
+                SetFileInformationByHandle=SetInformation(),
+                FlushFileBuffers=Flush(),
+                CloseHandle=close,
+            )
+
+            def audited_stat(path: str | Path):
+                candidate = Path(path)
+                if candidate == parent:
+                    return parent_state
+                if candidate == source:
+                    if not source.exists():
+                        raise FileNotFoundError(candidate)
+                    return source_state
+                if candidate == destination:
+                    if failure == "validation_close":
+                        raise OSError("injected destination validation failure")
+                    return source_state
+                raise FileNotFoundError(candidate)
+
+            def handle_stat(handle: int):
+                return source_state if handles[handle] == source else parent_state
+
+            with (
+                patch.object(
+                    directory_publish_module,
+                    "path_file_stat",
+                    side_effect=audited_stat,
+                ),
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "WinDLL",
+                    create=True,
+                    return_value=kernel32,
+                ),
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "get_last_error",
+                    create=True,
+                    return_value=5,
+                ),
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    side_effect=handle_stat,
+                ),
+                self.assertRaises(
+                    directory_publish_module.DirectoryPublishIndeterminateError
+                ) as caught,
+            ):
+                directory_publish_module._windows_rename_noreplace(  # noqa: SLF001
+                    source,
+                    destination,
+                    source_identity=source_identity,
+                    parent_identity=parent_identity,
+                )
+
+            self.assertIs(
+                type(caught.exception),
+                directory_publish_module.DirectoryPublishIndeterminateError,
+            )
+            self.assertIsInstance(caught.exception.__cause__, DirectoryPublishError)
+            self.assertFalse(source.exists())
+            self.assertTrue(destination.is_dir())
+            self.assertEqual(2, len(close.calls))
+            if failure == "validation_close":
+                self.assertTrue(
+                    any(
+                        "source handle cleanup" in note
+                        for note in getattr(caught.exception, "__notes__", ())
+                    )
+                )
+
     def test_windows_publication_uses_handle_identity_across_rename_stat_drift(
         self,
     ) -> None:
@@ -97,6 +231,8 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 candidate = path
                 if candidate == parent:
                     return self._directory_state(parent_identity)
+                if candidate == source and not source.exists():
+                    raise FileNotFoundError(candidate)
                 if candidate in {source, destination}:
                     return self._directory_state(published_identity)
                 raise FileNotFoundError(candidate)
@@ -170,7 +306,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
             self.assertEqual(published_identity, result)
             self.assertTrue(destination.is_dir())
             self.assertEqual([str(source), str(parent)], [call[0] for call in create_file.calls])
-            self.assertEqual([0x00000001, 0x00000001], [call[2] for call in create_file.calls])
+            self.assertEqual([0x00000001, 0x00000003], [call[2] for call in create_file.calls])
             self.assertEqual(1, len(set_information.calls))
             source_handle, information_class, payload, _size = set_information.calls[0]
             self.assertEqual(901, source_handle.value)
@@ -179,8 +315,19 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 payload
             )
             self.assertFalse(rename.replace_if_exists)
-            self.assertEqual(902, rename.root_directory)
-            self.assertEqual([901, 902], [call[0].value for call in flush.calls])
+            self.assertIsNone(rename.root_directory)
+            filename_offset = directory_publish_module._FileRenameInformation.filename.offset
+            self.assertEqual(
+                str(destination),
+                ctypes.string_at(
+                    ctypes.addressof(payload) + filename_offset,
+                    rename.filename_length,
+                ).decode("utf-16-le"),
+            )
+            self.assertEqual(
+                [901, 902, 901, 902],
+                [call[0].value for call in flush.calls],
+            )
 
     def test_windows_publication_flushes_files_and_deep_directories_before_rename(
         self,
@@ -213,7 +360,10 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 states[parent].st_ino,
             )
             handles: dict[int, Path] = {}
+            handle_shares: dict[int, int] = {}
             events: list[tuple[str, str]] = []
+            mutation_attempted = False
+            mutation_blocked = False
 
             class CreateFile:
                 argtypes: object = None
@@ -227,6 +377,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     path = Path(str(args[0]))
                     handle = 900 + len(handles)
                     handles[handle] = path
+                    handle_shares[handle] = int(args[2])
                     events.append(("open", path.relative_to(parent).as_posix() or "."))
                     return handle
 
@@ -235,6 +386,26 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 restype: object = None
 
                 def __call__(self, *args: object) -> int:
+                    nonlocal mutation_attempted, mutation_blocked
+                    closed = {int(call[0].value) for call in close.calls}
+                    payload_handles = {
+                        handle for handle, path in handles.items() if path not in {source, parent}
+                    }
+                    if payload_handles & closed:
+                        raise AssertionError(
+                            "Windows payload handles closed before directory rename"
+                        )
+                    mutation_attempted = True
+                    target = source / "nested/deeper/grand.txt"
+                    target_handle = next(
+                        handle for handle, path in handles.items() if path == target
+                    )
+                    if handle_shares[target_handle] & 0x00000002:
+                        target.write_text("evil!\n", encoding="utf-8")
+                    else:
+                        mutation_blocked = True
+                    if target.read_text(encoding="utf-8") != "grand\n":
+                        raise AssertionError("same-size payload substitution was admitted")
                     events.append(("rename", destination.name))
                     source.rename(destination)
                     return 1
@@ -265,6 +436,8 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
 
             def audited_stat(path: str | Path):
                 candidate = Path(path)
+                if candidate == source and not source.exists():
+                    raise FileNotFoundError(candidate)
                 if candidate == destination or destination in candidate.parents:
                     candidate = source / candidate.relative_to(destination)
                 return states[candidate]
@@ -295,6 +468,8 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 )
 
             self.assertEqual(source_identity, published)
+            self.assertTrue(mutation_attempted)
+            self.assertTrue(mutation_blocked)
             self.assertEqual(
                 [
                     ("flush", "stage/nested/child.txt"),
@@ -302,14 +477,29 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     ("flush", "stage/root.txt"),
                     ("flush", "stage/nested/deeper"),
                     ("flush", "stage/nested"),
+                    ("flush", "stage"),
+                    ("flush", "."),
                     ("rename", "published"),
                     ("flush", "stage"),
                     ("flush", "."),
                 ],
                 [event for event in events if event[0] != "open"],
             )
-            self.assertTrue(all(call[2] == 0x00000001 for call in create_file.calls))
+            self.assertEqual(
+                [0x00000001, 0x00000003, *([0x00000005] * (len(handles) - 2))],
+                [call[2] for call in create_file.calls],
+            )
             self.assertEqual(len(handles), len(close.calls))
+
+    def test_windows_post_rename_flush_failure_is_indeterminate(self) -> None:
+        self._assert_windows_post_rename_failure_is_indeterminate("flush")
+
+    def test_windows_post_rename_validation_and_close_failures_are_indeterminate(
+        self,
+    ) -> None:
+        for failure in ("validation_close", "close"):
+            with self.subTest(failure=failure):
+                self._assert_windows_post_rename_failure_is_indeterminate(failure)
 
     def test_windows_payload_flush_failure_closes_all_handles_without_rename(
         self,
@@ -410,7 +600,10 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
             self.assertFalse(destination.exists())
             self.assertEqual([], set_information.calls)
             self.assertEqual(len(handles), len(close.calls))
-            self.assertTrue(all(call[2] == 0x00000001 for call in create_file.calls))
+            self.assertEqual(
+                [0x00000001, 0x00000003, *([0x00000005] * (len(handles) - 2))],
+                [call[2] for call in create_file.calls],
+            )
 
     def test_windows_replaced_source_handle_is_rejected_before_rename(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -427,6 +620,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
             kernel32 = SimpleNamespace(
                 CreateFileW=create_file,
                 CloseHandle=close,
+                FlushFileBuffers=_FakeWindowsCall(1),
                 SetFileInformationByHandle=set_information,
             )
 
@@ -1248,17 +1442,26 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
         foreign = b'{"foreign":true}\n'
         real_lseek = os.lseek
         swapped = False
+        swap_blocked = False
 
         def swap_before_final_check(
             descriptor: int,
             offset: int,
             whence: int,
         ) -> int:
-            nonlocal swapped
+            nonlocal swap_blocked, swapped
             if not swapped:
-                path.rename(owned)
-                path.write_bytes(foreign)
                 swapped = True
+                try:
+                    path.rename(owned)
+                except OSError as exc:
+                    if getattr(exc, "winerror", None) != 32:
+                        raise
+                    swap_blocked = True
+                    raise OSError(
+                        "path binding changed because Windows retained the journal"
+                    ) from exc
+                path.write_bytes(foreign)
             return real_lseek(descriptor, offset, whence)
 
         with (
@@ -1280,8 +1483,12 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
                 expected_identity=prior_identity,
             )
         self.assertTrue(swapped)
-        self.assertEqual(foreign, path.read_bytes())
-        self.assertEqual(canonical_json_bytes(current), owned.read_bytes())
+        if swap_blocked:
+            self.assertFalse(owned.exists())
+            self.assertEqual(canonical_json_bytes(current), path.read_bytes())
+        else:
+            self.assertEqual(foreign, path.read_bytes())
+            self.assertEqual(canonical_json_bytes(current), owned.read_bytes())
 
     def test_manifest_rejects_casefold_prefix_collisions_and_false_selection(
         self,

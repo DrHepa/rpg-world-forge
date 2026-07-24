@@ -32,6 +32,7 @@ from worldforge.directory_publish import (
     append_append_only_journal,
     create_append_only_journal,
     directory_identity,
+    flush_windows_directory_tree,
     fsync_directory,
     open_expected_directory,
     publish_directory_noreplace,
@@ -1302,6 +1303,33 @@ def _fsync_claimed_payload_tree(
     return tuple(flushed)
 
 
+def _durably_flush_bundle_payload_tree(
+    root: Path,
+    expected_identity: DirectoryIdentity,
+) -> tuple[str, ...]:
+    if sys.platform.startswith("linux") and os.name == "posix":
+        with open_expected_directory(root, expected_identity) as retained:
+            flushed_payloads = _fsync_claimed_payload_tree(retained.fd)
+            try:
+                os.fsync(retained.fd)
+                os.fsync(retained.parent_fd)
+            except OSError as exc:
+                raise BundleError(
+                    f"Could not durably flush bundle payload tree {root}: {exc}"
+                ) from exc
+            retained.require_binding()
+            return flushed_payloads
+    if os.name == "nt":
+        try:
+            return flush_windows_directory_tree(
+                root,
+                expected_source_identity=expected_identity,
+            )
+        except DirectoryPublishError as exc:
+            raise BundleError(str(exc)) from exc
+    raise BundleError("Bundle payload durability is supported only on Linux and Windows")
+
+
 def export_runtime_bundle(
     worldpack_path: str | Path,
     renderpack_path: str | Path,
@@ -1347,22 +1375,18 @@ def export_runtime_bundle(
             stage,
             release_id,
         )
-        with open_expected_directory(stage, stage_identity) as retained:
-            flushed_payloads = _fsync_claimed_payload_tree(retained.fd)
-            expected_payloads = {
-                BUNDLE_MANIFEST,
-                *(record["path"] for record in manifest["files"]),
-            }
-            if (
-                len(flushed_payloads) != len(set(flushed_payloads))
-                or set(flushed_payloads) != expected_payloads
-            ):
-                raise BundleError(
-                    "Durably flushed bundle payload inventory does not match the manifest"
-                )
-            os.fsync(retained.fd)
-            os.fsync(retained.parent_fd)
-            retained.require_binding()
+        flushed_payloads = _durably_flush_bundle_payload_tree(stage, stage_identity)
+        expected_payloads = {
+            BUNDLE_MANIFEST,
+            *(record["path"] for record in manifest["files"]),
+        }
+        if (
+            len(flushed_payloads) != len(set(flushed_payloads))
+            or set(flushed_payloads) != expected_payloads
+        ):
+            raise BundleError(
+                "Durably flushed bundle payload inventory does not match the manifest"
+            )
         verified = verify_runtime_bundle(stage, expected_bundle_hash=manifest["bundle_hash"])
         verified.close()
         verified = None
@@ -2646,11 +2670,7 @@ def _import_verified_bundle(
         _replace_import_journal(root, journal, copying_journal)
         journal = copying_journal
         shutil.copytree(verified.root, temporary, symlinks=False, dirs_exist_ok=True)
-        with open_expected_directory(temporary, temporary_identity) as retained:
-            _fsync_claimed_payload_tree(retained.fd)
-            os.fsync(retained.fd)
-            os.fsync(retained.parent_fd)
-            retained.require_binding()
+        _durably_flush_bundle_payload_tree(temporary, temporary_identity)
         with verify_runtime_bundle(
             temporary,
             expected_bundle_hash=verified.bundle_hash,

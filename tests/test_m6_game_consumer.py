@@ -1665,17 +1665,24 @@ class M6GameConsumerTests(unittest.TestCase):
             foreign = b'{"foreign":true}\n'
             real_lseek = os.lseek
             swapped = False
+            swap_blocked = False
 
             def swap_before_final_check(
                 descriptor: int,
                 offset: int,
                 whence: int,
             ) -> int:
-                nonlocal swapped
+                nonlocal swap_blocked, swapped
                 if not swapped:
-                    path.rename(owned)
-                    path.write_bytes(foreign)
                     swapped = True
+                    try:
+                        path.rename(owned)
+                    except OSError as exc:
+                        if getattr(exc, "winerror", None) != 32:
+                            raise
+                        swap_blocked = True
+                        raise OSError("journal path binding changed before transition") from exc
+                    path.write_bytes(foreign)
                 return real_lseek(descriptor, offset, whence)
 
             with (
@@ -1697,8 +1704,12 @@ class M6GameConsumerTests(unittest.TestCase):
                 )
 
             self.assertTrue(swapped)
-            self.assertEqual(foreign, path.read_bytes())
-            self.assertEqual(canonical_json_bytes(current), owned.read_bytes())
+            if swap_blocked:
+                self.assertFalse(owned.exists())
+                self.assertEqual(canonical_json_bytes(current), path.read_bytes())
+            else:
+                self.assertEqual(foreign, path.read_bytes())
+                self.assertEqual(canonical_json_bytes(current), owned.read_bytes())
 
     def test_active_partial_and_foreign_catalog_journals_block_audit_and_package(
         self,

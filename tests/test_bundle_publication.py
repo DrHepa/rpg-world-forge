@@ -890,6 +890,34 @@ class BundlePublicationTests(unittest.TestCase):
             finally:
                 bundle.close()
 
+    def test_windows_bundle_durability_uses_retained_handle_tree(self) -> None:
+        root = Path("/synthetic/windows/stage")
+        identity = (41, 503)
+        expected = ("bundle.json", "assets/example.bin")
+        with (
+            patch.object(bundle_module.os, "name", "nt"),
+            patch.object(
+                bundle_module,
+                "open_expected_directory",
+                side_effect=AssertionError("Windows durability used POSIX descriptors"),
+            ),
+            patch.object(
+                bundle_module,
+                "flush_windows_directory_tree",
+                return_value=expected,
+            ) as flush,
+        ):
+            result = bundle_module._durably_flush_bundle_payload_tree(  # noqa: SLF001
+                root,
+                identity,
+            )
+
+        self.assertEqual(expected, result)
+        flush.assert_called_once_with(
+            root,
+            expected_source_identity=identity,
+        )
+
     @unittest.skipUnless(
         sys.platform.startswith("linux") and os.name == "posix",
         "Linux direct-claim payload durability",
@@ -1225,17 +1253,26 @@ class BundlePublicationTests(unittest.TestCase):
             foreign = b'{"foreign":true}\n'
             real_lseek = os.lseek
             swapped = False
+            swap_blocked = False
 
             def swap_before_final_check(
                 descriptor: int,
                 offset: int,
                 whence: int,
             ) -> int:
-                nonlocal swapped
+                nonlocal swap_blocked, swapped
                 if not swapped:
-                    path.rename(owned)
-                    path.write_bytes(foreign)
                     swapped = True
+                    try:
+                        path.rename(owned)
+                    except OSError as exc:
+                        if getattr(exc, "winerror", None) != 32:
+                            raise
+                        swap_blocked = True
+                        raise OSError(
+                            "path binding changed because Windows retained the journal"
+                        ) from exc
+                    path.write_bytes(foreign)
                 return real_lseek(descriptor, offset, whence)
 
             with (
@@ -1252,8 +1289,12 @@ class BundlePublicationTests(unittest.TestCase):
                 bundle_module._replace_import_journal(root, current, updated)
 
             self.assertTrue(swapped)
-            self.assertEqual(foreign, path.read_bytes())
-            self.assertEqual(bundle_module._pretty_json(current), owned.read_bytes())
+            if swap_blocked:
+                self.assertFalse(owned.exists())
+                self.assertEqual(bundle_module._pretty_json(current), path.read_bytes())
+            else:
+                self.assertEqual(foreign, path.read_bytes())
+                self.assertEqual(bundle_module._pretty_json(current), owned.read_bytes())
 
     def test_recovery_preserves_a_hash_mismatched_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
