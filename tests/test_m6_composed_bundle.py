@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import stat
+import sys
 import tempfile
 import unittest
 import uuid
@@ -66,6 +67,27 @@ class _FakeWindowsCall:
     def __call__(self, *args: object) -> object:
         self.calls.append(args)
         return self.result
+
+
+def _windows_dll_loader(
+    kernel32: object,
+    *,
+    nt_set_information: object,
+    nt_status_to_dos_error: object | None = None,
+):
+    ntdll = SimpleNamespace(
+        NtSetInformationFile=nt_set_information,
+        RtlNtStatusToDosError=nt_status_to_dos_error or _FakeWindowsCall(5),
+    )
+
+    def load(name: str, **_kwargs: object) -> object:
+        if name == "kernel32":
+            return kernel32
+        if name == "ntdll":
+            return ntdll
+        raise OSError(f"unexpected Windows DLL: {name}")
+
+    return load
 
 
 class DirectoryPublicationPortabilityTests(unittest.TestCase):
@@ -176,7 +198,10 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     directory_publish_module.ctypes,
                     "WinDLL",
                     create=True,
-                    return_value=kernel32,
+                    side_effect=_windows_dll_loader(
+                        kernel32,
+                        nt_set_information=kernel32.SetFileInformationByHandle,
+                    ),
                 ),
                 patch.object(
                     directory_publish_module.ctypes,
@@ -289,7 +314,10 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     directory_publish_module.ctypes,
                     "WinDLL",
                     create=True,
-                    return_value=kernel32,
+                    side_effect=_windows_dll_loader(
+                        kernel32,
+                        nt_set_information=set_information,
+                    ),
                 ),
                 patch.object(
                     directory_publish_module.file_stat_module,
@@ -310,7 +338,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 [call[0] for call in create_file.calls],
             )
             self.assertEqual(
-                [0xC0110000, 0x001000A0, 0x40100080, 0x40100080],
+                [0xC0110000, 0x001000A1, 0x40100080, 0x40100080],
                 [call[1] for call in create_file.calls],
             )
             self.assertEqual(
@@ -318,17 +346,36 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 [call[2] for call in create_file.calls],
             )
             self.assertEqual(1, len(set_information.calls))
-            source_handle, information_class, payload, _size = set_information.calls[0]
+            source_handle, io_status, payload, _size, information_class = set_information.calls[0]
             self.assertEqual(901, source_handle.value)
-            self.assertEqual(3, information_class)
-            rename = directory_publish_module._FileRenameInformation.from_buffer(  # noqa: SLF001
-                payload
-            )
-            self.assertFalse(rename.replace_if_exists)
-            self.assertIsNone(rename.root_directory)
-            filename_offset = directory_publish_module._FileRenameInformation.filename.offset
+            self.assertEqual(10, information_class)
+            io_status_type = directory_publish_module._IoStatusBlock  # noqa: SLF001
             self.assertEqual(
-                str(destination),
+                2 * ctypes.sizeof(ctypes.c_void_p),
+                ctypes.sizeof(io_status_type),
+            )
+            self.assertEqual(
+                ctypes.sizeof(ctypes.c_void_p),
+                io_status_type.information.offset,
+            )
+            self.assertIsNotNone(ctypes.cast(io_status, ctypes.POINTER(io_status_type)).contents)
+            rename_type = directory_publish_module._NtFileRenameInformation  # noqa: SLF001
+            self.assertEqual(0, rename_type.replace_if_exists.offset)
+            self.assertEqual(ctypes.sizeof(ctypes.c_void_p), rename_type.root_directory.offset)
+            self.assertEqual(
+                rename_type.root_directory.offset + ctypes.sizeof(ctypes.c_void_p),
+                rename_type.filename_length.offset,
+            )
+            self.assertEqual(
+                rename_type.filename_length.offset + ctypes.sizeof(ctypes.c_uint32),
+                rename_type.filename.offset,
+            )
+            rename = rename_type.from_buffer(payload)
+            self.assertFalse(rename.replace_if_exists)
+            self.assertEqual(902, rename.root_directory)
+            filename_offset = rename_type.filename.offset
+            self.assertEqual(
+                destination.name,
                 ctypes.string_at(
                     ctypes.addressof(payload) + filename_offset,
                     rename.filename_length,
@@ -338,6 +385,154 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 [901, 902, 901, 902],
                 [call[0].value for call in flush.calls],
             )
+
+    def test_windows_native_rename_maps_collisions_and_other_failures(self) -> None:
+        collision_status = ctypes.c_int32(0xC0000035).value
+        access_denied_status = ctypes.c_int32(0xC0000022).value
+        for status, error, expected_error in (
+            (collision_status, 183, FileExistsError),
+            (access_denied_status, 5, DirectoryPublishError),
+        ):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                parent = Path(directory)
+                source = parent / "stage"
+                destination = parent / "published"
+                source.mkdir()
+                source_state = directory_publish_module.path_file_stat(source)
+                parent_state = directory_publish_module.path_file_stat(parent)
+                states = {
+                    source: source_state,
+                    parent: parent_state,
+                }
+                handles: dict[int, Path] = {}
+
+                class CreateFile:
+                    argtypes: object = None
+                    restype: object = None
+
+                    def __init__(self, opened: dict[int, Path]) -> None:
+                        self.opened = opened
+
+                    def __call__(self, *args: object) -> int:
+                        path = Path(str(args[0]))
+                        handle = 920 + len(self.opened)
+                        self.opened[handle] = path
+                        return handle
+
+                nt_set_information = _FakeWindowsCall(status)
+                nt_status_to_dos_error = _FakeWindowsCall(error)
+                close = _FakeWindowsCall(1)
+                kernel32 = SimpleNamespace(
+                    CreateFileW=CreateFile(handles),
+                    FlushFileBuffers=_FakeWindowsCall(1),
+                    CloseHandle=close,
+                )
+
+                def audited_stat(
+                    path: str | Path,
+                    *,
+                    expected_destination: Path = destination,
+                    expected_states: dict[Path, object] = states,
+                ):
+                    candidate = Path(path)
+                    if candidate == expected_destination:
+                        raise FileNotFoundError(candidate)
+                    return expected_states[candidate]
+
+                with (
+                    patch.object(
+                        directory_publish_module,
+                        "path_file_stat",
+                        side_effect=audited_stat,
+                    ),
+                    patch.object(
+                        directory_publish_module.ctypes,
+                        "WinDLL",
+                        create=True,
+                        side_effect=_windows_dll_loader(
+                            kernel32,
+                            nt_set_information=nt_set_information,
+                            nt_status_to_dos_error=nt_status_to_dos_error,
+                        ),
+                    ),
+                    patch.object(
+                        directory_publish_module.file_stat_module,
+                        "_windows_handle_stat",
+                        side_effect=lambda handle, states=states, handles=handles: states[
+                            handles[handle]
+                        ],
+                    ),
+                    self.assertRaises(expected_error) as caught,
+                ):
+                    directory_publish_module._windows_rename_noreplace(  # noqa: SLF001
+                        source,
+                        destination,
+                        source_identity=(
+                            source_state.st_dev,
+                            source_state.st_ino,
+                        ),
+                        parent_identity=(
+                            parent_state.st_dev,
+                            parent_state.st_ino,
+                        ),
+                    )
+
+                self.assertEqual(error, caught.exception.errno)
+                self.assertTrue(source.is_dir())
+                self.assertFalse(destination.exists())
+                self.assertEqual([(status,)], nt_status_to_dos_error.calls)
+                self.assertEqual(1, len(nt_set_information.calls))
+                self.assertEqual(10, nt_set_information.calls[0][4])
+                self.assertEqual(len(handles), len(close.calls))
+
+    @unittest.skipUnless(
+        sys.platform == "win32" and os.name == "nt",
+        "requires native Windows directory publication",
+    )
+    def test_native_windows_directory_publication_and_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            source = parent / "stage"
+            destination = parent / "published"
+            (source / "nested").mkdir(parents=True)
+            (source / "nested/payload.bin").write_bytes(b"published payload")
+            source_identity = directory_identity(source)
+
+            published_identity = directory_publish_module.publish_directory_noreplace(
+                source,
+                destination,
+                expected_source_identity=source_identity,
+            )
+
+            self.assertEqual(source_identity, published_identity)
+            self.assertFalse(source.exists())
+            self.assertEqual(
+                b"published payload",
+                (destination / "nested/payload.bin").read_bytes(),
+            )
+
+            contender = parent / "contender"
+            winner = parent / "winner"
+            contender.mkdir()
+            (contender / "payload.bin").write_bytes(b"contender")
+            winner.mkdir()
+            (winner / "payload.bin").write_bytes(b"winner")
+            contender_identity = directory_identity(contender)
+            winner_identity = directory_identity(winner)
+
+            with self.assertRaises(FileExistsError):
+                directory_publish_module._windows_rename_noreplace(  # noqa: SLF001
+                    contender,
+                    winner,
+                    source_identity=contender_identity,
+                    parent_identity=directory_identity(parent),
+                )
+
+            self.assertTrue(contender.is_dir())
+            self.assertEqual(contender_identity, directory_identity(contender))
+            self.assertEqual(winner_identity, directory_identity(winner))
+            self.assertEqual(b"contender", (contender / "payload.bin").read_bytes())
+            self.assertEqual(b"winner", (winner / "payload.bin").read_bytes())
 
     def test_windows_publication_flushes_files_and_deep_directories_before_rename(
         self,
@@ -474,7 +669,10 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     directory_publish_module.ctypes,
                     "WinDLL",
                     create=True,
-                    return_value=kernel32,
+                    side_effect=_windows_dll_loader(
+                        kernel32,
+                        nt_set_information=set_information,
+                    ),
                 ),
                 patch.object(
                     directory_publish_module.file_stat_module,
@@ -520,7 +718,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
             )
             parent_calls = [call for call in create_file.calls if Path(str(call[0])) == parent]
             self.assertEqual(
-                [0x001000A0, 0x40100080, 0x40100080],
+                [0x001000A1, 0x40100080, 0x40100080],
                 [call[1] for call in parent_calls],
             )
             self.assertEqual(len(handles), len(close.calls))
@@ -599,7 +797,10 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     directory_publish_module.ctypes,
                     "WinDLL",
                     create=True,
-                    return_value=kernel32,
+                    side_effect=_windows_dll_loader(
+                        kernel32,
+                        nt_set_information=set_information,
+                    ),
                 ),
                 patch.object(
                     directory_publish_module.ctypes,
@@ -675,7 +876,10 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     directory_publish_module.ctypes,
                     "WinDLL",
                     create=True,
-                    return_value=kernel32,
+                    side_effect=_windows_dll_loader(
+                        kernel32,
+                        nt_set_information=set_information,
+                    ),
                 ),
                 patch.object(
                     directory_publish_module.file_stat_module,

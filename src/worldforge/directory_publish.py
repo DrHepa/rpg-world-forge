@@ -253,12 +253,27 @@ class _FileDispositionInfo(ctypes.Structure):
     _fields_ = [("delete_file", ctypes.c_ubyte)]
 
 
-class _FileRenameInformation(ctypes.Structure):
+class _IoStatusValue(ctypes.Union):
     _fields_ = [
-        ("replace_if_exists", ctypes.c_int),
+        ("status", ctypes.c_int32),
+        ("pointer", ctypes.c_void_p),
+    ]
+
+
+class _IoStatusBlock(ctypes.Structure):
+    _anonymous_ = ("value",)
+    _fields_ = [
+        ("value", _IoStatusValue),
+        ("information", ctypes.c_size_t),
+    ]
+
+
+class _NtFileRenameInformation(ctypes.Structure):
+    _fields_ = [
+        ("replace_if_exists", ctypes.c_ubyte),
         ("root_directory", ctypes.c_void_p),
         ("filename_length", ctypes.c_uint32),
-        ("filename", ctypes.c_wchar * 1),
+        ("filename", ctypes.c_uint16 * 1),
     ]
 
 
@@ -284,7 +299,8 @@ class _WindowsRetainedTree:
     expected_tree: dict[str, _WindowsTreeState]
     flush_file_buffers: Callable[[ctypes.c_void_p], int]
     close_handle: Callable[[ctypes.c_void_p], int]
-    set_information: Callable[[ctypes.c_void_p, int, object, int], int]
+    nt_set_information: Callable[[ctypes.c_void_p, object, object, int, int], int]
+    nt_status_to_dos_error: Callable[[int], int]
     flush_parent: Callable[[Path, DirectoryIdentity, str], None]
     namespace_mutated: bool = False
 
@@ -377,26 +393,35 @@ class _WindowsRetainedTree:
             raise DirectoryPublishError(
                 "Windows publication payload tree changed before handle-bound rename"
             )
-        encoded = str(destination).encode("utf-16-le")
-        offset = _FileRenameInformation.filename.offset
+        encoded = destination.name.encode("utf-16-le")
+        offset = _NtFileRenameInformation.filename.offset
         buffer = ctypes.create_string_buffer(
-            max(ctypes.sizeof(_FileRenameInformation), offset + len(encoded))
+            max(ctypes.sizeof(_NtFileRenameInformation), offset + len(encoded))
         )
-        information = _FileRenameInformation.from_buffer(buffer)
+        information = _NtFileRenameInformation.from_buffer(buffer)
         information.replace_if_exists = False
-        # SetFileInformationByHandle requires a fully-qualified name when used
-        # from Win32. A root-directory-relative FILE_RENAME_INFO request is an
-        # NT-native contract and is rejected here with ERROR_INVALID_PARAMETER.
-        information.root_directory = None
+        information.root_directory = self.parent_handle
         information.filename_length = len(encoded)
         ctypes.memmove(ctypes.addressof(buffer) + offset, encoded, len(encoded))
-        if not self.set_information(
-            ctypes.c_void_p(self.source_handle),
-            3,  # FileRenameInfo
-            buffer,
-            len(buffer),
-        ):
-            error = ctypes.get_last_error()
+        io_status = _IoStatusBlock()
+        status = ctypes.c_int32(
+            int(
+                self.nt_set_information(
+                    ctypes.c_void_p(self.source_handle),
+                    ctypes.byref(io_status),
+                    buffer,
+                    len(buffer),
+                    10,  # FileRenameInformation
+                )
+            )
+        ).value
+        if status < 0:
+            try:
+                error = int(self.nt_status_to_dos_error(status))
+            except Exception as exc:
+                raise DirectoryPublishError(
+                    f"Could not translate Windows directory rename status {status}"
+                ) from exc
             if error in {80, 183}:
                 raise FileExistsError(
                     error,
@@ -462,7 +487,7 @@ class _WindowsRetainedTree:
                 raise
             raise DirectoryPublishIndeterminateError(
                 "Windows directory publication outcome is indeterminate after "
-                "SetFileInformationByHandle; no rollback was attempted for "
+                "NtSetInformationFile; no rollback was attempted for "
                 f"{self.source} and {destination}: {exc}"
             ) from exc
 
@@ -496,13 +521,13 @@ class _WindowsRetainedTree:
         ):
             raise DirectoryPublishIndeterminateError(
                 "Windows directory publication outcome is indeterminate after "
-                "SetFileInformationByHandle and retained-handle cleanup"
+                "NtSetInformationFile and retained-handle cleanup"
             ) from primary
         if cleanup_error is not None:
             if self.namespace_mutated:
                 raise DirectoryPublishIndeterminateError(
                     "Windows directory publication outcome is indeterminate after "
-                    "SetFileInformationByHandle because retained-handle cleanup failed"
+                    "NtSetInformationFile because retained-handle cleanup failed"
                 ) from cleanup_error
             raise cleanup_error
 
@@ -1378,14 +1403,24 @@ def _open_windows_retained_tree(
     flush_file_buffers = kernel32.FlushFileBuffers
     flush_file_buffers.argtypes = [ctypes.c_void_p]
     flush_file_buffers.restype = ctypes.c_int
-    set_information = kernel32.SetFileInformationByHandle
-    set_information.argtypes = [
+    try:
+        ntdll = win_dll("ntdll", use_last_error=True)
+        nt_set_information = ntdll.NtSetInformationFile
+        nt_status_to_dos_error = ntdll.RtlNtStatusToDosError
+    except (AttributeError, OSError) as exc:
+        raise DirectoryPublishError(
+            "Identity-bound Windows directory rename API is unavailable"
+        ) from exc
+    nt_set_information.argtypes = [
         ctypes.c_void_p,
-        ctypes.c_int,
+        ctypes.POINTER(_IoStatusBlock),
         ctypes.c_void_p,
         ctypes.c_uint32,
+        ctypes.c_int,
     ]
-    set_information.restype = ctypes.c_int
+    nt_set_information.restype = ctypes.c_int32
+    nt_status_to_dos_error.argtypes = [ctypes.c_int32]
+    nt_status_to_dos_error.restype = ctypes.c_uint32
     invalid_handle = ctypes.c_void_p(-1).value
 
     def open_source_directory(path: Path, *, delete: bool) -> int:
@@ -1412,11 +1447,10 @@ def _open_windows_retained_tree(
     def open_parent_identity(path: Path) -> int:
         handle = create_file(
             str(path),
-            # FILE_TRAVERSE | FILE_READ_ATTRIBUTES | SYNCHRONIZE. The
-            # long-lived parent handle proves identity only; retaining write
-            # access here conflicts with the target-parent open performed by
-            # FileRenameInfo on native Windows.
-            0x00000020 | 0x00000080 | 0x00100000,
+            # FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_READ_ATTRIBUTES |
+            # SYNCHRONIZE. The long-lived parent handle supplies the
+            # identity-bound root for the native relative rename.
+            0x00000001 | 0x00000020 | 0x00000080 | 0x00100000,
             # The short-lived durability handle must coexist with this
             # identity pin, while omitted delete sharing retains the parent
             # namespace through publication.
@@ -1442,7 +1476,7 @@ def _open_windows_retained_tree(
         handle = create_file(
             str(path),
             # FlushFileBuffers requires write access. Keep this handle
-            # short-lived and close it before FileRenameInfo.
+            # short-lived and close it before the native relative rename.
             0x40000000 | 0x00000080 | 0x00100000,
             0x00000001 | 0x00000002 | 0x00000004,
             None,
@@ -1574,7 +1608,8 @@ def _open_windows_retained_tree(
             expected_tree=expected_tree,
             flush_file_buffers=flush_file_buffers,
             close_handle=close_handle,
-            set_information=set_information,
+            nt_set_information=nt_set_information,
+            nt_status_to_dos_error=nt_status_to_dos_error,
             flush_parent=flush_parent,
         )
         yield retained
@@ -1702,7 +1737,7 @@ def publish_directory_noreplace(
         if windows_publication:
             raise DirectoryPublishIndeterminateError(
                 "Windows directory publication outcome became indeterminate after "
-                "SetFileInformationByHandle; no rollback was attempted for "
+                "NtSetInformationFile; no rollback was attempted for "
                 f"{source} and {destination}: {exc}"
             ) from exc
         raise
