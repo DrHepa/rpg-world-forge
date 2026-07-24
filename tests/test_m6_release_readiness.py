@@ -14,12 +14,32 @@ STUDIO_PACKAGE_LOCK = ROOT / "apps/studio/package-lock.json"
 SETUP_NODE_SHA = "49933ea5288caeca8642d1e84afbd3f7d6820020"
 NPM_BOOTSTRAP_COMMAND = "npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0"
 WINDOWS_NATIVE_PYTHON_TESTS = (
+    "tests.test_m4_world_lifecycle.BumpWorldVersionTests."
+    "test_windows_lock_rename_denial_is_fail_closed",
+    "tests.test_renderpack_resources.DirectMediaValidationTests."
+    "test_native_windows_path_and_descriptor_file_states_agree",
+    "tests.test_renderpack_resources.RenderPackResourceBoundaryTests."
+    "test_windows_created_private_acl_passes_native_validation",
+    "tests.test_runtime_io.AtomicRuntimeWriterTests."
+    "test_windows_parent_rename_denial_is_fail_closed",
+    "tests.test_studio_authoring.StudioAuthoringTests."
+    "test_overview_exercises_native_windows_pinned_directory_path",
     "tests.test_studio_runtime_inputs.StudioRuntimeInputsTests."
     "test_native_windows_handles_block_target_swap_through_final_read",
+    "tests.test_studio_runtime_inputs.StudioRuntimeInputsTests."
+    "test_native_windows_owned_temp_revalidates_blocks_rename_and_cleans",
+    "tests.test_studio_runtime_inputs.StudioRuntimeInputsTests."
+    "test_native_windows_owned_temp_publishes_and_reopens",
+    "tests.test_studio_runtime_inputs.StudioRuntimeInputsTests."
+    "test_native_windows_owned_temp_preserves_mismatched_winner",
     "tests.test_studio_runtime_assembly.StudioRuntimeAssemblyTest."
     "test_native_windows_backend_assembles_and_zips_windows_target",
     "tests.test_studio_runtime_assembly.StudioRuntimeAssemblyTest."
+    "test_native_windows_pinned_reads_reject_hardlinks_and_retained_swaps",
+    "tests.test_studio_runtime_assembly.StudioRuntimeAssemblyTest."
     "test_native_windows_retained_handles_block_after_write_parent_swaps",
+    "tests.test_m6_game_consumer.M6GameConsumerTests."
+    "test_native_windows_generation_stage_handle_blocks_swap",
 )
 WINDOWS_NATIVE_SHELL_TEST = "retains the native Windows package root against parent replacement"
 
@@ -142,12 +162,32 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
         self.assertEqual(
             WINDOWS_NATIVE_PYTHON_TESTS,
             (
+                "tests.test_m4_world_lifecycle.BumpWorldVersionTests."
+                "test_windows_lock_rename_denial_is_fail_closed",
+                "tests.test_renderpack_resources.DirectMediaValidationTests."
+                "test_native_windows_path_and_descriptor_file_states_agree",
+                "tests.test_renderpack_resources.RenderPackResourceBoundaryTests."
+                "test_windows_created_private_acl_passes_native_validation",
+                "tests.test_runtime_io.AtomicRuntimeWriterTests."
+                "test_windows_parent_rename_denial_is_fail_closed",
+                "tests.test_studio_authoring.StudioAuthoringTests."
+                "test_overview_exercises_native_windows_pinned_directory_path",
                 "tests.test_studio_runtime_inputs.StudioRuntimeInputsTests."
                 "test_native_windows_handles_block_target_swap_through_final_read",
+                "tests.test_studio_runtime_inputs.StudioRuntimeInputsTests."
+                "test_native_windows_owned_temp_revalidates_blocks_rename_and_cleans",
+                "tests.test_studio_runtime_inputs.StudioRuntimeInputsTests."
+                "test_native_windows_owned_temp_publishes_and_reopens",
+                "tests.test_studio_runtime_inputs.StudioRuntimeInputsTests."
+                "test_native_windows_owned_temp_preserves_mismatched_winner",
                 "tests.test_studio_runtime_assembly.StudioRuntimeAssemblyTest."
                 "test_native_windows_backend_assembles_and_zips_windows_target",
                 "tests.test_studio_runtime_assembly.StudioRuntimeAssemblyTest."
+                "test_native_windows_pinned_reads_reject_hardlinks_and_retained_swaps",
+                "tests.test_studio_runtime_assembly.StudioRuntimeAssemblyTest."
                 "test_native_windows_retained_handles_block_after_write_parent_swaps",
+                "tests.test_m6_game_consumer.M6GameConsumerTests."
+                "test_native_windows_generation_stage_handle_blocks_swap",
             ),
         )
         self.assertIn("--run-windows-native-python", studio)
