@@ -594,6 +594,26 @@ class _FakeCType:
 class _FakeFFI:
     NULL = object()
 
+    def __init__(self) -> None:
+        self.model_fields = (
+            "transform",
+            "meshCount",
+            "materialCount",
+            "meshes",
+            "materials",
+            "meshMaterial",
+            "skeleton",
+            "currentPose",
+            "boneMatrices",
+        )
+        self.model_skeleton_fields = ("boneCount", "bones", "bindPose")
+        self.model_animation_fields = (
+            "name",
+            "boneCount",
+            "keyframeCount",
+            "keyframePoses",
+        )
+
     def new(self, declaration: str, value: int) -> list[int]:
         if declaration != "int *":
             raise AssertionError(declaration)
@@ -603,10 +623,20 @@ class _FakeFFI:
         return value.split(b"\x00", 1)[0]
 
     def typeof(self, value: object) -> _FakeCType:
+        if value == "Model":
+            return _FakeCType(
+                "<ctype 'struct Model'>",
+                fields=self.model_fields,
+            )
+        if value == "ModelSkeleton":
+            return _FakeCType(
+                "<ctype 'struct ModelSkeleton'>",
+                fields=self.model_skeleton_fields,
+            )
         if value == "ModelAnimation":
             return _FakeCType(
                 "<ctype 'struct ModelAnimation'>",
-                fields=("name", "boneCount", "keyframeCount", "keyframePoses"),
+                fields=self.model_animation_fields,
             )
         if value == "load_model_animations_raw":
             return _FakeCType("<ctype 'struct ModelAnimation *(*)(char *, int *)'>")
@@ -625,11 +655,11 @@ class _FakePyray:
     CAMERA_PERSPECTIVE = 0
     BLACK = object()
     WHITE = object()
-    ffi = _FakeFFI()
 
     def __init__(self) -> None:
+        self.ffi = _FakeFFI()
         self.events: list[object] = []
-        self.model = SimpleNamespace(boneCount=1)
+        self.model = SimpleNamespace(skeleton=SimpleNamespace(boneCount=1))
         self.animation = SimpleNamespace(name=b"idle", keyframeCount=61, boneCount=1)
         self.animations = [self.animation]
         self.loaded_animation_count = 1
@@ -754,8 +784,39 @@ class Pyray3DNativeBoundaryTests(unittest.TestCase):
                     installed_version=str(update.get("installed_version", "6.0.1.0")),
                 )
 
+    def test_abi_rejects_model_and_model_skeleton_layout_drift(self) -> None:
+        for field, layout, message in (
+            (
+                "model_fields",
+                (
+                    "transform",
+                    "meshCount",
+                    "materialCount",
+                    "meshes",
+                    "materials",
+                    "meshMaterial",
+                    "skeleton",
+                    "currentPose",
+                    "boneMatrices",
+                    "boneCount",
+                ),
+                "Model fields",
+            ),
+            (
+                "model_skeleton_fields",
+                ("bones", "boneCount", "bindPose"),
+                "ModelSkeleton fields",
+            ),
+        ):
+            with self.subTest(field=field):
+                changed = _FakePyray()
+                setattr(changed.ffi, field, layout)
+                with self.assertRaisesRegex(Pyray3DError, message):
+                    _verify_pyray_abi(changed, installed_version="6.0.1.0")
+
     def test_fake_native_load_draw_and_cleanup_use_exact_order_and_full_array(self) -> None:
         fake = _FakePyray()
+        self.assertFalse(hasattr(fake.model, "boneCount"))
         report = Pyray3DABIReport(
             "raylib",
             "6.0.1.0",
@@ -821,6 +882,45 @@ class Pyray3DNativeBoundaryTests(unittest.TestCase):
         )
         self.assertIs(fake.animations, unload_animations[1])
         self.assertEqual(1, unload_animations[2])
+
+    def test_native_rejects_zero_model_or_animation_bone_counts(self) -> None:
+        report = Pyray3DABIReport(
+            "raylib",
+            "6.0.1.0",
+            "6.1-dev",
+            (6, 1, 0),
+            "6.0",
+            (),
+        )
+        for target in ("model", "animation"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as temporary:
+                fake = _FakePyray()
+                if target == "model":
+                    fake.model.skeleton.boneCount = 0
+                else:
+                    fake.animation.boneCount = 0
+                resolved = self._resolved(Path(temporary).resolve())
+                with (
+                    patch(
+                        "isoworld.render.pyray_3d._pyray_native_factory",
+                        return_value=(fake, report),
+                    ),
+                    self.assertRaisesRegex(
+                        Pyray3DError,
+                        "positive model and animation skeleton",
+                    ),
+                ):
+                    _PyrayNativeOwner.open((resolved,))
+                cleanup = [
+                    item[0] if isinstance(item, tuple) else item
+                    for item in fake.events
+                    if (isinstance(item, tuple) and item[0].startswith("unload_"))
+                    or item == "close_window"
+                ]
+                self.assertEqual(
+                    ["unload_model_animations", "unload_model", "close_window"],
+                    cleanup,
+                )
 
     def test_cleanup_uncertainty_never_double_unloads_and_window_is_last(self) -> None:
         fake = _FakePyray()

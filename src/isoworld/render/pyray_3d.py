@@ -63,6 +63,22 @@ _REQUIRED_PYRAY_FUNCTIONS = (
     "unload_model_animations",
     "update_model_animation",
 )
+_MODEL_FIELDS = (
+    "transform",
+    "meshCount",
+    "materialCount",
+    "meshes",
+    "materials",
+    "meshMaterial",
+    "skeleton",
+    "currentPose",
+    "boneMatrices",
+)
+_MODEL_SKELETON_FIELDS = (
+    "boneCount",
+    "bones",
+    "bindPose",
+)
 _MODEL_ANIMATION_FIELDS = (
     "name",
     "boneCount",
@@ -223,6 +239,10 @@ def _verify_pyray_abi(pr: Any, *, installed_version: str) -> Pyray3DABIReport:
     if not hasattr(pr, "ffi") or not callable(getattr(pr.ffi, "new", None)):
         raise Pyray3DError("pyray must expose its CFFI pointer allocator")
     try:
+        model = pr.ffi.typeof("Model")
+        model_fields = tuple(name for name, _field in model.fields)
+        model_skeleton = pr.ffi.typeof("ModelSkeleton")
+        model_skeleton_fields = tuple(name for name, _field in model_skeleton.fields)
         model_animation = pr.ffi.typeof("ModelAnimation")
         model_animation_fields = tuple(name for name, _field in model_animation.fields)
         raw_library = pr.rl
@@ -230,7 +250,13 @@ def _verify_pyray_abi(pr: Any, *, installed_version: str) -> Pyray3DABIReport:
         unload_animations_ctype = str(pr.ffi.typeof(raw_library.UnloadModelAnimations))
         pr.ffi.new("int *", 0)
     except (AttributeError, TypeError, ValueError) as exc:
-        raise Pyray3DError("pyray must expose the exact ModelAnimation CFFI ABI") from exc
+        raise Pyray3DError(
+            "pyray must expose the exact Model, ModelSkeleton, and ModelAnimation CFFI ABI"
+        ) from exc
+    if model_fields != _MODEL_FIELDS:
+        raise Pyray3DError("pyray Model fields do not match the audited ABI")
+    if model_skeleton_fields != _MODEL_SKELETON_FIELDS:
+        raise Pyray3DError("pyray ModelSkeleton fields do not match the audited ABI")
     if model_animation_fields != _MODEL_ANIMATION_FIELDS:
         raise Pyray3DError("pyray ModelAnimation fields do not match the audited ABI")
     if load_animations_ctype != _LOAD_ANIMATIONS_CTYPE:
@@ -597,7 +623,7 @@ class _PyrayNativeOwner:
                     raise Pyray3DError(
                         "raylib animation keyframes do not match the exact asset plan"
                     )
-                if int(animation.boneCount) <= 0 or int(model.boneCount) <= 0:
+                if int(animation.boneCount) <= 0 or int(model.skeleton.boneCount) <= 0:
                     raise Pyray3DError("raylib requires a positive model and animation skeleton")
                 if not pr.is_model_animation_valid(model, animation):
                     raise Pyray3DError("raylib rejected the model/animation skeleton pairing")
