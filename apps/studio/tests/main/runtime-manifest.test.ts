@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -27,7 +28,9 @@ afterEach(async () => {
 });
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "rwf-studio-runtime-"));
+  const root = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "rwf-studio-runtime-")),
+  );
   roots.push(root);
   return root;
 }
@@ -110,26 +113,41 @@ describe("runtime manifest", () => {
 
   it("resolves packaged Python and Codex only from a closed manifest under resources", async () => {
     const root = await temporaryRoot();
-    const python = path.join(root, "runtime/python/linux-x64/bin/python3");
-    const codex = path.join(root, "runtime/codex/linux-x64/bin/codex");
+    const target =
+      process.platform === "win32"
+        ? {
+            codex: "runtime/codex/win32-x64/bin/codex.exe",
+            platform: "win32" as const,
+            python: "runtime/python/win32-x64/python.exe",
+            targetId: "win32-x64" as const,
+          }
+        : {
+            codex: "runtime/codex/linux-x64/bin/codex",
+            platform: "linux" as const,
+            python: "runtime/python/linux-x64/bin/python3",
+            targetId: "linux-x64" as const,
+          };
+    const python = path.join(root, ...target.python.split("/"));
+    const codex = path.join(root, ...target.codex.split("/"));
     await createExecutable(python);
     await createExecutable(codex);
     await writeProtocolManifest(root);
     await writeManifest(root, {});
+    await writePackageManifest(root, target.targetId);
 
     const spec = await resolveForgeServiceLaunch({
       packaged: true,
       resourcesPath: root,
       dataDir: path.join(root, "data"),
       environment: { PATH: "/attacker" },
-      platform: "linux",
+      platform: target.platform,
       architecture: "x64",
     });
     const runtime = await resolveCodexRuntime({
       packaged: true,
       resourcesPath: root,
       dataDir: path.join(root, "data"),
-      platform: "linux",
+      platform: target.platform,
       architecture: "x64",
     });
 
@@ -416,10 +434,44 @@ async function expectPackagedFailure(root: string, pattern: RegExp): Promise<voi
   ).rejects.toThrow(pattern);
 }
 
-async function writePackageManifest(root: string): Promise<void> {
+async function writePackageManifest(
+  root: string,
+  targetId: "linux-x64" | "win32-x64" = "linux-x64",
+): Promise<void> {
+  const target =
+    targetId === "win32-x64"
+      ? {
+          codexArchive: {
+            entrypoint: "package/vendor/x86_64-pc-windows-msvc/bin/codex.exe",
+            filename: "codex-0.144.6-win32-x64.tgz",
+            payloadRoot: "package/vendor/x86_64-pc-windows-msvc",
+          },
+          codexPath: "runtime/codex/win32-x64/bin/codex.exe",
+          pythonArchive: {
+            entrypoint: "python/python.exe",
+            filename:
+              "cpython-3.12.13+20260718-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+            payloadRoot: "python",
+          },
+          pythonPath: "runtime/python/win32-x64/python.exe",
+        }
+      : {
+          codexArchive: {
+            entrypoint: "package/vendor/x86_64-unknown-linux-musl/bin/codex",
+            filename: "codex.tgz",
+            payloadRoot: "package/vendor/x86_64-unknown-linux-musl",
+          },
+          codexPath: "runtime/codex/linux-x64/bin/codex",
+          pythonArchive: {
+            entrypoint: "python/bin/python3",
+            filename: "python.tar.gz",
+            payloadRoot: "python",
+          },
+          pythonPath: "runtime/python/linux-x64/bin/python3",
+        };
   const candidates = [
-    ["runtime/codex/linux-x64/bin/codex", "codex", 493],
-    ["runtime/python/linux-x64/bin/python3", "python", 493],
+    [target.codexPath, "codex", 493],
+    [target.pythonPath, "python", 493],
     ["protocol/codex-app-server-0.144.6/manifest.json", "forge", 420],
     ["runtime-manifest.json", "control", 420],
   ] as const;
@@ -451,9 +503,9 @@ async function writePackageManifest(root: string): Promise<void> {
     format_version: 1,
     inventory,
     launch: {
-      codex: "runtime/codex/linux-x64/bin/codex",
+      codex: target.codexPath,
       mcp_module: "worldforge.studio.mcp_server",
-      python: "runtime/python/linux-x64/bin/python3",
+      python: target.pythonPath,
       service_module: "worldforge.studio",
     },
     open_blocker_codes: ["synthetic_non_publishable_inputs"],
@@ -465,9 +517,9 @@ async function writePackageManifest(root: string): Promise<void> {
     sources: {
       codex: {
         archive: {
-          entrypoint: "package/vendor/x86_64-unknown-linux-musl/bin/codex",
-          filename: "codex.tgz",
-          payload_root: "package/vendor/x86_64-unknown-linux-musl",
+          entrypoint: target.codexArchive.entrypoint,
+          filename: target.codexArchive.filename,
+          payload_root: target.codexArchive.payloadRoot,
           sha256: "d".repeat(64),
           size: 100,
         },
@@ -479,9 +531,9 @@ async function writePackageManifest(root: string): Promise<void> {
       },
       python: {
         archive: {
-          entrypoint: "python/bin/python3",
-          filename: "python.tar.gz",
-          payload_root: "python",
+          entrypoint: target.pythonArchive.entrypoint,
+          filename: target.pythonArchive.filename,
+          payload_root: target.pythonArchive.payloadRoot,
           sha256: "f".repeat(64),
           size: 100,
         },
@@ -491,7 +543,7 @@ async function writePackageManifest(root: string): Promise<void> {
       runtime_sources: null,
       runtime_sources_sha256: "0".repeat(64),
     },
-    target_id: "linux-x64",
+    target_id: targetId,
   };
   await writeFile(
     path.join(root, "runtime-package-manifest.json"),

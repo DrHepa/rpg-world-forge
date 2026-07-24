@@ -1,4 +1,12 @@
-import { chmod, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -76,7 +84,9 @@ describe("Codex workspace configuration", () => {
 });
 
 async function makeFixture() {
-  const root = await mkdtemp(path.join(os.tmpdir(), "rwf-codex-config-"));
+  const root = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "rwf-codex-config-")),
+  );
   roots.push(root);
   const workspaceRoot = path.join(root, "workspace");
   const dataDir = path.join(root, "service");

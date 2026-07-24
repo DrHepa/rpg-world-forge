@@ -2160,7 +2160,8 @@ class M6GameConsumerTests(unittest.TestCase):
             path = Path(directory) / "resource.glb"
             payload = b"glTF\x1a\r\nbinary"
             path.write_bytes(payload)
-            binary_flag = 0x8000
+            host_binary_flag = getattr(os, "O_BINARY", 0)
+            binary_flag = host_binary_flag or 0x8000
             opened_flags: list[int] = []
             original_open = os.open
 
@@ -2168,7 +2169,7 @@ class M6GameConsumerTests(unittest.TestCase):
                 opened_flags.append(flags)
                 return original_open(
                     target,
-                    flags & ~binary_flag,
+                    flags if host_binary_flag else flags & ~binary_flag,
                     *args,
                     **kwargs,
                 )

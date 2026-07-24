@@ -1162,6 +1162,7 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
         unsupported = self.work / f"unsupported-{uuid.uuid4().hex}"
         with (
             patch.object(composed_module.sys, "platform", "darwin"),
+            patch.object(composed_module.os, "name", "posix"),
             self.assertRaisesRegex(ComposedBundleError, "Linux and Windows"),
         ):
             build_composed_runtime_bundle(
@@ -1287,6 +1288,10 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
     def test_stage_parent_flush_failure_blocks_ready_and_preserves_stage(self) -> None:
         destination = self.work / f"stage-parent-fsync-{uuid.uuid4().hex}"
         flush_directory = composed_module._fsync_directory  # noqa: SLF001
+        parent_identity = directory_identity(
+            destination.parent,
+            context="stage parent fixture",
+        )
         injected = False
 
         def fail_completed_stage_parent(path: Path) -> None:
@@ -1294,7 +1299,8 @@ class ComposedRuntimeBundleTests(unittest.TestCase):
             stages = tuple(destination.parent.glob(f".{destination.name}.composed-*"))
             if (
                 not injected
-                and path == destination.parent
+                and directory_identity(path, context="stage parent flush fixture")
+                == parent_identity
                 and any((stage / COMPOSED_BUNDLE_MANIFEST).is_file() for stage in stages)
             ):
                 injected = True

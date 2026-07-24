@@ -1,4 +1,11 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -127,7 +134,9 @@ function forgeService(workspaces: Record<string, string>): ForgeServiceClient {
 }
 
 async function createFixture() {
-  const root = await mkdtemp(path.join(os.tmpdir(), "rwf-codex-bridge-"));
+  const root = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "rwf-codex-bridge-")),
+  );
   roots.push(root);
   const worldOne = path.join(root, "world-one");
   const worldTwo = path.join(root, "world-two");

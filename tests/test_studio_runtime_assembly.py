@@ -1765,6 +1765,33 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         forest.mkdir()
         (forest / "first").mkdir()
         (forest / "second").mkdir()
+        if assembly._is_windows_native_host():
+            scanned_handles: list[int] = []
+            original_directory_entries = assembly._WindowsDirectoryChain.directory_entries
+
+            def tracked_directory_entries(
+                guard: assembly._WindowsDirectoryChain,
+                handle: int,
+            ) -> tuple[assembly._WindowsDirectoryEntry, ...]:
+                scanned_handles.append(handle)
+                return original_directory_entries(guard, handle)
+
+            with (
+                mock.patch.object(
+                    assembly._WindowsDirectoryChain,
+                    "directory_entries",
+                    new=tracked_directory_entries,
+                ),
+                mock.patch.object(assembly, "MAX_OUTPUT_FILES", 1),
+                self.assertRaisesRegex(
+                    assembly.RuntimeAssemblyError,
+                    "output_limit_exceeded",
+                ),
+            ):
+                assembly._scan_tree(forest)
+            self.assertEqual(1, len(scanned_handles))
+            return
+
         scanned: list[Path] = []
         original_scandir = os.scandir
 
