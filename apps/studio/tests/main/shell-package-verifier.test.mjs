@@ -21,6 +21,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  asarLookupPath,
+  enumerateRawAsarEntries,
   SHELL_MANIFEST_PATH,
   ShellPackageError,
   staticFuseFixture,
@@ -54,6 +56,16 @@ const writeShellPackageManifest = (options) =>
     ...options,
     pythonExecutable: testPython,
   });
+
+function shellPackageFailure(operation) {
+  try {
+    operation();
+  } catch (error) {
+    expect(error).toBeInstanceOf(ShellPackageError);
+    return error;
+  }
+  throw new Error("expected shell package verification to fail");
+}
 
 let temporaryRoot;
 const bases = new Map();
@@ -190,6 +202,132 @@ afterAll(async () => {
   if (temporaryRoot) {
     await rm(temporaryRoot, { force: true, recursive: true });
   }
+});
+
+describe("raw ASAR header enumeration", () => {
+  it("builds deterministic slash paths from literal nested keys", () => {
+    expect(
+      enumerateRawAsarEntries({
+        files: {
+          "z.txt": { size: 3 },
+          assets: {
+            files: {
+              "two.txt": { size: 2 },
+              "one.txt": { size: 1 },
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      directories: ["assets"],
+      files: [
+        { path: "assets/one.txt", size: 1 },
+        { path: "assets/two.txt", size: 2 },
+        { path: "z.txt", size: 3 },
+      ],
+    });
+  });
+
+  it("adapts canonical paths only at the host-sensitive lookup boundary", () => {
+    const canonical = enumerateRawAsarEntries({
+      files: {
+        "dist-electron": {
+          files: {
+            main: {
+              files: {
+                "index.cjs": { size: 1 },
+              },
+            },
+          },
+        },
+      },
+    }).files[0].path;
+    expect(canonical).toBe("dist-electron/main/index.cjs");
+    expect(asarLookupPath(canonical, path.posix)).toBe(canonical);
+
+    const windowsLookup = asarLookupPath(canonical, path.win32);
+    expect(windowsLookup).toBe("dist-electron\\main\\index.cjs");
+    expect(path.win32.dirname(windowsLookup).split(path.win32.sep)).toEqual([
+      "dist-electron",
+      "main",
+    ]);
+    expect(path.win32.basename(windowsLookup)).toBe("index.cjs");
+  });
+
+  it("rejects literal backslash keys instead of normalizing them", () => {
+    const error = shellPackageFailure(() =>
+      enumerateRawAsarEntries({
+        files: {
+          "dist\\renderer": { size: 1 },
+        },
+      }),
+    );
+    expect(error.code).toBe("nonportable_package_path");
+  });
+
+  it("rejects case-insensitive aliases from literal header keys", () => {
+    const error = shellPackageFailure(() =>
+      enumerateRawAsarEntries({
+        files: {
+          Assets: { files: {} },
+          assets: { files: {} },
+        },
+      }),
+    );
+    expect(error.code).toBe("app_asar_path_alias");
+  });
+
+  it("preserves link and unpacked-entry rejection", () => {
+    for (const entry of [{ link: "target.txt" }, { size: 1, unpacked: true }]) {
+      const error = shellPackageFailure(() =>
+        enumerateRawAsarEntries({ files: { entry } }),
+      );
+      expect(error.code).toBe("app_asar_non_regular_entry");
+    }
+  });
+
+  it("enforces the existing tree and file budgets", () => {
+    let nested = { "payload.bin": { size: 0 } };
+    for (let depth = 0; depth < 34; depth += 1) {
+      nested = { [`d${String(depth)}`]: { files: nested } };
+    }
+    expect(
+      shellPackageFailure(() =>
+        enumerateRawAsarEntries({ files: nested }),
+      ).code,
+    ).toBe("package_tree_too_deep");
+
+    expect(
+      shellPackageFailure(() =>
+        enumerateRawAsarEntries({
+          files: { "oversized.bin": { size: 1_073_741_825 } },
+        }),
+      ).code,
+    ).toBe("package_file_too_large");
+
+    expect(
+      shellPackageFailure(() =>
+        enumerateRawAsarEntries({
+          files: {
+            "one.bin": { size: 1_073_741_824 },
+            "two.bin": { size: 1_073_741_824 },
+            "three.bin": { size: 1_073_741_824 },
+            "four.bin": { size: 1 },
+          },
+        }),
+      ).code,
+    ).toBe("package_tree_too_large");
+
+    const tooManyFiles = {};
+    for (let index = 0; index < 20_001; index += 1) {
+      tooManyFiles[`f${String(index).padStart(5, "0")}`] = { size: 0 };
+    }
+    expect(
+      shellPackageFailure(() =>
+        enumerateRawAsarEntries({ files: tooManyFiles }),
+      ).code,
+    ).toBe("package_tree_too_large");
+  });
 });
 
 describe(

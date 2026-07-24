@@ -940,20 +940,35 @@ function expectedAsarDirectories(filePaths) {
   return [...directories].sort(compareUtf8);
 }
 
-function inspectAsar(record, sourceRecords) {
-  const archivePath = record.snapshotPath ?? procPath(record.handle);
-  let listed;
-  try {
-    listed = asar.listPackage(archivePath);
-  } catch {
+function isRawAsarRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function enumerateRawAsarEntries(header) {
+  if (
+    !isRawAsarRecord(header) ||
+    !Object.hasOwn(header, "files") ||
+    !isRawAsarRecord(header.files)
+  ) {
     fail("app_asar_invalid");
   }
   const aliases = new Map();
   const files = [];
   const directories = [];
-  try {
-    for (const raw of listed) {
-      const relative = raw.startsWith("/") ? raw.slice(1) : raw;
+  let nodes = 0;
+  let totalBytes = 0;
+
+  function visit(entries, prefix, depth) {
+    if (depth > MAX_DEPTH) {
+      fail("package_tree_too_deep");
+    }
+    for (const [literal, entry] of Object.entries(entries)) {
+      nodes += 1;
+      if (nodes > MAX_NODES) {
+        fail("package_tree_too_large");
+      }
+      validatePortableSegment(literal);
+      const relative = prefix ? `${prefix}/${literal}` : literal;
       validatePortablePath(relative);
       const alias = relative.toLowerCase();
       const previous = aliases.get(alias);
@@ -961,20 +976,66 @@ function inspectAsar(record, sourceRecords) {
         fail("app_asar_path_alias");
       }
       aliases.set(alias, relative);
-      const stat = asar.statFile(archivePath, relative, false);
-      if (stat.link !== undefined || stat.unpacked === true) {
+
+      if (!isRawAsarRecord(entry)) {
         fail("app_asar_non_regular_entry");
       }
-      if (typeof stat.size === "number") {
-        files.push({ path: relative, size: stat.size });
-      } else if (!stat.files || typeof stat.files !== "object") {
+      if (entry.link !== undefined || entry.unpacked === true) {
         fail("app_asar_non_regular_entry");
-      } else {
+      }
+      const hasFiles = Object.hasOwn(entry, "files");
+      const hasSize = Object.hasOwn(entry, "size");
+      if (hasFiles === hasSize) {
+        fail("app_asar_non_regular_entry");
+      }
+      if (hasFiles) {
+        if (!isRawAsarRecord(entry.files)) {
+          fail("app_asar_non_regular_entry");
+        }
         directories.push(relative);
+        visit(entry.files, relative, depth + 1);
+        continue;
       }
+      if (!Number.isSafeInteger(entry.size) || entry.size < 0) {
+        fail("app_asar_invalid");
+      }
+      if (entry.size > MAX_FILE_BYTES) {
+        fail("package_file_too_large");
+      }
+      totalBytes += entry.size;
+      if (totalBytes > MAX_TOTAL_BYTES) {
+        fail("package_tree_too_large");
+      }
+      files.push({ path: relative, size: entry.size });
     }
-    files.sort((left, right) => compareUtf8(left.path, right.path));
-    directories.sort(compareUtf8);
+  }
+
+  visit(header.files, "", 0);
+  files.sort((left, right) => compareUtf8(left.path, right.path));
+  directories.sort(compareUtf8);
+  return { directories, files };
+}
+
+export function asarLookupPath(relative, pathFlavor = path) {
+  validatePortablePath(relative);
+  // @electron/asar splits nested lookup paths with the host path separator.
+  return relative.split("/").join(pathFlavor.sep);
+}
+
+function extractAsarFile(archivePath, relative) {
+  return asar.extractFile(archivePath, asarLookupPath(relative), false);
+}
+
+function inspectAsar(record, sourceRecords) {
+  const archivePath = record.snapshotPath ?? procPath(record.handle);
+  let rawHeader;
+  try {
+    rawHeader = asar.getRawHeader(archivePath);
+  } catch {
+    fail("app_asar_invalid");
+  }
+  try {
+    const { directories, files } = enumerateRawAsarEntries(rawHeader.header);
     const sourceByPath = new Map(
       sourceRecords.map((source) => [source.relative, source]),
     );
@@ -999,9 +1060,7 @@ function inspectAsar(record, sourceRecords) {
       fail("app_asar_inventory_mismatch");
     }
     for (const [relative, source] of sourceByPath) {
-      const payload = Buffer.from(
-        asar.extractFile(archivePath, relative, false),
-      );
+      const payload = Buffer.from(extractAsarFile(archivePath, relative));
       if (
         payload.length !== source.size ||
         createHash("sha256").update(payload).digest("hex") !== source.sha256
@@ -1010,7 +1069,7 @@ function inspectAsar(record, sourceRecords) {
       }
     }
     const packageBytes = Buffer.from(
-      asar.extractFile(archivePath, "package.json", false),
+      extractAsarFile(archivePath, "package.json"),
     );
     const packageDocument = parseJson(packageBytes, "app_asar_package_invalid");
     if (
