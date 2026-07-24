@@ -127,6 +127,7 @@ class _File:
     sha256: str
     size: int
     snapshot_name: str | None = None
+    retained_writer: bool = False
 
 
 class _WindowsReader:
@@ -137,6 +138,7 @@ class _WindowsReader:
     FILE_WRITE_ATTRIBUTES = 0x0100
     SYNCHRONIZE = 0x00100000
     FILE_SHARE_READ = 0x00000001
+    FILE_SHARE_WRITE = 0x00000002
     FILE_OPEN = 0x00000001
     FILE_CREATE = 0x00000002
     FILE_WRITE_THROUGH = 0x00000002
@@ -200,6 +202,7 @@ class _WindowsReader:
         *,
         create: bool,
         delete_capable: bool = False,
+        share_write: bool = False,
         field: str,
     ) -> int:
         _portable_segment(name)
@@ -229,6 +232,11 @@ class _WindowsReader:
             | (self.GENERIC_WRITE | self.FILE_WRITE_ATTRIBUTES if create else 0)
             | (self.DELETE if delete_capable else 0)
         )
+        share = self.FILE_SHARE_READ
+        if not create and share_write:
+            # The owned-manifest verification reader must coexist with the
+            # retained creator. The creator still denies every later writer.
+            share |= self.FILE_SHARE_WRITE
         status = int(
             self.api.NtCreateFile(
                 self.ctypes.byref(output),
@@ -237,7 +245,7 @@ class _WindowsReader:
                 self.ctypes.byref(io_status),
                 None,
                 self.FILE_ATTRIBUTE_NORMAL,
-                self.FILE_SHARE_READ,
+                share,
                 self.FILE_CREATE if create else self.FILE_OPEN,
                 self.FILE_NON_DIRECTORY_FILE
                 | self.FILE_OPEN_REPARSE_POINT
@@ -266,8 +274,14 @@ class _WindowsReader:
             if not retained:
                 self.api.close(handle)
 
-    def open(self, parent: int, name: str) -> int:
-        return self._relative(parent, name, create=False, field="package")
+    def open(self, parent: int, name: str, *, share_write: bool = False) -> int:
+        return self._relative(
+            parent,
+            name,
+            create=False,
+            share_write=share_write,
+            field="package",
+        )
 
     def create(self, parent: int, name: str) -> int:
         return self._relative(parent, name, create=True, field="package")
@@ -512,6 +526,7 @@ class _WindowsPinnedTree:
             relative=SHELL_MANIFEST_PATH,
             sha256=hashlib.sha256(payload).hexdigest(),
             size=len(payload),
+            retained_writer=True,
         )
         self.files[SHELL_MANIFEST_PATH] = record
         resources.children = tuple(
@@ -568,7 +583,11 @@ class _WindowsPinnedTree:
                 or self._hash(record) != record.sha256
             ):
                 _fail("package_entry_replaced")
-            reopened = self.reader.open(record.parent.handle, record.name)
+            reopened = self.reader.open(
+                record.parent.handle,
+                record.name,
+                share_write=record.retained_writer,
+            )
             try:
                 if self.api.state(reopened, "package").identity != record.identity:
                     _fail("package_entry_replaced")
