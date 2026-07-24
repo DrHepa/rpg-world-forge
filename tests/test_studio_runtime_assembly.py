@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import gzip
 import hashlib
 import io
@@ -8,6 +9,7 @@ import json
 import os
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import tarfile
@@ -25,6 +27,7 @@ from scripts.studio_runtime_sources import REQUIRED_BLOCKERS
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DATE_EPOCH = 1_700_000_000
+_WINDOWS_FILE_ID_BOTH_DIRECTORY_PREFIX = struct.Struct("<IIqqqqqqIIIBx24s2xQ")
 
 
 def _sha256(payload: bytes) -> str:
@@ -54,6 +57,11 @@ def _write(path: Path, payload: bytes, mode: int = 0o644) -> None:
 
 def _forge_source(root: Path) -> Path:
     _write(root / "src/isoworld/__init__.py", b'"""Synthetic isoworld."""\n')
+    _write(root / "src/isoworld/content/__init__.py", b'"""Synthetic content."""\n')
+    _write(
+        root / "src/isoworld/content/publication_journal.py",
+        b'"""Synthetic publication journal."""\n',
+    )
     _write(root / "src/isoworld/runtime_io.py", b"VALUE = 1\n")
     _write(root / "src/worldforge/__init__.py", b'"""Synthetic worldforge."""\n')
     _write(root / "src/worldforge/studio/__init__.py", b"")
@@ -255,6 +263,84 @@ class _FakeWindowsReadChain:
 
     def close(self) -> None:
         self.closed = True
+
+
+def _windows_directory_page(
+    rows: tuple[tuple[str, bool, int], ...],
+    *,
+    first_next_offset: int | None = None,
+) -> bytes:
+    encoded: list[bytes] = []
+    for index, (name, is_directory, file_id) in enumerate(rows):
+        name_bytes = name.encode("utf-16-le")
+        size = _WINDOWS_FILE_ID_BOTH_DIRECTORY_PREFIX.size + len(name_bytes)
+        aligned = (size + 7) & ~7
+        next_offset = aligned if index + 1 < len(rows) else 0
+        if index == 0 and first_next_offset is not None:
+            next_offset = first_next_offset
+        attributes = (
+            assembly._WindowsOutputApi.FILE_ATTRIBUTE_DIRECTORY
+            if is_directory
+            else assembly._WindowsOutputApi.FILE_ATTRIBUTE_NORMAL
+        )
+        header = _WINDOWS_FILE_ID_BOTH_DIRECTORY_PREFIX.pack(
+            next_offset,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            attributes,
+            len(name_bytes),
+            0,
+            0,
+            b"",
+            file_id,
+        )
+        encoded.append(header + name_bytes + b"\x00" * (aligned - size))
+    return b"".join(encoded)
+
+
+def _windows_directory_query_api(
+    pages: list[tuple[int, bytes]],
+) -> tuple[assembly._WindowsOutputApi, list[int]]:
+    api = object.__new__(assembly._WindowsOutputApi)
+    api.ctypes = ctypes
+    api.wintypes = SimpleNamespace(HANDLE=lambda value: value)
+
+    class IoStatusBlock(ctypes.Structure):
+        _fields_ = [
+            ("Status", ctypes.c_void_p),
+            ("Information", ctypes.c_size_t),
+        ]
+
+    api.IoStatusBlock = IoStatusBlock
+    calls: list[int] = []
+
+    def query(
+        _handle: object,
+        _event: object,
+        _apc: object,
+        _context: object,
+        io_status: object,
+        buffer: object,
+        _length: int,
+        _information_class: int,
+        _single_entry: bool,
+        _name: object,
+        _restart: bool,
+    ) -> int:
+        calls.append(len(calls) + 1)
+        status, payload = pages.pop(0)
+        if payload:
+            ctypes.memmove(buffer, payload, len(payload))
+        io_status._obj.Information = len(payload)
+        return status
+
+    api.NtQueryDirectoryFile = query
+    return api, calls
 
 
 class StudioRuntimeAssemblyTest(unittest.TestCase):
@@ -701,7 +787,7 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             )
             + 3
         )
-        self.assertEqual(exact_inventory, 5_557)
+        self.assertEqual(exact_inventory, 5_558)
         self.assertLessEqual(
             exact_inventory * assembly._PACKAGE_INVENTORY_ENTRY_JSON_NODES
             + assembly._PACKAGE_NON_INVENTORY_MAX_JSON_NODES,
@@ -712,6 +798,28 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             + assembly._PACKAGE_NON_INVENTORY_MAX_CANONICAL_BYTES,
             assembly.MAX_PACKAGE_MANIFEST_BYTES,
         )
+
+    def test_committed_publication_journal_is_collected_once_for_every_target(
+        self,
+    ) -> None:
+        source_payload = (ROOT / "src/isoworld/content/publication_journal.py").read_bytes()
+        for target_id in ("linux-x64", "win32-x64"):
+            with self.subTest(target_id=target_id):
+                site_packages = (
+                    f"runtime/python/{target_id}/Lib/site-packages"
+                    if target_id == "win32-x64"
+                    else f"runtime/python/{target_id}/lib/python3.12/site-packages"
+                )
+                expected_path = f"{site_packages}/isoworld/content/publication_journal.py"
+                files = assembly._source_files(
+                    ROOT,
+                    target_id,
+                    assembly._PackageOutputBudget(),
+                )
+                matches = [item for item in files if item.path == expected_path]
+                self.assertEqual(len(matches), 1)
+                self.assertEqual(matches[0].payload, source_payload)
+                self.assertEqual(matches[0].mode, 0o644)
 
     def test_assembler_preflights_manifest_readability_before_output_creation(
         self,
@@ -734,45 +842,90 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         output = self.root / "source-count-overflow-output"
         source_directory = self.source / "src/isoworld"
         regular_info = (source_directory / "__init__.py").lstat()
-        original_scandir = assembly.os.scandir
-        original_read = assembly._read_pinned_regular
-        fake_stats = 0
+        original_entries = assembly._PosixSourceGuard.directory_entries
+        original_retain = assembly._PosixSourceGuard.retain_regular
+        original_read = assembly._PosixSourceGuard.read_regular
+        fake_authorizations = 0
         fake_reads = 0
 
-        def fake_stat(*, follow_symlinks: bool = True) -> os.stat_result:
-            nonlocal fake_stats
-            self.assertFalse(follow_symlinks)
-            fake_stats += 1
-            return regular_info
+        def directory_entries(
+            guard: assembly._PosixSourceGuard,
+            descriptor: int,
+        ) -> tuple[assembly._PosixDirectoryEntry, ...]:
+            rows = original_entries(guard, descriptor)
+            descriptor_path = Path(f"/proc/self/fd/{descriptor}").resolve()
+            if descriptor_path == source_directory:
+                return (
+                    *rows,
+                    *(
+                        assembly._PosixDirectoryEntry(
+                            name=f"mocked-{index:05d}.py",
+                            is_directory=False,
+                            is_reparse=False,
+                            identity=(regular_info.st_dev, regular_info.st_ino + index + 1),
+                        )
+                        for index in range(16_389)
+                    ),
+                )
+            return rows
 
-        def iter_entries(path: os.PathLike[str] | str):
-            with original_scandir(path) as entries:
-                yield from entries
-            if Path(path) == source_directory:
-                for index in range(16_389):
-                    name = f"mocked-{index:05d}.py"
-                    yield SimpleNamespace(
-                        name=name,
-                        path=os.fspath(source_directory / name),
-                        stat=fake_stat,
-                    )
+        def retain_regular(
+            guard: assembly._PosixSourceGuard,
+            parent: int,
+            name: str,
+            logical_path: Path,
+            **kwargs: object,
+        ) -> assembly._PosixRetainedRegular:
+            nonlocal fake_authorizations
+            if name.startswith("mocked-"):
+                fake_authorizations += 1
+                return assembly._PosixRetainedRegular(
+                    logical_path=logical_path,
+                    parent=parent,
+                    name=name,
+                    handle=-fake_authorizations,
+                    state=assembly._FileState(
+                        identity=(regular_info.st_dev, regular_info.st_ino + fake_authorizations),
+                        size=0,
+                        mtime_ns=regular_info.st_mtime_ns,
+                        ctime_ns=regular_info.st_ctime_ns,
+                        mode_type=stat.S_IFREG,
+                        nlink=1,
+                    ),
+                )
+            return original_retain(
+                guard,
+                parent,
+                name,
+                logical_path,
+                **kwargs,
+            )
 
-        def fake_scandir(path: os.PathLike[str] | str):
-            return contextlib.closing(iter_entries(path))
-
-        def tracked_read(path: Path, **kwargs: object) -> bytes:
+        def tracked_read(
+            guard: assembly._PosixSourceGuard,
+            opened: assembly._PosixRetainedRegular,
+        ) -> bytes:
             nonlocal fake_reads
-            if path.parent == source_directory and path.name.startswith("mocked-"):
+            if opened.name.startswith("mocked-"):
                 fake_reads += 1
                 return b""
-            return original_read(path, **kwargs)
+            return original_read(guard, opened)
 
         with (
-            mock.patch.object(assembly.os, "scandir", side_effect=fake_scandir),
             mock.patch.object(
-                assembly,
-                "_read_pinned_regular",
-                side_effect=tracked_read,
+                assembly._PosixSourceGuard,
+                "directory_entries",
+                new=directory_entries,
+            ),
+            mock.patch.object(
+                assembly._PosixSourceGuard,
+                "retain_regular",
+                new=retain_regular,
+            ),
+            mock.patch.object(
+                assembly._PosixSourceGuard,
+                "read_regular",
+                new=tracked_read,
             ),
             self.assertRaisesRegex(
                 assembly.RuntimeAssemblyError,
@@ -781,8 +934,8 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         ):
             assembly.assemble_runtime_resources(plan, output)
         self.assertFalse(output.exists())
-        self.assertLess(fake_reads, 16_389)
-        self.assertEqual(fake_stats, fake_reads + 1)
+        self.assertEqual(fake_reads, 0)
+        self.assertLess(fake_authorizations, 16_389)
 
     def test_source_collection_honors_exact_remaining_package_bounds(
         self,
@@ -1341,6 +1494,20 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                     else output / f"runtime/python/{target_id}/lib/python3.12/site-packages"
                 )
                 self.assertTrue((site_packages / "isoworld/__init__.py").is_file())
+                publication_journal = site_packages / "isoworld/content/publication_journal.py"
+                self.assertEqual(
+                    publication_journal.read_bytes(),
+                    b'"""Synthetic publication journal."""\n',
+                )
+                publication_path = publication_journal.relative_to(output).as_posix()
+                publication_entries = [
+                    entry for entry in manifest["inventory"] if entry["path"] == publication_path
+                ]
+                self.assertEqual(len(publication_entries), 1)
+                self.assertEqual(
+                    publication_entries[0]["sha256"],
+                    _sha256(publication_journal.read_bytes()),
+                )
                 self.assertTrue((site_packages / "worldforge/studio/__main__.py").is_file())
                 self.assertTrue(
                     (
@@ -2069,73 +2236,287 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                 self.assertEqual(caught.exception.code, expected)
                 api.close.assert_not_called()
 
+    def test_windows_directory_entries_bound_paginated_rows_including_dots(
+        self,
+    ) -> None:
+        self.assertEqual(104, _WINDOWS_FILE_ID_BOTH_DIRECTORY_PREFIX.size)
+        self.assertEqual(
+            _WINDOWS_FILE_ID_BOTH_DIRECTORY_PREFIX.size,
+            assembly._WindowsOutputApi.DIRECTORY_INFORMATION_HEADER.size,
+        )
+        pages = [
+            (
+                0,
+                _windows_directory_page(
+                    (
+                        (".", True, 1),
+                        ("..", True, 2),
+                    )
+                ),
+            ),
+            (
+                0,
+                _windows_directory_page(
+                    (
+                        ("alpha.py", False, 3),
+                        ("nested", True, 4),
+                    )
+                ),
+            ),
+            (assembly._WindowsOutputApi.STATUS_NO_MORE_FILES, b""),
+        ]
+        api, calls = _windows_directory_query_api(pages)
+        with mock.patch.object(assembly, "MAX_OUTPUT_NODES", 4):
+            entries = api.directory_entries(7, "forge_source_root")
+        self.assertEqual(
+            entries,
+            (
+                assembly._WindowsDirectoryEntry("alpha.py", False, False, 3),
+                assembly._WindowsDirectoryEntry("nested", True, False, 4),
+            ),
+        )
+        self.assertEqual([1, 2, 3], calls)
+
+    def test_windows_directory_entries_reject_paginated_row_overflow(self) -> None:
+        pages = [
+            (
+                0,
+                _windows_directory_page(
+                    (
+                        (".", True, 1),
+                        ("..", True, 2),
+                    )
+                ),
+            ),
+            (
+                0,
+                _windows_directory_page(
+                    (
+                        ("alpha.py", False, 3),
+                        ("beta.py", False, 4),
+                        ("overflow.py", False, 5),
+                    )
+                ),
+            ),
+        ]
+        api, calls = _windows_directory_query_api(pages)
+        with (
+            mock.patch.object(assembly, "MAX_OUTPUT_NODES", 4),
+            self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+        ):
+            api.directory_entries(7, "forge_source_root")
+        self.assertEqual("output_limit_exceeded", caught.exception.code)
+        self.assertEqual([1, 2], calls)
+
+    def test_windows_directory_entries_reject_nonprogress_and_bad_offsets(
+        self,
+    ) -> None:
+        for pages in (
+            [
+                (0, _windows_directory_page((("alpha.py", False, 3),))),
+                (0, _windows_directory_page((("alpha.py", False, 3),))),
+            ],
+            [
+                (
+                    0,
+                    _windows_directory_page(
+                        (
+                            ("alpha.py", False, 3),
+                            ("beta.py", False, 4),
+                        ),
+                        first_next_offset=8,
+                    ),
+                ),
+            ],
+            [
+                (
+                    0,
+                    _windows_directory_page(
+                        (
+                            ("alpha.py", False, 3),
+                            ("hidden.py", False, 4),
+                        ),
+                        first_next_offset=0,
+                    ),
+                ),
+            ],
+            [(0, b"")],
+        ):
+            with self.subTest(pages=len(pages)):
+                api, calls = _windows_directory_query_api(pages)
+                with self.assertRaises(assembly.RuntimeAssemblyError) as caught:
+                    api.directory_entries(7, "forge_source_root")
+                self.assertEqual("forge_material_unsafe", caught.exception.code)
+                self.assertGreaterEqual(len(calls), 1)
+
+    def test_windows_final_membership_recheck_rejects_late_and_portable_aliases(
+        self,
+    ) -> None:
+        relative = PurePosixPath("src/isoworld")
+        captured = (assembly._WindowsDirectoryEntry("__init__.py", False, False, 11),)
+        late_guard = SimpleNamespace(
+            directory_entries=mock.Mock(
+                return_value=(
+                    *captured,
+                    assembly._WindowsDirectoryEntry("late.py", False, False, 12),
+                )
+            )
+        )
+        with self.assertRaises(assembly.RuntimeAssemblyError) as caught:
+            assembly._require_windows_source_membership(
+                late_guard,
+                {relative: 7},
+                {relative: captured},
+            )
+        self.assertEqual("filesystem_identity_changed", caught.exception.code)
+        late_guard.directory_entries.assert_called_once_with(7)
+
+        aliases = (
+            assembly._WindowsDirectoryEntry("asset.py", False, False, 21),
+            assembly._WindowsDirectoryEntry("ASSET.PY", False, False, 22),
+        )
+        alias_guard = SimpleNamespace(
+            directory_entries=mock.Mock(return_value=aliases),
+        )
+        with self.assertRaises(assembly.RuntimeAssemblyError) as caught:
+            assembly._require_windows_source_membership(
+                alias_guard,
+                {relative: 9},
+                {relative: assembly._canonical_windows_directory_entries(aliases)},
+            )
+        self.assertEqual("forge_material_collision", caught.exception.code)
+
+    @unittest.skipUnless(os.name == "posix", "requires descriptor-relative POSIX reads")
+    def test_posix_final_membership_recheck_rejects_late_addition(self) -> None:
+        late = self.source / "src/isoworld/late.py"
+        fired = False
+
+        def add_late_file(path: Path, phase: str) -> None:
+            nonlocal fired
+            if (
+                not fired
+                and path == self.source / "THIRD_PARTY_NOTICES.md"
+                and phase == "before_recheck"
+            ):
+                fired = True
+                _write(late, b"LATE = True\n")
+
+        assembly._READ_TEST_HOOK = add_late_file
+        with self.assertRaises(assembly.RuntimeAssemblyError) as caught:
+            assembly._source_files(
+                self.source,
+                "linux-x64",
+                assembly._PackageOutputBudget(),
+            )
+        assembly._READ_TEST_HOOK = None
+        self.assertTrue(fired)
+        self.assertEqual("filesystem_identity_changed", caught.exception.code)
+
+    def test_source_cleanup_preserves_primary_and_records_cleanup_failure(self) -> None:
+        primary = assembly.RuntimeAssemblyError(
+            "filesystem_identity_changed",
+            "forge_source_root",
+        )
+
+        class CleanupFailure(Exception):
+            pass
+
+        class Guard:
+            leaf = 7
+
+            def require_bindings(self) -> None:
+                raise primary
+
+            def close(self) -> None:
+                raise CleanupFailure("close failed")
+
+        with (
+            mock.patch.object(assembly, "_is_windows_native_host", return_value=True),
+            mock.patch.object(assembly, "_WindowsDirectoryChain", return_value=Guard()),
+            self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+        ):
+            assembly._source_files(
+                self.source,
+                "win32-x64",
+                assembly._PackageOutputBudget(),
+            )
+
+        self.assertIs(primary, caught.exception)
+        self.assertTrue(any("CleanupFailure: close failed" in note for note in primary.__notes__))
+
     def test_windows_source_enumeration_defers_regular_metadata_to_native_reads(
         self,
     ) -> None:
         original_scandir = assembly.os.scandir
         read_paths: list[Path] = []
 
-        class EnumeratedEntry:
-            def __init__(self, entry: os.DirEntry[str]) -> None:
-                self.name = entry.name
-                self.path = entry.path
-                self._entry = entry
+        class DirectoryGuard:
+            def __init__(self, path: Path) -> None:
+                self.leaf = 100
+                self._next_handle = 101
+                self.handle_paths = {self.leaf: path}
+                self.regular_paths: dict[int, Path] = {}
 
-            def stat(self, *, follow_symlinks: bool = True) -> object:
-                self.assert_no_follow(follow_symlinks)
-                info = self._entry.stat(follow_symlinks=False)
-                return SimpleNamespace(
-                    st_mode=info.st_mode,
-                    st_nlink=99,
-                    st_size=info.st_size,
-                    st_file_attributes=getattr(info, "st_file_attributes", 0),
+            def retain_directory(
+                self,
+                parent: int,
+                name: str,
+                **_kwargs: object,
+            ) -> int:
+                handle = self._next_handle
+                self._next_handle += 1
+                self.handle_paths[handle] = self.handle_paths[parent] / name
+                return handle
+
+            def directory_entries(
+                self,
+                handle: int,
+            ) -> tuple[assembly._WindowsDirectoryEntry, ...]:
+                with original_scandir(self.handle_paths[handle]) as entries:
+                    return tuple(
+                        assembly._WindowsDirectoryEntry(
+                            entry.name,
+                            entry.is_dir(follow_symlinks=False),
+                            entry.is_symlink(),
+                            entry.inode(),
+                        )
+                        for entry in entries
+                    )
+
+            def retain_regular(
+                self,
+                parent: int,
+                name: str,
+                logical_path: Path,
+                **_kwargs: object,
+            ) -> assembly._WindowsRetainedRegular:
+                path = self.handle_paths[parent] / name
+                handle = self._next_handle
+                self._next_handle += 1
+                self.regular_paths[handle] = path
+                return assembly._WindowsRetainedRegular(
+                    logical_path,
+                    parent,
+                    name,
+                    handle,
+                    assembly._WindowsHandleState(
+                        (5, handle),
+                        path.stat().st_size,
+                        1,
+                        False,
+                        False,
+                    ),
                 )
 
-            @staticmethod
-            def assert_no_follow(follow_symlinks: bool) -> None:
-                if follow_symlinks:
-                    raise AssertionError("enumeration followed a link")
+            def read_regular(
+                self,
+                opened: assembly._WindowsRetainedRegular,
+                **_kwargs: object,
+            ) -> bytes:
+                path = self.regular_paths[opened.handle]
+                read_paths.append(path)
+                return path.read_bytes()
 
-        def enumerated_scandir(path: os.PathLike[str] | str) -> object:
-            with original_scandir(path) as entries:
-                wrapped = [EnumeratedEntry(entry) for entry in entries]
-            return contextlib.nullcontext(iter(wrapped))
-
-        def native_read(path: Path, **kwargs: object) -> bytes:
-            read_paths.append(path)
-            payload = path.read_bytes()
-            size_guard = kwargs.get("size_guard")
-            self.assertTrue(callable(size_guard))
-            assert callable(size_guard)
-            size_guard(len(payload))
-            return payload
-
-        def native_open(
-            path: Path,
-        ) -> tuple[Path, object, int, assembly._WindowsHandleState]:
-            payload = path.read_bytes()
-            return (
-                path,
-                object(),
-                1,
-                assembly._WindowsHandleState(
-                    identity=(5, len(read_paths) + 1),
-                    size=len(payload),
-                    nlink=1,
-                    is_directory=False,
-                    is_reparse=False,
-                ),
-            )
-
-        def native_open_read(opened: tuple[object, ...]) -> bytes:
-            path = opened[0]
-            assert isinstance(path, Path)
-            return native_read(
-                path,
-                size_guard=lambda _size: None,
-            )
-
-        class DirectoryGuard:
             def require_bindings(self) -> None:
                 return None
 
@@ -2147,27 +2528,42 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             mock.patch.object(
                 assembly,
                 "_WindowsDirectoryChain",
-                side_effect=lambda *_args, **_kwargs: DirectoryGuard(),
+                side_effect=lambda path, *_args, **_kwargs: DirectoryGuard(path),
             ),
-            mock.patch.object(assembly.os, "scandir", side_effect=enumerated_scandir),
+            mock.patch.object(
+                assembly.os,
+                "scandir",
+                side_effect=AssertionError("path-based Windows enumeration"),
+            ),
+            mock.patch.object(
+                assembly,
+                "_directory_chain",
+                side_effect=AssertionError("path-based Windows root metadata"),
+            ),
+            mock.patch.object(
+                assembly,
+                "_require_directory_chain",
+                side_effect=AssertionError("path-based Windows root revalidation"),
+            ),
             mock.patch.object(
                 assembly,
                 "_read_pinned_regular_windows",
-                side_effect=native_read,
+                side_effect=AssertionError("independent absolute Windows read"),
             ),
             mock.patch.object(
                 assembly,
                 "_open_forge_material_windows",
-                side_effect=native_open,
+                side_effect=AssertionError("independent absolute Windows open"),
             ),
             mock.patch.object(
                 assembly,
                 "_read_open_pinned_regular_windows",
-                side_effect=native_open_read,
+                side_effect=AssertionError("independent absolute Windows read"),
             ),
             mock.patch.object(
                 assembly,
-                "_close_open_pinned_regular_windows",
+                "_read_forge_material_windows",
+                side_effect=AssertionError("independent absolute Windows read"),
             ),
         ):
             files = assembly._source_files(
@@ -2186,6 +2582,134 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         self.assertIn(self.source / "LICENSE", read_paths)
         self.assertIn(self.source / "THIRD_PARTY_NOTICES.md", read_paths)
 
+    def test_windows_source_licenses_are_retained_before_first_spec_traversal(
+        self,
+    ) -> None:
+        original_scandir = assembly.os.scandir
+        first_source_root = self.source / "src/isoworld"
+        licenses = {
+            self.source / "LICENSE",
+            self.source / "THIRD_PARTY_NOTICES.md",
+        }
+        retained_paths: set[Path] = set()
+        traversal_seen = False
+
+        class DirectoryGuard:
+            def __init__(self, path: Path) -> None:
+                self.leaf = 100
+                self._next_handle = 101
+                self.handle_paths = {self.leaf: path}
+                self.regular_paths: dict[int, Path] = {}
+
+            def retain_directory(
+                self,
+                parent: int,
+                name: str,
+                **_kwargs: object,
+            ) -> int:
+                handle = self._next_handle
+                self._next_handle += 1
+                self.handle_paths[handle] = self.handle_paths[parent] / name
+                return handle
+
+            def directory_entries(
+                self,
+                handle: int,
+            ) -> tuple[assembly._WindowsDirectoryEntry, ...]:
+                nonlocal traversal_seen
+                directory = self.handle_paths[handle]
+                if directory == first_source_root:
+                    traversal_seen = True
+                    if not licenses <= retained_paths:
+                        raise AssertionError(
+                            "license files were not retained before source traversal"
+                        )
+                with original_scandir(directory) as entries:
+                    return tuple(
+                        assembly._WindowsDirectoryEntry(
+                            entry.name,
+                            entry.is_dir(follow_symlinks=False),
+                            entry.is_symlink(),
+                            entry.inode(),
+                        )
+                        for entry in entries
+                    )
+
+            def retain_regular(
+                self,
+                parent: int,
+                name: str,
+                logical_path: Path,
+                **_kwargs: object,
+            ) -> assembly._WindowsRetainedRegular:
+                path = self.handle_paths[parent] / name
+                handle = self._next_handle
+                self._next_handle += 1
+                retained_paths.add(logical_path)
+                self.regular_paths[handle] = path
+                return assembly._WindowsRetainedRegular(
+                    logical_path,
+                    parent,
+                    name,
+                    handle,
+                    assembly._WindowsHandleState(
+                        (17, handle),
+                        path.stat().st_size,
+                        1,
+                        False,
+                        False,
+                    ),
+                )
+
+            def read_regular(
+                self,
+                opened: assembly._WindowsRetainedRegular,
+                **_kwargs: object,
+            ) -> bytes:
+                return self.regular_paths[opened.handle].read_bytes()
+
+            def require_bindings(self) -> None:
+                return None
+
+            def close(self) -> None:
+                return None
+
+        with (
+            mock.patch.object(assembly, "_is_windows_native_host", return_value=True),
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                side_effect=lambda path, *_args, **_kwargs: DirectoryGuard(path),
+            ),
+            mock.patch.object(
+                assembly.os,
+                "scandir",
+                side_effect=AssertionError("path-based Windows enumeration"),
+            ),
+            mock.patch.object(
+                assembly,
+                "_directory_chain",
+                side_effect=AssertionError("path-based Windows root metadata"),
+            ),
+            mock.patch.object(
+                assembly,
+                "_require_directory_chain",
+                side_effect=AssertionError("path-based Windows root revalidation"),
+            ),
+        ):
+            files = assembly._source_files(
+                self.source,
+                "win32-x64",
+                assembly._PackageOutputBudget(),
+            )
+
+        self.assertTrue(traversal_seen)
+        self.assertTrue(licenses <= retained_paths)
+        packaged_paths = {item.path for item in files}
+        share = "runtime/python/win32-x64/share/rpg-world-forge"
+        self.assertIn(f"{share}/LICENSE", packaged_paths)
+        self.assertIn(f"{share}/THIRD_PARTY_NOTICES.md", packaged_paths)
+
     def test_windows_source_traversal_pins_child_before_empty_junction_swap(
         self,
     ) -> None:
@@ -2196,85 +2720,96 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         swapped = False
         guards: list[object] = []
 
-        class EnumeratedEntry:
-            def __init__(self, entry: os.DirEntry[str]) -> None:
-                self.name = entry.name
-                self.path = entry.path
-                self._entry = entry
-
-            def stat(self, *, follow_symlinks: bool = True) -> object:
-                if follow_symlinks:
-                    raise AssertionError("enumeration followed a link")
-                info = self._entry.stat(follow_symlinks=False)
-                return SimpleNamespace(
-                    st_mode=info.st_mode,
-                    st_nlink=99,
-                    st_size=info.st_size,
-                    st_file_attributes=getattr(info, "st_file_attributes", 0),
-                )
-
         class DirectoryGuard:
             def __init__(self, path: Path) -> None:
                 self.path = path
                 self.closed = False
+                self.leaf = 100
+                self._next_handle = 101
+                self.handle_paths = {self.leaf: path}
+                self.retained_paths: set[Path] = {path}
 
-            def require_bindings(self) -> None:
-                if self.path == optional and swapped:
+            def retain_directory(
+                self,
+                parent: int,
+                name: str,
+                **kwargs: object,
+            ) -> int:
+                child = self.handle_paths[parent] / name
+                if child == optional and swapped:
+                    if kwargs.get("expected_file_id") is None:
+                        raise AssertionError("enumerated identity was not retained")
                     assembly._fail(
                         "filesystem_identity_changed",
                         "forge_source_root",
                     )
+                handle = self._next_handle
+                self._next_handle += 1
+                self.handle_paths[handle] = child
+                self.retained_paths.add(child)
+                return handle
+
+            def directory_entries(
+                self,
+                handle: int,
+            ) -> tuple[assembly._WindowsDirectoryEntry, ...]:
+                nonlocal swapped
+                directory = self.handle_paths[handle]
+                with original_scandir(directory) as entries:
+                    rows = tuple(
+                        assembly._WindowsDirectoryEntry(
+                            entry.name,
+                            entry.is_dir(follow_symlinks=False),
+                            entry.is_symlink(),
+                            entry.inode(),
+                        )
+                        for entry in entries
+                    )
+                if directory == source_directory:
+                    swapped = True
+                return rows
+
+            def retain_regular(
+                self,
+                parent: int,
+                name: str,
+                logical_path: Path,
+                **_kwargs: object,
+            ) -> assembly._WindowsRetainedRegular:
+                path = self.handle_paths[parent] / name
+                handle = self._next_handle
+                self._next_handle += 1
+                return assembly._WindowsRetainedRegular(
+                    logical_path,
+                    parent,
+                    name,
+                    handle,
+                    assembly._WindowsHandleState(
+                        (9, handle),
+                        path.stat().st_size,
+                        1,
+                        False,
+                        False,
+                    ),
+                )
+
+            def read_regular(
+                self,
+                opened: assembly._WindowsRetainedRegular,
+                **_kwargs: object,
+            ) -> bytes:
+                return opened.logical_path.read_bytes()
+
+            def require_bindings(self) -> None:
+                return None
 
             def close(self) -> None:
                 self.closed = True
 
         def guard_factory(path: Path, _field: str, **_kwargs: object) -> DirectoryGuard:
-            if path == optional and swapped:
-                raise AssertionError("child directory was not pinned when queued")
             guard = DirectoryGuard(path)
             guards.append(guard)
             return guard
-
-        @contextlib.contextmanager
-        def enumerated_scandir(path: os.PathLike[str] | str):
-            nonlocal swapped
-            current = Path(path)
-            if current == optional and swapped:
-                yield iter(())
-                return
-            with original_scandir(path) as entries:
-                wrapped = [EnumeratedEntry(entry) for entry in entries]
-            yield iter(wrapped)
-            if current == source_directory:
-                swapped = True
-
-        def native_read(
-            path: Path,
-            *,
-            size_guard: Callable[[int], None] | None = None,
-            **_kwargs: object,
-        ) -> bytes:
-            payload = path.read_bytes()
-            if size_guard is not None:
-                size_guard(len(payload))
-            return payload
-
-        def native_open(
-            path: Path,
-        ) -> tuple[Path, object, int, assembly._WindowsHandleState]:
-            payload = path.read_bytes()
-            return (
-                path,
-                object(),
-                1,
-                assembly._WindowsHandleState(
-                    identity=(9, len(payload)),
-                    size=len(payload),
-                    nlink=1,
-                    is_directory=False,
-                    is_reparse=False,
-                ),
-            )
 
         with (
             mock.patch.object(assembly, "_is_windows_native_host", return_value=True),
@@ -2283,30 +2818,10 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                 "_WindowsDirectoryChain",
                 side_effect=guard_factory,
             ),
-            mock.patch.object(assembly.os, "scandir", side_effect=enumerated_scandir),
             mock.patch.object(
-                assembly,
-                "_read_pinned_regular",
-                side_effect=native_read,
-            ),
-            mock.patch.object(
-                assembly,
-                "_read_pinned_regular_windows",
-                side_effect=native_read,
-            ),
-            mock.patch.object(
-                assembly,
-                "_open_forge_material_windows",
-                side_effect=native_open,
-            ),
-            mock.patch.object(
-                assembly,
-                "_read_open_pinned_regular_windows",
-                side_effect=lambda opened: Path(opened[0]).read_bytes(),
-            ),
-            mock.patch.object(
-                assembly,
-                "_close_open_pinned_regular_windows",
+                assembly.os,
+                "scandir",
+                side_effect=AssertionError("path-based Windows enumeration"),
             ),
             self.assertRaisesRegex(
                 assembly.RuntimeAssemblyError,
@@ -2319,8 +2834,129 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                 assembly._PackageOutputBudget(),
             )
         self.assertTrue(swapped)
-        self.assertTrue(any(getattr(guard, "path", None) == optional for guard in guards))
+        self.assertEqual(1, len(guards))
+        self.assertNotIn(optional, guards[0].retained_paths)
         self.assertTrue(all(getattr(guard, "closed", False) for guard in guards))
+
+    def test_windows_source_roots_are_bound_before_any_traversal(self) -> None:
+        foreign = _forge_source(self.root / "foreign-forge")
+        authorized_source = self.source
+        original_scandir = assembly.os.scandir
+        switched = False
+        regular_opens: list[Path] = []
+        reads: list[Path] = []
+        guards: list[DirectoryGuard] = []
+
+        class DirectoryGuard:
+            def __init__(self, path: Path) -> None:
+                self.path = path
+                self.closed = False
+                self.leaf = 100
+                self._next_handle = 101
+                self.handle_paths = {self.leaf: path}
+
+            def retain_directory(
+                self,
+                parent: int,
+                name: str,
+                **kwargs: object,
+            ) -> int:
+                if self.closed:
+                    raise AssertionError("retained source root closed between specifications")
+                child = self.handle_paths[parent] / name
+                resolved = child
+                if switched and child == authorized_source / "src/worldforge":
+                    resolved = foreign / "src/worldforge"
+                expected = kwargs.get("expected_file_id")
+                if expected is None:
+                    raise AssertionError("source root was not identity-bound")
+                if int(expected) != resolved.stat().st_ino:
+                    assembly._fail(
+                        "filesystem_identity_changed",
+                        "forge_source_root",
+                    )
+                handle = self._next_handle
+                self._next_handle += 1
+                self.handle_paths[handle] = resolved
+                return handle
+
+            def directory_entries(
+                self,
+                handle: int,
+            ) -> tuple[assembly._WindowsDirectoryEntry, ...]:
+                nonlocal switched
+                directory = self.handle_paths[handle]
+                with original_scandir(directory) as entries:
+                    rows = tuple(
+                        assembly._WindowsDirectoryEntry(
+                            name=entry.name,
+                            is_directory=entry.is_dir(follow_symlinks=False),
+                            is_reparse=entry.is_symlink(),
+                            file_id=entry.inode(),
+                        )
+                        for entry in entries
+                    )
+                if directory == authorized_source / "src":
+                    switched = True
+                return rows
+
+            def retain_regular(
+                self,
+                parent: int,
+                name: str,
+                logical_path: Path,
+                **_kwargs: object,
+            ) -> assembly._WindowsRetainedRegular:
+                del parent, name
+                regular_opens.append(logical_path)
+                raise AssertionError("a file opened before every source root was retained")
+
+            def read_regular(
+                self,
+                opened: assembly._WindowsRetainedRegular,
+                **_kwargs: object,
+            ) -> bytes:
+                reads.append(opened.logical_path)
+                raise AssertionError("source bytes were read before root pre-retention")
+
+            def require_bindings(self) -> None:
+                if self.closed:
+                    raise AssertionError("closed source root was reused")
+
+            def close(self) -> None:
+                self.closed = True
+
+        def guard_factory(path: Path, _field: str, **_kwargs: object) -> DirectoryGuard:
+            guard = DirectoryGuard(path)
+            guards.append(guard)
+            return guard
+
+        with (
+            mock.patch.object(assembly, "_is_windows_native_host", return_value=True),
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                side_effect=guard_factory,
+            ),
+            mock.patch.object(
+                assembly.os,
+                "scandir",
+                side_effect=AssertionError("path-based Windows enumeration"),
+            ),
+            self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+        ):
+            assembly._source_files(
+                self.source,
+                "win32-x64",
+                assembly._PackageOutputBudget(),
+            )
+
+        self.assertEqual("filesystem_identity_changed", caught.exception.code)
+        self.assertTrue(switched)
+        self.assertEqual([], regular_opens)
+        self.assertEqual([], reads)
+        self.assertEqual([self.source], [guard.path for guard in guards])
+        self.assertTrue(guards[0].closed)
 
     def test_windows_source_authorization_and_capacity_precede_casefold_collision(
         self,
@@ -2330,53 +2966,93 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         _write(source_directory / "a.py", b"a")
         original_scandir = assembly.os.scandir
 
-        class DirectoryGuard:
-            def require_bindings(self) -> None:
-                return None
-
-            def close(self) -> None:
-                return None
-
-        def ordered_scandir(path: os.PathLike[str] | str) -> object:
-            with original_scandir(path) as entries:
-                rows = list(entries)
-            if Path(path) == source_directory:
-                priority = {"A.py": 0, "a.py": 1}
-                rows.sort(key=lambda entry: (priority.get(entry.name, 2), os.fsencode(entry.name)))
-            return contextlib.nullcontext(iter(rows))
-
         def exercise(mode: str, expected: str) -> None:
             events: list[tuple[str, str]] = []
 
-            def native_open(
-                path: Path,
-            ) -> tuple[Path, object, int, assembly._WindowsHandleState]:
-                events.append(("authorize", path.name))
-                if mode == "unsafe" and path.name == "a.py":
-                    assembly._fail("forge_material_unsafe", "forge_source_root")
-                return (
-                    path,
-                    object(),
-                    1,
-                    assembly._WindowsHandleState(
-                        identity=(13, len(events)),
-                        size=path.stat().st_size,
-                        nlink=1,
-                        is_directory=False,
-                        is_reparse=False,
-                    ),
-                )
+            class DirectoryGuard:
+                def __init__(self, path: Path) -> None:
+                    self.leaf = 100
+                    self._next_handle = 101
+                    self.handle_paths = {self.leaf: path}
+                    self.regular_paths: dict[int, Path] = {}
 
-            def native_read(opened: tuple[object, ...]) -> bytes:
-                path = opened[0]
-                assert isinstance(path, Path)
-                events.append(("read", path.name))
-                return path.read_bytes()
+                def retain_directory(
+                    self,
+                    parent: int,
+                    name: str,
+                    **_kwargs: object,
+                ) -> int:
+                    handle = self._next_handle
+                    self._next_handle += 1
+                    self.handle_paths[handle] = self.handle_paths[parent] / name
+                    return handle
 
-            def native_close(opened: tuple[object, ...]) -> None:
-                path = opened[0]
-                assert isinstance(path, Path)
-                events.append(("close", path.name))
+                def directory_entries(
+                    self,
+                    handle: int,
+                ) -> tuple[assembly._WindowsDirectoryEntry, ...]:
+                    directory = self.handle_paths[handle]
+                    with original_scandir(directory) as entries:
+                        rows = list(entries)
+                    if directory == source_directory:
+                        priority = {"A.py": 0, "a.py": 1}
+                        rows.sort(
+                            key=lambda entry: (
+                                priority.get(entry.name, 2),
+                                os.fsencode(entry.name),
+                            )
+                        )
+                    return tuple(
+                        assembly._WindowsDirectoryEntry(
+                            entry.name,
+                            entry.is_dir(follow_symlinks=False),
+                            entry.is_symlink(),
+                            entry.inode(),
+                        )
+                        for entry in rows
+                    )
+
+                def retain_regular(
+                    self,
+                    parent: int,
+                    name: str,
+                    logical_path: Path,
+                    **_kwargs: object,
+                ) -> assembly._WindowsRetainedRegular:
+                    events.append(("authorize", name))
+                    if mode == "unsafe" and name == "a.py":
+                        assembly._fail("forge_material_unsafe", "forge_source_root")
+                    path = self.handle_paths[parent] / name
+                    handle = self._next_handle
+                    self._next_handle += 1
+                    self.regular_paths[handle] = path
+                    return assembly._WindowsRetainedRegular(
+                        logical_path,
+                        parent,
+                        name,
+                        handle,
+                        assembly._WindowsHandleState(
+                            (13, handle),
+                            path.stat().st_size,
+                            1,
+                            False,
+                            False,
+                        ),
+                    )
+
+                def read_regular(
+                    self,
+                    opened: assembly._WindowsRetainedRegular,
+                    **_kwargs: object,
+                ) -> bytes:
+                    events.append(("read", opened.name))
+                    return self.regular_paths[opened.handle].read_bytes()
+
+                def require_bindings(self) -> None:
+                    return None
+
+                def close(self) -> None:
+                    return None
 
             limit = 1 if mode == "capacity" else assembly.MAX_OUTPUT_BYTES
             with (
@@ -2384,23 +3060,12 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                 mock.patch.object(
                     assembly,
                     "_WindowsDirectoryChain",
-                    side_effect=lambda *_args, **_kwargs: DirectoryGuard(),
-                ),
-                mock.patch.object(assembly.os, "scandir", side_effect=ordered_scandir),
-                mock.patch.object(
-                    assembly,
-                    "_open_forge_material_windows",
-                    side_effect=native_open,
+                    side_effect=lambda path, *_args, **_kwargs: DirectoryGuard(path),
                 ),
                 mock.patch.object(
-                    assembly,
-                    "_read_open_pinned_regular_windows",
-                    side_effect=native_read,
-                ),
-                mock.patch.object(
-                    assembly,
-                    "_close_open_pinned_regular_windows",
-                    side_effect=native_close,
+                    assembly.os,
+                    "scandir",
+                    side_effect=AssertionError("path-based Windows enumeration"),
                 ),
                 mock.patch.object(assembly, "MAX_OUTPUT_BYTES", limit),
                 self.assertRaises(assembly.RuntimeAssemblyError) as caught,
@@ -2412,17 +3077,16 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                 )
             self.assertEqual(caught.exception.code, expected)
             self.assertEqual(
-                events[:4],
-                [
-                    ("authorize", "A.py"),
-                    ("read", "A.py"),
-                    ("close", "A.py"),
-                    ("authorize", "a.py"),
-                ],
+                [event for event in events if event[1] in {"A.py", "a.py"}][:2],
+                [("authorize", "A.py"), ("authorize", "a.py")],
             )
             self.assertNotIn(("read", "a.py"), events)
-            if mode != "unsafe":
-                self.assertIn(("close", "a.py"), events)
+            if mode == "unsafe":
+                self.assertNotIn(("read", "A.py"), events)
+            else:
+                self.assertIn(("read", "A.py"), events)
+                first_read = next(index for index, event in enumerate(events) if event[0] == "read")
+                self.assertTrue(all(event[0] == "authorize" for event in events[:first_read]))
 
         for mode, expected in (
             ("capacity", "output_limit_exceeded"),
@@ -2632,6 +3296,19 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         second_plan = self._plan(source=second_source, archives=second_archives)
         second = self.root / "second-root"
         assembly.assemble_runtime_resources(second_plan, second)
+        first_manifest = assembly.verify_runtime_tree(first)
+        second_manifest = assembly.verify_runtime_tree(second)
+        self.assertEqual(first_manifest, second_manifest)
+        self.assertEqual(
+            first_manifest["sources"]["forge"]["inventory_sha256"],
+            second_manifest["sources"]["forge"]["inventory_sha256"],
+        )
+        publication_suffix = "/isoworld/content/publication_journal.py"
+        for manifest in (first_manifest, second_manifest):
+            self.assertEqual(
+                sum(entry["path"].endswith(publication_suffix) for entry in manifest["inventory"]),
+                1,
+            )
         for path in second.rglob("*"):
             with contextlib.suppress(OSError):
                 os.utime(path, (1_800_000_000, 1_800_000_000), follow_symlinks=False)
@@ -2806,6 +3483,267 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                 field="output",
             )
         relative_api.close.assert_called_once_with(91)
+
+    def test_windows_directory_chain_closes_anchor_when_setup_state_fails(
+        self,
+    ) -> None:
+        failure = assembly.RuntimeAssemblyError(
+            "filesystem_identity_changed",
+            "forge_source_root",
+        )
+        api = SimpleNamespace(
+            open_anchor=mock.Mock(return_value=1),
+            state=mock.Mock(side_effect=failure),
+            close=mock.Mock(),
+        )
+        with (
+            mock.patch.object(assembly, "_windows_output_api", return_value=api),
+            mock.patch.object(
+                assembly,
+                "_lexical_absolute",
+                return_value=Path(r"C:\forge"),
+            ),
+            self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+        ):
+            assembly._WindowsDirectoryChain(
+                Path("ignored"),
+                "forge_source_root",
+                writable_leaf=False,
+            )
+
+        self.assertIs(failure, caught.exception)
+        api.close.assert_called_once_with(1)
+
+    def test_windows_directory_chain_closes_child_when_setup_state_fails(
+        self,
+    ) -> None:
+        failure = assembly.RuntimeAssemblyError(
+            "filesystem_identity_changed",
+            "forge_source_root",
+        )
+        anchor_state = assembly._WindowsHandleState(
+            (7, 1),
+            0,
+            1,
+            True,
+            False,
+        )
+
+        def state(handle: int, _field: str) -> assembly._WindowsHandleState:
+            if handle == 1:
+                return anchor_state
+            raise failure
+
+        api = SimpleNamespace(
+            open_anchor=mock.Mock(return_value=1),
+            relative=mock.Mock(return_value=2),
+            state=mock.Mock(side_effect=state),
+            close=mock.Mock(),
+        )
+        with (
+            mock.patch.object(assembly, "_windows_output_api", return_value=api),
+            mock.patch.object(
+                assembly,
+                "_lexical_absolute",
+                return_value=Path(r"C:\forge"),
+            ),
+            self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+        ):
+            assembly._WindowsDirectoryChain(
+                Path("ignored"),
+                "forge_source_root",
+                writable_leaf=False,
+            )
+
+        self.assertIs(failure, caught.exception)
+        self.assertEqual([mock.call(2), mock.call(1)], api.close.call_args_list)
+
+    def test_windows_retain_regular_rejects_enumerated_file_id_mismatch(
+        self,
+    ) -> None:
+        class Api:
+            def __init__(self) -> None:
+                self.closed: list[int] = []
+
+            def relative(self, *_args: object, **_kwargs: object) -> int:
+                return 9
+
+            def state(
+                self,
+                _handle: int,
+                _field: str,
+            ) -> assembly._WindowsHandleState:
+                return assembly._WindowsHandleState(
+                    (7, 99),
+                    4,
+                    1,
+                    False,
+                    False,
+                )
+
+            def close(self, handle: int) -> None:
+                self.closed.append(handle)
+
+        chain = object.__new__(assembly._WindowsDirectoryChain)
+        chain.api = Api()
+        chain.field = "forge_source_root"
+        chain.anchor_identity = (7, 1)
+        chain.handles = [1]
+        chain.bindings = []
+        chain.regular_states = {}
+
+        with self.assertRaises(assembly.RuntimeAssemblyError) as caught:
+            chain.retain_regular(
+                1,
+                "source.py",
+                Path("source.py"),
+                readable=True,
+                missing_code="forge_material_missing",
+                unsafe_code="forge_material_unsafe",
+                expected_file_id=98,
+            )
+
+        self.assertEqual("filesystem_identity_changed", caught.exception.code)
+        self.assertEqual([9], chain.api.closed)
+        self.assertEqual([1], chain.handles)
+        self.assertEqual([], chain.bindings)
+        self.assertEqual({}, chain.regular_states)
+
+    def test_windows_pinned_open_failure_attempts_leaf_and_chain_cleanup(
+        self,
+    ) -> None:
+        class LeafCleanupFailure(Exception):
+            pass
+
+        class ChainCleanupFailure(Exception):
+            pass
+
+        events: list[str] = []
+
+        class Api:
+            def relative(self, *_args: object, **_kwargs: object) -> int:
+                return 41
+
+            def state(
+                self,
+                _handle: int,
+                _field: str,
+            ) -> assembly._WindowsHandleState:
+                return assembly._WindowsHandleState(
+                    (7, 41),
+                    4,
+                    2,
+                    False,
+                    False,
+                )
+
+            def close(self, _handle: int) -> None:
+                events.append("leaf")
+                raise LeafCleanupFailure("leaf cleanup failed")
+
+        class Chain:
+            def __init__(self) -> None:
+                self.api = Api()
+                self.leaf = 31
+
+            def close(self) -> None:
+                events.append("chain")
+                raise ChainCleanupFailure("chain cleanup failed")
+
+        chain = Chain()
+        with (
+            mock.patch.object(
+                assembly,
+                "_WindowsDirectoryChain",
+                return_value=chain,
+            ),
+            self.assertRaises(assembly.RuntimeAssemblyError) as caught,
+        ):
+            assembly._open_pinned_regular_windows(
+                self.root / "source.py",
+                field="forge_source_root",
+                readable=True,
+            )
+
+        self.assertEqual("file_unsafe", caught.exception.code)
+        self.assertEqual(["leaf", "chain"], events)
+        self.assertTrue(any("LeafCleanupFailure" in note for note in caught.exception.__notes__))
+
+    def test_windows_pinned_close_preserves_first_cleanup_failure(
+        self,
+    ) -> None:
+        class LeafCleanupFailure(Exception):
+            pass
+
+        class ChainCleanupFailure(Exception):
+            pass
+
+        events: list[str] = []
+        first = LeafCleanupFailure("leaf cleanup failed")
+
+        class Api:
+            def close(self, _handle: int) -> None:
+                events.append("leaf")
+                raise first
+
+        class Chain:
+            def __init__(self) -> None:
+                self.api = Api()
+
+            def close(self) -> None:
+                events.append("chain")
+                raise ChainCleanupFailure("chain cleanup failed")
+
+        chain = Chain()
+        state = assembly._WindowsHandleState((7, 41), 4, 1, False, False)
+        with self.assertRaises(LeafCleanupFailure) as caught:
+            assembly._close_open_pinned_regular_windows((self.root / "source.py", chain, 41, state))
+
+        self.assertIs(first, caught.exception)
+        self.assertEqual(["leaf", "chain"], events)
+        self.assertTrue(any("ChainCleanupFailure" in note for note in caught.exception.__notes__))
+
+    def test_windows_directory_chain_close_attempts_every_handle(self) -> None:
+        class CleanupFailure(Exception):
+            pass
+
+        class Api:
+            def __init__(self) -> None:
+                self.attempted: list[int] = []
+
+            def close(self, handle: int) -> None:
+                self.attempted.append(handle)
+                if handle == 3:
+                    raise CleanupFailure("first close failed")
+
+        chain = object.__new__(assembly._WindowsDirectoryChain)
+        chain.api = Api()
+        chain.handles = [1, 2, 3]
+        chain.bindings = [
+            assembly._WindowsBinding(1, "leaf", 2, (1, 2), True),
+        ]
+        chain.regular_states = {
+            3: assembly._WindowsHandleState((1, 3), 1, 1, False, False),
+        }
+        with self.assertRaisesRegex(CleanupFailure, "first close failed"):
+            chain.close()
+        self.assertEqual([3, 2, 1], chain.api.attempted)
+        self.assertEqual([], chain.handles)
+        self.assertEqual([], chain.bindings)
+        self.assertEqual({}, chain.regular_states)
+
+        chain.handles = [4, 3]
+        chain.bindings = []
+        chain.regular_states = {}
+        primary = RuntimeError("primary")
+        with self.assertRaisesRegex(RuntimeError, "primary") as caught:
+            try:
+                raise primary
+            finally:
+                chain.close()
+        self.assertIs(caught.exception, primary)
+        self.assertEqual([3, 2, 1, 3, 4], chain.api.attempted)
+        self.assertTrue(any("CleanupFailure" in note for note in caught.exception.__notes__))
 
     def test_archive_filenames_use_the_same_portable_alias_contract(self) -> None:
         output = self._assemble(name="filename-contract-output")

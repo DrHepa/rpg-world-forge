@@ -17,6 +17,7 @@ import os
 import posixpath
 import re
 import stat
+import struct
 import sys
 import tarfile
 import time
@@ -327,6 +328,49 @@ class _WindowsBinding:
     is_directory: bool
 
 
+@dataclass(frozen=True, slots=True)
+class _WindowsDirectoryEntry:
+    name: str
+    is_directory: bool
+    is_reparse: bool
+    file_id: int
+
+
+@dataclass(frozen=True, slots=True)
+class _WindowsRetainedRegular:
+    logical_path: Path
+    parent: int
+    name: str
+    handle: int
+    state: _WindowsHandleState
+
+
+@dataclass(frozen=True, slots=True)
+class _PosixDirectoryEntry:
+    name: str
+    is_directory: bool
+    is_reparse: bool
+    identity: tuple[int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class _PosixBinding:
+    parent: int
+    name: str
+    handle: int
+    state: _FileState
+    is_directory: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _PosixRetainedRegular:
+    logical_path: Path
+    parent: int
+    name: str
+    handle: int
+    state: _FileState
+
+
 def _fail(
     code: str,
     field: str,
@@ -426,6 +470,32 @@ def _invoke_write_hook(path: Path, phase: str) -> None:
     hook = _WRITE_TEST_HOOK
     if hook is not None:
         hook(path, phase)
+
+
+def _attempt_cleanups(
+    cleanups: Iterable[Callable[[], None]],
+    *,
+    context: str,
+) -> None:
+    """Attempt every cleanup without replacing an exception already in flight."""
+
+    primary = sys.exception()
+    errors: list[BaseException] = []
+    for cleanup in cleanups:
+        try:
+            cleanup()
+        except BaseException as cleanup_error:
+            errors.append(cleanup_error)
+    if not errors:
+        return
+    if primary is not None:
+        for cleanup_error in errors:
+            primary.add_note(f"{context}: {type(cleanup_error).__name__}: {cleanup_error}")
+        return
+    first, *later = errors
+    for cleanup_error in later:
+        first.add_note(f"{context}: {type(cleanup_error).__name__}: {cleanup_error}")
+    raise first
 
 
 def _read_pinned_regular(
@@ -1658,14 +1728,141 @@ def _read_forge_material_windows(
     )
 
 
+def _directory_name_bytes(name: str) -> bytes:
+    try:
+        return name.encode("utf-8", "strict")
+    except UnicodeError:
+        _fail("forge_material_unsafe", "forge_source_root")
+
+
+def _canonical_windows_directory_entries(
+    entries: Iterable[_WindowsDirectoryEntry],
+) -> tuple[_WindowsDirectoryEntry, ...]:
+    result = tuple(entries)
+    if len(result) > MAX_OUTPUT_NODES:
+        _fail("output_limit_exceeded", "output")
+    names = [entry.name for entry in result]
+    if len(names) != len(set(names)):
+        _fail("forge_material_unsafe", "forge_source_root")
+    return tuple(sorted(result, key=lambda entry: _directory_name_bytes(entry.name)))
+
+
+def _canonical_posix_directory_entries(
+    entries: Iterable[_PosixDirectoryEntry],
+) -> tuple[_PosixDirectoryEntry, ...]:
+    result = tuple(entries)
+    if len(result) > MAX_OUTPUT_NODES:
+        _fail("output_limit_exceeded", "output")
+    names = [entry.name for entry in result]
+    if len(names) != len(set(names)):
+        _fail("forge_material_unsafe", "forge_source_root")
+    return tuple(sorted(result, key=lambda entry: _directory_name_bytes(entry.name)))
+
+
+def _require_portable_directory_identities(
+    names: Iterable[str],
+) -> None:
+    aliases: set[tuple[str, ...]] = set()
+    for name in names:
+        try:
+            portable = _portable_path(name, "forge_source_root")
+        except RuntimeAssemblyError:
+            _fail("forge_material_unsafe", "forge_source_root")
+        key = _path_key(portable)
+        if key in aliases:
+            _fail("forge_material_collision", "forge_source_root")
+        aliases.add(key)
+
+
+def _consume_source_membership_budget(total: int, entries: int) -> int:
+    updated = total + entries + 1
+    if updated > MAX_OUTPUT_NODES:
+        _fail("output_limit_exceeded", "output")
+    return updated
+
+
+def _require_windows_source_membership(
+    guard: _WindowsDirectoryChain,
+    retained_directories: Mapping[PurePosixPath, int],
+    inventories: Mapping[PurePosixPath, tuple[_WindowsDirectoryEntry, ...]],
+) -> None:
+    total = 0
+    for relative, handle in sorted(
+        retained_directories.items(),
+        key=lambda item: _directory_name_bytes(item[0].as_posix()),
+    ):
+        try:
+            current = _canonical_windows_directory_entries(guard.directory_entries(handle))
+        except RuntimeAssemblyError:
+            raise
+        except OSError:
+            _fail("forge_material_unsafe", "forge_source_root")
+        total = _consume_source_membership_budget(total, len(current))
+        _require_portable_directory_identities(entry.name for entry in current)
+        if current != inventories.get(relative):
+            _fail("filesystem_identity_changed", "forge_source_root")
+
+
+def _require_posix_source_membership(
+    guard: _PosixSourceGuard,
+    retained_directories: Mapping[PurePosixPath, int],
+    inventories: Mapping[PurePosixPath, tuple[_PosixDirectoryEntry, ...]],
+) -> None:
+    total = 0
+    for relative, descriptor in sorted(
+        retained_directories.items(),
+        key=lambda item: _directory_name_bytes(item[0].as_posix()),
+    ):
+        try:
+            current = _canonical_posix_directory_entries(guard.directory_entries(descriptor))
+        except RuntimeAssemblyError:
+            raise
+        except OSError:
+            _fail("forge_material_unsafe", "forge_source_root")
+        total = _consume_source_membership_budget(total, len(current))
+        _require_portable_directory_identities(entry.name for entry in current)
+        if current != inventories.get(relative):
+            _fail("filesystem_identity_changed", "forge_source_root")
+
+
 def _source_files(
     source_root: Path,
     target_id: str,
     budget: _PackageOutputBudget,
 ) -> tuple[_PayloadFile, ...]:
     root = _lexical_absolute(source_root, "forge_source_root")
-    root_chain = _directory_chain(root, "forge_source_root")
     windows_native = _is_windows_native_host()
+    source_guard: _WindowsDirectoryChain | _PosixSourceGuard
+    if windows_native:
+        source_guard = _WindowsDirectoryChain(
+            root,
+            "forge_source_root",
+            writable_leaf=False,
+            missing_code="forge_material_missing",
+            unsafe_code="forge_material_unsafe",
+        )
+    else:
+        source_guard = _PosixSourceGuard(root, "forge_source_root")
+    try:
+        return _collect_source_files(
+            root,
+            target_id,
+            budget,
+            source_guard,
+        )
+    finally:
+        _attempt_cleanups(
+            (source_guard.close,),
+            context="Forge source cleanup failed",
+        )
+
+
+def _collect_source_files(
+    root: Path,
+    target_id: str,
+    budget: _PackageOutputBudget,
+    source_guard: _WindowsDirectoryChain | _PosixSourceGuard,
+) -> tuple[_PayloadFile, ...]:
     site_packages = (
         f"runtime/python/{target_id}/Lib/site-packages"
         if target_id == "win32-x64"
@@ -1691,156 +1888,277 @@ def _source_files(
             frozenset({".json", ".ts"}),
         ),
     )
+    if isinstance(source_guard, _PosixSourceGuard):
+        result = _collect_posix_source_files(
+            root,
+            prefix,
+            specifications,
+            budget,
+            source_guard,
+        )
+    else:
+        result = _collect_windows_source_files(
+            root,
+            prefix,
+            specifications,
+            budget,
+            source_guard,
+        )
+    source_guard.require_bindings()
+    if not any(item.path.endswith("/isoworld/__init__.py") for item in result):
+        _fail("forge_material_missing", "forge_source_root")
+    if not any(item.path.endswith("/worldforge/studio/__main__.py") for item in result):
+        _fail("forge_material_missing", "forge_source_root")
+    if not any(item.path == PROTOCOL_RELATIVE.as_posix() for item in result):
+        _fail("forge_material_missing", "forge_source_root")
+    result.sort(key=lambda item: item.path.encode("utf-8"))
+    return tuple(result)
+
+
+def _collect_windows_source_files(
+    root: Path,
+    prefix: str,
+    specifications: tuple[tuple[Path, str, frozenset[str]], ...],
+    budget: _PackageOutputBudget,
+    guard: _WindowsDirectoryChain,
+) -> list[_PayloadFile]:
     result: list[_PayloadFile] = []
     aliases: set[tuple[str, ...]] = set()
+    root_relative = PurePosixPath(".")
+    retained_directories: dict[PurePosixPath, int] = {
+        root_relative: guard.leaf,
+    }
+    inventories: dict[PurePosixPath, tuple[_WindowsDirectoryEntry, ...]] = {}
+    retained_files: dict[
+        tuple[PurePosixPath, str],
+        _WindowsRetainedRegular,
+    ] = {}
+    source_roots: dict[PurePosixPath, int] = {}
+    captured_membership = 0
+
+    def capture_directory(
+        relative: PurePosixPath,
+        handle: int,
+    ) -> tuple[_WindowsDirectoryEntry, ...]:
+        nonlocal captured_membership
+        existing = inventories.get(relative)
+        if existing is not None:
+            return existing
+        try:
+            entries = _canonical_windows_directory_entries(guard.directory_entries(handle))
+        except RuntimeAssemblyError:
+            raise
+        except OSError:
+            _fail("forge_material_unsafe", "forge_source_root")
+        captured_membership = _consume_source_membership_budget(
+            captured_membership,
+            len(entries),
+        )
+        inventories[relative] = entries
+        return entries
+
+    def retain_directory(
+        relative: PurePosixPath,
+        *,
+        missing_code: str,
+        unsafe_code: str,
+        expected_file_id: int | None = None,
+    ) -> int:
+        parent_relative = root_relative
+        parent_handle = retained_directories[parent_relative]
+        for part in relative.parts:
+            child_relative = (
+                PurePosixPath(part) if parent_relative == root_relative else parent_relative / part
+            )
+            handle = retained_directories.get(child_relative)
+            if handle is None:
+                handle = guard.retain_directory(
+                    parent_handle,
+                    part,
+                    missing_code=missing_code,
+                    unsafe_code=unsafe_code,
+                    expected_file_id=(expected_file_id if child_relative == relative else None),
+                )
+                retained_directories[child_relative] = handle
+                if len(retained_directories) > MAX_OUTPUT_DIRECTORIES:
+                    _fail("output_limit_exceeded", "output")
+            parent_relative = child_relative
+            parent_handle = handle
+        return parent_handle
+
+    def resolve_entry(
+        parent_relative: PurePosixPath,
+        parent_handle: int,
+        name: str,
+    ) -> _WindowsDirectoryEntry:
+        entries = capture_directory(parent_relative, parent_handle)
+        matches = tuple(entry for entry in entries if entry.name == name)
+        if len(matches) != 1:
+            _fail(
+                "forge_material_missing" if not matches else "forge_material_unsafe",
+                "forge_source_root",
+            )
+        return matches[0]
+
+    def retain_bound_directory(relative: PurePosixPath) -> int:
+        parent_relative = root_relative
+        parent_handle = retained_directories[parent_relative]
+        for part in relative.parts:
+            child_relative = (
+                PurePosixPath(part) if parent_relative == root_relative else parent_relative / part
+            )
+            handle = retained_directories.get(child_relative)
+            if handle is None:
+                entry = resolve_entry(parent_relative, parent_handle, part)
+                if entry.is_reparse or not entry.is_directory:
+                    _fail("forge_material_unsafe", "forge_source_root")
+                handle = guard.retain_directory(
+                    parent_handle,
+                    part,
+                    missing_code="forge_material_missing",
+                    unsafe_code="forge_material_unsafe",
+                    expected_file_id=entry.file_id,
+                )
+                retained_directories[child_relative] = handle
+                if len(retained_directories) > MAX_OUTPUT_DIRECTORIES:
+                    _fail("output_limit_exceeded", "output")
+            parent_relative = child_relative
+            parent_handle = handle
+        return parent_handle
+
+    guard.require_bindings()
+    for source, _destination, _suffixes in specifications:
+        source_relative = PurePosixPath(*source.relative_to(root).parts)
+        source_roots[source_relative] = retain_bound_directory(source_relative)
+
+    retained_licenses: dict[str, _WindowsRetainedRegular] = {}
+    for source_name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
+        entry = resolve_entry(root_relative, guard.leaf, source_name)
+        if entry.is_reparse or entry.is_directory:
+            _fail("forge_material_unsafe", "forge_source_root")
+        retained_licenses[source_name] = guard.retain_regular(
+            guard.leaf,
+            source_name,
+            root / source_name,
+            readable=True,
+            missing_code="forge_material_missing",
+            unsafe_code="forge_material_unsafe",
+            expected_file_id=entry.file_id,
+        )
+    guard.require_bindings()
+
+    for source, _destination, suffixes in specifications:
+        source_relative = PurePosixPath(*source.relative_to(root).parts)
+        stack = [source_relative]
+        while stack:
+            current_relative = stack.pop()
+            current_handle = retained_directories[current_relative]
+            entries = capture_directory(current_relative, current_handle)
+            child_directories: list[tuple[bytes, PurePosixPath]] = []
+            for entry in entries:
+                child_source_relative = current_relative / entry.name
+                logical_path = root.joinpath(*child_source_relative.parts)
+                if entry.is_reparse:
+                    _fail("forge_material_unsafe", "forge_source_root")
+                if entry.is_directory:
+                    retain_directory(
+                        child_source_relative,
+                        missing_code="forge_material_unsafe",
+                        unsafe_code="forge_material_unsafe",
+                        expected_file_id=entry.file_id,
+                    )
+                    if entry.name != "__pycache__":
+                        child_directories.append((os.fsencode(entry.name), child_source_relative))
+                    continue
+                retained_files[(current_relative, entry.name)] = guard.retain_regular(
+                    current_handle,
+                    entry.name,
+                    logical_path,
+                    readable=logical_path.suffix in suffixes,
+                    missing_code="forge_material_missing",
+                    unsafe_code="forge_material_unsafe",
+                    expected_file_id=entry.file_id,
+                )
+                if len(retained_files) > MAX_OUTPUT_FILES:
+                    _fail("output_limit_exceeded", "output")
+            for _, child_relative in sorted(
+                child_directories,
+                key=lambda item: item[0],
+                reverse=True,
+            ):
+                stack.append(child_relative)
+
+    for relative, handle in retained_directories.items():
+        capture_directory(relative, handle)
+    guard.require_bindings()
+
     for source, destination, suffixes in specifications:
         destination = _portable_path(destination, "forge_source_root")
         budget.add_directory(destination)
-        retained_directories: list[_WindowsDirectoryChain] = []
-        try:
-            if windows_native:
-                source_guard = _WindowsDirectoryChain(
-                    source,
-                    "forge_source_root",
-                    writable_leaf=False,
-                    missing_code="forge_material_missing",
-                    unsafe_code="forge_material_unsafe",
+        source_relative = PurePosixPath(*source.relative_to(root).parts)
+        stack: list[tuple[PurePosixPath, PurePosixPath, int]] = [
+            (source_relative, PurePosixPath("."), source_roots[source_relative])
+        ]
+        while stack:
+            current_source_relative, relative, current_handle = stack.pop()
+            child_directories: list[tuple[bytes, PurePosixPath, PurePosixPath, int]] = []
+            for entry in inventories[current_source_relative]:
+                child_relative = (
+                    PurePosixPath(entry.name)
+                    if relative == PurePosixPath(".")
+                    else relative / entry.name
                 )
-                retained_directories.append(source_guard)
-            else:
-                try:
-                    info = source.lstat()
-                except OSError:
-                    _fail("forge_material_missing", "forge_source_root")
-                if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
-                    _fail("forge_material_unsafe", "forge_source_root")
-                source_guard = None
-            stack: list[tuple[Path, PurePosixPath, _WindowsDirectoryChain | None]] = [
-                (source, PurePosixPath("."), source_guard)
-            ]
-            while stack:
-                current, relative, current_guard = stack.pop()
-                child_directories: list[
-                    tuple[
-                        bytes,
-                        Path,
-                        PurePosixPath,
-                        _WindowsDirectoryChain | None,
-                    ]
-                ] = []
-                try:
-                    if current_guard is not None:
-                        current_guard.require_bindings()
-                    with os.scandir(current) as entries:
-                        for entry in entries:
-                            child_relative = (
-                                PurePosixPath(entry.name)
-                                if relative == PurePosixPath(".")
-                                else relative / entry.name
+                output_path = _portable_path(
+                    f"{destination}/{child_relative.as_posix()}",
+                    "forge_source_root",
+                )
+                budget.preflight_path(output_path)
+                child_source_relative = current_source_relative / entry.name
+                if entry.is_directory:
+                    budget.add_directory(output_path)
+                    if entry.name != "__pycache__":
+                        child_directories.append(
+                            (
+                                os.fsencode(entry.name),
+                                child_source_relative,
+                                child_relative,
+                                retained_directories[child_source_relative],
                             )
-                            output_path = _portable_path(
-                                f"{destination}/{child_relative.as_posix()}",
-                                "forge_source_root",
-                            )
-                            budget.preflight_path(output_path)
-                            entry_info = entry.stat(follow_symlinks=False)
-                            if _is_link_or_reparse(entry_info):
-                                _fail("forge_material_unsafe", "forge_source_root")
-                            source_file = Path(entry.path)
-                            if stat.S_ISDIR(entry_info.st_mode):
-                                if windows_native:
-                                    child_guard = _WindowsDirectoryChain(
-                                        source_file,
-                                        "forge_source_root",
-                                        writable_leaf=False,
-                                        missing_code="forge_material_unsafe",
-                                        unsafe_code="forge_material_unsafe",
-                                    )
-                                    retained_directories.append(child_guard)
-                                else:
-                                    child_guard = None
-                                budget.add_directory(output_path)
-                                if entry.name != "__pycache__":
-                                    child_directories.append(
-                                        (
-                                            os.fsencode(entry.name),
-                                            source_file,
-                                            child_relative,
-                                            child_guard,
-                                        )
-                                    )
-                                continue
-                            pinned_file: (
-                                tuple[
-                                    Path,
-                                    _WindowsDirectoryChain,
-                                    int,
-                                    _WindowsHandleState,
-                                ]
-                                | None
-                            ) = None
-                            try:
-                                if windows_native:
-                                    if source_file.suffix in suffixes:
-                                        pinned_file = _open_forge_material_windows(source_file)
-                                    else:
-                                        _authorize_forge_material_windows(source_file)
-                                elif not (
-                                    stat.S_ISREG(entry_info.st_mode) and entry_info.st_nlink == 1
-                                ):
-                                    _fail("forge_material_unsafe", "forge_source_root")
-                                budget.add_file_path(output_path)
-                                if (
-                                    source_file.suffix == ".pyc"
-                                    or "__pycache__" in source_file.parts
-                                ):
-                                    _fail("forge_bytecode_forbidden", "forge_source_root")
-                                if source_file.suffix not in suffixes:
-                                    continue
-                                max_bytes = min(
-                                    MAX_MANIFEST_BYTES,
-                                    budget.remaining_bytes,
-                                )
-                                if windows_native:
-                                    assert pinned_file is not None
-                                    budget.require_payload_capacity(pinned_file[3].size)
-                                else:
-                                    budget.require_payload_capacity(entry_info.st_size)
-                                key = _path_key(output_path)
-                                if key in aliases:
-                                    _fail("forge_material_collision", "forge_source_root")
-                                aliases.add(key)
-                                if windows_native:
-                                    assert pinned_file is not None
-                                    if pinned_file[3].size > max_bytes:
-                                        _fail("file_unsafe", "forge_source_root")
-                                    payload = _read_open_pinned_regular_windows(pinned_file)
-                                else:
-                                    payload = _read_pinned_regular(
-                                        source_file,
-                                        field="forge_source_root",
-                                        max_bytes=max_bytes,
-                                    )
-                                budget.add_payload_bytes(len(payload))
-                                result.append(_PayloadFile(output_path, payload, 0o644))
-                            finally:
-                                if pinned_file is not None:
-                                    _close_open_pinned_regular_windows(pinned_file)
-                    if current_guard is not None:
-                        current_guard.require_bindings()
-                except RuntimeAssemblyError:
-                    raise
-                except OSError:
-                    _fail("forge_material_unsafe", "forge_source_root")
-                for _, child, child_relative, child_guard in sorted(
-                    child_directories,
-                    key=lambda item: item[0],
-                    reverse=True,
+                        )
+                    continue
+                retained = retained_files[(current_source_relative, entry.name)]
+                budget.add_file_path(output_path)
+                if (
+                    retained.logical_path.suffix == ".pyc"
+                    or "__pycache__" in retained.logical_path.parts
                 ):
-                    stack.append((child, child_relative, child_guard))
-        finally:
-            while retained_directories:
-                retained_directories.pop().close()
+                    _fail("forge_bytecode_forbidden", "forge_source_root")
+                if retained.logical_path.suffix not in suffixes:
+                    continue
+                max_bytes = min(MAX_MANIFEST_BYTES, budget.remaining_bytes)
+                budget.require_payload_capacity(retained.state.size)
+                key = _path_key(output_path)
+                if key in aliases:
+                    _fail("forge_material_collision", "forge_source_root")
+                aliases.add(key)
+                if retained.state.size > max_bytes:
+                    _fail("file_unsafe", "forge_source_root")
+                payload = guard.read_regular(retained)
+                budget.add_payload_bytes(len(payload))
+                result.append(_PayloadFile(output_path, payload, 0o644))
+            for _, child_source_relative, child_relative, child_handle in sorted(
+                child_directories,
+                key=lambda item: item[0],
+                reverse=True,
+            ):
+                stack.append(
+                    (
+                        child_source_relative,
+                        child_relative,
+                        child_handle,
+                    )
+                )
+
     for source_name, destination_name in (
         ("LICENSE", "LICENSE"),
         ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
@@ -1855,41 +2173,297 @@ def _source_files(
         if key in aliases:
             _fail("forge_material_collision", "forge_source_root")
         aliases.add(key)
-        source_path = root / source_name
-        if windows_native:
-            payload = _read_forge_material_windows(
-                source_path,
-                max_bytes=min(MAX_MANIFEST_BYTES, budget.remaining_bytes),
-                budget=budget,
-            )
-        else:
-            try:
-                source_info = source_path.lstat()
-            except OSError:
-                _fail("forge_material_missing", "forge_source_root")
-            if (
-                _is_link_or_reparse(source_info)
-                or not stat.S_ISREG(source_info.st_mode)
-                or source_info.st_nlink != 1
-            ):
-                _fail("forge_material_unsafe", "forge_source_root")
-            budget.require_payload_capacity(source_info.st_size)
-            payload = _read_pinned_regular(
-                source_path,
-                field="forge_source_root",
-                max_bytes=min(MAX_MANIFEST_BYTES, budget.remaining_bytes),
-            )
+        retained = retained_licenses[source_name]
+        budget.require_payload_capacity(retained.state.size)
+        if retained.state.size > min(MAX_MANIFEST_BYTES, budget.remaining_bytes):
+            _fail("file_unsafe", "forge_source_root")
+        payload = guard.read_regular(retained)
         budget.add_payload_bytes(len(payload))
         result.append(_PayloadFile(output_path, payload, 0o644))
-    _require_directory_chain(root_chain, "forge_source_root")
-    if not any(item.path.endswith("/isoworld/__init__.py") for item in result):
-        _fail("forge_material_missing", "forge_source_root")
-    if not any(item.path.endswith("/worldforge/studio/__main__.py") for item in result):
-        _fail("forge_material_missing", "forge_source_root")
-    if not any(item.path == PROTOCOL_RELATIVE.as_posix() for item in result):
-        _fail("forge_material_missing", "forge_source_root")
-    result.sort(key=lambda item: item.path.encode("utf-8"))
-    return tuple(result)
+
+    guard.require_bindings()
+    _require_windows_source_membership(
+        guard,
+        retained_directories,
+        inventories,
+    )
+    guard.require_bindings()
+    return result
+
+
+def _collect_posix_source_files(
+    root: Path,
+    prefix: str,
+    specifications: tuple[tuple[Path, str, frozenset[str]], ...],
+    budget: _PackageOutputBudget,
+    guard: _PosixSourceGuard,
+) -> list[_PayloadFile]:
+    result: list[_PayloadFile] = []
+    aliases: set[tuple[str, ...]] = set()
+    root_relative = PurePosixPath(".")
+    retained_directories: dict[PurePosixPath, int] = {
+        root_relative: guard.leaf,
+    }
+    inventories: dict[PurePosixPath, tuple[_PosixDirectoryEntry, ...]] = {}
+    retained_files: dict[
+        tuple[PurePosixPath, str],
+        _PosixRetainedRegular,
+    ] = {}
+    source_roots: dict[PurePosixPath, int] = {}
+    captured_membership = 0
+
+    def capture_directory(
+        relative: PurePosixPath,
+        descriptor: int,
+    ) -> tuple[_PosixDirectoryEntry, ...]:
+        nonlocal captured_membership
+        existing = inventories.get(relative)
+        if existing is not None:
+            return existing
+        try:
+            entries = _canonical_posix_directory_entries(guard.directory_entries(descriptor))
+        except RuntimeAssemblyError:
+            raise
+        except OSError:
+            _fail("forge_material_unsafe", "forge_source_root")
+        captured_membership = _consume_source_membership_budget(
+            captured_membership,
+            len(entries),
+        )
+        inventories[relative] = entries
+        return entries
+
+    def retain_directory(
+        relative: PurePosixPath,
+        *,
+        missing_code: str,
+        unsafe_code: str,
+        expected_identity: tuple[int, int] | None = None,
+    ) -> int:
+        parent_relative = root_relative
+        parent_descriptor = retained_directories[parent_relative]
+        for part in relative.parts:
+            child_relative = (
+                PurePosixPath(part) if parent_relative == root_relative else parent_relative / part
+            )
+            descriptor = retained_directories.get(child_relative)
+            if descriptor is None:
+                descriptor = guard.retain_directory(
+                    parent_descriptor,
+                    part,
+                    missing_code=missing_code,
+                    unsafe_code=unsafe_code,
+                    expected_identity=(expected_identity if child_relative == relative else None),
+                )
+                retained_directories[child_relative] = descriptor
+                if len(retained_directories) > MAX_OUTPUT_DIRECTORIES:
+                    _fail("output_limit_exceeded", "output")
+            parent_relative = child_relative
+            parent_descriptor = descriptor
+        return parent_descriptor
+
+    def resolve_entry(
+        parent_relative: PurePosixPath,
+        parent_descriptor: int,
+        name: str,
+    ) -> _PosixDirectoryEntry:
+        entries = capture_directory(parent_relative, parent_descriptor)
+        matches = tuple(entry for entry in entries if entry.name == name)
+        if len(matches) != 1:
+            _fail(
+                "forge_material_missing" if not matches else "forge_material_unsafe",
+                "forge_source_root",
+            )
+        return matches[0]
+
+    def retain_bound_directory(relative: PurePosixPath) -> int:
+        parent_relative = root_relative
+        parent_descriptor = retained_directories[parent_relative]
+        for part in relative.parts:
+            child_relative = (
+                PurePosixPath(part) if parent_relative == root_relative else parent_relative / part
+            )
+            descriptor = retained_directories.get(child_relative)
+            if descriptor is None:
+                entry = resolve_entry(parent_relative, parent_descriptor, part)
+                if entry.is_reparse or not entry.is_directory:
+                    _fail("forge_material_unsafe", "forge_source_root")
+                descriptor = guard.retain_directory(
+                    parent_descriptor,
+                    part,
+                    missing_code="forge_material_missing",
+                    unsafe_code="forge_material_unsafe",
+                    expected_identity=entry.identity,
+                )
+                retained_directories[child_relative] = descriptor
+                if len(retained_directories) > MAX_OUTPUT_DIRECTORIES:
+                    _fail("output_limit_exceeded", "output")
+            parent_relative = child_relative
+            parent_descriptor = descriptor
+        return parent_descriptor
+
+    guard.require_bindings()
+    for source, destination, suffixes in specifications:
+        del destination, suffixes
+        source_relative = PurePosixPath(*source.relative_to(root).parts)
+        source_roots[source_relative] = retain_bound_directory(source_relative)
+
+    retained_licenses: dict[str, _PosixRetainedRegular] = {}
+    for source_name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
+        entry = resolve_entry(root_relative, guard.leaf, source_name)
+        if entry.is_reparse or entry.is_directory:
+            _fail("forge_material_unsafe", "forge_source_root")
+        retained_licenses[source_name] = guard.retain_regular(
+            guard.leaf,
+            source_name,
+            root / source_name,
+            missing_code="forge_material_missing",
+            unsafe_code="forge_material_unsafe",
+            expected_identity=entry.identity,
+        )
+    guard.require_bindings()
+
+    for source, _destination, _suffixes in specifications:
+        source_relative = PurePosixPath(*source.relative_to(root).parts)
+        stack = [source_relative]
+        while stack:
+            current_relative = stack.pop()
+            current_descriptor = retained_directories[current_relative]
+            entries = capture_directory(current_relative, current_descriptor)
+            child_directories: list[tuple[bytes, PurePosixPath]] = []
+            for entry in entries:
+                child_source_relative = current_relative / entry.name
+                logical_path = root.joinpath(*child_source_relative.parts)
+                if entry.is_reparse:
+                    _fail("forge_material_unsafe", "forge_source_root")
+                if entry.is_directory:
+                    retain_directory(
+                        child_source_relative,
+                        missing_code="forge_material_unsafe",
+                        unsafe_code="forge_material_unsafe",
+                        expected_identity=entry.identity,
+                    )
+                    if entry.name != "__pycache__":
+                        child_directories.append((os.fsencode(entry.name), child_source_relative))
+                    continue
+                retained_files[(current_relative, entry.name)] = guard.retain_regular(
+                    current_descriptor,
+                    entry.name,
+                    logical_path,
+                    missing_code="forge_material_missing",
+                    unsafe_code="forge_material_unsafe",
+                    expected_identity=entry.identity,
+                )
+                if len(retained_files) > MAX_OUTPUT_FILES:
+                    _fail("output_limit_exceeded", "output")
+            for _, child_relative in sorted(
+                child_directories,
+                key=lambda item: item[0],
+                reverse=True,
+            ):
+                stack.append(child_relative)
+
+    for relative, descriptor in retained_directories.items():
+        capture_directory(relative, descriptor)
+    guard.require_bindings()
+
+    for source, destination, suffixes in specifications:
+        destination = _portable_path(destination, "forge_source_root")
+        budget.add_directory(destination)
+        source_relative = PurePosixPath(*source.relative_to(root).parts)
+        stack: list[tuple[PurePosixPath, PurePosixPath, int]] = [
+            (source_relative, PurePosixPath("."), source_roots[source_relative])
+        ]
+        while stack:
+            current_source_relative, relative, current_descriptor = stack.pop()
+            child_directories: list[tuple[bytes, PurePosixPath, PurePosixPath, int]] = []
+            for entry in inventories[current_source_relative]:
+                child_relative = (
+                    PurePosixPath(entry.name)
+                    if relative == PurePosixPath(".")
+                    else relative / entry.name
+                )
+                output_path = _portable_path(
+                    f"{destination}/{child_relative.as_posix()}",
+                    "forge_source_root",
+                )
+                budget.preflight_path(output_path)
+                child_source_relative = current_source_relative / entry.name
+                if entry.is_directory:
+                    budget.add_directory(output_path)
+                    if entry.name != "__pycache__":
+                        child_directories.append(
+                            (
+                                os.fsencode(entry.name),
+                                child_source_relative,
+                                child_relative,
+                                retained_directories[child_source_relative],
+                            )
+                        )
+                    continue
+                retained = retained_files[(current_source_relative, entry.name)]
+                budget.add_file_path(output_path)
+                if (
+                    retained.logical_path.suffix == ".pyc"
+                    or "__pycache__" in retained.logical_path.parts
+                ):
+                    _fail("forge_bytecode_forbidden", "forge_source_root")
+                if retained.logical_path.suffix not in suffixes:
+                    continue
+                max_bytes = min(MAX_MANIFEST_BYTES, budget.remaining_bytes)
+                budget.require_payload_capacity(retained.state.size)
+                key = _path_key(output_path)
+                if key in aliases:
+                    _fail("forge_material_collision", "forge_source_root")
+                aliases.add(key)
+                if retained.state.size > max_bytes:
+                    _fail("file_unsafe", "forge_source_root")
+                payload = guard.read_regular(retained)
+                budget.add_payload_bytes(len(payload))
+                result.append(_PayloadFile(output_path, payload, 0o644))
+            for _, child_source_relative, child_relative, child_descriptor in sorted(
+                child_directories,
+                key=lambda item: item[0],
+                reverse=True,
+            ):
+                stack.append(
+                    (
+                        child_source_relative,
+                        child_relative,
+                        child_descriptor,
+                    )
+                )
+
+    for source_name, destination_name in (
+        ("LICENSE", "LICENSE"),
+        ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
+    ):
+        output_path = _portable_path(
+            f"{prefix}/share/rpg-world-forge/{destination_name}",
+            "forge_source_root",
+        )
+        budget.preflight_path(output_path)
+        budget.add_file_path(output_path)
+        key = _path_key(output_path)
+        if key in aliases:
+            _fail("forge_material_collision", "forge_source_root")
+        aliases.add(key)
+        retained = retained_licenses[source_name]
+        budget.require_payload_capacity(retained.state.size)
+        if retained.state.size > min(MAX_MANIFEST_BYTES, budget.remaining_bytes):
+            _fail("file_unsafe", "forge_source_root")
+        payload = guard.read_regular(retained)
+        budget.add_payload_bytes(len(payload))
+        result.append(_PayloadFile(output_path, payload, 0o644))
+
+    guard.require_bindings()
+    _require_posix_source_membership(
+        guard,
+        retained_directories,
+        inventories,
+    )
+    guard.require_bindings()
+    return result
 
 
 def _launch_paths(target_id: str) -> tuple[str, str]:
@@ -2680,6 +3254,335 @@ def _confirm_directory_binding(
         _fail("filesystem_identity_changed", field)
 
 
+class _PosixSourceGuard:
+    """Retain one source tree and access every descendant relative to its handles."""
+
+    def __init__(self, path: Path, field: str) -> None:
+        _require_secure_output_primitives(field)
+        self.field = field
+        absolute = _lexical_absolute(path, field)
+        if absolute.anchor != os.path.sep:
+            _fail("invalid_path", field, exit_code=2)
+        self.handles: list[int] = []
+        self.bindings: list[_PosixBinding] = []
+        try:
+            anchor = os.open(os.path.sep, _directory_open_flags())
+        except OSError:
+            _fail("unsafe_parent", field)
+        self.handles.append(anchor)
+        try:
+            anchor_info = os.fstat(anchor)
+            if _is_link_or_reparse(anchor_info) or not stat.S_ISDIR(anchor_info.st_mode):
+                _fail("unsafe_parent", field)
+            self.anchor_identity = _identity(anchor_info)
+            parent = anchor
+            for component in absolute.parts[1:]:
+                try:
+                    descriptor = os.open(
+                        component,
+                        _directory_open_flags(),
+                        dir_fd=parent,
+                    )
+                except OSError:
+                    _fail("unsafe_parent", field)
+                retained = False
+                try:
+                    state = _state(os.fstat(descriptor))
+                    if state.mode_type != stat.S_IFDIR or _is_link_or_reparse(os.fstat(descriptor)):
+                        _fail("unsafe_parent", field)
+                    self.handles.append(descriptor)
+                    self.bindings.append(
+                        _PosixBinding(
+                            parent=parent,
+                            name=component,
+                            handle=descriptor,
+                            state=state,
+                            is_directory=True,
+                        )
+                    )
+                    retained = True
+                    parent = descriptor
+                finally:
+                    if not retained:
+                        _attempt_cleanups(
+                            (lambda descriptor=descriptor: os.close(descriptor),),
+                            context="POSIX source setup cleanup failed",
+                        )
+            self.root_handle = parent
+        except BaseException:
+            self.close()
+            raise
+
+    @property
+    def leaf(self) -> int:
+        return self.root_handle
+
+    def directory_entries(
+        self,
+        descriptor: int,
+    ) -> tuple[_PosixDirectoryEntry, ...]:
+        iterator = os.scandir(descriptor)
+        rows: list[_PosixDirectoryEntry] = []
+        try:
+            for entry in iterator:
+                if len(rows) >= MAX_OUTPUT_NODES:
+                    _fail("output_limit_exceeded", "output")
+                try:
+                    info = entry.stat(follow_symlinks=False)
+                except OSError:
+                    _fail("forge_material_unsafe", self.field)
+                rows.append(
+                    _PosixDirectoryEntry(
+                        name=entry.name,
+                        is_directory=stat.S_ISDIR(info.st_mode),
+                        is_reparse=_is_link_or_reparse(info),
+                        identity=_identity(info),
+                    )
+                )
+        finally:
+            _attempt_cleanups(
+                (iterator.close,),
+                context="POSIX directory enumeration cleanup failed",
+            )
+        return tuple(rows)
+
+    def retain_directory(
+        self,
+        parent: int,
+        name: str,
+        *,
+        missing_code: str,
+        unsafe_code: str,
+        expected_identity: tuple[int, int] | None = None,
+    ) -> int:
+        try:
+            descriptor = os.open(name, _directory_open_flags(), dir_fd=parent)
+        except FileNotFoundError:
+            _fail(missing_code, self.field)
+        except OSError:
+            _fail(unsafe_code, self.field)
+        retained = False
+        try:
+            info = os.fstat(descriptor)
+            state = _state(info)
+            if (
+                _is_link_or_reparse(info)
+                or state.mode_type != stat.S_IFDIR
+                or (expected_identity is not None and state.identity != expected_identity)
+            ):
+                _fail("filesystem_identity_changed", self.field)
+            self.handles.append(descriptor)
+            self.bindings.append(
+                _PosixBinding(
+                    parent=parent,
+                    name=name,
+                    handle=descriptor,
+                    state=state,
+                    is_directory=True,
+                )
+            )
+            retained = True
+            return descriptor
+        finally:
+            if not retained:
+                _attempt_cleanups(
+                    (lambda: os.close(descriptor),),
+                    context="POSIX retained-directory cleanup failed",
+                )
+
+    def retain_regular(
+        self,
+        parent: int,
+        name: str,
+        logical_path: Path,
+        *,
+        missing_code: str,
+        unsafe_code: str,
+        expected_identity: tuple[int, int] | None = None,
+    ) -> _PosixRetainedRegular:
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        try:
+            descriptor = os.open(name, flags, dir_fd=parent)
+        except FileNotFoundError:
+            _fail(missing_code, self.field)
+        except OSError:
+            _fail(unsafe_code, self.field)
+        retained = False
+        try:
+            info = os.fstat(descriptor)
+            state = _state(info)
+            if (
+                _is_link_or_reparse(info)
+                or state.mode_type != stat.S_IFREG
+                or state.nlink != 1
+                or state.size < 0
+                or (expected_identity is not None and state.identity != expected_identity)
+            ):
+                _fail(unsafe_code, self.field)
+            opened = _PosixRetainedRegular(
+                logical_path=logical_path,
+                parent=parent,
+                name=name,
+                handle=descriptor,
+                state=state,
+            )
+            self.handles.append(descriptor)
+            self.bindings.append(
+                _PosixBinding(
+                    parent=parent,
+                    name=name,
+                    handle=descriptor,
+                    state=state,
+                    is_directory=False,
+                )
+            )
+            retained = True
+            return opened
+        finally:
+            if not retained:
+                _attempt_cleanups(
+                    (lambda: os.close(descriptor),),
+                    context="POSIX retained-file cleanup failed",
+                )
+
+    def read_regular(self, opened: _PosixRetainedRegular) -> bytes:
+        _invoke_read_hook(opened.logical_path, "after_lstat")
+        payload = bytearray()
+        while len(payload) < opened.state.size:
+            try:
+                chunk = os.read(
+                    opened.handle,
+                    min(READ_CHUNK_BYTES, opened.state.size - len(payload)),
+                )
+            except OSError:
+                _fail("file_unsafe", self.field)
+            if not chunk:
+                _fail("file_truncated", self.field)
+            payload.extend(chunk)
+        try:
+            if os.read(opened.handle, 1):
+                _fail("file_size_mismatch", self.field)
+        except OSError:
+            _fail("file_unsafe", self.field)
+        _invoke_read_hook(opened.logical_path, "before_recheck")
+        self.require_regular(opened)
+        return bytes(payload)
+
+    def require_regular(self, opened: _PosixRetainedRegular) -> None:
+        try:
+            current = os.fstat(opened.handle)
+        except OSError:
+            _fail("filesystem_identity_changed", self.field)
+        if _is_link_or_reparse(current) or _state(current) != opened.state:
+            _fail("filesystem_identity_changed", self.field)
+        flags = (
+            os.O_RDONLY
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        try:
+            rebound = os.open(opened.name, flags, dir_fd=opened.parent)
+        except OSError:
+            _fail("filesystem_identity_changed", self.field)
+        try:
+            rebound_info = os.fstat(rebound)
+            if _is_link_or_reparse(rebound_info) or _state(rebound_info) != opened.state:
+                _fail("filesystem_identity_changed", self.field)
+        finally:
+            _attempt_cleanups(
+                (lambda: os.close(rebound),),
+                context="POSIX rebound-file cleanup failed",
+            )
+
+    def require_bindings(self) -> None:
+        try:
+            anchor = os.fstat(self.handles[0])
+        except OSError:
+            _fail("filesystem_identity_changed", self.field)
+        if (
+            _is_link_or_reparse(anchor)
+            or not stat.S_ISDIR(anchor.st_mode)
+            or _identity(anchor) != self.anchor_identity
+        ):
+            _fail("filesystem_identity_changed", self.field)
+        try:
+            reopened_anchor = os.open(os.path.sep, _directory_open_flags())
+        except OSError:
+            _fail("filesystem_identity_changed", self.field)
+        try:
+            reopened_info = os.fstat(reopened_anchor)
+            if (
+                _is_link_or_reparse(reopened_info)
+                or not stat.S_ISDIR(reopened_info.st_mode)
+                or _identity(reopened_info) != self.anchor_identity
+            ):
+                _fail("filesystem_identity_changed", self.field)
+        finally:
+            _attempt_cleanups(
+                (lambda: os.close(reopened_anchor),),
+                context="POSIX anchor-recheck cleanup failed",
+            )
+        directory_flags = _directory_open_flags()
+        regular_flags = (
+            os.O_RDONLY
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        for binding in self.bindings:
+            try:
+                retained = os.fstat(binding.handle)
+            except OSError:
+                _fail("filesystem_identity_changed", self.field)
+            retained_state = _state(retained)
+            if (
+                _is_link_or_reparse(retained)
+                or retained_state.identity != binding.state.identity
+                or retained_state.mode_type
+                != (stat.S_IFDIR if binding.is_directory else stat.S_IFREG)
+                or (not binding.is_directory and retained_state != binding.state)
+            ):
+                _fail("filesystem_identity_changed", self.field)
+            try:
+                rebound = os.open(
+                    binding.name,
+                    directory_flags if binding.is_directory else regular_flags,
+                    dir_fd=binding.parent,
+                )
+            except OSError:
+                _fail("filesystem_identity_changed", self.field)
+            try:
+                current = os.fstat(rebound)
+                current_state = _state(current)
+                if (
+                    _is_link_or_reparse(current)
+                    or current_state.identity != binding.state.identity
+                    or current_state.mode_type != retained_state.mode_type
+                    or (not binding.is_directory and current_state != binding.state)
+                ):
+                    _fail("filesystem_identity_changed", self.field)
+            finally:
+                _attempt_cleanups(
+                    (lambda rebound=rebound: os.close(rebound),),
+                    context="POSIX binding-recheck cleanup failed",
+                )
+
+    def close(self) -> None:
+        handles = tuple(reversed(self.handles))
+        self.handles.clear()
+        self.bindings.clear()
+        _attempt_cleanups(
+            (lambda handle=handle: os.close(handle) for handle in handles),
+            context="POSIX source cleanup failed",
+        )
+
+
 def _windows_unicode_name_length(name: str, field: str) -> int:
     try:
         length = len(name.encode("utf-16-le", "strict"))
@@ -2719,6 +3622,10 @@ class _WindowsOutputApi:
     STATUS_OBJECT_NAME_NOT_FOUND = 0xC0000034
     STATUS_OBJECT_NAME_COLLISION = 0xC0000035
     STATUS_OBJECT_PATH_NOT_FOUND = 0xC000003A
+    STATUS_NO_MORE_FILES = 0x80000006
+    FILE_ID_BOTH_DIRECTORY_INFORMATION = 37
+    DIRECTORY_QUERY_BYTES = 64 * 1024
+    DIRECTORY_INFORMATION_HEADER = struct.Struct("<IIqqqqqqIIIBx24s2xQ")
 
     def __init__(self) -> None:
         try:
@@ -2796,6 +3703,22 @@ class _WindowsOutputApi:
             self.wintypes.ULONG,
         ]
         self.NtCreateFile.restype = self.wintypes.LONG
+
+        self.NtQueryDirectoryFile = self.ntdll.NtQueryDirectoryFile
+        self.NtQueryDirectoryFile.argtypes = [
+            self.wintypes.HANDLE,
+            self.wintypes.HANDLE,
+            self.wintypes.LPVOID,
+            self.wintypes.LPVOID,
+            self.ctypes.POINTER(IoStatusBlock),
+            self.wintypes.LPVOID,
+            self.wintypes.ULONG,
+            self.wintypes.ULONG,
+            self.ctypes.c_ubyte,
+            self.wintypes.LPVOID,
+            self.ctypes.c_ubyte,
+        ]
+        self.NtQueryDirectoryFile.restype = self.wintypes.LONG
 
         self.CreateFileW = self.kernel32.CreateFileW
         self.CreateFileW.argtypes = [
@@ -2902,7 +3825,10 @@ class _WindowsOutputApi:
             return handle
         finally:
             if not retained:
-                self.close(handle)
+                _attempt_cleanups(
+                    (lambda: self.close(handle),),
+                    context="Windows handle validation cleanup failed",
+                )
 
     def open_anchor(self, anchor: str, field: str) -> int:
         access = self.FILE_LIST_DIRECTORY | self.FILE_READ_ATTRIBUTES | self.SYNCHRONIZE
@@ -3055,6 +3981,107 @@ class _WindowsOutputApi:
             _fail("file_unsafe", field)
         return bytes(buffer[: received.value])
 
+    def directory_entries(
+        self,
+        handle: int,
+        field: str,
+    ) -> tuple[_WindowsDirectoryEntry, ...]:
+        entries: list[_WindowsDirectoryEntry] = []
+        seen_names: set[str] = set()
+        parsed_rows = 0
+        query_calls = 0
+        query_limit = MAX_OUTPUT_NODES + 1
+        restart = True
+        while True:
+            query_calls += 1
+            if query_calls > query_limit:
+                _fail("output_limit_exceeded", "output")
+            buffer = (self.ctypes.c_ubyte * self.DIRECTORY_QUERY_BYTES)()
+            io_status = self.IoStatusBlock()
+            status = int(
+                self.NtQueryDirectoryFile(
+                    self.wintypes.HANDLE(handle),
+                    None,
+                    None,
+                    None,
+                    self.ctypes.byref(io_status),
+                    self.ctypes.byref(buffer),
+                    len(buffer),
+                    self.FILE_ID_BOTH_DIRECTORY_INFORMATION,
+                    False,
+                    None,
+                    restart,
+                )
+            )
+            status_code = status & 0xFFFFFFFF
+            if status_code == self.STATUS_NO_MORE_FILES:
+                break
+            if status < 0:
+                _fail("forge_material_unsafe", field)
+            returned = int(io_status.Information)
+            if returned <= 0 or returned > len(buffer):
+                _fail("forge_material_unsafe", field)
+            offset = 0
+            page_rows: list[_WindowsDirectoryEntry] = []
+            while True:
+                remaining = returned - offset
+                if remaining < self.DIRECTORY_INFORMATION_HEADER.size:
+                    _fail("forge_material_unsafe", field)
+                row = self.DIRECTORY_INFORMATION_HEADER.unpack_from(buffer, offset)
+                next_offset = int(row[0])
+                attributes = int(row[8])
+                name_bytes = int(row[9])
+                file_id = int(row[-1])
+                if (
+                    name_bytes <= 0
+                    or name_bytes % 2
+                    or name_bytes > remaining - self.DIRECTORY_INFORMATION_HEADER.size
+                ):
+                    _fail("forge_material_unsafe", field)
+                name_start = offset + self.DIRECTORY_INFORMATION_HEADER.size
+                try:
+                    name = bytes(buffer[name_start : name_start + name_bytes]).decode(
+                        "utf-16-le",
+                        "strict",
+                    )
+                except UnicodeError:
+                    _fail("forge_material_unsafe", field)
+                if not name:
+                    _fail("forge_material_unsafe", field)
+                if file_id == 0 and name not in {".", ".."}:
+                    _fail("filesystem_identity_unavailable", field)
+                page_rows.append(
+                    _WindowsDirectoryEntry(
+                        name=name,
+                        is_directory=bool(attributes & self.FILE_ATTRIBUTE_DIRECTORY),
+                        is_reparse=bool(attributes & self.FILE_ATTRIBUTE_REPARSE_POINT),
+                        file_id=file_id,
+                    )
+                )
+                record_size = self.DIRECTORY_INFORMATION_HEADER.size + name_bytes
+                aligned_record_size = (record_size + 7) & ~7
+                if next_offset == 0:
+                    if remaining < record_size or remaining > aligned_record_size:
+                        _fail("forge_material_unsafe", field)
+                    break
+                if next_offset != aligned_record_size or next_offset >= remaining:
+                    _fail("forge_material_unsafe", field)
+                offset += next_offset
+            page_names = {entry.name for entry in page_rows}
+            if (
+                not page_rows
+                or len(page_names) != len(page_rows)
+                or page_names.intersection(seen_names)
+            ):
+                _fail("forge_material_unsafe", field)
+            if parsed_rows + len(page_rows) > MAX_OUTPUT_NODES:
+                _fail("output_limit_exceeded", "output")
+            parsed_rows += len(page_rows)
+            seen_names.update(page_names)
+            entries.extend(entry for entry in page_rows if entry.name not in {".", ".."})
+            restart = False
+        return tuple(entries)
+
     def write(self, handle: int, payload: bytes, field: str) -> None:
         offset = 0
         while offset < len(payload):
@@ -3104,12 +4131,13 @@ class _WindowsDirectoryChain:
             _fail("invalid_path", field, exit_code=2)
         self.handles: list[int] = []
         self.bindings: list[_WindowsBinding] = []
+        self.regular_states: dict[int, _WindowsHandleState] = {}
         self.anchor_name = windows.anchor
         anchor = self.api.open_anchor(self.anchor_name, field)
-        self.anchor_identity = self.api.state(anchor, field).identity
         self.handles.append(anchor)
-        parent = anchor
         try:
+            self.anchor_identity = self.api.state(anchor, field).identity
+            parent = anchor
             components = windows.parts[1:]
             for index, component in enumerate(components):
                 handle = self.api.relative(
@@ -3122,8 +4150,8 @@ class _WindowsDirectoryChain:
                     failure_code=unsafe_code,
                     field=field,
                 )
-                state = self.api.state(handle, field)
                 self.handles.append(handle)
+                state = self.api.state(handle, field)
                 self.bindings.append(
                     _WindowsBinding(
                         parent=parent,
@@ -3134,13 +4162,176 @@ class _WindowsDirectoryChain:
                     )
                 )
                 parent = handle
+            self.root_handle = parent
         except BaseException:
             self.close()
             raise
 
     @property
     def leaf(self) -> int:
-        return self.handles[-1]
+        return self.root_handle
+
+    def retain_directory(
+        self,
+        parent: int,
+        name: str,
+        *,
+        missing_code: str,
+        unsafe_code: str,
+        expected_file_id: int | None = None,
+    ) -> int:
+        """Retain one child beneath an already authorized directory handle."""
+
+        handle = self.api.relative(
+            parent,
+            name,
+            directory=True,
+            create=False,
+            writable=False,
+            missing_code=missing_code,
+            failure_code=unsafe_code,
+            field=self.field,
+        )
+        retained = False
+        try:
+            state = self.api.state(handle, self.field)
+            if expected_file_id is not None and state.identity != (
+                self.anchor_identity[0],
+                expected_file_id,
+            ):
+                _fail("filesystem_identity_changed", self.field)
+            self.handles.append(handle)
+            self.bindings.append(
+                _WindowsBinding(
+                    parent=parent,
+                    name=name,
+                    handle=handle,
+                    identity=state.identity,
+                    is_directory=True,
+                )
+            )
+            retained = True
+            return handle
+        finally:
+            if not retained:
+                _attempt_cleanups(
+                    (lambda: self.api.close(handle),),
+                    context="Windows retained-directory cleanup failed",
+                )
+
+    def directory_entries(self, handle: int) -> tuple[_WindowsDirectoryEntry, ...]:
+        return self.api.directory_entries(handle, self.field)
+
+    def retain_regular(
+        self,
+        parent: int,
+        name: str,
+        logical_path: Path,
+        *,
+        readable: bool,
+        missing_code: str,
+        unsafe_code: str,
+        expected_file_id: int | None = None,
+    ) -> _WindowsRetainedRegular:
+        handle = self.api.relative(
+            parent,
+            name,
+            directory=False,
+            create=False,
+            readable=readable,
+            missing_code=missing_code,
+            failure_code=unsafe_code,
+            field=self.field,
+        )
+        retained = False
+        try:
+            state = self.api.state(handle, self.field)
+            if state.is_reparse or state.is_directory or state.nlink != 1 or state.size < 0:
+                _fail(unsafe_code, self.field)
+            if expected_file_id is not None and state.identity != (
+                self.anchor_identity[0],
+                expected_file_id,
+            ):
+                _fail("filesystem_identity_changed", self.field)
+            opened = _WindowsRetainedRegular(
+                logical_path=logical_path,
+                parent=parent,
+                name=name,
+                handle=handle,
+                state=state,
+            )
+            self.handles.append(handle)
+            self.bindings.append(
+                _WindowsBinding(
+                    parent=parent,
+                    name=name,
+                    handle=handle,
+                    identity=state.identity,
+                    is_directory=False,
+                )
+            )
+            self.regular_states[handle] = state
+            retained = True
+            return opened
+        finally:
+            if not retained:
+                _attempt_cleanups(
+                    (lambda: self.api.close(handle),),
+                    context="Windows retained-file cleanup failed",
+                )
+
+    def read_regular(
+        self,
+        opened: _WindowsRetainedRegular,
+        *,
+        expected_sha256: str | None = None,
+    ) -> bytes:
+        try:
+            _invoke_read_hook(opened.logical_path, "after_lstat")
+        except OSError:
+            _fail("filesystem_identity_changed", self.field)
+        payload = bytearray()
+        digest = hashlib.sha256()
+        while len(payload) < opened.state.size:
+            chunk = self.api.read(
+                opened.handle,
+                min(READ_CHUNK_BYTES, opened.state.size - len(payload)),
+                self.field,
+            )
+            if not chunk:
+                _fail("file_truncated", self.field)
+            payload.extend(chunk)
+            digest.update(chunk)
+        if self.api.read(opened.handle, 1, self.field):
+            _fail("file_size_mismatch", self.field)
+        try:
+            _invoke_read_hook(opened.logical_path, "before_recheck")
+        except OSError:
+            _fail("filesystem_identity_changed", self.field)
+        self.require_regular(opened)
+        actual_sha256 = digest.hexdigest()
+        if expected_sha256 is not None and actual_sha256 != expected_sha256:
+            _fail("file_digest_mismatch", self.field)
+        return bytes(payload)
+
+    def require_regular(self, opened: _WindowsRetainedRegular) -> None:
+        if self.api.state(opened.handle, self.field) != opened.state:
+            _fail("filesystem_identity_changed", self.field)
+        rebound = self.api.relative(
+            opened.parent,
+            opened.name,
+            directory=False,
+            create=False,
+            field=self.field,
+        )
+        try:
+            if self.api.state(rebound, self.field) != opened.state:
+                _fail("filesystem_identity_changed", self.field)
+        finally:
+            _attempt_cleanups(
+                (lambda: self.api.close(rebound),),
+                context="Windows rebound-file cleanup failed",
+            )
 
     def require_bindings(self) -> None:
         anchor = self.api.state(self.handles[0], self.field)
@@ -3151,13 +4342,18 @@ class _WindowsDirectoryChain:
             if self.api.state(reopened_anchor, self.field).identity != self.anchor_identity:
                 _fail("filesystem_identity_changed", self.field)
         finally:
-            self.api.close(reopened_anchor)
+            _attempt_cleanups(
+                (lambda: self.api.close(reopened_anchor),),
+                context="Windows anchor-recheck cleanup failed",
+            )
         for binding in self.bindings:
             retained = self.api.state(binding.handle, self.field)
+            expected_regular = self.regular_states.get(binding.handle)
             if (
                 retained.identity != binding.identity
                 or retained.is_reparse
                 or retained.is_directory != binding.is_directory
+                or (expected_regular is not None and retained != expected_regular)
             ):
                 _fail("filesystem_identity_changed", self.field)
             reopened = self.api.relative(
@@ -3169,15 +4365,39 @@ class _WindowsDirectoryChain:
             )
             try:
                 current = self.api.state(reopened, self.field)
-                if current.identity != binding.identity:
+                if current.identity != binding.identity or (
+                    expected_regular is not None and current != expected_regular
+                ):
                     _fail("filesystem_identity_changed", self.field)
             finally:
-                self.api.close(reopened)
+                _attempt_cleanups(
+                    (lambda reopened=reopened: self.api.close(reopened),),
+                    context="Windows binding-recheck cleanup failed",
+                )
 
     def close(self) -> None:
-        while self.handles:
-            self.api.close(self.handles.pop())
+        handles = tuple(reversed(self.handles))
+        self.handles.clear()
         self.bindings.clear()
+        self.regular_states.clear()
+        _attempt_cleanups(
+            (lambda handle=handle: self.api.close(handle) for handle in handles),
+            context="Windows directory-chain cleanup failed",
+        )
+
+
+def _close_windows_leaf_and_chain(
+    chain: _WindowsDirectoryChain,
+    handle: int,
+) -> None:
+    cleanups: list[Callable[[], None]] = []
+    if handle >= 0:
+        cleanups.append(lambda: chain.api.close(handle))
+    cleanups.append(chain.close)
+    _attempt_cleanups(
+        cleanups,
+        context="Windows retained-file cleanup failed",
+    )
 
 
 def _open_pinned_regular_windows(
@@ -3222,9 +4442,7 @@ def _open_pinned_regular_windows(
             _fail("file_size_mismatch", field)
         return absolute, chain, handle, state
     except BaseException:
-        if handle >= 0:
-            chain.api.close(handle)
-        chain.close()
+        _close_windows_leaf_and_chain(chain, handle)
         raise
 
 
@@ -3250,7 +4468,10 @@ def _confirm_pinned_regular_windows(
             _fail("filesystem_identity_changed", field)
         chain.require_bindings()
     finally:
-        chain.api.close(rebound)
+        _attempt_cleanups(
+            (lambda: chain.api.close(rebound),),
+            context="Windows rebound-file cleanup failed",
+        )
 
 
 def _authorize_pinned_regular_windows(
@@ -3278,10 +4499,7 @@ def _close_open_pinned_regular_windows(
     opened: tuple[Path, _WindowsDirectoryChain, int, _WindowsHandleState],
 ) -> None:
     _absolute, chain, handle, _state = opened
-    try:
-        chain.api.close(handle)
-    finally:
-        chain.close()
+    _close_windows_leaf_and_chain(chain, handle)
 
 
 def _read_open_pinned_regular_windows(
