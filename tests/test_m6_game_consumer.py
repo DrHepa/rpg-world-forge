@@ -233,16 +233,21 @@ class M6GameConsumerTests(unittest.TestCase):
 
     def _assert_identity_swap_rejected(self, target: Path, operation) -> None:
         original = resource_snapshot_module._source_directory_snapshot  # noqa: SLF001
+        canonical_target = target.resolve(strict=True)
         swapped = False
 
         def replace_after_snapshot(root: Path, relative):
             nonlocal swapped
             result = original(root, relative)
             source = result[0]
-            if source == target and not swapped:
-                replacement = target.with_name(f".{target.name}.injected-swap")
-                replacement.write_bytes(target.read_bytes())
-                os.replace(replacement, target)
+            try:
+                same_target = source.samefile(canonical_target)
+            except OSError as exc:
+                self.fail(f"could not prove identity swap target for {source}: {exc}")
+            if same_target and not swapped:
+                replacement = canonical_target.with_name(f".{canonical_target.name}.injected-swap")
+                replacement.write_bytes(canonical_target.read_bytes())
+                os.replace(replacement, canonical_target)
                 swapped = True
             return result
 
@@ -700,10 +705,16 @@ class M6GameConsumerTests(unittest.TestCase):
                     expected_bundle_hash=bundle_hash,
                 )
 
-            game_data = game / "game_data"
+            canonical_game = game.resolve(strict=True)
+            game_data = canonical_game / "game_data"
             expected_composition: list[Path] = []
             current = imported.parent.parent
             while current != game_data.parent:
+                if current == current.parent:
+                    self.fail(
+                        "composed import ancestor walk reached the filesystem anchor "
+                        f"before the game root: {current}"
+                    )
                 expected_composition.append(current)
                 current = current.parent
             self.assertEqual(
@@ -715,7 +726,7 @@ class M6GameConsumerTests(unittest.TestCase):
                 [path for path, context in calls if context == "composed catalog parent"],
             )
             self.assertNotIn(
-                game,
+                canonical_game,
                 {
                     path
                     for path, context in calls

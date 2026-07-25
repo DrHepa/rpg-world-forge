@@ -971,12 +971,25 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     candidate = destination
                 return states[candidate]
 
+            def audited_stat(path: str | Path):
+                candidate = Path(path)
+                if candidate == source and not source.exists():
+                    raise FileNotFoundError(candidate)
+                if candidate == destination or destination in candidate.parents:
+                    candidate = source / candidate.relative_to(destination)
+                return states[candidate]
+
             kernel32 = SimpleNamespace(
                 CreateFileW=CreateFile(),
                 FlushFileBuffers=_FakeWindowsCall(1),
                 CloseHandle=Close(),
             )
             with (
+                patch.object(
+                    directory_publish_module,
+                    "path_file_stat",
+                    side_effect=audited_stat,
+                ),
                 patch.object(
                     directory_publish_module.ctypes,
                     "WinDLL",

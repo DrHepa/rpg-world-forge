@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import isoworld.content.resource_snapshot as resource_snapshot_module
 import worldforge.bundle as bundle_module
 import worldforge.directory_publish as directory_publish_module
 from tests.test_m4_game_scaffold import _write_fixture
@@ -1212,7 +1213,33 @@ class BundlePublicationTests(unittest.TestCase):
                     path = destination
                 return states[path]
 
+            def audited_stat(path: str | Path):
+                candidate = Path(path)
+                if candidate == stage and not stage.exists():
+                    raise FileNotFoundError(candidate)
+                return states[candidate]
+
             with (
+                patch.object(
+                    directory_publish_module,
+                    "path_file_stat",
+                    side_effect=audited_stat,
+                ),
+                patch.object(
+                    resource_snapshot_module,
+                    "path_file_stat",
+                    side_effect=lambda path: os.stat(path, follow_symlinks=False),
+                ),
+                patch.object(
+                    resource_snapshot_module,
+                    "descriptor_file_stat",
+                    side_effect=os.fstat,
+                ),
+                patch.object(
+                    resource_snapshot_module,
+                    "_open_source_descriptor",
+                    side_effect=lambda path, flags: os.open(path, flags),
+                ),
                 patch.object(
                     directory_publish_module.ctypes,
                     "WinDLL",
