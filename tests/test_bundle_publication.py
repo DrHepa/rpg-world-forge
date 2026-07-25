@@ -1148,6 +1148,11 @@ class BundlePublicationTests(unittest.TestCase):
             real_windows_handle_stat = (
                 directory_publish_module.file_stat_module._windows_handle_stat  # noqa: SLF001
             )
+            real_file_stat_module = directory_publish_module.file_stat_module
+            real_snapshot_ctypes = resource_snapshot_module.ctypes
+            real_snapshot_path_file_stat = resource_snapshot_module.path_file_stat
+            real_snapshot_descriptor_file_stat = resource_snapshot_module.descriptor_file_stat
+            real_snapshot_open_source_descriptor = resource_snapshot_module._open_source_descriptor
             states = {
                 root: real_path_file_stat(root),
                 stage: real_path_file_stat(stage),
@@ -1164,6 +1169,7 @@ class BundlePublicationTests(unittest.TestCase):
             source_handle: int | None = None
             create_calls: list[tuple[object, ...]] = []
             fake_handle_stat_calls: list[int] = []
+            forced_handle_stat_calls: list[int] = []
             native_fallback_calls: list[int] = []
             forced_native_handle = -0xC112
             forced_native_probe_pending = True
@@ -1185,7 +1191,7 @@ class BundlePublicationTests(unittest.TestCase):
                 def __call__(self, *args: object) -> int:
                     nonlocal source_handle
                     create_calls.append(args)
-                    handle = 1200 + len(handles)
+                    handle = -(0x1000 + len(handles))
                     path = Path(str(args[0]))
                     handles[handle] = path
                     if path == stage and source_handle is None:
@@ -1224,12 +1230,23 @@ class BundlePublicationTests(unittest.TestCase):
                 def __getattr__(self, name: str) -> object:
                     return getattr(self._real_ctypes, name)
 
+            class FileStatProxy:
+                def __init__(self, real_module: object) -> None:
+                    self._real_module = real_module
+
+                def _windows_handle_stat(self, handle: int) -> object:
+                    return handle_stat(handle)
+
+                def __getattr__(self, name: str) -> object:
+                    return getattr(self._real_module, name)
+
             def handle_stat(handle: int):
+                if handle == forced_native_handle:
+                    forced_handle_stat_calls.append(handle)
+                    return states[root]
                 path = handles.get(handle)
                 if path is None:
                     native_fallback_calls.append(handle)
-                    if handle == forced_native_handle:
-                        return states[root]
                     return real_windows_handle_stat(handle)
                 fake_handle_stat_calls.append(handle)
                 if handle == source_handle and not stage.exists():
@@ -1261,6 +1278,7 @@ class BundlePublicationTests(unittest.TestCase):
                 return media_signature_matches(path, media_type)
 
             fake_ctypes = CtypesProxy(directory_publish_module.ctypes)
+            fake_file_stat_module = FileStatProxy(real_file_stat_module)
             with (
                 patch.object(
                     directory_publish_module,
@@ -1268,29 +1286,14 @@ class BundlePublicationTests(unittest.TestCase):
                     side_effect=audited_stat,
                 ),
                 patch.object(
-                    resource_snapshot_module,
-                    "path_file_stat",
-                    side_effect=lambda path: os.stat(path, follow_symlinks=False),
-                ),
-                patch.object(
-                    resource_snapshot_module,
-                    "descriptor_file_stat",
-                    side_effect=os.fstat,
-                ),
-                patch.object(
-                    resource_snapshot_module,
-                    "_open_source_descriptor",
-                    side_effect=lambda path, flags: os.open(path, flags),
-                ),
-                patch.object(
                     directory_publish_module,
                     "ctypes",
                     fake_ctypes,
                 ),
                 patch.object(
-                    directory_publish_module.file_stat_module,
-                    "_windows_handle_stat",
-                    side_effect=handle_stat,
+                    directory_publish_module,
+                    "file_stat_module",
+                    fake_file_stat_module,
                 ),
                 patch.object(
                     bundle_module,
@@ -1298,7 +1301,28 @@ class BundlePublicationTests(unittest.TestCase):
                     side_effect=media_signature_with_forced_native_handle,
                 ),
             ):
+                self.assertIs(
+                    real_file_stat_module._windows_handle_stat,  # noqa: SLF001
+                    real_windows_handle_stat,
+                )
+                self.assertIs(resource_snapshot_module.ctypes, real_snapshot_ctypes)
+                self.assertIs(
+                    resource_snapshot_module.path_file_stat,
+                    real_snapshot_path_file_stat,
+                )
+                self.assertIs(
+                    resource_snapshot_module.descriptor_file_stat,
+                    real_snapshot_descriptor_file_stat,
+                )
+                self.assertIs(
+                    resource_snapshot_module._open_source_descriptor,
+                    real_snapshot_open_source_descriptor,
+                )
                 self.assertIs(directory_publish_module.ctypes, fake_ctypes)
+                self.assertIs(
+                    directory_publish_module.file_stat_module,
+                    fake_file_stat_module,
+                )
                 self.assertIsNot(resource_snapshot_module.ctypes, fake_ctypes)
                 self.assertIsNot(
                     getattr(resource_snapshot_module.ctypes, "WinDLL", None),
@@ -1317,9 +1341,11 @@ class BundlePublicationTests(unittest.TestCase):
                         self.assertEqual(manifest["bundle_hash"], verified.bundle_hash)
 
             self.assertFalse(forced_native_probe_pending)
-            self.assertEqual(1, native_fallback_calls.count(forced_native_handle))
+            self.assertEqual([forced_native_handle], forced_handle_stat_calls)
+            self.assertEqual([], native_fallback_calls)
             self.assertGreater(len(fake_handle_stat_calls), 0)
             self.assertTrue(all(handle in handles for handle in fake_handle_stat_calls))
+            self.assertTrue(all(handle < -1 for handle in fake_handle_stat_calls))
             post_seal_calls = [
                 call for call in create_calls if destination in Path(str(call[0])).parents
             ]

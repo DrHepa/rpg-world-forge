@@ -959,9 +959,9 @@ class M6GameConsumerTests(unittest.TestCase):
                 )
 
             self.assertEqual(1, len(failure_paths))
-            self.assertEqual(
-                game / "game_data",
-                failure_paths[0].parent,
+            canonical_game = game.resolve(strict=True)
+            self.assertTrue(
+                (canonical_game / "game_data").samefile(failure_paths[0].parent),
             )
             self.assertTrue(failure_paths[0].name.startswith(".compositions.import-"))
             self.assertFalse((game / "game_data/compositions").exists())
