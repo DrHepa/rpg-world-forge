@@ -14,7 +14,6 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
-import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -196,6 +195,35 @@ const TARGETS = Object.freeze({
 });
 
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
+const MAX_WINDOWS_BACKEND_STDERR_BYTES = 1024;
+const MAX_WINDOWS_BACKEND_REPORT_LINE_BYTES = 16 * 1024 * 1024;
+const MAX_WINDOWS_BACKEND_FINAL_LINE_BYTES = 64;
+const MAX_WINDOWS_BACKEND_TRAILING_BYTES = 64;
+const DEFAULT_WINDOWS_BACKEND_TIMEOUT_MS = 5 * 60 * 1000;
+const DEFAULT_WINDOWS_BACKEND_TERMINATION_TIMEOUT_MS = 1000;
+const WAIT_TIMEOUT = Symbol("wait_timeout");
+const WINDOWS_SNAPSHOT_ERROR_CODES = new Set([
+  "codex_protocol_tree_mismatch",
+  "nonportable_package_path",
+  "package_directory_changed",
+  "package_directory_replaced",
+  "package_entry_changed",
+  "package_entry_replaced",
+  "package_file_changed",
+  "package_file_too_large",
+  "package_non_regular_entry",
+  "package_path_alias",
+  "package_resource_directory_missing",
+  "package_tree_too_deep",
+  "package_tree_too_large",
+  "packaged_resource_mismatch",
+  "secure_primitive_unavailable",
+  "shell_manifest_already_exists",
+  "shell_manifest_publish_failed",
+  "snapshot_cleanup_failed",
+  "snapshot_directory_not_empty",
+  "unsupported_python",
+]);
 
 export class ShellPackageError extends Error {
   constructor(code, message = code) {
@@ -207,6 +235,480 @@ export class ShellPackageError extends Error {
 
 function fail(code, message = code) {
   throw new ShellPackageError(code, message);
+}
+
+export function parseWindowsSnapshotError(stderr) {
+  if (
+    !Buffer.isBuffer(stderr) ||
+    stderr.length < 1 ||
+    stderr.length > MAX_WINDOWS_BACKEND_STDERR_BYTES
+  ) {
+    return null;
+  }
+  let message;
+  try {
+    message = textDecoder.decode(stderr);
+  } catch {
+    return null;
+  }
+  if (!Buffer.from(message, "utf8").equals(stderr)) {
+    return null;
+  }
+  const match =
+    /^Studio shell snapshot failed: ([a-z][a-z0-9_]{0,127})\r?\n$/u.exec(
+      message,
+    );
+  if (!match || !WINDOWS_SNAPSHOT_ERROR_CODES.has(match[1])) {
+    return null;
+  }
+  return match[1];
+}
+
+function captureBoundedBytes(stream, limit) {
+  const chunks = [];
+  let length = 0;
+  let overflow = false;
+  const onData = (chunk) => {
+    if (overflow) {
+      return;
+    }
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    if (length + bytes.length > limit) {
+      chunks.length = 0;
+      length = 0;
+      overflow = true;
+      return;
+    }
+    chunks.push(bytes);
+    length += bytes.length;
+  };
+  const onError = () => {
+    chunks.length = 0;
+    length = 0;
+    overflow = true;
+  };
+  stream.on("data", onData);
+  stream.on("error", onError);
+  return {
+    bytes: () => (overflow ? null : Buffer.concat(chunks, length)),
+    cancel: () => {
+      stream.off("data", onData);
+      stream.off("error", onError);
+      if (!stream.destroyed) {
+        stream.destroy();
+      }
+    },
+  };
+}
+
+function resultSlot() {
+  let resolve;
+  let settled = false;
+  const promise = new Promise((settle) => {
+    resolve = settle;
+  });
+  return {
+    promise,
+    settle(value) {
+      if (!settled) {
+        settled = true;
+        resolve(value);
+      }
+    },
+  };
+}
+
+function createWindowsBackendProtocolReader(stream) {
+  const limits = [
+    MAX_WINDOWS_BACKEND_REPORT_LINE_BYTES,
+    MAX_WINDOWS_BACKEND_FINAL_LINE_BYTES,
+  ];
+  const lines = limits.map(() => resultSlot());
+  const end = resultSlot();
+  let active = true;
+  let lineBuffer = Buffer.alloc(0);
+  let lineBytes = 0;
+  let lineLastByte;
+  let lineIndex = 0;
+  let trailingBytes = 0;
+
+  const detach = () => {
+    stream.off("close", onClose);
+    stream.off("data", onData);
+    stream.off("end", onEnd);
+    stream.off("error", onError);
+  };
+
+  const settleRemaining = (result) => {
+    for (let index = lineIndex; index < lines.length; index += 1) {
+      lines[index].settle(result);
+    }
+    end.settle(result);
+  };
+
+  const stopWithError = (code) => {
+    if (!active) {
+      return;
+    }
+    active = false;
+    detach();
+    settleRemaining({
+      error: new ShellPackageError(code),
+      kind: "error",
+    });
+    if (!stream.destroyed) {
+      stream.destroy();
+    }
+  };
+
+  const completeLine = (stripCarriageReturn) => {
+    const contentLength = lineBytes - (stripCarriageReturn ? 1 : 0);
+    const bytes = Buffer.from(lineBuffer.subarray(0, contentLength));
+    lines[lineIndex].settle({
+      kind: "line",
+      value: bytes,
+    });
+    lineIndex += 1;
+    lineBuffer = Buffer.alloc(0);
+    lineBytes = 0;
+    lineLastByte = undefined;
+  };
+
+  const appendLineBytes = (bytes, terminated) => {
+    const nextLength = lineBytes + bytes.length;
+    const nextLastByte =
+      bytes.length > 0 ? bytes[bytes.length - 1] : lineLastByte;
+    const hasCarriageReturn =
+      terminated && nextLength > 0 && nextLastByte === 0x0d;
+    const contentLength = nextLength - (hasCarriageReturn ? 1 : 0);
+    const limit = limits[lineIndex];
+    const pendingCrLf =
+      !terminated &&
+      nextLength === limit + 1 &&
+      nextLastByte === 0x0d;
+    if (
+      (terminated && contentLength > limit) ||
+      (!terminated && nextLength > limit && !pendingCrLf)
+    ) {
+      stopWithError("windows_backend_invalid");
+      return;
+    }
+    if (bytes.length > 0) {
+      if (nextLength > lineBuffer.length) {
+        const maximum = limit + 1;
+        const capacity = Math.min(
+          maximum,
+          Math.max(nextLength, lineBuffer.length * 2, 1024),
+        );
+        const replacement = Buffer.allocUnsafe(capacity);
+        lineBuffer.copy(replacement, 0, 0, lineBytes);
+        lineBuffer = replacement;
+      }
+      bytes.copy(lineBuffer, lineBytes);
+      lineBytes = nextLength;
+      lineLastByte = nextLastByte;
+    }
+    if (terminated) {
+      completeLine(hasCarriageReturn);
+    }
+  };
+
+  function onData(chunk) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    let offset = 0;
+    while (active && offset < bytes.length) {
+      if (lineIndex < lines.length) {
+        const lineFeed = bytes.indexOf(0x0a, offset);
+        const segmentEnd =
+          lineFeed === -1 ? bytes.length : lineFeed;
+        appendLineBytes(
+          bytes.subarray(offset, segmentEnd),
+          lineFeed !== -1,
+        );
+        offset = lineFeed === -1 ? bytes.length : lineFeed + 1;
+        continue;
+      }
+      const trailing = bytes.subarray(offset);
+      if (
+        trailingBytes + trailing.length > MAX_WINDOWS_BACKEND_TRAILING_BYTES ||
+        trailing.some((byte) => byte !== 0x09 && byte !== 0x20)
+      ) {
+        stopWithError("windows_backend_invalid");
+        return;
+      }
+      trailingBytes += trailing.length;
+      offset = bytes.length;
+    }
+  }
+
+  const finish = () => {
+    if (!active) {
+      return;
+    }
+    if (lineIndex < lines.length && lineBytes > 0) {
+      if (lineBytes > limits[lineIndex]) {
+        stopWithError("windows_backend_invalid");
+        return;
+      }
+      completeLine(false);
+    }
+    active = false;
+    detach();
+    const done = { kind: "done" };
+    for (let index = lineIndex; index < lines.length; index += 1) {
+      lines[index].settle(done);
+    }
+    end.settle({ kind: "end" });
+  };
+
+  function onClose() {
+    finish();
+  }
+
+  function onEnd() {
+    finish();
+  }
+
+  function onError() {
+    stopWithError("windows_backend_failed");
+  }
+
+  stream.on("close", onClose);
+  stream.on("data", onData);
+  stream.on("end", onEnd);
+  stream.on("error", onError);
+
+  return {
+    cancel() {
+      if (active) {
+        active = false;
+        detach();
+        settleRemaining({ kind: "cancelled" });
+      }
+      if (!stream.destroyed) {
+        stream.destroy();
+      }
+    },
+    end: end.promise,
+    hasPendingLineOverflow(index) {
+      return (
+        active &&
+        lineIndex === index &&
+        lineBytes > limits[index]
+      );
+    },
+    lines: lines.map((line) => line.promise),
+  };
+}
+
+function backendExitState(child) {
+  const terminal = resultSlot();
+  let active = true;
+  let spawned = false;
+  let runtimeError;
+  let terminalState;
+
+  const detach = () => {
+    child.off("close", onClose);
+    child.off("error", onError);
+    child.off("spawn", onSpawn);
+  };
+
+  const finish = (state) => {
+    if (!active) {
+      return;
+    }
+    active = false;
+    terminalState = state;
+    detach();
+    terminal.settle(state);
+  };
+
+  function onClose(status, signal) {
+    finish({
+      error: runtimeError,
+      kind: "close",
+      signal,
+      status,
+    });
+  }
+
+  function onError(error) {
+    if (!spawned) {
+      finish({ error, kind: "spawn_error" });
+      return;
+    }
+    runtimeError = error;
+  }
+
+  function onSpawn() {
+    spawned = true;
+    child.off("spawn", onSpawn);
+  }
+
+  child.once("close", onClose);
+  child.on("error", onError);
+  child.once("spawn", onSpawn);
+
+  return {
+    cancel() {
+      finish({
+        error: runtimeError,
+        kind: "cancelled",
+      });
+    },
+    get current() {
+      return terminalState;
+    },
+    result: terminal.promise,
+  };
+}
+
+async function waitBounded(promise, timeoutMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(WAIT_TIMEOUT), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function nextBackendLine(reader, lineIndex, timeoutMs) {
+  let result;
+  try {
+    result = await waitBounded(reader.lines[lineIndex], timeoutMs);
+  } catch {
+    fail("windows_backend_failed");
+  }
+  if (result === WAIT_TIMEOUT) {
+    fail(
+      reader.hasPendingLineOverflow(lineIndex)
+        ? "windows_backend_invalid"
+        : "windows_backend_timeout",
+    );
+  }
+  if (result.kind === "error") {
+    throw result.error;
+  }
+  if (result.kind === "cancelled") {
+    fail("windows_backend_failed");
+  }
+  return result.kind === "line"
+    ? { done: false, value: result.value }
+    : { done: true };
+}
+
+async function requireBackendProtocolEnd(reader, timeoutMs) {
+  let result;
+  try {
+    result = await waitBounded(reader.end, timeoutMs);
+  } catch {
+    fail("windows_backend_failed");
+  }
+  if (result === WAIT_TIMEOUT) {
+    fail("windows_backend_timeout");
+  }
+  if (result.kind === "error") {
+    throw result.error;
+  }
+  if (result.kind !== "end") {
+    fail("windows_backend_failed");
+  }
+}
+
+function failForWindowsBackendExit(state, stderr) {
+  if (state === WAIT_TIMEOUT) {
+    fail("windows_backend_timeout");
+  }
+  if (state.kind === "spawn_error") {
+    fail("windows_python_backend_unavailable");
+  }
+  if (
+    state.kind !== "close" ||
+    state.status !== 0 ||
+    state.error !== undefined
+  ) {
+    fail(parseWindowsSnapshotError(stderr()) ?? "windows_backend_failed");
+  }
+  fail("windows_backend_invalid");
+}
+
+function requireSuccessfulWindowsBackendExit(state, stderr) {
+  if (state === WAIT_TIMEOUT) {
+    fail("windows_backend_timeout");
+  }
+  if (state.kind === "spawn_error") {
+    fail("windows_python_backend_unavailable");
+  }
+  if (
+    state.kind !== "close" ||
+    state.status !== 0 ||
+    state.error !== undefined
+  ) {
+    fail(parseWindowsSnapshotError(stderr()) ?? "windows_backend_failed");
+  }
+}
+
+function endBackendInput(child, payload) {
+  if (child.stdin.destroyed || child.stdin.writableEnded) {
+    return payload === undefined;
+  }
+  try {
+    child.stdin.end(payload);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function terminateAndReapBackend(
+  child,
+  lifecycle,
+  timeoutMs,
+  { force = false } = {},
+) {
+  endBackendInput(child);
+  if (
+    lifecycle.current?.kind === "close" ||
+    lifecycle.current?.kind === "spawn_error"
+  ) {
+    return lifecycle.current;
+  }
+  if (!force) {
+    const graceful = await waitBounded(lifecycle.result, timeoutMs);
+    if (graceful !== WAIT_TIMEOUT) {
+      return graceful.kind === "close" ||
+        graceful.kind === "spawn_error"
+        ? graceful
+        : null;
+    }
+  }
+  try {
+    child.kill("SIGTERM");
+  } catch {
+    // Continue to the bounded hard-kill attempt.
+  }
+  const terminated = await waitBounded(lifecycle.result, timeoutMs);
+  if (terminated !== WAIT_TIMEOUT) {
+    return terminated.kind === "close" ||
+      terminated.kind === "spawn_error"
+      ? terminated
+      : null;
+  }
+  try {
+    child.kill("SIGKILL");
+  } catch {
+    // The final bounded wait below still observes a concurrent exit.
+  }
+  const killed = await waitBounded(lifecycle.result, timeoutMs);
+  return killed !== WAIT_TIMEOUT && killed.kind === "close"
+    ? killed
+    : null;
 }
 
 function requireLinuxSecurePrimitive() {
@@ -1337,7 +1839,8 @@ function windowsTreeEvidence(report, targetId, snapshotRoot) {
       size: raw.size,
     });
   }
-  const target = expectedTarget(targetId);
+  const tree = { directories, files };
+  const target = validateClosedOuterLayout(tree, targetId);
   const snapshots = report.snapshots;
   if (
     !exactObjectKeys(snapshots, [APP_ASAR_PATH, target.executable])
@@ -1438,7 +1941,7 @@ function windowsTreeEvidence(report, targetId, snapshotRoot) {
     schemaBytes: files.get(
       "resources/packaging/shell-package-manifest.schema.json",
     ).payload,
-    tree: { directories, files },
+    tree,
   };
 }
 
@@ -1460,7 +1963,7 @@ function windowsPythonExecutable(explicit) {
   return executable;
 }
 
-async function withWindowsBackend(
+export async function withWindowsBackend(
   {
     outputPath,
     pythonExecutable,
@@ -1468,7 +1971,21 @@ async function withWindowsBackend(
     targetId,
   },
   callback,
+  {
+    parseEvidence = windowsTreeEvidence,
+    spawnBackend = spawn,
+    terminationTimeoutMs = DEFAULT_WINDOWS_BACKEND_TERMINATION_TIMEOUT_MS,
+    timeoutMs = DEFAULT_WINDOWS_BACKEND_TIMEOUT_MS,
+  } = {},
 ) {
+  if (
+    !Number.isSafeInteger(timeoutMs) ||
+    timeoutMs < 1 ||
+    !Number.isSafeInteger(terminationTimeoutMs) ||
+    terminationTimeoutMs < 1
+  ) {
+    fail("windows_backend_invalid");
+  }
   const executable = windowsPythonExecutable(pythonExecutable);
   const snapshotRoot = await mkdtemp(
     path.join(os.tmpdir(), "rwf-shell-snapshot-"),
@@ -1491,79 +2008,139 @@ async function withWindowsBackend(
       WINDIR: process.env.WINDIR,
     }).filter(([, value]) => typeof value === "string"),
   );
-  const child = spawn(
-    executable,
-    [
-      backend,
-      "serve",
-      "--path",
-      outputPath,
-      "--target",
-      targetId,
-      "--source-root",
-      sourceRoot,
-      "--snapshot-dir",
-      snapshotRoot,
-    ],
-    {
-      cwd: sourceRoot,
-      env: environment,
-      shell: false,
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true,
-    },
+  let child;
+  try {
+    child = spawnBackend(
+      executable,
+      [
+        backend,
+        "serve",
+        "--path",
+        outputPath,
+        "--target",
+        targetId,
+        "--source-root",
+        sourceRoot,
+        "--snapshot-dir",
+        snapshotRoot,
+      ],
+      {
+        cwd: sourceRoot,
+        env: environment,
+        shell: false,
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true,
+      },
+    );
+  } catch {
+    fail("windows_python_backend_unavailable");
+  }
+  const lifecycle = backendExitState(child);
+  child.stdin.on("error", () => undefined);
+  const stderr = captureBoundedBytes(
+    child.stderr,
+    MAX_WINDOWS_BACKEND_STDERR_BYTES,
   );
-  child.stderr.resume();
-  const exited = new Promise((resolve, reject) => {
-    child.once("error", () => reject(new ShellPackageError("windows_python_backend_unavailable")));
-    child.once("close", (status) => resolve(status));
-  });
-  const lines = createInterface({
-    crlfDelay: Infinity,
-    input: child.stdout,
-  });
-  const iterator = lines[Symbol.asyncIterator]();
+  const protocol = createWindowsBackendProtocolReader(child.stdout);
   let callbackResult;
   let completed = false;
+  let failure;
   try {
-    const first = await iterator.next();
+    const first = await nextBackendLine(protocol, 0, timeoutMs);
+    if (first.done) {
+      failForWindowsBackendExit(
+        await waitBounded(lifecycle.result, timeoutMs),
+        stderr.bytes,
+      );
+    }
     if (
-      first.done ||
-      typeof first.value !== "string" ||
-      Buffer.byteLength(first.value, "utf8") > 16 * 1024 * 1024
+      !Buffer.isBuffer(first.value) ||
+      first.value.length > MAX_WINDOWS_BACKEND_REPORT_LINE_BYTES
     ) {
       fail("windows_backend_invalid");
     }
     const report = parseJson(
-      Buffer.from(first.value, "utf8"),
+      first.value,
       "windows_backend_invalid",
     );
-    const evidence = windowsTreeEvidence(report, targetId, snapshotRoot);
+    const evidence = parseEvidence(report, targetId, snapshotRoot);
     const outcome = await callback({ evidence, report, snapshotRoot });
     const { result, ...command } = outcome;
-    child.stdin.end(canonicalJsonBytes(command));
-    const final = await iterator.next();
+    if (!endBackendInput(child, canonicalJsonBytes(command))) {
+      fail("windows_backend_failed");
+    }
+    const final = await nextBackendLine(protocol, 1, timeoutMs);
+    if (final.done) {
+      failForWindowsBackendExit(
+        await waitBounded(lifecycle.result, timeoutMs),
+        stderr.bytes,
+      );
+    }
     if (
-      final.done ||
+      !Buffer.isBuffer(final.value) ||
+      final.value.length > MAX_WINDOWS_BACKEND_FINAL_LINE_BYTES ||
       !sameJson(
-        parseJson(Buffer.from(final.value, "utf8"), "windows_backend_invalid"),
+        parseJson(final.value, "windows_backend_invalid"),
         { status: "finalized" },
       )
     ) {
       fail("windows_backend_invalid");
     }
-    const status = await exited;
-    if (status !== 0) {
-      fail("windows_backend_failed");
-    }
+    await requireBackendProtocolEnd(protocol, timeoutMs);
+    requireSuccessfulWindowsBackendExit(
+      await waitBounded(lifecycle.result, timeoutMs),
+      stderr.bytes,
+    );
     completed = true;
     callbackResult = result;
+  } catch (error) {
+    failure = error;
   } finally {
-    lines.close();
-    if (!completed) {
-      child.stdin.end();
-      await exited.catch(() => undefined);
+    try {
+      protocol.cancel();
+    } catch {
+      if (!failure) {
+        failure = new ShellPackageError("windows_backend_failed");
+      }
     }
+    try {
+      stderr.cancel();
+    } catch {
+      if (!failure) {
+        failure = new ShellPackageError("windows_backend_failed");
+      }
+    }
+    if (!completed) {
+      try {
+        const reaped = await terminateAndReapBackend(
+          child,
+          lifecycle,
+          terminationTimeoutMs,
+          {
+            force:
+              failure instanceof ShellPackageError &&
+              failure.code === "windows_backend_timeout",
+          },
+        );
+        if (!reaped && !failure) {
+          failure = new ShellPackageError("windows_backend_failed");
+        }
+      } catch {
+        if (!failure) {
+          failure = new ShellPackageError("windows_backend_failed");
+        }
+      }
+    }
+    try {
+      lifecycle.cancel();
+    } catch {
+      if (!failure) {
+        failure = new ShellPackageError("windows_backend_failed");
+      }
+    }
+  }
+  if (failure) {
+    throw failure;
   }
   return callbackResult;
 }

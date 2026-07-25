@@ -189,6 +189,66 @@ class StudioShellPackageSnapshotTests(unittest.TestCase):
             self.assertEqual([True], tree.reader.share_write)
             self.assertEqual([3], tree.api.closed)
 
+    def test_output_guard_reopen_shares_the_retained_creator(self) -> None:
+        expected = SimpleNamespace(
+            identity=(4, 2),
+            is_directory=True,
+            is_reparse=False,
+        )
+
+        class FakeApi:
+            def __init__(self) -> None:
+                self.closed: list[int] = []
+                self.reopens: list[tuple[int, str, bool]] = []
+
+            def state(self, _handle: int, _field: str) -> SimpleNamespace:
+                return expected
+
+            def relative(
+                self,
+                parent: int,
+                name: str,
+                *,
+                directory: bool,
+                create: bool,
+                share_write: bool = False,
+                field: str,
+            ) -> int:
+                self.assert_contract(directory, create, field)
+                self.reopens.append((parent, name, share_write))
+                if not share_write:
+                    raise snapshot.SnapshotError("package_output_changed")
+                return 12
+
+            def close(self, handle: int) -> None:
+                self.closed.append(handle)
+
+            @staticmethod
+            def assert_contract(directory: bool, create: bool, field: str) -> None:
+                if not directory or create or field != "package":
+                    raise AssertionError("unexpected guard reopen contract")
+
+        class FakeChain:
+            def __init__(self) -> None:
+                self.api = FakeApi()
+                self.bindings_checked = False
+                self.leaf = 7
+
+            def require_bindings(self) -> None:
+                self.bindings_checked = True
+
+        chain = FakeChain()
+        snapshot._require_guard_output_binding(
+            chain,
+            output_handle=11,
+            output_name="external-shell-output",
+            expected=expected,
+        )
+
+        self.assertTrue(chain.bindings_checked)
+        self.assertEqual([(7, "external-shell-output", True)], chain.api.reopens)
+        self.assertEqual([12], chain.api.closed)
+
 
 if __name__ == "__main__":
     unittest.main()

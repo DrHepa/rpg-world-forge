@@ -27,20 +27,20 @@ function fail(code, exitCode = 1) {
   throw new PackageShellError(code, exitCode);
 }
 
-function normalizedKey(value) {
-  return process.platform === "win32" ? value.toLowerCase() : value;
+function normalizedKey(value, pathFlavor) {
+  return pathFlavor.sep === "\\" ? value.toLowerCase() : value;
 }
 
-function isWithin(parent, candidate) {
-  const relative = path.relative(
-    normalizedKey(parent),
-    normalizedKey(candidate),
+export function isWithin(parent, candidate, pathFlavor = path) {
+  const relative = pathFlavor.relative(
+    normalizedKey(parent, pathFlavor),
+    normalizedKey(candidate, pathFlavor),
   );
   return (
     relative === "" ||
-    (!path.isAbsolute(relative) &&
+    (!pathFlavor.isAbsolute(relative) &&
       relative !== ".." &&
-      !relative.startsWith(`..${path.sep}`))
+      !relative.startsWith(`..${pathFlavor.sep}`))
   );
 }
 

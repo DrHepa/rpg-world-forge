@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import {
   chmod,
   copyFile,
@@ -15,6 +17,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -23,15 +26,18 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   asarLookupPath,
   enumerateRawAsarEntries,
+  parseWindowsSnapshotError,
   SHELL_MANIFEST_PATH,
   ShellPackageError,
   staticFuseFixture,
   targetFixtureLayout,
   verifyPackagedShell as verifyPackagedShellCore,
+  withWindowsBackend,
   writeShellPackageManifest as writeShellPackageManifestCore,
 } from "../../scripts/shell-package-verifier.mjs";
 import { parseShellPackageArguments } from "../../scripts/verify-shell-package.mjs";
 import {
+  isWithin,
   PackageShellError,
   runShellPackage,
 } from "../../scripts/package-shell.mjs";
@@ -49,6 +55,9 @@ const testPython =
   (process.env.pythonLocation
     ? path.join(process.env.pythonLocation, "python.exe")
     : undefined);
+const maxBackendReportLineBytes = 16 * 1024 * 1024;
+const maxBackendFinalLineBytes = 64;
+const maxBackendTrailingBytes = 64;
 const verifyPackagedShell = (options) =>
   verifyPackagedShellCore({ ...options, pythonExecutable: testPython });
 const writeShellPackageManifest = (options) =>
@@ -56,6 +65,78 @@ const writeShellPackageManifest = (options) =>
     ...options,
     pythonExecutable: testPython,
   });
+
+function createHungBackend({
+  closeAfterFinal = false,
+  closeAfterKillErrors = [],
+  finalOutput,
+  initialOutput = '{"status":"ready"}\n',
+  killErrorSignals = [],
+  reapOnKill = true,
+} = {}) {
+  const child = new EventEmitter();
+  child.exitCode = null;
+  child.killSignals = [];
+  child.killed = false;
+  child.signalCode = null;
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+  child.stdout = new PassThrough();
+  const close = (status, signal) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      return;
+    }
+    child.exitCode = status;
+    child.signalCode = signal;
+    child.stderr.end();
+    child.stdout.end();
+    queueMicrotask(() => child.emit("close", status, signal));
+  };
+  child.kill = (signal = "SIGTERM") => {
+    child.killed = true;
+    child.killSignals.push(signal);
+    if (killErrorSignals.includes(signal)) {
+      const error = new Error(`kill ${signal} denied`);
+      error.code = "EPERM";
+      child.emit("error", error);
+      if (closeAfterKillErrors.includes(signal)) {
+        queueMicrotask(() => close(null, signal));
+      }
+      return false;
+    }
+    if (reapOnKill && child.signalCode === null) {
+      close(null, signal);
+    }
+    return true;
+  };
+  child.stdin.once("finish", () => {
+    if (finalOutput !== undefined) {
+      child.stdout.write(finalOutput);
+    }
+    if (closeAfterFinal) {
+      close(0, null);
+    }
+  });
+  child.start = () => {
+    if (!child.started) {
+      child.started = true;
+      queueMicrotask(() => {
+        child.emit("spawn");
+        if (initialOutput !== undefined) {
+          child.stdout.write(initialOutput);
+        }
+      });
+    }
+    return child;
+  };
+  return child;
+}
+
+function expectBackendLifecycleDetached(child) {
+  for (const event of ["close", "error", "spawn"]) {
+    expect(child.listenerCount(event)).toBe(0);
+  }
+}
 
 function shellPackageFailure(operation) {
   try {
@@ -330,6 +411,420 @@ describe("raw ASAR header enumeration", () => {
   });
 });
 
+describe("Windows boundary helpers", () => {
+  it("treats cross-volume Windows paths as external", () => {
+    expect(
+      isWithin(
+        "D:\\a\\rpg-world-forge",
+        "C:\\runner-temp\\shell-package",
+        path.win32,
+      ),
+    ).toBe(false);
+    expect(
+      isWithin(
+        "D:\\A\\RPG-World-Forge",
+        "d:\\a\\rpg-world-forge\\nested",
+        path.win32,
+      ),
+    ).toBe(true);
+  });
+
+  it("accepts only bounded exact allowlisted snapshot errors", () => {
+    expect(
+      parseWindowsSnapshotError(
+        Buffer.from(
+          "Studio shell snapshot failed: packaged_resource_mismatch\r\n",
+          "utf8",
+        ),
+      ),
+    ).toBe("packaged_resource_mismatch");
+    for (const invalid of [
+      Buffer.from("Studio shell snapshot failed: backend_failure\n", "utf8"),
+      Buffer.from(
+        "Studio shell snapshot failed: invalid_backend_command\n",
+        "utf8",
+      ),
+      Buffer.from(
+        "Studio shell snapshot failed: packaged_resource_mismatch\ntrailing\n",
+        "utf8",
+      ),
+      Buffer.from([
+        0xef,
+        0xbb,
+        0xbf,
+        ...Buffer.from(
+          "Studio shell snapshot failed: packaged_resource_mismatch\n",
+          "utf8",
+        ),
+      ]),
+      Buffer.alloc(1025, 0x61),
+      Buffer.from([0xff]),
+    ]) {
+      expect(parseWindowsSnapshotError(invalid)).toBeNull();
+    }
+  });
+
+  it("maps a missing backend executable without an unhandled rejection", async () => {
+    let child;
+    const unhandled = [];
+    const listener = (reason) => unhandled.push(reason);
+    process.on("unhandledRejection", listener);
+    try {
+      await expect(
+        withWindowsBackend(
+          {
+            outputPath: temporaryRoot,
+            pythonExecutable: path.join(
+              temporaryRoot,
+              "missing-python-backend",
+            ),
+            sourceRoot: studioRoot,
+            targetId: "linux-x64",
+          },
+          async () => {
+            throw new Error("callback must not run");
+          },
+          {
+            spawnBackend: (...arguments_) => {
+              child = spawn(...arguments_);
+              return child;
+            },
+            timeoutMs: 50,
+            terminationTimeoutMs: 50,
+          },
+        ),
+      ).rejects.toMatchObject({
+        code: "windows_python_backend_unavailable",
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+      expect(child).toBeDefined();
+      expectBackendLifecycleDetached(child);
+    } finally {
+      process.off("unhandledRejection", listener);
+    }
+  });
+
+  it("times out and reaps a backend that stops after ready", async () => {
+    let callbackRan = false;
+    const child = createHungBackend();
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => {
+          callbackRan = true;
+          return { action: "finalize", result: null };
+        },
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 20,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "windows_backend_timeout" });
+    expect(callbackRan).toBe(true);
+    expect(child.killed).toBe(true);
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+  });
+
+  it("escalates to SIGKILL when SIGTERM errors without close", async () => {
+    const original = new ShellPackageError("electron_root_layout_mismatch");
+    const child = createHungBackend({
+      killErrorSignals: ["SIGTERM"],
+    });
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => {
+          throw original;
+        },
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 20,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toBe(original);
+    expect(child.killSignals).toEqual(["SIGTERM", "SIGKILL"]);
+    expect(child.signalCode).toBe("SIGKILL");
+    expectBackendLifecycleDetached(child);
+  });
+
+  it("bounds cleanup when SIGTERM and SIGKILL both error without close", async () => {
+    const original = new ShellPackageError("electron_root_layout_mismatch");
+    const child = createHungBackend({
+      killErrorSignals: ["SIGTERM", "SIGKILL"],
+    });
+    const started = Date.now();
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => {
+          throw original;
+        },
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 20,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toBe(original);
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(child.killSignals).toEqual(["SIGTERM", "SIGKILL"]);
+    expect(child.exitCode).toBeNull();
+    expect(child.signalCode).toBeNull();
+    expectBackendLifecycleDetached(child);
+  });
+
+  it("accepts close as reaping proof after a SIGTERM error", async () => {
+    const original = new ShellPackageError("electron_root_layout_mismatch");
+    const child = createHungBackend({
+      closeAfterKillErrors: ["SIGTERM"],
+      killErrorSignals: ["SIGTERM"],
+    });
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => {
+          throw original;
+        },
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 20,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toBe(original);
+    expect(child.killSignals).toEqual(["SIGTERM"]);
+    expect(child.signalCode).toBe("SIGTERM");
+    expectBackendLifecycleDetached(child);
+  });
+
+  it("rejects an oversized unterminated first line at the CRLF lookahead bound", async () => {
+    const child = createHungBackend({
+      initialOutput: Buffer.concat([
+        Buffer.alloc(maxBackendReportLineBytes, 0x61),
+        Buffer.from("\r", "ascii"),
+      ]),
+    });
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => {
+          throw new Error("callback must not run");
+        },
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 100,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "windows_backend_invalid" });
+    expect(child.killed).toBe(true);
+  });
+
+  it("rejects an oversized unterminated final line", async () => {
+    const child = createHungBackend({
+      finalOutput: Buffer.concat([
+        Buffer.alloc(maxBackendFinalLineBytes, 0x20),
+        Buffer.from("\r", "ascii"),
+      ]),
+    });
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => ({ action: "finalize", result: null }),
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 100,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "windows_backend_invalid" });
+    expect(child.killed).toBe(true);
+  });
+
+  it("rejects oversized trailing whitespace after the final line", async () => {
+    const child = createHungBackend({
+      closeAfterFinal: true,
+      finalOutput: Buffer.concat([
+        Buffer.from('{"status":"finalized"}\n', "utf8"),
+        Buffer.alloc(maxBackendTrailingBytes + 1, 0x20),
+      ]),
+    });
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => ({ action: "finalize", result: null }),
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 100,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "windows_backend_invalid" });
+  });
+
+  it("rejects a third protocol line", async () => {
+    const child = createHungBackend({
+      closeAfterFinal: true,
+      finalOutput:
+        '{"status":"finalized"}\n{"status":"unexpected"}\n',
+    });
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => ({ action: "finalize", result: null }),
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 100,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "windows_backend_invalid" });
+  });
+
+  it("accepts exact report and acknowledgement byte boundaries", async () => {
+    const report = Buffer.from('{"status":"ready"}', "utf8");
+    const final = Buffer.from('{"status":"finalized"}', "utf8");
+    const child = createHungBackend({
+      closeAfterFinal: true,
+      finalOutput: Buffer.concat([
+        final,
+        Buffer.alloc(maxBackendFinalLineBytes - final.length, 0x20),
+        Buffer.from("\n", "ascii"),
+        Buffer.alloc(maxBackendTrailingBytes, 0x20),
+      ]),
+      initialOutput: Buffer.concat([
+        report,
+        Buffer.alloc(maxBackendReportLineBytes - report.length, 0x20),
+        Buffer.from("\r\n", "ascii"),
+      ]),
+    });
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => ({ action: "finalize", result: "bounded" }),
+        {
+          parseEvidence: (value) => value,
+          spawnBackend: () => child.start(),
+          timeoutMs: 1000,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).resolves.toBe("bounded");
+  });
+
+  it("preserves a callback error while reaping a hung backend", async () => {
+    const original = new ShellPackageError("electron_root_layout_mismatch");
+    const child = createHungBackend();
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => {
+          throw original;
+        },
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 20,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toBe(original);
+    expect(child.killed).toBe(true);
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+  });
+
+  it("preserves a callback error when bounded cleanup cannot observe exit", async () => {
+    const original = new ShellPackageError("electron_root_layout_mismatch");
+    const child = createHungBackend({ reapOnKill: false });
+
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "linux-x64",
+        },
+        async () => {
+          throw original;
+        },
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 20,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toBe(original);
+    expect(child.killSignals).toEqual(["SIGTERM", "SIGKILL"]);
+    expect(child.stdout.destroyed).toBe(true);
+    for (const event of ["close", "data", "end", "error"]) {
+      expect(child.stdout.listenerCount(event)).toBe(0);
+    }
+  });
+});
+
 describe(
   "Studio packaged shell verifier",
   { timeout: process.platform === "win32" ? 60_000 : 10_000 },
@@ -339,7 +834,7 @@ describe(
     async () => {
       for (const targetId of ["linux-x64", "win32-x64"]) {
         const packageRoot = bases.get(targetId);
-        expect(path.relative(studioRoot, packageRoot).startsWith("..")).toBe(true);
+        expect(isWithin(studioRoot, packageRoot)).toBe(false);
         expect(
           JSON.parse(
             await readFile(

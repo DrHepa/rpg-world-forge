@@ -814,6 +814,35 @@ def _inside(parent: Path, candidate: Path) -> bool:
     return common == os.path.normcase(parent)
 
 
+def _require_guard_output_binding(
+    chain: Any,
+    output_handle: int,
+    output_name: str,
+    expected: Any,
+) -> None:
+    chain.require_bindings()
+    retained = chain.api.state(output_handle, "package")
+    reopened = chain.api.relative(
+        chain.leaf,
+        output_name,
+        directory=True,
+        create=False,
+        share_write=True,
+        field="package",
+    )
+    try:
+        current = chain.api.state(reopened, "package")
+        if (
+            retained.identity != expected.identity
+            or current.identity != expected.identity
+            or retained.is_reparse
+            or not retained.is_directory
+        ):
+            _fail("package_output_changed")
+    finally:
+        chain.api.close(reopened)
+
+
 def _guard_output(argv: list[str]) -> None:
     if os.name != "nt":
         _fail("secure_primitive_unavailable")
@@ -870,26 +899,12 @@ def _guard_output(argv: list[str]) -> None:
             _fail("invalid_backend_command")
         if command != {"action": "finalize"}:
             _fail("invalid_backend_command")
-        chain.require_bindings()
-        retained = chain.api.state(output_handle, "package")
-        reopened = chain.api.relative(
-            chain.leaf,
+        _require_guard_output_binding(
+            chain,
+            output_handle,
             output_root.name,
-            directory=True,
-            create=False,
-            field="package",
+            expected,
         )
-        try:
-            current = chain.api.state(reopened, "package")
-            if (
-                retained.identity != expected.identity
-                or current.identity != expected.identity
-                or retained.is_reparse
-                or not retained.is_directory
-            ):
-                _fail("package_output_changed")
-        finally:
-            chain.api.close(reopened)
         try:
             final_real = output_root.resolve(strict=True)
         except OSError:
