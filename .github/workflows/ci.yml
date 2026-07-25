@@ -46,6 +46,12 @@ jobs:
         run: >-
           python -m compileall -q
           src scripts tests apps/studio/scripts/shell_package_snapshot.py
+      - name: Run Windows fail-fast publication contract gate
+        if: runner.os == 'Windows'
+        run: >-
+          python -m unittest -v
+          tests.test_bundle_publication.BundlePublicationTests.test_windows_seam_bundle_verifier_reads_with_seal_handles_active
+          tests.test_m6_game_consumer.M6GameConsumerTests.test_stage_mkdir_failure_leaves_no_compositions_tree_and_retry_succeeds
       - name: Run complete headless test suite
         run: python -m unittest discover -s tests -v
       - name: Validate foundation release profile
