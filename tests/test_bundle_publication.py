@@ -1143,6 +1143,19 @@ class BundlePublicationTests(unittest.TestCase):
                 root,
                 context="Windows verifier seam parent",
             )
+            real_path_file_stat = directory_publish_module.path_file_stat
+            states = {
+                root: real_path_file_stat(root),
+                stage: real_path_file_stat(stage),
+            }
+            states.update({path: real_path_file_stat(path) for path in stage.rglob("*")})
+            states.update(
+                {
+                    destination / path.relative_to(stage): state
+                    for path, state in tuple(states.items())
+                    if path == stage or stage in path.parents
+                }
+            )
             handles: dict[int, Path] = {}
             source_handle: int | None = None
             create_calls: list[tuple[object, ...]] = []
@@ -1197,7 +1210,7 @@ class BundlePublicationTests(unittest.TestCase):
                 path = handles[handle]
                 if handle == source_handle and not stage.exists():
                     path = destination
-                return directory_publish_module.path_file_stat(path)
+                return states[path]
 
             with (
                 patch.object(
@@ -1512,6 +1525,7 @@ class BundlePublicationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             bundle, game = self._bundle_and_game(root)
+            game = game.resolve(strict=True)
             replace_journal = bundle_module._replace_import_journal
 
             def interrupt_ready(
@@ -1858,6 +1872,7 @@ class BundlePublicationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             bundle, game = self._bundle_and_game(root)
+            game = game.resolve(strict=True)
             flush_directory = bundle_module.fsync_directory
             injected = False
 
@@ -1918,6 +1933,7 @@ class BundlePublicationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             bundle, game = self._bundle_and_game(root)
+            game = game.resolve(strict=True)
             world_root = game / "game_data/worlds/modly_foundation"
             flush_directory = bundle_module.fsync_directory
             injected = False

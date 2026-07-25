@@ -638,6 +638,50 @@ class _WindowsRetainedTree:
                 f"{self.source} and {destination}: {exc}"
             ) from exc
 
+    def require_post_body_unchanged(self, destination: Path) -> None:
+        """Revalidate the exact published tree before releasing its seal handles."""
+
+        try:
+            if not self.namespace_mutated or self.expected_fingerprint is None:
+                raise DirectoryPublishError("Windows publication lease was not fully established")
+            self._require_published_binding(
+                destination,
+                context="post-body Windows publication",
+            )
+            self._require_payload_handles(context="post-body sealed Windows publication")
+            if _windows_tree_snapshot(destination) != self.expected_tree:
+                raise DirectoryPublishError(
+                    "Published Windows payload tree changed during caller verification"
+                )
+            if (
+                _windows_tree_fingerprint(
+                    destination,
+                    expected_root_state=self.expected_root_state,
+                    expected_tree=self.expected_tree,
+                )
+                != self.expected_fingerprint
+            ):
+                raise DirectoryPublishError(
+                    "Published Windows payload fingerprint changed during caller verification"
+                )
+            self._require_published_binding(
+                destination,
+                context="post-body fingerprinted Windows publication",
+            )
+            self._require_payload_handles(context="post-body fingerprinted Windows publication")
+            if _windows_tree_snapshot(destination) != self.expected_tree:
+                raise DirectoryPublishError(
+                    "Published Windows payload tree changed after caller verification"
+                )
+        except DirectoryPublishIndeterminateError:
+            raise
+        except BaseException as exc:
+            raise DirectoryPublishIndeterminateError(
+                "Windows directory publication outcome became indeterminate after "
+                "caller verification; no rollback was attempted and evidence was "
+                f"retained at {destination}: {exc}"
+            ) from exc
+
     def close(self) -> None:
         primary = sys.exception()
         cleanup_error: DirectoryPublishError | None = None
@@ -1933,6 +1977,7 @@ def _windows_rename_noreplace(
     ) as retained:
         published_identity = retained.rename_noreplace(destination)
         yield published_identity
+        retained.require_post_body_unchanged(destination)
 
 
 @contextmanager

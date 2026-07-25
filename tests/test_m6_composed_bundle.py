@@ -614,27 +614,35 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                     (external_destination / "nested/payload.bin").read_bytes(),
                 )
 
-            with directory_publish_module.publish_directory_noreplace(
-                source,
-                destination,
-                expected_source_identity=source_identity,
-            ) as published_identity:
-                self.assertFalse(source.exists())
-                published_payload = destination / "nested/payload.bin"
-                self.assertEqual(
-                    b"published payload",
-                    published_payload.read_bytes(),
-                )
-                with self.assertRaises(OSError):
-                    published_payload.write_bytes(b"mutated payload")
-                with self.assertRaises(OSError):
-                    published_payload.unlink()
-                with self.assertRaises(OSError):
-                    published_payload.rename(destination / "nested/renamed.bin")
-                with self.assertRaises(OSError):
+            with self.assertRaisesRegex(
+                directory_publish_module.DirectoryPublishIndeterminateError,
+                "caller verification",
+            ):
+                with directory_publish_module.publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=source_identity,
+                ) as published_identity:
+                    self.assertFalse(source.exists())
+                    published_payload = destination / "nested/payload.bin"
+                    self.assertEqual(
+                        b"published payload",
+                        published_payload.read_bytes(),
+                    )
+                    with self.assertRaises(OSError):
+                        published_payload.write_bytes(b"mutated payload")
+                    with self.assertRaises(OSError):
+                        published_payload.unlink()
+                    with self.assertRaises(OSError):
+                        published_payload.rename(destination / "nested/renamed.bin")
                     (destination / "new-entry.bin").write_bytes(b"new")
 
             self.assertEqual(source_identity, published_identity)
+            self.assertEqual(
+                b"published payload",
+                (destination / "nested/payload.bin").read_bytes(),
+            )
+            self.assertEqual(b"new", (destination / "new-entry.bin").read_bytes())
 
             contender = parent / "contender"
             winner = parent / "winner"
@@ -903,6 +911,16 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 parent,
                 context="Windows substitution parent",
             )
+            real_path_file_stat = directory_publish_module.path_file_stat
+            source_state = real_path_file_stat(source)
+            payload_state = real_path_file_stat(payload)
+            states = {
+                parent: real_path_file_stat(parent),
+                source: source_state,
+                payload: payload_state,
+                destination: source_state,
+                destination / payload.name: payload_state,
+            }
             handles: dict[int, Path] = {}
             closed: set[int] = set()
             source_handle: int | None = None
@@ -951,7 +969,7 @@ class DirectoryPublicationPortabilityTests(unittest.TestCase):
                 candidate = handles[handle]
                 if handle == source_handle and not source.exists():
                     candidate = destination
-                return directory_publish_module.path_file_stat(candidate)
+                return states[candidate]
 
             kernel32 = SimpleNamespace(
                 CreateFileW=CreateFile(),
