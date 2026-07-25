@@ -52,6 +52,8 @@ TARGET_IDS = ("linux-x64", "win32-x64")
 USER_AGENT = "rpg-world-forge-studio-runtime-inputs/1"
 NETWORK_TIMEOUT_SECONDS = 30.0
 DOWNLOAD_DEADLINE_SECONDS = 900.0
+WINDOWS_COLLISION_RETRY_SECONDS = 2.0
+WINDOWS_COLLISION_RETRY_INTERVAL_SECONDS = 0.025
 MAX_REDIRECTS = 1
 CHUNK_BYTES = 1024 * 1024
 MAX_CACHE_PATH_CHARS = 4096
@@ -98,6 +100,7 @@ _WINDOWS_RESERVED = {
     "prn",
 }
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x0400
+_WINDOWS_SHARING_VIOLATION = 32
 _HAS_SECURE_DIR_FD = os.name == "posix" and all(
     function in os.supports_dir_fd for function in (os.open, os.mkdir, os.stat, os.unlink, os.link)
 )
@@ -290,6 +293,8 @@ class _WindowsApi:
                 raise FileNotFoundError
             if error in {80, 183}:
                 raise FileExistsError
+            if error == _WINDOWS_SHARING_VIOLATION:
+                raise _WindowsSharingViolation
             raise RuntimeInputsError("cache_root_unsafe", "cache")
         return int(handle)
 
@@ -504,6 +509,11 @@ class RuntimeInputsError(RuntimeError):
         }
 
 
+class _WindowsSharingViolation(RuntimeInputsError):
+    def __init__(self) -> None:
+        super().__init__("cache_entry_unsafe", "cache")
+
+
 if os.name == "nt":
     try:
         _WINDOWS_API = _WindowsApi()
@@ -538,13 +548,17 @@ class _Deadline:
         )
 
     def remaining(self) -> float:
-        current = self.clock()
-        if isinstance(current, bool) or not isinstance(current, (int, float)):
-            raise RuntimeInputsError("internal_error", "cache")
-        remaining = self.expires_at - float(current)
+        current = self.now()
+        remaining = self.expires_at - current
         if remaining <= 0:
             raise RuntimeInputsError("download_interrupted", self.context)
         return remaining
+
+    def now(self) -> float:
+        current = self.clock()
+        if isinstance(current, bool) or not isinstance(current, (int, float)):
+            raise RuntimeInputsError("internal_error", "cache")
+        return float(current)
 
     def checkpoint(self) -> None:
         self.remaining()
@@ -635,6 +649,7 @@ class _Inspection:
     status: str
     identity: tuple[int, int] | None = None
     pinned: _PinnedCacheFile | None = None
+    windows_sharing_violation: bool = False
 
     @property
     def valid(self) -> bool:
@@ -938,6 +953,8 @@ class _Directory:
                 handle = _WINDOWS_API.open_entry(self.path / name)
             except FileNotFoundError:
                 return None
+            except _WindowsSharingViolation:
+                raise
             except RuntimeInputsError:
                 raise RuntimeInputsError("cache_entry_unsafe", "cache") from None
             try:
@@ -962,6 +979,27 @@ class _Directory:
             raise RuntimeInputsError("cache_entry_unsafe", "cache") from None
         self.assert_current()
         return result
+
+    def windows_entry_info(self, name: str) -> _WindowsHandleInfo | None:
+        if not self.windows_handles or _WINDOWS_API is None:
+            raise RuntimeInputsError("secure_primitive_unavailable", "cache")
+        self.assert_current()
+        handle: int | None = None
+        try:
+            try:
+                handle = _WINDOWS_API.open_entry(self.path / name)
+            except FileNotFoundError:
+                return None
+            info = _WINDOWS_API.info(handle)
+            if info.directory or info.reparse or info.link_count != 1:
+                raise RuntimeInputsError("cache_entry_unsafe", "cache")
+            return info
+        except RuntimeInputsError:
+            raise RuntimeInputsError("cache_entry_unsafe", "cache") from None
+        finally:
+            if handle is not None:
+                _WINDOWS_API.close(handle)
+            self.assert_current()
 
     def open_entry(self, name: str) -> int:
         self.assert_current()
@@ -1553,10 +1591,22 @@ def _require_child_identity(
     expected_identity: tuple[int, int],
     *,
     directory: bool,
+    expected_size: int | None = None,
 ) -> None:
     parent.reject_alias(name)
     info = parent.entry_stat(name)
-    if info is None or _identity(info) != expected_identity:
+    if info is None:
+        raise RuntimeInputsError("cache_parent_changed", "cache")
+    if parent.windows_handles and not directory:
+        native = parent.windows_entry_info(name)
+        if (
+            native is None
+            or native.identity != expected_identity
+            or expected_size is None
+            or native.size != expected_size
+        ):
+            raise RuntimeInputsError("cache_parent_changed", "cache")
+    elif _identity(info) != expected_identity:
         raise RuntimeInputsError("cache_parent_changed", "cache")
     if directory:
         if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode) or _is_reparse(info):
@@ -1619,7 +1669,7 @@ def _inspect_cached(
             not stat.S_ISREG(opened.st_mode)
             or _is_reparse(opened)
             or opened.st_nlink != 1
-            or _identity(opened) != _identity(before)
+            or (not directory.windows_handles and _identity(opened) != _identity(before))
         ):
             return _Inspection("unsafe")
         if opened.st_size != artifact.size:
@@ -1634,18 +1684,23 @@ def _inspect_cached(
         if size != artifact.size:
             return _Inspection("wrong_size")
         current = directory.entry_stat(artifact.filename)
-        if (
-            current is None
-            or not _same_file_state(opened, after)
-            or not _same_file_state(after, current)
-            or current.st_nlink != 1
-        ):
+        if current is None or not _same_file_state(opened, after) or current.st_nlink != 1:
+            return _Inspection("changed")
+        if directory.windows_handles:
+            if (
+                not stat.S_ISREG(current.st_mode)
+                or stat.S_ISLNK(current.st_mode)
+                or _is_reparse(current)
+                or current.st_size != artifact.size
+            ):
+                return _Inspection("changed")
+        elif not _same_file_state(after, current):
             return _Inspection("changed")
         if sha256 != artifact.sha256:
             return _Inspection("wrong_sha256")
         if artifact.sha512 is not None and sha512 != artifact.sha512:
             return _Inspection("wrong_sha512")
-        identity = _identity(current)
+        identity = _identity(after) if directory.windows_handles else _identity(current)
         if retain:
             pinned = _PinnedCacheFile(
                 descriptor=descriptor,
@@ -1655,7 +1710,11 @@ def _inspect_cached(
             descriptor = -1
             return _Inspection("verified", identity, pinned)
         return _Inspection("verified", identity)
-    except RuntimeInputsError:
+    except _WindowsSharingViolation:
+        return _Inspection("unsafe", windows_sharing_violation=True)
+    except RuntimeInputsError as exc:
+        if exc.code == "cache_root_unsafe":
+            raise
         return _Inspection("unsafe")
     except OSError:
         return _Inspection("read_failed")
@@ -1665,6 +1724,30 @@ def _inspect_cached(
                 os.close(descriptor)
             except OSError:
                 pass
+
+
+def _inspect_collision_winner(
+    directory: _Directory,
+    artifact: InputArtifact,
+    *,
+    deadline: _Deadline,
+) -> _Inspection:
+    collision_expires_at = time.monotonic() + WINDOWS_COLLISION_RETRY_SECONDS
+    while True:
+        inspection = _inspect_cached(directory, artifact)
+        if (
+            inspection.valid
+            or not directory.windows_handles
+            or not inspection.windows_sharing_violation
+        ):
+            return inspection
+        remaining = min(
+            collision_expires_at - time.monotonic(),
+            deadline.expires_at - deadline.now(),
+        )
+        if remaining <= 0:
+            return inspection
+        time.sleep(min(WINDOWS_COLLISION_RETRY_INTERVAL_SECONDS, remaining))
 
 
 def _rehash_pinned(
@@ -1697,12 +1780,20 @@ def _rehash_pinned(
             return _Inspection("changed")
         directory.reject_alias(artifact.filename)
         current = directory.entry_stat(artifact.filename)
-        if (
-            current is None
-            or current.st_nlink != 1
-            or not _same_file_state(after, current)
-            or _identity(current) != pinned.identity
-        ):
+        if current is None or current.st_nlink != 1:
+            return _Inspection("changed")
+        if directory.windows_handles:
+            if (
+                not stat.S_ISREG(current.st_mode)
+                or stat.S_ISLNK(current.st_mode)
+                or _is_reparse(current)
+                or current.st_size != artifact.size
+            ):
+                return _Inspection("changed")
+            native = directory.windows_entry_info(artifact.filename)
+            if native is None or native.identity != pinned.identity or native.size != artifact.size:
+                return _Inspection("changed")
+        elif not _same_file_state(after, current) or _identity(current) != pinned.identity:
             return _Inspection("changed")
         if sha256 != artifact.sha256:
             return _Inspection("wrong_sha256")
@@ -2293,7 +2384,11 @@ def _download_one(
                 temporary_identity,
             )
         except FileExistsError:
-            raced = _inspect_cached(directory, artifact)
+            raced = _inspect_collision_winner(
+                directory,
+                artifact,
+                deadline=deadline,
+            )
             if raced.valid:
                 return "reused"
             raise RuntimeInputsError(
@@ -2556,6 +2651,7 @@ def _fetch_artifacts(
                             artifact.filename,
                             inspection.identity,
                             directory=False,
+                            expected_size=artifact.size,
                         )
                         directory.assert_current()
                     _require_child_identity(

@@ -3944,7 +3944,14 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             )
         for path in second.rglob("*"):
             with contextlib.suppress(OSError):
-                os.utime(path, (1_800_000_000, 1_800_000_000), follow_symlinks=False)
+                if os.utime in os.supports_follow_symlinks:
+                    os.utime(
+                        path,
+                        (1_800_000_000, 1_800_000_000),
+                        follow_symlinks=False,
+                    )
+                else:
+                    os.utime(path, (1_800_000_000, 1_800_000_000))
         first_zip = self.root / "first.zip"
         second_zip = self.root / "second.zip"
         first_digest = assembly.build_deterministic_zip(first, first_zip)

@@ -5791,20 +5791,38 @@ def build_deterministic_zip(
     canonical = _canonical_zip_bytes(manifest, payloads)
     with _PublishedFile(destination, canonical, 0o644, "zip") as publication:
         publication.require_bindings()
-        verify_runtime_zip(destination)
+        verify_runtime_zip(destination, _owned_output=True)
         publication.require_bindings()
         return _sha256(canonical)
 
 
-def verify_runtime_zip(filename: Path) -> dict[str, Any]:
+def verify_runtime_zip(
+    filename: Path,
+    *,
+    _owned_output: bool = False,
+) -> dict[str, Any]:
     """Verify deterministic ZIP structure, metadata, manifest, and payload hashes."""
 
     filename = _lexical_absolute(filename, "zip")
-    try:
-        initial = _state(filename.lstat())
-    except OSError:
-        _fail("file_missing", "zip")
-    raw = _read_pinned_regular(filename, field="zip", max_bytes=MAX_ZIP_BYTES)
+    if _is_windows_native_host():
+        initial = _windows_scan_state(
+            _authorize_pinned_regular_windows(
+                filename,
+                field="zip",
+                share_write=_owned_output,
+            )
+        )
+    else:
+        try:
+            initial = _state(filename.lstat())
+        except OSError:
+            _fail("file_missing", "zip")
+    raw = _read_pinned_regular(
+        filename,
+        field="zip",
+        max_bytes=MAX_ZIP_BYTES,
+        windows_share_write=_owned_output,
+    )
     try:
         archive = zipfile.ZipFile(io.BytesIO(raw), mode="r")
     except (OSError, zipfile.BadZipFile):
@@ -5919,11 +5937,23 @@ def verify_runtime_zip(filename: Path) -> dict[str, Any]:
             _fail("zip_noncanonical", "zip")
         if raw != _canonical_zip_bytes(manifest, payloads):
             _fail("zip_noncanonical", "zip")
-        try:
-            final = filename.lstat()
-        except OSError:
-            _fail("filesystem_identity_changed", "zip")
-        if _is_link_or_reparse(final) or _state(final) != initial:
+        if _is_windows_native_host():
+            final = _windows_scan_state(
+                _authorize_pinned_regular_windows(
+                    filename,
+                    field="zip",
+                    share_write=_owned_output,
+                )
+            )
+        else:
+            try:
+                final_info = filename.lstat()
+            except OSError:
+                _fail("filesystem_identity_changed", "zip")
+            if _is_link_or_reparse(final_info):
+                _fail("filesystem_identity_changed", "zip")
+            final = _state(final_info)
+        if final != initial:
             _fail("filesystem_identity_changed", "zip")
         return manifest
 

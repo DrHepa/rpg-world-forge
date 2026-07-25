@@ -11,6 +11,7 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from scripts import studio_runtime_inputs as runtime_inputs
@@ -330,6 +331,20 @@ class StudioRuntimeInputsTests(unittest.TestCase):
             ],
         )
 
+    def test_windows_open_classifies_sharing_violation_for_collision_retry(self) -> None:
+        api = object.__new__(runtime_inputs._WindowsApi)
+        api.create_file = lambda *_args: api._INVALID_HANDLE
+        with (
+            patch.object(
+                runtime_inputs.ctypes,
+                "get_last_error",
+                return_value=runtime_inputs._WINDOWS_SHARING_VIOLATION,
+                create=True,
+            ),
+            self.assertRaises(runtime_inputs._WindowsSharingViolation),
+        ):
+            api.open_entry(Path("retained-winner.bin"))
+
     def test_pinned_manifest_resolves_exact_bounded_inventory(self) -> None:
         document = runtime_inputs._manifest_document()
 
@@ -465,6 +480,7 @@ class StudioRuntimeInputsTests(unittest.TestCase):
         original = runtime_inputs._download_one
         with tempfile.TemporaryDirectory() as directory:
             cache = Path(directory)
+            mutation_hook_ran = False
 
             def download_then_mutate(
                 parent: object,
@@ -473,6 +489,7 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                 *,
                 clock: object,
             ) -> str:
+                nonlocal mutation_hook_ran
                 status = original(
                     parent,
                     current_artifact,
@@ -481,6 +498,7 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                 )
                 if current_artifact.component == second.component:
                     _cache_file(cache, first).write_bytes(mutated)
+                    mutation_hook_ran = True
                 return status
 
             responses = {
@@ -509,7 +527,111 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                 )
 
             self.assertEqual(captured.exception.code, "cache_entry_unsafe")
+            self.assertTrue(mutation_hook_ran)
             self.assertEqual(_cache_file(cache, first).read_bytes(), mutated)
+
+    def test_windows_retained_descriptor_accepts_path_drift_but_rejects_native_size_drift(
+        self,
+    ) -> None:
+        payload = b"retained descriptor bytes"
+        artifact = _artifact(payload)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / artifact.filename
+            path.write_bytes(payload)
+            descriptor_state = path.stat()
+            path_state = SimpleNamespace(
+                st_mode=descriptor_state.st_mode,
+                st_dev=descriptor_state.st_dev + 1,
+                st_ino=descriptor_state.st_ino + 1,
+                st_nlink=1,
+                st_size=descriptor_state.st_size,
+                st_mtime_ns=descriptor_state.st_mtime_ns + 1,
+                st_ctime_ns=descriptor_state.st_ctime_ns + 1,
+                st_file_attributes=0,
+            )
+            alias_checks = 0
+            native_size = [len(payload)]
+
+            class WindowsDirectorySeam:
+                windows_handles = (71,)
+
+                def reject_alias(self, name: str) -> None:
+                    nonlocal alias_checks
+                    self.assert_name(name)
+                    alias_checks += 1
+
+                @staticmethod
+                def assert_name(name: str) -> None:
+                    if name != artifact.filename:
+                        raise AssertionError(name)
+
+                def entry_stat(self, name: str) -> object:
+                    self.assert_name(name)
+                    return path_state
+
+                def open_entry(self, name: str) -> int:
+                    self.assert_name(name)
+                    return os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+
+                def windows_entry_info(
+                    self,
+                    name: str,
+                ) -> runtime_inputs._WindowsHandleInfo:
+                    self.assert_name(name)
+                    return runtime_inputs._WindowsHandleInfo(
+                        identity=runtime_inputs._identity(descriptor_state),
+                        attributes=0,
+                        link_count=1,
+                        size=native_size[0],
+                    )
+
+            directory_seam = WindowsDirectorySeam()
+            inspection = runtime_inputs._inspect_cached(  # noqa: SLF001
+                directory_seam,
+                artifact,
+                retain=True,
+            )
+            self.assertTrue(inspection.valid)
+            self.assertIsNotNone(inspection.pinned)
+            assert inspection.pinned is not None
+            try:
+                runtime_inputs._require_child_identity(  # noqa: SLF001
+                    directory_seam,
+                    artifact.filename,
+                    inspection.identity,
+                    directory=False,
+                    expected_size=artifact.size,
+                )
+                final = runtime_inputs._rehash_pinned(  # noqa: SLF001
+                    directory_seam,
+                    artifact,
+                    inspection.pinned,
+                )
+                native_size[0] = artifact.size + 1
+                with self.assertRaises(RuntimeInputsError) as captured:
+                    runtime_inputs._require_child_identity(  # noqa: SLF001
+                        directory_seam,
+                        artifact.filename,
+                        inspection.identity,
+                        directory=False,
+                        expected_size=artifact.size,
+                    )
+                changed = runtime_inputs._rehash_pinned(  # noqa: SLF001
+                    directory_seam,
+                    artifact,
+                    inspection.pinned,
+                )
+            finally:
+                inspection.pinned.close()
+
+            self.assertTrue(final.valid)
+            self.assertEqual(
+                runtime_inputs._identity(descriptor_state),
+                final.identity,
+            )
+            self.assertEqual("cache_parent_changed", captured.exception.code)
+            self.assertEqual("changed", changed.status)
+            self.assertGreaterEqual(alias_checks, 2)
 
     def test_offline_verify_is_read_only_and_never_constructs_an_opener(self) -> None:
         with tempfile.TemporaryDirectory() as parent:
@@ -1270,6 +1392,190 @@ class StudioRuntimeInputsTests(unittest.TestCase):
             )
 
     @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_collision_waits_beyond_three_yields_for_exact_winner(self) -> None:
+        payload = b"delayed exact Windows winner"
+        artifact = _artifact(payload)
+        fake_windows = FakeWindowsHandleApi()
+        real_inspect = runtime_inputs._inspect_cached
+        now = [100.0]
+        sleeps: list[float] = []
+        destination: Path | None = None
+        sealed = True
+        transient_inspections = 0
+
+        def open_windows_cache(path: Path, *, create: bool) -> object:
+            return runtime_inputs._open_windows_directory(path, (), create=create)
+
+        def race(
+            parent: object,
+            _temporary_name: str,
+            destination_name: str,
+            _identity: tuple[int, int],
+        ) -> None:
+            nonlocal destination
+            destination = parent.path / destination_name
+            destination.write_bytes(payload)
+            raise FileExistsError
+
+        def inspect(
+            directory: object,
+            current_artifact: InputArtifact,
+            *,
+            retain: bool = False,
+        ) -> object:
+            nonlocal transient_inspections
+            if destination is not None and sealed:
+                transient_inspections += 1
+                return runtime_inputs._Inspection(
+                    "unsafe",
+                    windows_sharing_violation=True,
+                )
+            return real_inspect(directory, current_artifact, retain=retain)
+
+        def yield_to_winner(delay: float) -> None:
+            nonlocal sealed
+            self.assertGreater(delay, 0)
+            sleeps.append(delay)
+            now[0] += delay
+            if len(sleeps) == 4:
+                sealed = False
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                patch(
+                    "scripts.studio_runtime_inputs._open_cache_directory",
+                    side_effect=open_windows_cache,
+                ),
+                patch(
+                    "scripts.studio_runtime_inputs._publish_no_replace",
+                    side_effect=race,
+                ),
+                patch(
+                    "scripts.studio_runtime_inputs._inspect_cached",
+                    side_effect=inspect,
+                ),
+                patch(
+                    "scripts.studio_runtime_inputs.time.monotonic",
+                    side_effect=lambda: now[0],
+                ),
+                patch(
+                    "scripts.studio_runtime_inputs.time.sleep",
+                    side_effect=yield_to_winner,
+                ),
+            ):
+                report = _fetch_artifacts(
+                    TARGET,
+                    cache,
+                    (artifact,),
+                    FakeOpener(lambda _request: FakeResponse(payload)),
+                    clock=lambda: now[0],
+                )
+
+            self.assertTrue(report.valid)
+            self.assertEqual("reused", report.items[0].status)
+            self.assertEqual(4, len(sleeps))
+            self.assertEqual(4, transient_inspections)
+            self.assertEqual(payload, _cache_file(cache, artifact).read_bytes())
+            self.assertEqual(
+                [],
+                list((cache / TARGET / artifact.component).glob(".rwf-input-*.part")),
+            )
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_collision_timeout_fails_closed_with_cache_conflict(self) -> None:
+        payload = b"permanently sealed Windows winner"
+        artifact = _artifact(payload)
+        fake_windows = FakeWindowsHandleApi()
+        real_inspect = runtime_inputs._inspect_cached
+        now = [200.0]
+        sleeps: list[float] = []
+        destination: Path | None = None
+        transient_inspections = 0
+
+        def open_windows_cache(path: Path, *, create: bool) -> object:
+            return runtime_inputs._open_windows_directory(path, (), create=create)
+
+        def race(
+            parent: object,
+            _temporary_name: str,
+            destination_name: str,
+            _identity: tuple[int, int],
+        ) -> None:
+            nonlocal destination
+            destination = parent.path / destination_name
+            destination.write_bytes(payload)
+            raise FileExistsError
+
+        def inspect(
+            directory: object,
+            current_artifact: InputArtifact,
+            *,
+            retain: bool = False,
+        ) -> object:
+            nonlocal transient_inspections
+            if destination is not None:
+                transient_inspections += 1
+                return runtime_inputs._Inspection(
+                    "unsafe",
+                    windows_sharing_violation=True,
+                )
+            return real_inspect(directory, current_artifact, retain=retain)
+
+        def advance_clock(delay: float) -> None:
+            self.assertGreater(delay, 0)
+            sleeps.append(delay)
+            now[0] += delay
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                patch(
+                    "scripts.studio_runtime_inputs._open_cache_directory",
+                    side_effect=open_windows_cache,
+                ),
+                patch(
+                    "scripts.studio_runtime_inputs._publish_no_replace",
+                    side_effect=race,
+                ),
+                patch(
+                    "scripts.studio_runtime_inputs._inspect_cached",
+                    side_effect=inspect,
+                ),
+                patch(
+                    "scripts.studio_runtime_inputs.time.monotonic",
+                    side_effect=lambda: now[0],
+                ),
+                patch(
+                    "scripts.studio_runtime_inputs.time.sleep",
+                    side_effect=advance_clock,
+                ),
+                self.assertRaises(RuntimeInputsError) as captured,
+            ):
+                _fetch_artifacts(
+                    TARGET,
+                    cache,
+                    (artifact,),
+                    FakeOpener(lambda _request: FakeResponse(payload)),
+                    clock=lambda: now[0],
+                )
+
+            self.assertEqual("cache_conflict", captured.exception.code)
+            self.assertGreater(len(sleeps), 3)
+            self.assertEqual(len(sleeps) + 1, transient_inspections)
+            self.assertLessEqual(
+                sum(sleeps),
+                runtime_inputs.WINDOWS_COLLISION_RETRY_SECONDS,
+            )
+            self.assertEqual(payload, _cache_file(cache, artifact).read_bytes())
+            self.assertEqual(
+                [],
+                list((cache / TARGET / artifact.component).glob(".rwf-input-*.part")),
+            )
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
     def test_windows_handle_mock_reports_conflict_and_cleans_owned_loser(self) -> None:
         payload = b"mock Windows winner"
         hostile = b"mock hostile bytes!"
@@ -1298,6 +1604,10 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                     side_effect=open_windows_cache,
                 ),
                 patch("scripts.studio_runtime_inputs._publish_no_replace", side_effect=race),
+                patch(
+                    "scripts.studio_runtime_inputs.time.sleep",
+                    side_effect=AssertionError("foreign winner must not be retried"),
+                ),
                 self.assertRaises(RuntimeInputsError) as captured,
             ):
                 _fetch_artifacts(
@@ -1684,10 +1994,26 @@ class StudioRuntimeInputsTests(unittest.TestCase):
         payload = b"alias injection"
         artifact = _artifact(payload, component="test-input")
         original = runtime_inputs._download_one
+        original_names = runtime_inputs._Directory.names
         injections = ("component", "filename", "target")
         for injection in injections:
             with self.subTest(injection=injection), tempfile.TemporaryDirectory() as directory:
                 cache = Path(directory)
+                alias_state = {"visible": False, "enumerated": False}
+                alias_parent, alias_name = {
+                    "component": (
+                        cache / TARGET,
+                        "TEST-INPUT",
+                    ),
+                    "filename": (
+                        cache / TARGET / artifact.component,
+                        "INPUT.BIN",
+                    ),
+                    "target": (
+                        cache,
+                        "LINUX-X64",
+                    ),
+                }[injection]
 
                 def inject_alias(
                     parent: object,
@@ -1696,7 +2022,8 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                     *,
                     clock: object,
                     selected: str = injection,
-                    cache_root: Path = cache,
+                    expected: str = injection,
+                    state: dict[str, bool] = alias_state,
                 ) -> str:
                     status = original(
                         parent,
@@ -1704,20 +2031,35 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                         opener,
                         clock=clock,
                     )
-                    if selected == "component":
-                        (parent.path.parent / "TEST-INPUT").mkdir()
-                    elif selected == "filename":
-                        (parent.path / "INPUT.BIN").write_bytes(b"foreign alias")
-                    else:
-                        (cache_root / "LINUX-X64").mkdir()
+                    self.assertEqual(selected, expected)
+                    state["visible"] = True
                     return status
+
+                def enumerate_aliases(
+                    current: object,
+                    *,
+                    state: dict[str, bool] = alias_state,
+                    expected_parent: Path = alias_parent,
+                    expected_name: str = alias_name,
+                ) -> list[str]:
+                    names = original_names(current)
+                    if state["visible"] and current.path == expected_parent:
+                        state["enumerated"] = True
+                        return [*names, expected_name]
+                    return names
 
                 with (
                     patch(
                         "scripts.studio_runtime_inputs._download_one",
                         side_effect=inject_alias,
                     ),
-                    self.assertRaises(RuntimeInputsError),
+                    patch.object(
+                        runtime_inputs._Directory,
+                        "names",
+                        side_effect=enumerate_aliases,
+                        autospec=True,
+                    ),
+                    self.assertRaises(RuntimeInputsError) as captured,
                 ):
                     _fetch_artifacts(
                         TARGET,
@@ -1726,16 +2068,10 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                         FakeOpener(lambda _request: FakeResponse(payload)),
                     )
 
+                self.assertEqual("cache_root_unsafe", captured.exception.code)
+                self.assertTrue(alias_state["visible"])
+                self.assertTrue(alias_state["enumerated"])
                 self.assertEqual(_cache_file(cache, artifact).read_bytes(), payload)
-                if injection == "component":
-                    self.assertTrue((cache / TARGET / "TEST-INPUT").is_dir())
-                elif injection == "filename":
-                    self.assertEqual(
-                        (cache / TARGET / artifact.component / "INPUT.BIN").read_bytes(),
-                        b"foreign alias",
-                    )
-                else:
-                    self.assertTrue((cache / "LINUX-X64").is_dir())
 
     def test_file_and_parent_sync_failures_do_not_replace_existing_entries(self) -> None:
         payload = b"sync"
