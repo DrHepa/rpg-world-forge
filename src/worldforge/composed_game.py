@@ -344,13 +344,74 @@ def _copy_owned_import_stage(
     )
 
 
+def _require_windows_stage_parent(
+    parent: Path,
+    expected_identity: tuple[int, int],
+    *,
+    context: str,
+) -> None:
+    try:
+        current = directory_identity(parent, context=f"{context} parent")
+    except (DirectoryPublishError, OSError) as exc:
+        raise ComposedGameError(f"{context} parent identity changed") from exc
+    if current != expected_identity:
+        raise ComposedGameError(f"{context} parent identity changed")
+
+
+@contextmanager
+def _pin_windows_stage_parent(
+    stage: Path,
+    *,
+    expected_parent_identity: tuple[int, int],
+    context: str,
+) -> Iterator[None]:
+    parent = stage.parent
+    _require_windows_stage_parent(
+        parent,
+        expected_parent_identity,
+        context=context,
+    )
+    try:
+        parent_handle = resource_snapshot_module._windows_lock_directory(  # noqa: SLF001
+            parent
+        )
+    except resource_snapshot_module.ResourceSnapshotError as exc:
+        raise ComposedGameError(f"could not pin {context} parent: {exc}") from exc
+    try:
+        _require_windows_stage_parent(
+            parent,
+            expected_parent_identity,
+            context=context,
+        )
+        yield
+        _require_windows_stage_parent(
+            parent,
+            expected_parent_identity,
+            context=context,
+        )
+    finally:
+        active_error = sys.exception()
+        try:
+            resource_snapshot_module._windows_close_handle(  # noqa: SLF001
+                parent_handle
+            )
+        except resource_snapshot_module.ResourceSnapshotError as exc:
+            if not resource_snapshot_module.note_cleanup_failure(
+                active_error,
+                exc,
+                context=f"{context} parent handle cleanup",
+            ):
+                raise ComposedGameError(f"could not close {context} parent handle: {exc}") from exc
+
+
 @contextmanager
 def _private_import_stage(
     stage_root: Path,
     *,
     expected_parent_identity: tuple[int, int],
 ) -> Iterator[tuple[tuple[int, int], DirectoryClaim | None]]:
-    if sys.platform.startswith("linux") and os.name == "posix":
+    platform = _generation_platform()
+    if platform == "posix":
         try:
             with claim_directory_noreplace(
                 stage_root,
@@ -359,6 +420,16 @@ def _private_import_stage(
                 yield claim.identity, claim
         except DirectoryPublishError as exc:
             raise ComposedGameError(str(exc)) from exc
+        return
+    if platform == "windows":
+        with _pin_windows_stage_parent(
+            stage_root,
+            expected_parent_identity=expected_parent_identity,
+            context="composed import stage",
+        ):
+            _create_generation_stage(stage_root)
+            identity = directory_identity(stage_root, context="composed import stage root")
+            yield identity, None
         return
     _create_generation_stage(stage_root)
     identity = directory_identity(stage_root, context="composed import stage root")
@@ -962,6 +1033,7 @@ def _write_generation_payload(
             os.O_WRONLY
             | os.O_CREAT
             | os.O_EXCL
+            | getattr(os, "O_BINARY", 0)
             | getattr(os, "O_CLOEXEC", 0)
             | getattr(os, "O_NOINHERIT", 0)
             | getattr(os, "O_NOFOLLOW", 0)
@@ -1221,13 +1293,21 @@ def _private_catalog_stage(
         except DirectoryPublishError as exc:
             raise ComposedGameError(str(exc)) from exc
         return
+    if _generation_platform() == "windows":
+        with _pin_windows_stage_parent(
+            stage,
+            expected_parent_identity=expected_parent_identity,
+            context="catalog generation stage",
+        ):
+            _create_generation_stage(stage)
+            identity = directory_identity(stage, context="catalog generation stage")
+            with _pin_generation_directory(
+                stage,
+                expected_identity=identity,
+            ) as (_identity, descriptor):
+                yield identity, descriptor, None
+        return
     _create_generation_stage(stage)
-    identity = directory_identity(stage, context="catalog generation stage")
-    with _pin_generation_directory(
-        stage,
-        expected_identity=identity,
-    ) as (_identity, descriptor):
-        yield identity, descriptor, None
 
 
 def _fsync_catalog_state(

@@ -824,19 +824,22 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="staged_bundle_durability",
                 title="Staged Bundle Durability",
             )
-            copy_into_claim = composed_game_module._copy_owned_bundle_into_claim
+            copy_seam_name = (
+                "_copy_owned_import_stage" if os.name == "nt" else "_copy_owned_bundle_into_claim"
+            )
+            copy_into_stage = getattr(composed_game_module, copy_seam_name)
 
             def copy_then_fail(*args: object, **kwargs: object) -> None:
-                copy_into_claim(*args, **kwargs)
-                raise OSError("injected claimed bundle flush failure")
+                copy_into_stage(*args, **kwargs)
+                raise OSError("injected staged bundle flush failure")
 
             with (
                 patch.object(
                     composed_game_module,
-                    "_copy_owned_bundle_into_claim",
+                    copy_seam_name,
                     side_effect=copy_then_fail,
                 ),
-                self.assertRaisesRegex(OSError, "claimed bundle flush failure"),
+                self.assertRaisesRegex(OSError, "staged bundle flush failure"),
             ):
                 import_composed_bundle(
                     bundle,
@@ -867,14 +870,24 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="pre_stage_recovery",
                 title="Pre-stage Recovery",
             )
-            with (
-                patch.object(
+            if os.name == "nt":
+                failure = patch.object(
+                    composed_game_module.resource_snapshot_module,
+                    "_windows_create_private_directory",
+                    side_effect=composed_game_module.resource_snapshot_module.ResourceSnapshotError(
+                        "injected composed destination claim failure"
+                    ),
+                )
+            else:
+                failure = patch.object(
                     composed_game_module,
                     "claim_directory_noreplace",
                     side_effect=composed_game_module.DirectoryPublishError(
                         "injected composed destination claim failure"
                     ),
-                ),
+                )
+            with (
+                failure,
                 self.assertRaisesRegex(
                     ComposedGameError,
                     "destination claim failure",
@@ -917,20 +930,36 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="same_parent_publication",
                 title="Same-parent Publication",
             )
-            claim = composed_game_module.claim_directory_noreplace
             calls: list[Path] = []
 
-            @contextmanager
-            def record_claim(destination: Path, **kwargs: object):
-                calls.append(destination)
-                with claim(destination, **kwargs) as retained:
-                    yield retained
+            if os.name == "nt":
+                create_private = composed_game_module._create_generation_stage
 
-            with patch.object(
-                composed_game_module,
-                "claim_directory_noreplace",
-                side_effect=record_claim,
-            ):
+                def record_private_stage(destination: Path) -> None:
+                    calls.append(destination)
+                    create_private(destination)
+
+                exclusive_stage = patch.object(
+                    composed_game_module,
+                    "_create_generation_stage",
+                    side_effect=record_private_stage,
+                )
+            else:
+                claim = composed_game_module.claim_directory_noreplace
+
+                @contextmanager
+                def record_claim(destination: Path, **kwargs: object):
+                    calls.append(destination)
+                    with claim(destination, **kwargs) as retained:
+                        yield retained
+
+                exclusive_stage = patch.object(
+                    composed_game_module,
+                    "claim_directory_noreplace",
+                    side_effect=record_claim,
+                )
+
+            with exclusive_stage:
                 imported = import_composed_bundle(
                     bundle,
                     game,
@@ -956,33 +985,54 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="game_data_parent_swap",
                 title="Game Data Parent Swap",
             )
+            game = game.resolve(strict=True)
             game_data = game / "game_data"
             displaced = game / "game_data-owned"
             sentinel = game_data / "foreign.txt"
             claim = composed_game_module.claim_directory_noreplace
             swapped = False
 
-            @contextmanager
-            def swap_before_claim(destination: Path, **kwargs: object):
+            def replace_game_data() -> None:
                 nonlocal swapped
-                if (
-                    destination.parent == game_data
-                    and destination.name.startswith(".compositions.import-")
-                    and not swapped
-                ):
+                if not swapped:
                     game_data.rename(displaced)
                     game_data.mkdir()
                     sentinel.write_bytes(b"foreign-game-data\n")
                     swapped = True
+
+            @contextmanager
+            def swap_before_claim(destination: Path, **kwargs: object):
+                if destination.parent == game_data and destination.name.startswith(
+                    ".compositions.import-"
+                ):
+                    replace_game_data()
                 with claim(destination, **kwargs) as retained:
                     yield retained
 
-            with (
-                patch.object(
+            if os.name == "nt":
+                lock_directory = (
+                    composed_game_module.resource_snapshot_module._windows_lock_directory
+                )
+
+                def swap_before_parent_lock(path: Path) -> int:
+                    if path == game_data:
+                        replace_game_data()
+                    return lock_directory(path)
+
+                parent_swap = patch.object(
+                    composed_game_module.resource_snapshot_module,
+                    "_windows_lock_directory",
+                    side_effect=swap_before_parent_lock,
+                )
+            else:
+                parent_swap = patch.object(
                     composed_game_module,
                     "claim_directory_noreplace",
                     side_effect=swap_before_claim,
-                ),
+                )
+
+            with (
+                parent_swap,
                 self.assertRaisesRegex(
                     ComposedGameError,
                     "parent identity changed|ancestor identity changed",
@@ -999,6 +1049,61 @@ class M6GameConsumerTests(unittest.TestCase):
             self.assertEqual(["foreign.txt"], sorted(path.name for path in game_data.iterdir()))
             self.assertTrue((displaced / "compositions.lock.json").is_file())
 
+    def test_windows_private_import_stage_revalidates_the_locked_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "parent"
+            parent.mkdir()
+            stage = parent / ".compositions.import-test"
+            expected_identity = composed_game_module.directory_identity(
+                parent,
+                context="Windows import-stage seam parent",
+            )
+            displaced = root / "parent-owned"
+            closed: list[int] = []
+
+            def swap_before_lock(path: Path) -> int:
+                self.assertEqual(parent, path)
+                parent.rename(displaced)
+                parent.mkdir()
+                return 71
+
+            with (
+                patch.object(
+                    composed_game_module,
+                    "_generation_platform",
+                    return_value="windows",
+                ),
+                patch.object(
+                    composed_game_module.resource_snapshot_module,
+                    "_windows_lock_directory",
+                    side_effect=swap_before_lock,
+                ),
+                patch.object(
+                    composed_game_module.resource_snapshot_module,
+                    "_windows_close_handle",
+                    side_effect=closed.append,
+                ),
+                patch.object(
+                    composed_game_module,
+                    "_create_generation_stage",
+                ) as create_stage,
+                self.assertRaisesRegex(
+                    ComposedGameError,
+                    "parent identity changed",
+                ),
+            ):
+                with composed_game_module._private_import_stage(  # noqa: SLF001
+                    stage,
+                    expected_parent_identity=expected_identity,
+                ):
+                    self.fail("changed Windows stage parent must fail before yield")
+
+            create_stage.assert_not_called()
+            self.assertEqual([71], closed)
+            self.assertTrue(displaced.is_dir())
+            self.assertFalse(stage.exists())
+
     def test_generation_stage_flush_failure_is_retried_before_publication(
         self,
     ) -> None:
@@ -1011,24 +1116,48 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="generation_stage_durability",
                 title="Generation Stage Durability",
             )
-            fsync_claim = composed_game_module.DirectoryClaim.fsync
+            game = game.resolve(strict=True)
             injected = False
 
-            def fail_generation_claim(claim: object) -> None:
-                nonlocal injected
-                path = claim.path
-                if not injected and path.parent == game / CATALOG_GENERATIONS_RELATIVE_PATH:
-                    injected = True
-                    raise OSError("injected generation claim flush failure")
-                fsync_claim(claim)
+            if os.name == "nt":
+                flush_directory = composed_game_module.fsync_directory
 
-            with (
-                patch.object(
+                def fail_generation_directory(path: Path, *, context: str) -> None:
+                    nonlocal injected
+                    if (
+                        not injected
+                        and context == "catalog generation stage"
+                        and path.parent == game / CATALOG_GENERATIONS_RELATIVE_PATH
+                    ):
+                        injected = True
+                        raise OSError("injected generation stage flush failure")
+                    flush_directory(path, context=context)
+
+                flush_failure = patch.object(
+                    composed_game_module,
+                    "fsync_directory",
+                    side_effect=fail_generation_directory,
+                )
+            else:
+                fsync_claim = composed_game_module.DirectoryClaim.fsync
+
+                def fail_generation_claim(claim: object) -> None:
+                    nonlocal injected
+                    path = claim.path
+                    if not injected and path.parent == game / CATALOG_GENERATIONS_RELATIVE_PATH:
+                        injected = True
+                        raise OSError("injected generation stage flush failure")
+                    fsync_claim(claim)
+
+                flush_failure = patch.object(
                     composed_game_module.DirectoryClaim,
                     "fsync",
                     new=fail_generation_claim,
-                ),
-                self.assertRaisesRegex(OSError, "generation claim flush failure"),
+                )
+
+            with (
+                flush_failure,
+                self.assertRaisesRegex(OSError, "generation stage flush failure"),
             ):
                 import_composed_bundle(
                     bundle,
@@ -1814,20 +1943,39 @@ class M6GameConsumerTests(unittest.TestCase):
             real_claim = directory_publish_module._posix_mkdir_noreplace
             swapped = False
 
-            def swap_parent(parent_fd: int, name: str, mode: int) -> None:
+            def replace_generation_parent() -> None:
                 nonlocal swapped
                 generations.rename(displaced)
                 generations.mkdir()
                 (generations / "sentinel.txt").write_bytes(b"foreign-parent\n")
                 swapped = True
+
+            def swap_parent(parent_fd: int, name: str, mode: int) -> None:
+                replace_generation_parent()
                 real_claim(parent_fd, name, mode)
 
-            with (
-                patch.object(
+            if os.name == "nt":
+                lock_directory = module.resource_snapshot_module._windows_lock_directory
+
+                def swap_before_parent_lock(path: Path) -> int:
+                    if path == generations and not swapped:
+                        replace_generation_parent()
+                    return lock_directory(path)
+
+                parent_swap = patch.object(
+                    module.resource_snapshot_module,
+                    "_windows_lock_directory",
+                    side_effect=swap_before_parent_lock,
+                )
+            else:
+                parent_swap = patch.object(
                     directory_publish_module,
                     "_posix_mkdir_noreplace",
                     side_effect=swap_parent,
-                ),
+                )
+
+            with (
+                parent_swap,
                 self.assertRaises((OSError, ComposedGameError)),
             ):
                 module._publish_catalog_generation(game, state, entries)
@@ -1841,6 +1989,55 @@ class M6GameConsumerTests(unittest.TestCase):
                 [path for path in generations.iterdir() if path.name != "sentinel.txt"],
             )
             self.assertTrue(any(path.is_dir() for path in displaced.iterdir()))
+
+    def test_generation_payload_write_requests_binary_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory)
+            payload = b'{"format":"test","line_endings":"canonical\\n"}\n'
+            host_binary_flag = getattr(os, "O_BINARY", 0)
+            binary_flag = host_binary_flag or 0x8000
+            opened_flags: list[int] = []
+            original_open = os.open
+
+            def record_open(
+                target: object,
+                flags: int,
+                *args: object,
+                **kwargs: object,
+            ) -> int:
+                opened_flags.append(flags)
+                return original_open(
+                    target,
+                    flags if host_binary_flag else flags & ~binary_flag,
+                    *args,
+                    **kwargs,
+                )
+
+            with (
+                patch.object(
+                    composed_game_module.os,
+                    "O_BINARY",
+                    binary_flag,
+                    create=True,
+                ),
+                patch.object(
+                    composed_game_module.os,
+                    "open",
+                    side_effect=record_open,
+                ),
+            ):
+                composed_game_module._write_generation_payload(  # noqa: SLF001
+                    stage,
+                    payload,
+                    directory_descriptor=None,
+                )
+
+            self.assertEqual(1, len(opened_flags))
+            self.assertTrue(opened_flags[0] & binary_flag)
+            self.assertEqual(
+                payload,
+                (stage / CATALOG_GENERATION_NAME).read_bytes(),
+            )
 
     def test_generation_destination_symlink_is_never_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1904,8 +2101,12 @@ class M6GameConsumerTests(unittest.TestCase):
             state, entries = self._next_generation_entries(game)
             write = module._write_generation_payload
             verify_generation = module._verify_generation_directory
-            lock_calls: list[Path] = []
+            opened_handles: dict[int, Path] = {}
+            active_handles: dict[int, Path] = {}
             close_calls: list[int] = []
+            catalog_stage_path: Path | None = None
+            catalog_stage_handle: int | None = None
+            catalog_stage_verifications = 0
             publication_destination: Path | None = None
             publication_lease_active = False
             verification_during_lease = False
@@ -1914,10 +2115,16 @@ class M6GameConsumerTests(unittest.TestCase):
                 path.mkdir(mode=0o700)
 
             def lock_directory(path: Path) -> int:
-                lock_calls.append(path)
-                return len(lock_calls)
+                handle = len(opened_handles) + 1
+                opened_handles[handle] = path
+                active_handles[handle] = path
+                return handle
 
             def close_handle(handle: int) -> None:
+                self.assertIn(handle, active_handles)
+                if handle == catalog_stage_handle:
+                    self.assertGreaterEqual(catalog_stage_verifications, 2)
+                del active_handles[handle]
                 close_calls.append(handle)
 
             def assert_pinned_write(
@@ -1926,8 +2133,15 @@ class M6GameConsumerTests(unittest.TestCase):
                 *,
                 directory_descriptor: int | None,
             ) -> None:
-                self.assertTrue(lock_calls)
-                self.assertEqual([], close_calls)
+                nonlocal catalog_stage_handle, catalog_stage_path
+                stage_handles = [
+                    handle
+                    for handle, retained_path in active_handles.items()
+                    if retained_path == stage
+                ]
+                self.assertEqual(1, len(stage_handles))
+                catalog_stage_path = stage
+                catalog_stage_handle = stage_handles[0]
                 self.assertIsNone(directory_descriptor)
                 write(
                     stage,
@@ -1961,7 +2175,13 @@ class M6GameConsumerTests(unittest.TestCase):
                 *,
                 expected_identity: tuple[int, int],
             ) -> None:
-                nonlocal verification_during_lease
+                nonlocal catalog_stage_verifications, verification_during_lease
+                stage_handle = catalog_stage_handle
+                is_catalog_stage = path == catalog_stage_path
+                if is_catalog_stage:
+                    self.assertIsNotNone(stage_handle)
+                    assert stage_handle is not None
+                    self.assertEqual(path, active_handles.get(stage_handle))
                 if path == publication_destination and publication_lease_active:
                     verification_during_lease = True
                 verify_generation(
@@ -1969,6 +2189,9 @@ class M6GameConsumerTests(unittest.TestCase):
                     payload,
                     expected_identity=expected_identity,
                 )
+                if is_catalog_stage:
+                    self.assertEqual(path, active_handles.get(stage_handle))
+                    catalog_stage_verifications += 1
 
             with (
                 patch.object(module, "_generation_platform", return_value="windows"),
@@ -2006,7 +2229,13 @@ class M6GameConsumerTests(unittest.TestCase):
                 published = module._publish_catalog_generation(game, state, entries)
             self.assertEqual(2, len(published.entries))
             self.assertTrue(verification_during_lease)
-            self.assertEqual(list(range(1, len(lock_calls) + 1)), sorted(close_calls))
+            self.assertEqual(2, catalog_stage_verifications)
+            self.assertIsNotNone(catalog_stage_handle)
+            assert catalog_stage_handle is not None
+            self.assertEqual(1, close_calls.count(catalog_stage_handle))
+            self.assertEqual({}, active_handles)
+            self.assertEqual(set(opened_handles), set(close_calls))
+            self.assertEqual(len(opened_handles), len(close_calls))
 
     @unittest.skipUnless(os.name == "nt", "native Windows no-delete handle semantics")
     def test_native_windows_generation_stage_handle_blocks_swap(self) -> None:
