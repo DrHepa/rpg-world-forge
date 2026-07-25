@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import worldforge.bundle as bundle_module
@@ -638,11 +639,12 @@ class BundlePublicationTests(unittest.TestCase):
                 ),
                 self.assertRaises(FileExistsError),
             ):
-                directory_publish_module.publish_directory_noreplace(
+                with directory_publish_module.publish_directory_noreplace(
                     source,
                     destination,
                     expected_source_identity=(1, 2),
-                )
+                ):
+                    pass
             self.assertTrue(source.is_dir())
             self.assertTrue(destination.is_dir())
 
@@ -688,11 +690,12 @@ class BundlePublicationTests(unittest.TestCase):
                 ),
                 self.assertRaisesRegex(DirectoryPublishError, "binding|identity"),
             ):
-                publish_directory_noreplace(
+                with publish_directory_noreplace(
                     source,
                     destination,
                     expected_source_identity=expected,
-                )
+                ):
+                    pass
 
             self.assertEqual(
                 "foreign\n",
@@ -749,11 +752,12 @@ class BundlePublicationTests(unittest.TestCase):
                 ),
                 self.assertRaisesRegex(DirectoryPublishError, "binding|identity"),
             ):
-                publish_directory_noreplace(
+                with publish_directory_noreplace(
                     source,
                     destination,
                     expected_source_identity=expected,
-                )
+                ):
+                    pass
 
             self.assertEqual(
                 "foreign\n",
@@ -789,11 +793,12 @@ class BundlePublicationTests(unittest.TestCase):
                 DirectoryPublishError,
                 "identity changed",
             ):
-                publish_directory_noreplace(
+                with publish_directory_noreplace(
                     source,
                     destination,
                     expected_source_identity=expected,
-                )
+                ):
+                    pass
 
             self.assertEqual(
                 "foreign\n",
@@ -803,6 +808,180 @@ class BundlePublicationTests(unittest.TestCase):
             self.assertEqual(
                 "owned\n",
                 (displaced / "owned.txt").read_text(encoding="utf-8"),
+            )
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux retained-directory descriptors",
+    )
+    def test_linux_rename_then_raise_is_indeterminate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            destination = root / "destination"
+            source.mkdir()
+            (source / "payload.txt").write_text("payload\n", encoding="utf-8")
+            source_identity = directory_publish_module.directory_identity(
+                source,
+                context="Linux rename interruption source",
+            )
+
+            class RenameThenRaise:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(
+                    self,
+                    source_parent: int,
+                    source_name: bytes,
+                    destination_parent: int,
+                    destination_name: bytes,
+                    _flags: int,
+                ) -> int:
+                    os.rename(
+                        source_name,
+                        destination_name,
+                        src_dir_fd=source_parent,
+                        dst_dir_fd=destination_parent,
+                    )
+                    raise KeyboardInterrupt("injected post-rename Linux interruption")
+
+            class FakeLibc:
+                renameat2 = RenameThenRaise()
+
+            with (
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "CDLL",
+                    return_value=FakeLibc(),
+                ),
+                self.assertRaisesRegex(
+                    directory_publish_module.DirectoryPublishIndeterminateError,
+                    "renameat2 raised",
+                ) as caught,
+            ):
+                with publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=source_identity,
+                ):
+                    pass
+
+            self.assertIsInstance(caught.exception.__cause__, KeyboardInterrupt)
+            self.assertFalse(source.exists())
+            self.assertEqual(
+                "payload\n",
+                (destination / "payload.txt").read_text(encoding="utf-8"),
+            )
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux retained-directory descriptors",
+    )
+    def test_linux_returned_collision_remains_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            destination = root / "destination"
+            source.mkdir()
+            (source / "payload.txt").write_text("payload\n", encoding="utf-8")
+            source_identity = directory_publish_module.directory_identity(
+                source,
+                context="Linux deterministic collision source",
+            )
+
+            class Collision:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(
+                    self,
+                    _source_parent: int,
+                    _source_name: bytes,
+                    destination_parent: int,
+                    destination_name: bytes,
+                    _flags: int,
+                ) -> int:
+                    os.mkdir(destination_name, dir_fd=destination_parent)
+                    (destination / "foreign.txt").write_text(
+                        "foreign\n",
+                        encoding="utf-8",
+                    )
+                    directory_publish_module.ctypes.set_errno(errno.EEXIST)
+                    return -1
+
+            class FakeLibc:
+                renameat2 = Collision()
+
+            with (
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "CDLL",
+                    return_value=FakeLibc(),
+                ),
+                self.assertRaises(FileExistsError),
+            ):
+                with publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=source_identity,
+                ):
+                    pass
+
+            self.assertTrue(source.is_dir())
+            self.assertEqual(
+                "payload\n",
+                (source / "payload.txt").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                "foreign\n",
+                (destination / "foreign.txt").read_text(encoding="utf-8"),
+            )
+
+    @unittest.skipUnless(
+        sys.platform.startswith("linux") and os.name == "posix",
+        "Linux retained-directory descriptors",
+    )
+    def test_linux_post_rename_lease_close_failure_is_indeterminate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source"
+            destination = root / "destination"
+            source.mkdir()
+            (source / "payload.txt").write_text("payload\n", encoding="utf-8")
+            source_identity = directory_publish_module.directory_identity(
+                source,
+                context="Linux close failure source",
+            )
+            close_descriptors = directory_publish_module._close_descriptors  # noqa: SLF001
+
+            def close_then_fail(descriptors: tuple[tuple[int, str], ...]) -> None:
+                close_descriptors(descriptors)
+                raise DirectoryPublishError("injected retained descriptor close failure")
+
+            with (
+                patch.object(
+                    directory_publish_module,
+                    "_close_descriptors",
+                    side_effect=close_then_fail,
+                ),
+                self.assertRaisesRegex(
+                    directory_publish_module.DirectoryPublishIndeterminateError,
+                    "indeterminate after RENAME_NOREPLACE",
+                ) as caught,
+            ):
+                with publish_directory_noreplace(
+                    source,
+                    destination,
+                    expected_source_identity=source_identity,
+                ):
+                    pass
+
+            self.assertIsInstance(caught.exception.__cause__, DirectoryPublishError)
+            self.assertFalse(source.exists())
+            self.assertEqual(
+                "payload\n",
+                (destination / "payload.txt").read_text(encoding="utf-8"),
             )
 
     @unittest.skipUnless(
@@ -890,6 +1069,30 @@ class BundlePublicationTests(unittest.TestCase):
             finally:
                 bundle.close()
 
+    @unittest.skipUnless(
+        sys.platform == "win32" and os.name == "nt",
+        "native Windows publication seal sharing",
+    )
+    def test_native_windows_bundle_verifier_reads_while_seal_is_active(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worldpack, renderpack, licenses = _write_fixture(root / "fixture")
+            bundle = export_runtime_bundle(
+                worldpack,
+                renderpack,
+                root / "bundle",
+                release_id="1.0.0",
+                licenses_directory=licenses,
+            )
+            try:
+                self.assertEqual(
+                    bundle.bundle_hash,
+                    bundle.manifest["bundle_hash"],
+                )
+                self.assertTrue((bundle.root / "bundle.manifest.json").is_file())
+            finally:
+                bundle.close()
+
     def test_windows_bundle_durability_uses_retained_handle_tree(self) -> None:
         root = Path("/synthetic/windows/stage")
         identity = (41, 503)
@@ -917,6 +1120,116 @@ class BundlePublicationTests(unittest.TestCase):
             root,
             expected_source_identity=identity,
         )
+
+    def test_windows_seam_bundle_verifier_reads_with_seal_handles_active(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            worldpack, renderpack, licenses = _write_fixture(root / "fixture")
+            stage = root / "stage"
+            destination = root / "bundle"
+            stage.mkdir()
+            manifest = bundle_module._populate_runtime_bundle(  # noqa: SLF001
+                worldpack,
+                renderpack,
+                licenses,
+                stage,
+                "1.0.0",
+            )
+            stage_identity = directory_publish_module.directory_identity(
+                stage,
+                context="Windows verifier seam stage",
+            )
+            parent_identity = directory_publish_module.directory_identity(
+                root,
+                context="Windows verifier seam parent",
+            )
+            handles: dict[int, Path] = {}
+            source_handle: int | None = None
+            create_calls: list[tuple[object, ...]] = []
+
+            class WindowsCall:
+                argtypes: object = None
+                restype: object = None
+
+                def __init__(self, result: int) -> None:
+                    self.result = result
+
+                def __call__(self, *_args: object) -> int:
+                    return self.result
+
+            class CreateFile:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, *args: object) -> int:
+                    nonlocal source_handle
+                    create_calls.append(args)
+                    handle = 1200 + len(handles)
+                    path = Path(str(args[0]))
+                    handles[handle] = path
+                    if path == stage and source_handle is None:
+                        source_handle = handle
+                    return handle
+
+            class Rename:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, *_args: object) -> int:
+                    stage.rename(destination)
+                    return 1
+
+            def load_dll(name: str, **_kwargs: object) -> object:
+                if name == "kernel32":
+                    return SimpleNamespace(
+                        CreateFileW=CreateFile(),
+                        FlushFileBuffers=WindowsCall(1),
+                        CloseHandle=WindowsCall(1),
+                    )
+                if name == "ntdll":
+                    return SimpleNamespace(
+                        NtSetInformationFile=Rename(),
+                        RtlNtStatusToDosError=WindowsCall(5),
+                    )
+                raise OSError(f"unexpected DLL: {name}")
+
+            def handle_stat(handle: int):
+                path = handles[handle]
+                if handle == source_handle and not stage.exists():
+                    path = destination
+                return directory_publish_module.path_file_stat(path)
+
+            with (
+                patch.object(
+                    directory_publish_module.ctypes,
+                    "WinDLL",
+                    create=True,
+                    side_effect=load_dll,
+                ),
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    side_effect=handle_stat,
+                ),
+            ):
+                with directory_publish_module._windows_rename_noreplace(  # noqa: SLF001
+                    stage,
+                    destination,
+                    source_identity=stage_identity,
+                    parent_identity=parent_identity,
+                ):
+                    with bundle_module.verify_runtime_bundle(
+                        destination,
+                        expected_bundle_hash=manifest["bundle_hash"],
+                    ) as verified:
+                        self.assertEqual(manifest["bundle_hash"], verified.bundle_hash)
+
+            post_seal_calls = [
+                call for call in create_calls if destination in Path(str(call[0])).parents
+            ]
+            self.assertGreater(len(post_seal_calls), 0)
+            self.assertTrue(all(call[1] == 0x00100081 for call in post_seal_calls))
+            self.assertTrue(all(call[2] == 0x00000001 for call in post_seal_calls))
 
     @unittest.skipUnless(
         sys.platform.startswith("linux") and os.name == "posix",
@@ -1800,11 +2113,12 @@ class BundlePublicationTests(unittest.TestCase):
                     "supported only on Linux and Windows",
                 ),
             ):
-                publish_directory_noreplace(
+                with publish_directory_noreplace(
                     source,
                     destination,
                     expected_source_identity=expected,
-                )
+                ):
+                    pass
             self.assertTrue(source.is_dir())
             self.assertFalse(destination.exists())
 

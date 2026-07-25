@@ -1897,17 +1897,27 @@ def _recover_journal(
         ):
             pass
         try:
-            published_identity = publish_directory_noreplace(
+            with publish_directory_noreplace(
                 stage,
                 destination,
                 expected_source_identity=expected_identity,
-            )
+            ) as published_identity:
+                if published_identity != expected_identity:
+                    raise ComposedBundleError(
+                        "recovered composed bundle publication identity changed"
+                    )
+                with verify_composed_runtime_bundle(
+                    destination,
+                    expected_bundle_hash=bundle_hash,
+                    platform=platform,
+                    runtime_api_version=runtime_api_version,
+                    registry=registry,
+                ):
+                    pass
         except (DirectoryPublishError, FileExistsError) as exc:
             raise ComposedBundleError(
                 f"Could not recover ready composed bundle publication: {exc}"
             ) from exc
-        if published_identity != expected_identity:
-            raise ComposedBundleError("recovered composed bundle publication identity changed")
     elif destination_identity == expected_identity and stage_identity is None:
         pass
     else:
@@ -2638,42 +2648,42 @@ def build_composed_runtime_bundle(
             )
             journal_document = ready_journal
             try:
-                published_identity = publish_directory_noreplace(
+                with publish_directory_noreplace(
                     stage,
                     destination_path,
                     expected_source_identity=stage_identity,
-                )
+                ) as published_identity:
+                    if published_identity != stage_identity:
+                        raise ComposedBundleError("published bundle identity changed")
+                    _fsync_directory(destination_path.parent)
+                    published_bundle = load_composed_runtime_bundle(
+                        destination_path,
+                        expected_bundle_hash=ready_hash,
+                        platform=platform,
+                        runtime_api_version=runtime_api_version,
+                        registry=registry,
+                    )
+                    if (
+                        _optional_directory_identity(
+                            destination_path,
+                            context="verified published destination",
+                        )
+                        != published_identity
+                        or _optional_directory_identity(
+                            stage_path,
+                            context="published absent stage",
+                        )
+                        is not None
+                    ):
+                        raise ComposedBundleError(
+                            "published bundle changed before recovery journal cleanup"
+                        )
             except FileExistsError as exc:
                 raise ComposedBundleError(
                     f"bundle destination already exists: {destination_path}"
                 ) from exc
             except DirectoryPublishError as exc:
                 raise ComposedBundleError(str(exc)) from exc
-            if published_identity != stage_identity:
-                raise ComposedBundleError("published bundle identity changed")
-            _fsync_directory(destination_path.parent)
-            published_bundle = load_composed_runtime_bundle(
-                destination_path,
-                expected_bundle_hash=ready_hash,
-                platform=platform,
-                runtime_api_version=runtime_api_version,
-                registry=registry,
-            )
-            if (
-                _optional_directory_identity(
-                    destination_path,
-                    context="verified published destination",
-                )
-                != published_identity
-                or _optional_directory_identity(
-                    stage_path,
-                    context="published absent stage",
-                )
-                is not None
-            ):
-                raise ComposedBundleError(
-                    "published bundle changed before recovery journal cleanup"
-                )
             assert journal_identity is not None
             _remove_owned_journal(journal_path, journal_identity)
             result = published_bundle

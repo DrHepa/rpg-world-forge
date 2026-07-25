@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import errno
+import hashlib
 import os
 import stat
 import sys
@@ -278,6 +279,7 @@ class _NtFileRenameInformation(ctypes.Structure):
 
 
 _WindowsTreeState = tuple[DirectoryIdentity, int, int, int, int]
+_WindowsTreeFingerprint = str
 
 
 @dataclass(frozen=True)
@@ -297,12 +299,16 @@ class _WindowsRetainedTree:
     parent_handle: int
     payload_handles: list[_WindowsPayloadHandle]
     expected_tree: dict[str, _WindowsTreeState]
+    expected_root_state: _WindowsTreeState
+    expected_fingerprint: _WindowsTreeFingerprint | None
+    open_tree_entry: Callable[[Path, bool, bool], int]
     flush_file_buffers: Callable[[ctypes.c_void_p], int]
     close_handle: Callable[[ctypes.c_void_p], int]
     nt_set_information: Callable[[ctypes.c_void_p, object, object, int, int], int]
     nt_status_to_dos_error: Callable[[int], int]
     flush_parent: Callable[[Path, DirectoryIdentity, str], None]
     namespace_mutated: bool = False
+    namespace_outcome_ambiguous: bool = False
 
     def _require_root_handles(self, *, context: str) -> None:
         _require_expected_directory(
@@ -331,6 +337,31 @@ class _WindowsRetainedTree:
                 raise DirectoryPublishError(
                     f"{context} payload identity changed: {retained.relative}"
                 )
+
+    def _close_payload_handles(self, *, context: str) -> None:
+        primary = sys.exception()
+        cleanup_error: DirectoryPublishError | None = None
+        retained_failures: list[_WindowsPayloadHandle] = []
+        for retained in reversed(self.payload_handles):
+            if self.close_handle(ctypes.c_void_p(retained.handle)):
+                continue
+            retained_failures.append(retained)
+            error = ctypes.get_last_error()
+            detail = f"{context} for {retained.relative} failed: {_windows_error_detail(error)}"
+            if primary is not None:
+                primary.add_note(detail)
+            elif cleanup_error is not None:
+                cleanup_error.add_note(detail)
+            else:
+                cleanup_error = DirectoryPublishError(detail)
+        self.payload_handles = list(reversed(retained_failures))
+        if cleanup_error is not None:
+            if self.namespace_mutated or self.namespace_outcome_ambiguous:
+                raise DirectoryPublishIndeterminateError(
+                    "Windows directory publication outcome is indeterminate after "
+                    "NtSetInformationFile because retained payload cleanup failed"
+                ) from cleanup_error
+            raise cleanup_error
 
     def _flush_handle(self, handle: int, context: str) -> None:
         if not self.flush_file_buffers(ctypes.c_void_p(handle)):
@@ -377,7 +408,92 @@ class _WindowsRetainedTree:
             raise DirectoryPublishError(
                 "Windows publication payload tree changed after durable flush"
             )
+        fingerprint = _windows_tree_fingerprint(
+            self.source,
+            expected_root_state=self.expected_root_state,
+            expected_tree=self.expected_tree,
+        )
+        self._require_root_handles(context="fingerprinted Windows publication")
+        self._require_payload_handles(context="fingerprinted Windows publication")
+        if _windows_tree_snapshot(self.source) != self.expected_tree:
+            raise DirectoryPublishError(
+                "Windows publication payload tree changed during fingerprinting"
+            )
+        self.expected_fingerprint = fingerprint
         return tuple(retained.relative for retained in ordered if not retained.directory)
+
+    def _require_published_binding(self, destination: Path, *, context: str) -> None:
+        try:
+            self._require_root_handles(context=context)
+            _require_expected_directory(
+                path_file_stat(destination.parent),
+                self.parent_identity,
+                context=f"{context} lexical parent",
+            )
+            _require_expected_directory(
+                path_file_stat(destination),
+                self.source_identity,
+                context=f"{context} destination",
+            )
+            try:
+                path_file_stat(self.source)
+            except FileNotFoundError:
+                pass
+            else:
+                raise DirectoryPublishError(
+                    f"{context} retained the private publication stage name"
+                )
+        except DirectoryPublishError:
+            raise
+        except OSError as exc:
+            raise DirectoryPublishError(
+                f"Could not validate {context} path binding: {exc}"
+            ) from exc
+
+    def _retain_published_payload(self, destination: Path) -> None:
+        if self.payload_handles:
+            raise DirectoryPublishError(
+                "Windows publication payload handles were not released before rename"
+            )
+        published_tree = _windows_tree_snapshot(destination)
+        if published_tree != self.expected_tree:
+            raise DirectoryPublishError(
+                "Published Windows payload inventory or metadata changed during rename"
+            )
+        retained: list[_WindowsPayloadHandle] = []
+        try:
+            for relative, expected in sorted(self.expected_tree.items()):
+                payload_path = destination / PurePath(*relative.split("/"))
+                directory = expected[1] == stat.S_IFDIR
+                handle = self.open_tree_entry(payload_path, directory, False)
+                item = _WindowsPayloadHandle(
+                    relative=relative,
+                    handle=handle,
+                    directory=directory,
+                    expected=expected,
+                )
+                retained.append(item)
+                opened = file_stat_module._windows_handle_stat(handle)  # noqa: SLF001
+                if (
+                    is_link_or_reparse(opened)
+                    or file_identity(opened) != expected[0]
+                    or stat.S_IFMT(opened.st_mode) != expected[1]
+                    or opened.st_nlink != expected[2]
+                    or opened.st_size != expected[3]
+                    or opened.st_mtime_ns != expected[4]
+                ):
+                    raise DirectoryPublishError(
+                        f"Published Windows payload identity changed: {relative}"
+                    )
+        except BaseException:
+            self.payload_handles = retained
+            raise
+        self.payload_handles = retained
+        self._require_payload_handles(context="sealed published Windows publication")
+        if _windows_tree_snapshot(destination) != self.expected_tree:
+            raise DirectoryPublishError(
+                "Published Windows payload tree changed while retaining seal handles"
+            )
 
     def rename_noreplace(self, destination: Path) -> DirectoryIdentity:
         if self.source.parent != destination.parent:
@@ -387,12 +503,17 @@ class _WindowsRetainedTree:
                 "Windows directory publication destination must be absolute"
             )
         self.flush_payload_tree()
+        if self.expected_fingerprint is None:
+            raise DirectoryPublishError(
+                "Windows publication payload fingerprint was not established"
+            )
         self._require_root_handles(context="pre-rename Windows publication")
         self._require_payload_handles(context="pre-rename Windows publication")
         if _windows_tree_snapshot(self.source) != self.expected_tree:
             raise DirectoryPublishError(
                 "Windows publication payload tree changed before handle-bound rename"
             )
+        self._close_payload_handles(context="Windows pre-rename payload handle release")
         encoded = destination.name.encode("utf-16-le")
         offset = _NtFileRenameInformation.filename.offset
         buffer = ctypes.create_string_buffer(
@@ -404,17 +525,24 @@ class _WindowsRetainedTree:
         information.filename_length = len(encoded)
         ctypes.memmove(ctypes.addressof(buffer) + offset, encoded, len(encoded))
         io_status = _IoStatusBlock()
-        status = ctypes.c_int32(
-            int(
-                self.nt_set_information(
-                    ctypes.c_void_p(self.source_handle),
-                    ctypes.byref(io_status),
-                    buffer,
-                    len(buffer),
-                    10,  # FileRenameInformation
+        try:
+            status = ctypes.c_int32(
+                int(
+                    self.nt_set_information(
+                        ctypes.c_void_p(self.source_handle),
+                        ctypes.byref(io_status),
+                        buffer,
+                        len(buffer),
+                        10,  # FileRenameInformation
+                    )
                 )
-            )
-        ).value
+            ).value
+        except BaseException as exc:
+            self.namespace_outcome_ambiguous = True
+            raise DirectoryPublishIndeterminateError(
+                "Windows directory publication outcome is indeterminate because "
+                "NtSetInformationFile raised after the rename attempt"
+            ) from exc
         if status < 0:
             try:
                 error = int(self.nt_status_to_dos_error(status))
@@ -441,13 +569,36 @@ class _WindowsRetainedTree:
                     ) from None
             raise DirectoryPublishError(
                 error,
-                _windows_error_detail(error),
+                f"{_windows_error_detail(error)} "
+                f"(NTSTATUS 0x{status & 0xFFFFFFFF:08x}, Win32 {error})",
                 destination,
             )
 
         try:
             self.namespace_mutated = True
-            self._require_root_handles(context="renamed Windows publication")
+            self._require_published_binding(
+                destination,
+                context="renamed Windows publication",
+            )
+            self._retain_published_payload(destination)
+            self._require_published_binding(
+                destination,
+                context="sealed renamed Windows publication",
+            )
+            published_fingerprint = _windows_tree_fingerprint(
+                destination,
+                expected_root_state=self.expected_root_state,
+                expected_tree=self.expected_tree,
+            )
+            if published_fingerprint != self.expected_fingerprint:
+                raise DirectoryPublishError(
+                    "Published Windows payload fingerprint changed during rename"
+                )
+            self._require_payload_handles(context="fingerprinted published Windows publication")
+            if _windows_tree_snapshot(destination) != self.expected_tree:
+                raise DirectoryPublishError(
+                    "Published Windows payload tree changed during verification"
+                )
             published_info = file_stat_module._windows_handle_stat(  # noqa: SLF001
                 self.source_handle
             )
@@ -457,29 +608,25 @@ class _WindowsRetainedTree:
                 self.parent_identity,
                 "Windows publication parent",
             )
-            self._require_root_handles(context="durably published Windows publication")
-            try:
-                destination_info = path_file_stat(destination)
-            except OSError as exc:
-                raise DirectoryPublishError(
-                    f"Could not validate published Windows directory {destination}: {exc}"
-                ) from exc
-            _require_expected_directory(
-                destination_info,
-                self.source_identity,
-                context="published Windows destination",
+            self._require_published_binding(
+                destination,
+                context="durably published Windows publication",
             )
+            self._require_payload_handles(context="durably sealed published Windows publication")
             if _windows_tree_snapshot(destination) != self.expected_tree:
                 raise DirectoryPublishError(
                     "Published Windows payload tree changed during handle-bound rename"
                 )
-            try:
-                path_file_stat(self.source)
-            except FileNotFoundError:
-                pass
-            else:
+            if (
+                _windows_tree_fingerprint(
+                    destination,
+                    expected_root_state=self.expected_root_state,
+                    expected_tree=self.expected_tree,
+                )
+                != self.expected_fingerprint
+            ):
                 raise DirectoryPublishError(
-                    "Published Windows directory retained its private stage name"
+                    "Published Windows payload fingerprint changed during durable flush"
                 )
             return file_identity(published_info)
         except BaseException as exc:
@@ -494,14 +641,11 @@ class _WindowsRetainedTree:
     def close(self) -> None:
         primary = sys.exception()
         cleanup_error: DirectoryPublishError | None = None
+        try:
+            self._close_payload_handles(context="Windows publication payload handle cleanup")
+        except DirectoryPublishError as exc:
+            cleanup_error = exc
         for handle, context in (
-            *(
-                (
-                    retained.handle,
-                    f"Windows publication payload handle cleanup for {retained.relative}",
-                )
-                for retained in reversed(self.payload_handles)
-            ),
             (self.source_handle, "Windows publication source handle cleanup"),
             (self.parent_handle, "Windows publication parent handle cleanup"),
         ):
@@ -516,7 +660,7 @@ class _WindowsRetainedTree:
                     cleanup_error = DirectoryPublishError(detail)
         if (
             primary is not None
-            and self.namespace_mutated
+            and (self.namespace_mutated or self.namespace_outcome_ambiguous)
             and not isinstance(primary, DirectoryPublishIndeterminateError)
         ):
             raise DirectoryPublishIndeterminateError(
@@ -524,7 +668,7 @@ class _WindowsRetainedTree:
                 "NtSetInformationFile and retained-handle cleanup"
             ) from primary
         if cleanup_error is not None:
-            if self.namespace_mutated:
+            if self.namespace_mutated or self.namespace_outcome_ambiguous:
                 raise DirectoryPublishIndeterminateError(
                     "Windows directory publication outcome is indeterminate after "
                     "NtSetInformationFile because retained-handle cleanup failed"
@@ -892,16 +1036,22 @@ def _linux_rename_retained_noreplace(
         raise FileExistsError(errno.EEXIST, "destination already exists", destination)
 
     ctypes.set_errno(0)
-    if (
-        renameat2(
-            retained.parent_fd,
-            os.fsencode(retained.path.name),
-            retained.parent_fd,
-            os.fsencode(destination.name),
-            1,  # RENAME_NOREPLACE
+    try:
+        rename_result = int(
+            renameat2(
+                retained.parent_fd,
+                os.fsencode(retained.path.name),
+                retained.parent_fd,
+                os.fsencode(destination.name),
+                1,  # RENAME_NOREPLACE
+            )
         )
-        != 0
-    ):
+    except BaseException as exc:
+        raise DirectoryPublishIndeterminateError(
+            "Linux directory publication outcome is indeterminate because "
+            "renameat2 raised after the RENAME_NOREPLACE attempt"
+        ) from exc
+    if rename_result != 0:
         error = ctypes.get_errno()
         if error == errno.EEXIST:
             raise FileExistsError(error, "destination already exists", destination)
@@ -970,7 +1120,7 @@ def _linux_rename_retained_noreplace(
         os.fsync(retained.fd)
         os.fsync(retained.parent_fd)
         require_published_state(context="durably published Linux")
-    except Exception as exc:
+    except BaseException as exc:
         raise DirectoryPublishIndeterminateError(
             "Linux directory publication outcome is indeterminate after "
             f"RENAME_NOREPLACE; evidence retained at {retained.path} and {destination}: {exc}"
@@ -1332,6 +1482,16 @@ def copy_retained_tree_noreplace(
     return destination.identity
 
 
+def _windows_tree_state(info: FileStat) -> _WindowsTreeState:
+    return (
+        file_identity(info),
+        stat.S_IFMT(info.st_mode),
+        info.st_nlink,
+        info.st_size,
+        info.st_mtime_ns,
+    )
+
+
 def _windows_tree_snapshot(root: Path) -> dict[str, _WindowsTreeState]:
     def fail_walk(error: OSError) -> None:
         raise DirectoryPublishError(
@@ -1362,14 +1522,89 @@ def _windows_tree_snapshot(root: Path) -> dict[str, _WindowsTreeState]:
                 or (not directory and info.st_nlink != 1)
             ):
                 raise DirectoryPublishError(f"Windows publication payload is unsafe: {path}")
-            result[path.relative_to(root).as_posix()] = (
-                file_identity(info),
-                stat.S_IFMT(info.st_mode),
-                info.st_nlink,
-                info.st_size,
-                info.st_mtime_ns,
-            )
+            result[path.relative_to(root).as_posix()] = _windows_tree_state(info)
     return result
+
+
+def _windows_tree_fingerprint(
+    root: Path,
+    *,
+    expected_root_state: _WindowsTreeState,
+    expected_tree: dict[str, _WindowsTreeState],
+) -> _WindowsTreeFingerprint:
+    """Hash one portable tree's metadata and ordinary default-stream bytes.
+
+    Windows alternate data streams are outside this publication contract. All
+    runtime-referenced paths remain subject to their existing portable-path
+    validation, including rejection of colon-bearing path components.
+    """
+
+    root_info = path_file_stat(root)
+    if (
+        is_link_or_reparse(root_info)
+        or not stat.S_ISDIR(root_info.st_mode)
+        or _windows_tree_state(root_info) != expected_root_state
+    ):
+        raise DirectoryPublishError(
+            "Windows publication root metadata changed during fingerprinting"
+        )
+    if _windows_tree_snapshot(root) != expected_tree:
+        raise DirectoryPublishError(
+            "Windows publication payload tree changed before fingerprinting"
+        )
+
+    digest = hashlib.sha256()
+
+    def add_frame(payload: bytes) -> None:
+        digest.update(len(payload).to_bytes(8, "big"))
+        digest.update(payload)
+
+    digest.update(b"worldforge.windows-default-stream-tree.v1\0")
+    records = (("", expected_root_state), *sorted(expected_tree.items()))
+    for relative, expected in records:
+        metadata = "\0".join(
+            (
+                relative,
+                str(expected[0][0]),
+                str(expected[0][1]),
+                str(expected[1]),
+                str(expected[2]),
+                str(expected[3]),
+                str(expected[4]),
+            )
+        ).encode("utf-8")
+        add_frame(metadata)
+        if relative and expected[1] == stat.S_IFREG:
+            path = root / PurePath(*relative.split("/"))
+            file_digest = hashlib.sha256()
+            bytes_read = 0
+            try:
+                with path.open("rb") as stream:
+                    while True:
+                        chunk = stream.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        file_digest.update(chunk)
+                        bytes_read += len(chunk)
+            except OSError as exc:
+                raise DirectoryPublishError(
+                    f"Could not fingerprint Windows publication payload {relative}: {exc}"
+                ) from exc
+            if bytes_read != expected[3]:
+                raise DirectoryPublishError(
+                    f"Windows publication payload size changed during fingerprinting: {relative}"
+                )
+            add_frame(file_digest.digest())
+
+    if _windows_tree_state(path_file_stat(root)) != expected_root_state:
+        raise DirectoryPublishError(
+            "Windows publication root metadata changed during fingerprinting"
+        )
+    if _windows_tree_snapshot(root) != expected_tree:
+        raise DirectoryPublishError(
+            "Windows publication payload tree changed during fingerprinting"
+        )
+    return digest.hexdigest()
 
 
 @contextmanager
@@ -1522,20 +1757,24 @@ def _open_windows_retained_tree(
                 else:
                     raise DirectoryPublishError(detail)
 
-    def open_tree_entry(path: Path, *, directory: bool) -> int:
+    def open_tree_entry(path: Path, directory: bool, writable: bool) -> int:
         flags = 0x00200000
         if directory:
             flags |= 0x02000000
-        share = 0x00000001
-        if delete_source:
-            # The retained descendants must permit the source-directory rename
-            # while continuing to deny every writer until publication and
-            # post-rename identity validation finish.
-            share |= 0x00000004
+        access = (
+            0x80000000 | 0x40000000 | 0x00100000
+            if writable
+            else 0x00000001 | 0x00000080 | 0x00100000
+        )
         handle = create_file(
             str(path),
-            0x80000000 | 0x40000000 | 0x00100000,
-            share,
+            access,
+            # Descendant handles intentionally deny write and delete sharing.
+            # Windows cannot rename a directory with open descendant handles,
+            # so the pre-rename set is closed only after its durable
+            # fingerprint is complete and a new seal set is acquired
+            # immediately after the root-handle-bound rename.
+            0x00000001,
             None,
             3,
             flags,
@@ -1569,11 +1808,16 @@ def _open_windows_retained_tree(
             parent_identity,
             context="retained Windows publication parent",
         )
+        expected_root_state = _windows_tree_state(path_file_stat(source))
+        if expected_root_state[0] != source_identity:
+            raise DirectoryPublishError(
+                "Windows publication source identity changed before retention"
+            )
         expected_tree = _windows_tree_snapshot(source)
         for relative, expected in sorted(expected_tree.items()):
             payload_path = source / PurePath(*relative.split("/"))
             directory = expected[1] == stat.S_IFDIR
-            handle = open_tree_entry(payload_path, directory=directory)
+            handle = open_tree_entry(payload_path, directory, True)
             payload_handles.append(
                 _WindowsPayloadHandle(
                     relative=relative,
@@ -1606,6 +1850,9 @@ def _open_windows_retained_tree(
             parent_handle=parent_handle,
             payload_handles=payload_handles,
             expected_tree=expected_tree,
+            expected_root_state=expected_root_state,
+            expected_fingerprint=None,
+            open_tree_entry=open_tree_entry,
             flush_file_buffers=flush_file_buffers,
             close_handle=close_handle,
             nt_set_information=nt_set_information,
@@ -1670,78 +1917,107 @@ def flush_windows_directory_tree(
         return retained.flush_payload_tree()
 
 
+@contextmanager
 def _windows_rename_noreplace(
     source: Path,
     destination: Path,
     *,
     source_identity: DirectoryIdentity,
     parent_identity: DirectoryIdentity,
-) -> DirectoryIdentity:
+) -> Iterator[DirectoryIdentity]:
     with _open_windows_retained_tree(
         source,
         source_identity=source_identity,
         parent_identity=parent_identity,
         delete_source=True,
     ) as retained:
-        return retained.rename_noreplace(destination)
+        published_identity = retained.rename_noreplace(destination)
+        yield published_identity
 
 
+@contextmanager
 def publish_directory_noreplace(
     source: Path,
     destination: Path,
     *,
     expected_source_identity: DirectoryIdentity,
-) -> DirectoryIdentity:
-    """Publish one directory with supported native no-replace semantics."""
+) -> Iterator[DirectoryIdentity]:
+    """Publish and retain one directory through immediate caller verification."""
 
     source_identity = expected_source_identity
-    linux_publication = False
-    windows_publication = False
 
     if sys.platform.startswith("linux") and os.name == "posix":
-        with open_expected_directory(source, source_identity) as retained:
-            parent_identity = retained.parent_identity
-            published_identity = _linux_rename_retained_noreplace(retained, destination)
-            linux_publication = True
-    elif os.name == "nt":
+        namespace_mutated = False
+        try:
+            with open_expected_directory(source, source_identity) as retained:
+                parent_identity = retained.parent_identity
+                published_identity = _linux_rename_retained_noreplace(
+                    retained,
+                    destination,
+                )
+                namespace_mutated = True
+                if published_identity != source_identity:
+                    raise DirectoryPublishError("Published directory identity changed unexpectedly")
+                if (
+                    directory_identity(destination.parent, context="publication parent")
+                    != parent_identity
+                ):
+                    raise DirectoryPublishError("Publication parent identity changed unexpectedly")
+                if (
+                    directory_identity(destination, context="published directory")
+                    != source_identity
+                ):
+                    raise DirectoryPublishError("Published directory identity changed unexpectedly")
+                yield published_identity
+        except DirectoryPublishIndeterminateError:
+            raise
+        except BaseException as exc:
+            if namespace_mutated:
+                raise DirectoryPublishIndeterminateError(
+                    "Linux directory publication outcome became indeterminate after "
+                    f"RENAME_NOREPLACE; evidence retained at {source} and "
+                    f"{destination}: {exc}"
+                ) from exc
+            raise
+        return
+    if os.name == "nt":
         if source.parent != destination.parent:
             raise DirectoryPublishError("Windows directory publication must stay within one parent")
         parent_identity = directory_identity(source.parent, context="publication parent")
         if destination.exists() or destination.is_symlink():
             raise FileExistsError(errno.EEXIST, "destination already exists", destination)
-        published_identity = _windows_rename_noreplace(
+        with _windows_rename_noreplace(
             source,
             destination,
             source_identity=source_identity,
             parent_identity=parent_identity,
-        )
-        windows_publication = True
-    else:
-        raise DirectoryPublishError(
-            "Safe exclusive directory publication is supported only on Linux and Windows"
-        )
-
-    try:
-        if published_identity != source_identity:
-            raise DirectoryPublishError("Published directory identity changed unexpectedly")
-        if directory_identity(destination.parent, context="publication parent") != parent_identity:
-            raise DirectoryPublishError("Publication parent identity changed unexpectedly")
-        if directory_identity(destination, context="published directory") != source_identity:
-            raise DirectoryPublishError("Published directory identity changed unexpectedly")
-    except DirectoryPublishError as exc:
-        if linux_publication:
-            raise DirectoryPublishIndeterminateError(
-                "Linux directory publication outcome became indeterminate after "
-                f"RENAME_NOREPLACE; evidence retained at {source} and {destination}: {exc}"
-            ) from exc
-        if windows_publication:
-            raise DirectoryPublishIndeterminateError(
-                "Windows directory publication outcome became indeterminate after "
-                "NtSetInformationFile; no rollback was attempted for "
-                f"{source} and {destination}: {exc}"
-            ) from exc
-        raise
-    return published_identity
+        ) as published_identity:
+            try:
+                if published_identity != source_identity:
+                    raise DirectoryPublishError("Published directory identity changed unexpectedly")
+                if (
+                    directory_identity(destination.parent, context="publication parent")
+                    != parent_identity
+                ):
+                    raise DirectoryPublishError("Publication parent identity changed unexpectedly")
+                if (
+                    directory_identity(destination, context="published directory")
+                    != source_identity
+                ):
+                    raise DirectoryPublishError("Published directory identity changed unexpectedly")
+                yield published_identity
+            except DirectoryPublishIndeterminateError:
+                raise
+            except BaseException as exc:
+                raise DirectoryPublishIndeterminateError(
+                    "Windows directory publication outcome became indeterminate after "
+                    "NtSetInformationFile; no rollback was attempted for "
+                    f"{source} and {destination}: {exc}"
+                ) from exc
+        return
+    raise DirectoryPublishError(
+        "Safe exclusive directory publication is supported only on Linux and Windows"
+    )
 
 
 def _posix_unlink_descriptor_raw(descriptor: int, *, directory: bool) -> int | None:

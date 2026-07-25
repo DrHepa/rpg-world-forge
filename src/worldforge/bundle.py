@@ -1391,24 +1391,29 @@ def export_runtime_bundle(
         verified.close()
         verified = None
         try:
-            published_identity = publish_directory_noreplace(
+            with publish_directory_noreplace(
                 stage,
                 destination_path,
                 expected_source_identity=stage_identity,
-            )
+            ) as published_identity:
+                published_verified = verify_runtime_bundle(
+                    destination_path,
+                    expected_bundle_hash=manifest["bundle_hash"],
+                )
+                if (
+                    directory_identity(
+                        destination_path,
+                        context="published bundle export",
+                    )
+                    != published_identity
+                ):
+                    raise BundleError(
+                        "Published bundle export identity changed during verification"
+                    )
         except FileExistsError as exc:
             raise BundleError(f"Bundle destination already exists: {destination_path}") from exc
         except DirectoryPublishError as exc:
             raise BundleError(str(exc)) from exc
-        published_verified = verify_runtime_bundle(
-            destination_path,
-            expected_bundle_hash=manifest["bundle_hash"],
-        )
-        if (
-            directory_identity(destination_path, context="published bundle export")
-            != published_identity
-        ):
-            raise BundleError("Published bundle export identity changed during verification")
         installed = True
         result = published_verified
         published_verified = None
@@ -2390,20 +2395,24 @@ def _recover_import_journal(root: Path) -> Path | None:
             raise BundleError("Ready bundle import stage identity changed; preserving evidence")
         _journal_bundle_release(temporary, identity, journal["bundle_hash"])
         try:
-            published_identity = publish_directory_noreplace(
+            with publish_directory_noreplace(
                 temporary,
                 destination,
                 expected_source_identity=identity,
-            )
+            ) as published_identity:
+                if published_identity != identity:
+                    raise BundleError("Recovered bundle import identity changed during publication")
+                _verify_journal_bundle(
+                    destination,
+                    identity,
+                    journal["bundle_hash"],
+                )
         except FileExistsError as exc:
             raise BundleError(
                 "Ready bundle import destination became occupied; preserving evidence"
             ) from exc
         except DirectoryPublishError as exc:
             raise BundleError(str(exc)) from exc
-        if published_identity != identity:
-            raise BundleError("Recovered bundle import identity changed during publication")
-        _verify_journal_bundle(destination, identity, journal["bundle_hash"])
         return _roll_forward_published_journal_bundle(
             root,
             journal,
@@ -2684,18 +2693,22 @@ def _import_verified_bundle(
         _replace_import_journal(root, journal, ready_journal)
         journal = ready_journal
         try:
-            published_identity = publish_directory_noreplace(
+            with publish_directory_noreplace(
                 temporary,
                 destination,
                 expected_source_identity=temporary_identity,
-            )
+            ) as published_identity:
+                if published_identity != temporary_identity:
+                    raise BundleError("Published bundle identity disagrees with its journal")
+                _verify_journal_bundle(
+                    destination,
+                    published_identity,
+                    verified.bundle_hash,
+                )
         except FileExistsError as exc:
             raise BundleError(f"Import destination already exists: {destination}") from exc
         except DirectoryPublishError as exc:
             raise BundleError(str(exc)) from exc
-        if published_identity != temporary_identity:
-            raise BundleError("Published bundle identity disagrees with its journal")
-        _verify_journal_bundle(destination, published_identity, verified.bundle_hash)
         try:
             _write_catalog_atomic(root / WORLD_CATALOG, catalog_after)
         except BaseException as catalog_error:

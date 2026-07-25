@@ -12,7 +12,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
@@ -1491,8 +1491,9 @@ class M6GameConsumerTests(unittest.TestCase):
                 source: Path,
                 destination: Path,
                 **kwargs: object,
-            ) -> tuple[int, int]:
-                publish(source, destination, **kwargs)
+            ) -> None:
+                with publish(source, destination, **kwargs):
+                    pass
                 raise KeyboardInterrupt("injected post-rename process loss")
 
             with (
@@ -1902,8 +1903,12 @@ class M6GameConsumerTests(unittest.TestCase):
 
             state, entries = self._next_generation_entries(game)
             write = module._write_generation_payload
+            verify_generation = module._verify_generation_directory
             lock_calls: list[Path] = []
             close_calls: list[int] = []
+            publication_destination: Path | None = None
+            publication_lease_active = False
+            verification_during_lease = False
 
             def create_private(path: Path) -> None:
                 path.mkdir(mode=0o700)
@@ -1930,18 +1935,40 @@ class M6GameConsumerTests(unittest.TestCase):
                     directory_descriptor=directory_descriptor,
                 )
 
+            @contextmanager
             def simulate_windows_publish(
                 source: Path,
                 destination: Path,
                 **kwargs: object,
-            ) -> tuple[int, int]:
+            ) -> Iterator[tuple[int, int]]:
+                nonlocal publication_destination, publication_lease_active
                 del kwargs
                 identity = module.directory_identity(
                     source,
                     context="simulated Windows publication source",
                 )
                 source.rename(destination)
-                return identity
+                publication_destination = destination
+                publication_lease_active = True
+                try:
+                    yield identity
+                finally:
+                    publication_lease_active = False
+
+            def assert_verified_within_lease(
+                path: Path,
+                payload: bytes,
+                *,
+                expected_identity: tuple[int, int],
+            ) -> None:
+                nonlocal verification_during_lease
+                if path == publication_destination and publication_lease_active:
+                    verification_during_lease = True
+                verify_generation(
+                    path,
+                    payload,
+                    expected_identity=expected_identity,
+                )
 
             with (
                 patch.object(module, "_generation_platform", return_value="windows"),
@@ -1967,12 +1994,18 @@ class M6GameConsumerTests(unittest.TestCase):
                 ),
                 patch.object(
                     module,
+                    "_verify_generation_directory",
+                    side_effect=assert_verified_within_lease,
+                ),
+                patch.object(
+                    module,
                     "publish_directory_noreplace",
                     side_effect=simulate_windows_publish,
                 ),
             ):
                 published = module._publish_catalog_generation(game, state, entries)
             self.assertEqual(2, len(published.entries))
+            self.assertTrue(verification_during_lease)
             self.assertEqual(list(range(1, len(lock_calls) + 1)), sorted(close_calls))
 
     @unittest.skipUnless(os.name == "nt", "native Windows no-delete handle semantics")

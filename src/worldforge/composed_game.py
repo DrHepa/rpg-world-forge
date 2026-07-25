@@ -1332,17 +1332,22 @@ def _recover_catalog_publication(root: Path) -> None:
             expected_identity=expected_identity,
         )
         try:
-            published_identity = publish_directory_noreplace(
+            with publish_directory_noreplace(
                 stage,
                 generation,
                 expected_source_identity=expected_identity,
-            )
+            ) as published_identity:
+                if published_identity != expected_identity:
+                    raise ComposedGameError("recovered catalog generation identity changed")
+                _verify_generation_directory(
+                    generation,
+                    payload,
+                    expected_identity=expected_identity,
+                )
         except (DirectoryPublishError, FileExistsError) as exc:
             raise ComposedGameError(
                 f"could not recover composed catalog publication: {exc}"
             ) from exc
-        if published_identity != expected_identity:
-            raise ComposedGameError("recovered catalog generation identity changed")
     elif generation_identity == expected_identity and stage_identity is None:
         pass
     else:
@@ -1542,17 +1547,19 @@ def _recover_composed_import_publication(
         if _verify_import_candidate(staged_bundle, bundle, entry) != candidate_identity:
             raise ComposedGameError("composed import stage changed before recovery publication")
         try:
-            published_identity = publish_directory_noreplace(
+            with publish_directory_noreplace(
                 stage_root,
                 publication_root,
                 expected_source_identity=expected_identity,
-            )
+            ) as published_identity:
+                if published_identity != expected_identity:
+                    raise ComposedGameError("recovered composed import root identity changed")
+                if _verify_import_candidate(destination, bundle, entry) != candidate_identity:
+                    raise ComposedGameError("recovered composed bundle identity changed")
         except (DirectoryPublishError, FileExistsError) as exc:
             raise ComposedGameError(
                 f"could not recover composed import publication: {exc}"
             ) from exc
-        if published_identity != expected_identity:
-            raise ComposedGameError("recovered composed import root identity changed")
     if _verify_import_candidate(destination, bundle, entry) != candidate_identity:
         raise ComposedGameError("recovered composed bundle identity changed")
     _fsync_composed_bundle_tree(destination)
@@ -1706,24 +1713,24 @@ def _publish_catalog_generation(
                 create=False,
                 expected=journal_state,
             )
-        published_identity = publish_directory_noreplace(
+        with publish_directory_noreplace(
             stage,
             generation,
             expected_source_identity=stage_identity,
-        )
+        ) as published_identity:
+            if published_identity != stage_identity:
+                raise ComposedGameError("published composed catalog generation identity changed")
+            _verify_generation_directory(
+                generation,
+                payload,
+                expected_identity=published_identity,
+            )
     except FileExistsError as exc:
         raise ComposedGameError(
             "private stage or immutable catalog generation is already occupied"
         ) from exc
     except DirectoryPublishError as exc:
         raise ComposedGameError(str(exc)) from exc
-    if published_identity != stage_identity:
-        raise ComposedGameError("published composed catalog generation identity changed")
-    _verify_generation_directory(
-        generation,
-        payload,
-        expected_identity=published_identity,
-    )
     if (
         directory_identity(generations_root, context="catalog generation root")
         != generations_identity
@@ -1940,21 +1947,28 @@ def _publish_verified(
                 create=False,
                 expected=journal_state,
             )
-            published_identity = publish_directory_noreplace(
+            with publish_directory_noreplace(
                 stage_root,
                 publication_root,
                 expected_source_identity=stage_identity,
-            )
+            ) as published_identity:
+                if published_identity != stage_identity:
+                    raise ComposedGameError("published composed directory identity changed")
+                if (
+                    directory_identity(
+                        destination,
+                        context="published composed import",
+                    )
+                    != candidate_identity
+                ):
+                    raise ComposedGameError("published composed bundle identity changed")
+                _verify_import_candidate(destination, bundle, entry)
     except FileExistsError as exc:
         raise ComposedGameError(
             "derived composed release staging or publication path already exists"
         ) from exc
     except DirectoryPublishError as exc:
         raise ComposedGameError(str(exc)) from exc
-    if published_identity != stage_identity:
-        raise ComposedGameError("published composed directory identity changed")
-    if directory_identity(destination, context="published composed import") != candidate_identity:
-        raise ComposedGameError("published composed bundle identity changed")
     _fsync_composed_bundle_tree(destination)
     _fsync_modified_ancestors(
         _composition_recovery_ancestors(root, destination.parent),
