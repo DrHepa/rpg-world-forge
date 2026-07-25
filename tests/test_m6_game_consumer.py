@@ -2073,6 +2073,20 @@ class M6GameConsumerTests(unittest.TestCase):
                 (stage / CATALOG_GENERATION_NAME).read_bytes(),
             )
 
+    def test_generation_payload_open_error_is_composed_game_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory) / "missing-stage"
+            with self.assertRaisesRegex(
+                ComposedGameError,
+                "could not write composed catalog generation payload",
+            ) as raised:
+                composed_game_module._write_generation_payload(  # noqa: SLF001
+                    stage,
+                    b'{"format":"test"}\n',
+                    directory_descriptor=None,
+                )
+            self.assertIsInstance(raised.exception.__cause__, FileNotFoundError)
+
     def test_generation_destination_symlink_is_never_replaced(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -2135,15 +2149,22 @@ class M6GameConsumerTests(unittest.TestCase):
             state, entries = self._next_generation_entries(game)
             write = module._write_generation_payload
             verify_generation = module._verify_generation_directory
+            close_descriptor_real = module._close_descriptor
             opened_handles: dict[int, Path] = {}
             active_handles: dict[int, Path] = {}
             close_calls: list[int] = []
             catalog_stage_path: Path | None = None
             catalog_stage_handle: int | None = None
+            payload_descriptor_path: dict[int, Path] = {}
+            active_payload_descriptors: dict[int, Path] = {}
+            payload_descriptor_closed_before_publish = False
+            payload_handle_shares: list[int] = []
+            handle_to_descriptor: dict[int, int] = {}
             catalog_stage_verifications = 0
             publication_destination: Path | None = None
             publication_lease_active = False
             verification_during_lease = False
+            events: list[str] = []
 
             def create_private(path: Path) -> None:
                 path.mkdir(mode=0o700)
@@ -2161,13 +2182,52 @@ class M6GameConsumerTests(unittest.TestCase):
                 del active_handles[handle]
                 close_calls.append(handle)
 
+            case = self
+
+            class CreatePayloadFile:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, *args: object) -> int:
+                    path = Path(str(args[0]))
+                    share_mode = int(args[2])
+                    disposition = int(args[4])
+                    case.assertEqual(1, disposition)  # CREATE_NEW
+                    case.assertFalse(share_mode & 0x00000004)  # FILE_SHARE_DELETE
+                    payload_handle_shares.append(share_mode)
+                    descriptor = os.open(
+                        path,
+                        os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0),
+                        0o600,
+                    )
+                    handle = 10_000 + len(handle_to_descriptor)
+                    handle_to_descriptor[handle] = descriptor
+                    payload_descriptor_path[descriptor] = path
+                    events.append("payload-open")
+                    return handle
+
+            def descriptor_from_handle(handle: int) -> int:
+                descriptor = handle_to_descriptor.pop(int(handle))
+                active_payload_descriptors[descriptor] = payload_descriptor_path[descriptor]
+                return descriptor
+
+            def close_descriptor(descriptor: int, *, context: str) -> None:
+                nonlocal payload_descriptor_closed_before_publish
+                if context == "retained Windows composed catalog generation payload cleanup":
+                    self.assertIn(descriptor, active_payload_descriptors)
+                    del active_payload_descriptors[descriptor]
+                    payload_descriptor_closed_before_publish = True
+                close_descriptor_real(descriptor, context=context)
+
             def assert_pinned_write(
                 stage: Path,
                 payload: bytes,
                 *,
                 directory_descriptor: int | None,
+                payload_descriptor: int | None = None,
             ) -> None:
                 nonlocal catalog_stage_handle, catalog_stage_path
+                events.append("write")
                 stage_handles = [
                     handle
                     for handle, retained_path in active_handles.items()
@@ -2177,10 +2237,17 @@ class M6GameConsumerTests(unittest.TestCase):
                 catalog_stage_path = stage
                 catalog_stage_handle = stage_handles[0]
                 self.assertIsNone(directory_descriptor)
+                self.assertIsNotNone(payload_descriptor)
+                assert payload_descriptor is not None
+                self.assertEqual(
+                    stage / CATALOG_GENERATION_NAME,
+                    active_payload_descriptors.get(payload_descriptor),
+                )
                 write(
                     stage,
                     payload,
                     directory_descriptor=directory_descriptor,
+                    payload_descriptor=payload_descriptor,
                 )
 
             @contextmanager
@@ -2191,6 +2258,9 @@ class M6GameConsumerTests(unittest.TestCase):
             ) -> Iterator[tuple[int, int]]:
                 nonlocal publication_destination, publication_lease_active
                 del kwargs
+                events.append("publish")
+                self.assertTrue(payload_descriptor_closed_before_publish)
+                self.assertEqual({}, active_payload_descriptors)
                 identity = module.directory_identity(
                     source,
                     context="simulated Windows publication source",
@@ -2216,6 +2286,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     self.assertIsNotNone(stage_handle)
                     assert stage_handle is not None
                     self.assertEqual(path, active_handles.get(stage_handle))
+                    self.assertEqual(1, len(active_payload_descriptors))
                 if path == publication_destination and publication_lease_active:
                     verification_during_lease = True
                 verify_generation(
@@ -2225,10 +2296,20 @@ class M6GameConsumerTests(unittest.TestCase):
                 )
                 if is_catalog_stage:
                     self.assertEqual(path, active_handles.get(stage_handle))
+                    self.assertEqual(1, len(active_payload_descriptors))
                     catalog_stage_verifications += 1
+
+            create_payload_file = CreatePayloadFile()
+            kernel32 = SimpleNamespace(CreateFileW=create_payload_file)
 
             with (
                 patch.object(module, "_generation_platform", return_value="windows"),
+                patch.object(
+                    module.ctypes,
+                    "WinDLL",
+                    create=True,
+                    return_value=kernel32,
+                ),
                 patch.object(
                     module.resource_snapshot_module,
                     "_windows_create_private_directory",
@@ -2243,6 +2324,16 @@ class M6GameConsumerTests(unittest.TestCase):
                     module.resource_snapshot_module,
                     "_windows_close_handle",
                     side_effect=close_handle,
+                ),
+                patch.object(
+                    module,
+                    "_windows_generation_payload_descriptor_from_handle",
+                    side_effect=descriptor_from_handle,
+                ),
+                patch.object(
+                    module,
+                    "_close_descriptor",
+                    side_effect=close_descriptor,
                 ),
                 patch.object(
                     module,
@@ -2263,6 +2354,8 @@ class M6GameConsumerTests(unittest.TestCase):
                 published = module._publish_catalog_generation(game, state, entries)
             self.assertEqual(2, len(published.entries))
             self.assertTrue(verification_during_lease)
+            self.assertEqual(["payload-open", "write", "publish"], events)
+            self.assertEqual([0x00000001], payload_handle_shares)
             self.assertEqual(2, catalog_stage_verifications)
             self.assertIsNotNone(catalog_stage_handle)
             assert catalog_stage_handle is not None
@@ -2298,6 +2391,7 @@ class M6GameConsumerTests(unittest.TestCase):
                 payload: bytes,
                 *,
                 directory_descriptor: int | None,
+                payload_descriptor: int | None = None,
             ) -> None:
                 try:
                     stage.rename(stage.with_name(f"{stage.name}.swapped"))
@@ -2309,6 +2403,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     stage,
                     payload,
                     directory_descriptor=directory_descriptor,
+                    payload_descriptor=payload_descriptor,
                 )
 
             with patch.object(

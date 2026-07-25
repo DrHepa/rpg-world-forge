@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 import re
 import shutil
@@ -1026,27 +1027,44 @@ def _write_generation_payload(
     payload: bytes,
     *,
     directory_descriptor: int | None,
+    payload_descriptor: int | None = None,
 ) -> None:
     descriptor: int | None = None
+    close_descriptor = False
     try:
-        flags = (
-            os.O_WRONLY
-            | os.O_CREAT
-            | os.O_EXCL
-            | getattr(os, "O_BINARY", 0)
-            | getattr(os, "O_CLOEXEC", 0)
-            | getattr(os, "O_NOINHERIT", 0)
-            | getattr(os, "O_NOFOLLOW", 0)
-        )
-        if directory_descriptor is not None:
-            descriptor = os.open(
-                CATALOG_GENERATION_NAME,
-                flags,
-                0o600,
-                dir_fd=directory_descriptor,
+        if payload_descriptor is None:
+            flags = (
+                os.O_WRONLY
+                | os.O_CREAT
+                | os.O_EXCL
+                | getattr(os, "O_BINARY", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+                | getattr(os, "O_NOINHERIT", 0)
+                | getattr(os, "O_NOFOLLOW", 0)
             )
+            if directory_descriptor is not None:
+                descriptor = os.open(
+                    CATALOG_GENERATION_NAME,
+                    flags,
+                    0o600,
+                    dir_fd=directory_descriptor,
+                )
+            else:
+                descriptor = os.open(stage / CATALOG_GENERATION_NAME, flags, 0o600)
+            close_descriptor = True
         else:
-            descriptor = os.open(stage / CATALOG_GENERATION_NAME, flags, 0o600)
+            descriptor = payload_descriptor
+            before = descriptor_file_stat(descriptor)
+            if (
+                _is_link_or_reparse(before)
+                or not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_size != 0
+            ):
+                raise ComposedGameError(
+                    "retained composed catalog generation payload changed before writing"
+                )
+            expected_payload_identity = file_identity(before)
         view = memoryview(payload)
         while view:
             written = os.write(descriptor, view)
@@ -1062,14 +1080,131 @@ def _write_generation_payload(
             or info.st_size != len(payload)
         ):
             raise ComposedGameError("composed catalog generation file changed while writing")
+        if payload_descriptor is not None and file_identity(info) != expected_payload_identity:
+            raise ComposedGameError("composed catalog generation file changed while writing")
         if directory_descriptor is not None:
             os.fsync(directory_descriptor)
+    except OSError as exc:
+        raise ComposedGameError(
+            f"could not write composed catalog generation payload: {exc}"
+        ) from exc
     finally:
-        if descriptor is not None:
+        if descriptor is not None and close_descriptor:
             _close_descriptor(
                 descriptor,
                 context="composed catalog generation payload cleanup",
             )
+
+
+def _open_windows_generation_payload_descriptor(
+    path: Path,
+    *,
+    expected_stage_identity: tuple[int, int],
+) -> int:
+    if (
+        directory_identity(path.parent, context="catalog generation stage")
+        != expected_stage_identity
+    ):
+        raise ComposedGameError("composed catalog generation directory identity changed")
+    win_dll = getattr(ctypes, "WinDLL", None)
+    if win_dll is None:
+        raise ComposedGameError("Windows catalog generation payload API is unavailable")
+    kernel32 = win_dll("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+    ]
+    create_file.restype = ctypes.c_void_p
+    handle = create_file(
+        str(path),
+        0x80000000 | 0x40000000 | 0x00100000,  # GENERIC_READ | GENERIC_WRITE | SYNCHRONIZE
+        0x00000001,  # FILE_SHARE_READ; deny writers and pathname replacement
+        None,
+        1,  # CREATE_NEW
+        0x00200000,  # FILE_FLAG_OPEN_REPARSE_POINT
+        None,
+    )
+    invalid_handle = ctypes.c_void_p(-1).value
+    if handle in {None, invalid_handle}:
+        error = ctypes.get_last_error()
+        raise ComposedGameError(
+            f"could not create retained Windows composed catalog generation payload "
+            f"{path}: {ctypes.FormatError(error)}"
+        )
+    handle_value = int(handle)
+    try:
+        descriptor = _windows_generation_payload_descriptor_from_handle(handle_value)
+    except BaseException as conversion_error:
+        close_handle = kernel32.CloseHandle
+        close_handle.argtypes = [ctypes.c_void_p]
+        close_handle.restype = ctypes.c_int
+        if not close_handle(ctypes.c_void_p(handle_value)):
+            error = ctypes.get_last_error()
+            conversion_error.add_note(
+                "Windows catalog generation payload handle cleanup failed after "
+                f"descriptor conversion failure: {ctypes.FormatError(error)}"
+            )
+        raise
+    try:
+        info = descriptor_file_stat(descriptor)
+        if (
+            _is_link_or_reparse(info)
+            or not stat.S_ISREG(info.st_mode)
+            or info.st_nlink != 1
+            or info.st_size != 0
+        ):
+            raise ComposedGameError(
+                "retained Windows composed catalog generation payload is unsafe"
+            )
+        if (
+            directory_identity(path.parent, context="catalog generation stage")
+            != expected_stage_identity
+        ):
+            raise ComposedGameError("composed catalog generation directory identity changed")
+    except BaseException:
+        _close_descriptor(
+            descriptor,
+            context="retained Windows composed catalog generation payload cleanup",
+        )
+        raise
+    return descriptor
+
+
+def _windows_generation_payload_descriptor_from_handle(handle: int) -> int:
+    import msvcrt
+
+    return msvcrt.open_osfhandle(
+        handle,
+        os.O_RDWR | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOINHERIT", 0),
+    )
+
+
+@contextmanager
+def _retained_generation_payload(
+    stage: Path,
+    *,
+    expected_stage_identity: tuple[int, int],
+) -> Iterator[int | None]:
+    if _generation_platform() != "windows":
+        yield None
+        return
+    descriptor = _open_windows_generation_payload_descriptor(
+        stage / CATALOG_GENERATION_NAME,
+        expected_stage_identity=expected_stage_identity,
+    )
+    try:
+        yield descriptor
+    finally:
+        _close_descriptor(
+            descriptor,
+            context="retained Windows composed catalog generation payload cleanup",
+        )
 
 
 def _generation_platform() -> str:
@@ -1759,27 +1894,30 @@ def _publish_catalog_generation(
                 create=False,
                 expected=journal_state,
             )
-            _write_generation_payload(
+            with _retained_generation_payload(
                 stage,
-                payload,
-                directory_descriptor=directory_descriptor,
-            )
-            _verify_generation_directory(
-                stage,
-                payload,
-                expected_identity=stage_identity,
-            )
-            if claim is not None:
-                claim.fsync()
-                claim.require_binding()
-            else:
-                fsync_directory(stage, context="catalog generation stage")
-            fsync_directory(generations_root, context="catalog generation root")
-            _verify_generation_directory(
-                stage,
-                payload,
-                expected_identity=stage_identity,
-            )
+                expected_stage_identity=stage_identity,
+            ) as payload_descriptor:
+                write_kwargs: dict[str, int | None] = {"directory_descriptor": directory_descriptor}
+                if payload_descriptor is not None:
+                    write_kwargs["payload_descriptor"] = payload_descriptor
+                _write_generation_payload(stage, payload, **write_kwargs)
+                _verify_generation_directory(
+                    stage,
+                    payload,
+                    expected_identity=stage_identity,
+                )
+                if claim is not None:
+                    claim.fsync()
+                    claim.require_binding()
+                else:
+                    fsync_directory(stage, context="catalog generation stage")
+                fsync_directory(generations_root, context="catalog generation root")
+                _verify_generation_directory(
+                    stage,
+                    payload,
+                    expected_identity=stage_identity,
+                )
             ready_journal = _catalog_journal_document(
                 operation_id=operation_id,
                 state="ready",
