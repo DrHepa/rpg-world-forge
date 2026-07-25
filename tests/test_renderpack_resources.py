@@ -2392,7 +2392,6 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
             tracemalloc.reset_peak()
             return original_capture(*args, **kwargs)
 
-        gc.collect()
         tracemalloc.start()
         try:
             with patch(
@@ -2550,7 +2549,6 @@ class RenderPackResourceBoundaryTests(unittest.TestCase):
         finalized = load_renderpack(renderpack_path, self.pack)
         finalized_root = finalized.root
         del finalized
-        gc.collect()
         self.assertFalse(finalized_root.exists())
 
 

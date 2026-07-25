@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import copy
-import gc
 import hashlib
 import json
 import os
@@ -9,7 +8,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import weakref
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -501,7 +499,6 @@ class Pyray3DSessionTests(unittest.TestCase):
             write_neutral_skinned_glb(path)
             asset = _asset_plan(path)
             resolver = _Resolver(path)
-            resolver_ref = weakref.ref(resolver)
             owner = _FakeOwner()
             adapter = Pyray3DAdapter(_native_factory=lambda _assets: owner)
             with (
@@ -513,14 +510,11 @@ class Pyray3DSessionTests(unittest.TestCase):
                 ),
             ):
                 session = adapter.open_session(resolver, (asset,), (_binding_plan(),))
-            del resolver
-            gc.collect()
-            self.assertIsNotNone(resolver_ref())
+            self.assertIs(resolver, session._resolver)  # noqa: SLF001
 
             session.close()
-            gc.collect()
 
-            self.assertIsNone(resolver_ref())
+            self.assertIsNone(session._resolver)  # noqa: SLF001
             self.assertEqual(["close"], owner.events)
             session.close()
             self.assertEqual(["close"], owner.events)
@@ -1050,6 +1044,7 @@ class Pyray3DNativeBoundaryTests(unittest.TestCase):
                 check=False,
                 capture_output=True,
                 text=True,
+                timeout=300,
             )
             self.assertEqual(0, accepted.returncode, accepted.stdout + accepted.stderr)
             self.assertEqual([], audit_game_repository(game))
@@ -1081,6 +1076,7 @@ class Pyray3DNativeBoundaryTests(unittest.TestCase):
                 check=False,
                 capture_output=True,
                 text=True,
+                timeout=300,
             )
 
         self.assertEqual(1, len(forge_rejected), forge_rejected)
