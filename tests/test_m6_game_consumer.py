@@ -13,7 +13,7 @@ import tempfile
 import unittest
 import zipfile
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
@@ -30,6 +30,7 @@ import worldforge.directory_publish as directory_publish_module
 import worldforge.game_control_io as game_control_io_module
 from isoworld.content.composed_catalog import (
     CATALOG_GENERATION_NAME,
+    CATALOG_GENERATION_STAGE_PREFIX,
     CATALOG_GENERATIONS_RELATIVE_PATH,
     ComposedCatalogError,
     load_composed_catalog,
@@ -904,21 +905,41 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="pre_stage_recovery",
                 title="Pre-stage Recovery",
             )
+            failure_paths: list[Path] = []
+            create_private_directory = (
+                composed_game_module.resource_snapshot_module._windows_create_private_directory
+            )
             if os.name == "nt":
+                create_generation_stage = composed_game_module._create_generation_stage
+
+                def fail_composed_import_stage(destination: Path) -> None:
+                    if destination.name.startswith(".compositions.import-"):
+                        failure_paths.append(destination)
+                        raise ComposedGameError("injected composed destination claim failure")
+                    create_generation_stage(destination)
+
                 failure = patch.object(
-                    composed_game_module.resource_snapshot_module,
-                    "_windows_create_private_directory",
-                    side_effect=composed_game_module.resource_snapshot_module.ResourceSnapshotError(
-                        "injected composed destination claim failure"
-                    ),
+                    composed_game_module,
+                    "_create_generation_stage",
+                    side_effect=fail_composed_import_stage,
                 )
             else:
+                claim_directory = composed_game_module.claim_directory_noreplace
+
+                @contextmanager
+                def fail_composed_import_claim(destination: Path, **kwargs: object):
+                    if destination.name.startswith(".compositions.import-"):
+                        failure_paths.append(destination)
+                        raise composed_game_module.DirectoryPublishError(
+                            "injected composed destination claim failure"
+                        )
+                    with claim_directory(destination, **kwargs) as claim:
+                        yield claim
+
                 failure = patch.object(
                     composed_game_module,
                     "claim_directory_noreplace",
-                    side_effect=composed_game_module.DirectoryPublishError(
-                        "injected composed destination claim failure"
-                    ),
+                    side_effect=fail_composed_import_claim,
                 )
             with (
                 failure,
@@ -927,12 +948,22 @@ class M6GameConsumerTests(unittest.TestCase):
                     "destination claim failure",
                 ),
             ):
+                self.assertIs(
+                    create_private_directory,
+                    composed_game_module.resource_snapshot_module._windows_create_private_directory,
+                )
                 import_composed_bundle(
                     bundle,
                     game,
                     expected_bundle_hash=bundle_hash,
                 )
 
+            self.assertEqual(1, len(failure_paths))
+            self.assertEqual(
+                game / "game_data",
+                failure_paths[0].parent,
+            )
+            self.assertTrue(failure_paths[0].name.startswith(".compositions.import-"))
             self.assertFalse((game / "game_data/compositions").exists())
             imported = import_composed_bundle(
                 bundle,
@@ -952,6 +983,93 @@ class M6GameConsumerTests(unittest.TestCase):
             self.assertEqual(
                 ("game_data/.composed-catalog-publication.json",),
                 tuple(path.as_posix() for path in journal_audit.terminal_paths),
+            )
+
+    def test_forced_windows_catalog_generation_mkdir_failure_is_scoped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            generations_root = Path(directory) / CATALOG_GENERATIONS_RELATIVE_PATH
+            generations_root.mkdir(parents=True)
+            catalog_stage = (
+                generations_root / f"{CATALOG_GENERATION_STAGE_PREFIX}forced-native-probe"
+            )
+            catalog_failure_paths: list[Path] = []
+            create_private_directory = (
+                composed_game_module.resource_snapshot_module._windows_create_private_directory
+            )
+            create_generation_stage = composed_game_module._create_generation_stage
+
+            def fail_catalog_generation_stage(destination: Path) -> None:
+                if destination.name.startswith(CATALOG_GENERATION_STAGE_PREFIX):
+                    catalog_failure_paths.append(destination)
+                    raise ComposedGameError("injected catalog generation stage failure")
+                create_generation_stage(destination)
+
+            if os.name == "nt":
+                pin_catalog_parent = composed_game_module._pin_windows_stage_parent  # noqa: SLF001
+            else:
+
+                @contextmanager
+                def pin_catalog_parent(
+                    stage: Path,
+                    *,
+                    expected_parent_identity: tuple[int, int],
+                    context: str,
+                ) -> Iterator[None]:
+                    self.assertEqual("catalog generation stage", context)
+                    self.assertEqual(
+                        expected_parent_identity,
+                        composed_game_module.directory_identity(
+                            stage.parent,
+                            context="forced Windows catalog generation parent",
+                        ),
+                    )
+                    yield
+
+                parent_pin = patch.object(
+                    composed_game_module,
+                    "_pin_windows_stage_parent",
+                    side_effect=pin_catalog_parent,
+                )
+
+            with (
+                patch.object(
+                    composed_game_module,
+                    "_generation_platform",
+                    return_value="windows",
+                ),
+                parent_pin if os.name != "nt" else nullcontext(),
+                patch.object(
+                    composed_game_module,
+                    "_create_generation_stage",
+                    side_effect=fail_catalog_generation_stage,
+                ),
+                self.assertRaisesRegex(
+                    ComposedGameError,
+                    "catalog generation stage failure",
+                ),
+            ):
+                self.assertIs(
+                    create_private_directory,
+                    composed_game_module.resource_snapshot_module._windows_create_private_directory,
+                )
+                with composed_game_module._private_catalog_stage(  # noqa: SLF001
+                    catalog_stage,
+                    expected_parent_identity=composed_game_module.directory_identity(
+                        generations_root,
+                        context="forced Windows catalog generation root",
+                    ),
+                ):
+                    self.fail("catalog generation failure injection did not fire")
+
+            self.assertEqual([catalog_stage], catalog_failure_paths)
+            self.assertFalse(catalog_stage.exists())
+            self.assertEqual(
+                [],
+                [
+                    path
+                    for path in generations_root.iterdir()
+                    if path.name.startswith(CATALOG_GENERATION_STAGE_PREFIX)
+                ],
             )
 
     def test_first_import_uses_exclusive_destination_claim(self) -> None:

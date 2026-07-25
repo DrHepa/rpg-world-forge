@@ -1145,6 +1145,9 @@ class BundlePublicationTests(unittest.TestCase):
                 context="Windows verifier seam parent",
             )
             real_path_file_stat = directory_publish_module.path_file_stat
+            real_windows_handle_stat = (
+                directory_publish_module.file_stat_module._windows_handle_stat  # noqa: SLF001
+            )
             states = {
                 root: real_path_file_stat(root),
                 stage: real_path_file_stat(stage),
@@ -1160,6 +1163,10 @@ class BundlePublicationTests(unittest.TestCase):
             handles: dict[int, Path] = {}
             source_handle: int | None = None
             create_calls: list[tuple[object, ...]] = []
+            fake_handle_stat_calls: list[int] = []
+            native_fallback_calls: list[int] = []
+            forced_native_handle = -0xC112
+            forced_native_probe_pending = True
 
             class WindowsCall:
                 argtypes: object = None
@@ -1218,7 +1225,13 @@ class BundlePublicationTests(unittest.TestCase):
                     return getattr(self._real_ctypes, name)
 
             def handle_stat(handle: int):
-                path = handles[handle]
+                path = handles.get(handle)
+                if path is None:
+                    native_fallback_calls.append(handle)
+                    if handle == forced_native_handle:
+                        return states[root]
+                    return real_windows_handle_stat(handle)
+                fake_handle_stat_calls.append(handle)
                 if handle == source_handle and not stage.exists():
                     path = destination
                 return states[path]
@@ -1228,6 +1241,24 @@ class BundlePublicationTests(unittest.TestCase):
                 if candidate == stage and not stage.exists():
                     raise FileNotFoundError(candidate)
                 return states[candidate]
+
+            media_signature_matches = bundle_module.media_signature_matches
+
+            def media_signature_with_forced_native_handle(
+                path: str | Path,
+                media_type: str,
+            ) -> bool:
+                nonlocal forced_native_probe_pending
+                candidate = Path(path)
+                if forced_native_probe_pending and destination in candidate.parents:
+                    forced_native_probe_pending = False
+                    self.assertEqual(
+                        states[root],
+                        directory_publish_module.file_stat_module._windows_handle_stat(  # noqa: SLF001
+                            forced_native_handle
+                        ),
+                    )
+                return media_signature_matches(path, media_type)
 
             fake_ctypes = CtypesProxy(directory_publish_module.ctypes)
             with (
@@ -1261,6 +1292,11 @@ class BundlePublicationTests(unittest.TestCase):
                     "_windows_handle_stat",
                     side_effect=handle_stat,
                 ),
+                patch.object(
+                    bundle_module,
+                    "media_signature_matches",
+                    side_effect=media_signature_with_forced_native_handle,
+                ),
             ):
                 self.assertIs(directory_publish_module.ctypes, fake_ctypes)
                 self.assertIsNot(resource_snapshot_module.ctypes, fake_ctypes)
@@ -1280,6 +1316,10 @@ class BundlePublicationTests(unittest.TestCase):
                     ) as verified:
                         self.assertEqual(manifest["bundle_hash"], verified.bundle_hash)
 
+            self.assertFalse(forced_native_probe_pending)
+            self.assertEqual(1, native_fallback_calls.count(forced_native_handle))
+            self.assertGreater(len(fake_handle_stat_calls), 0)
+            self.assertTrue(all(handle in handles for handle in fake_handle_stat_calls))
             post_seal_calls = [
                 call for call in create_calls if destination in Path(str(call[0])).parents
             ]
