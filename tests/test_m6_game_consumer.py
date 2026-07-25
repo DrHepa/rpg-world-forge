@@ -607,6 +607,28 @@ class M6GameConsumerTests(unittest.TestCase):
         )
 
     @staticmethod
+    @contextmanager
+    def _fail_composed_import_stage_copy(
+        module: object,
+        *,
+        message: str,
+        after_copy: bool,
+    ) -> Iterator[None]:
+        if module._generation_platform() == "windows":  # noqa: SLF001
+            target = "_copy_owned_import_stage"
+        else:
+            target = "_copy_owned_bundle_into_claim"
+        copy_exact = getattr(module, target)
+
+        def copy_then_raise(*args: object, **kwargs: object) -> None:
+            if after_copy:
+                copy_exact(*args, **kwargs)
+            raise OSError(message)
+
+        with patch.object(module, target, side_effect=copy_then_raise):
+            yield
+
+    @staticmethod
     def _open_regular_test_descriptor(root: Path) -> int:
         path = root / "descriptor.bin"
         path.write_bytes(b"descriptor")
@@ -750,7 +772,8 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="recovery_ancestor_durability",
                 title="Recovery Ancestor Durability",
             )
-            game_data = game / "game_data"
+            canonical_game = game.resolve(strict=True)
+            game_data = canonical_game / "game_data"
             flush = composed_game_module.fsync_directory
 
             def fail_composition_parent(path: Path, *, context: str) -> None:
@@ -773,7 +796,7 @@ class M6GameConsumerTests(unittest.TestCase):
                 )
 
             def fail_catalog_parent(path: Path, *, context: str) -> None:
-                if context == "composed catalog parent":
+                if context == "composed catalog parent" and path == game_data:
                     raise OSError("injected catalog parent flush failure")
                 flush(path, context=context)
 
@@ -979,11 +1002,11 @@ class M6GameConsumerTests(unittest.TestCase):
 
             self.assertTrue(imported.is_dir())
             self.assertGreaterEqual(len(calls), 2)
-            self.assertEqual(game / "game_data", calls[0].parent)
+            canonical_game = game.resolve(strict=True)
+            self.assertTrue((canonical_game / "game_data").samefile(calls[0].parent))
             self.assertTrue(calls[0].name.startswith(".compositions.import-"))
-            self.assertEqual(
-                game / CATALOG_GENERATIONS_RELATIVE_PATH,
-                calls[-1].parent,
+            self.assertTrue(
+                (canonical_game / CATALOG_GENERATIONS_RELATIVE_PATH).samefile(calls[-1].parent)
             )
 
     def test_first_missing_claim_revalidates_the_existing_game_data_chain(self) -> None:
@@ -2252,14 +2275,18 @@ class M6GameConsumerTests(unittest.TestCase):
     def test_native_windows_generation_stage_handle_blocks_swap(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            bundle, bundle_hash = self._build_bundle(root)
+            bundle, bundle_hash, registry = self._build_asset_bundle(root)
             game = root / "windows-native-generation"
             create_game_project(
                 game,
                 game_id="windows_native_generation",
                 title="Windows Native Generation",
             )
-            import_composed_bundle(bundle, game, expected_bundle_hash=bundle_hash)
+            with patch(
+                "worldforge.composed_game.BUILTIN_COMPOSED_ADAPTERS",
+                registry,
+            ):
+                import_composed_bundle(bundle, game, expected_bundle_hash=bundle_hash)
             from worldforge import composed_game as module
 
             state, entries = self._next_generation_entries(game)
@@ -3490,25 +3517,21 @@ class M6GameConsumerTests(unittest.TestCase):
             bundle, bundle_hash = self._build_bundle(root)
             game = root / "game"
             create_game_project(game, game_id="recovery_game", title="Recovery Game")
+            canonical_game = game.resolve(strict=True)
             from worldforge import composed_game as module
 
-            catalog_path = game / "game_data/compositions.lock.json"
+            catalog_path = canonical_game / "game_data/compositions.lock.json"
             catalog_bytes = catalog_path.read_bytes()
             self.assertEqual(
                 canonical_json_bytes(json.loads(catalog_bytes)),
                 catalog_bytes,
             )
-            copy_into_claim = module._copy_owned_bundle_into_claim
-
-            def copy_then_raise(*args: object, **kwargs: object) -> None:
-                copy_into_claim(*args, **kwargs)
-                raise OSError("injected after claimed directory copy")
 
             with (
-                patch.object(
+                self._fail_composed_import_stage_copy(
                     module,
-                    "_copy_owned_bundle_into_claim",
-                    side_effect=copy_then_raise,
+                    message="injected after claimed directory copy",
+                    after_copy=True,
                 ),
                 self.assertRaisesRegex(OSError, "claimed directory copy"),
             ):
@@ -3517,9 +3540,9 @@ class M6GameConsumerTests(unittest.TestCase):
                     game,
                     expected_bundle_hash=bundle_hash,
                 )
-            journal = game / composed_game_module.CATALOG_PUBLICATION_JOURNAL
+            journal = canonical_game / composed_game_module.CATALOG_PUBLICATION_JOURNAL
             self.assertTrue(journal.is_file())
-            active = module._read_catalog_journal_record(game)
+            active = module._read_catalog_journal_record(canonical_game)
             self.assertIsNotNone(active)
             assert active is not None
             self.assertEqual("copying", active[0]["state"])
@@ -3532,11 +3555,11 @@ class M6GameConsumerTests(unittest.TestCase):
                 expected_bundle_hash=bundle_hash,
             )
             self.assertTrue(recovered.is_dir())
-            committed = module._read_catalog_journal_record(game)
+            committed = module._read_catalog_journal_record(canonical_game)
             self.assertIsNotNone(committed)
             assert committed is not None
             self.assertEqual("committed", committed[0]["state"])
-            self.assertFalse((game / "game_data/.compositions.lock.json.lock").exists())
+            self.assertFalse((canonical_game / "game_data/.compositions.lock.json.lock").exists())
             self.assertEqual(1, len(load_composed_catalog(game)))
 
     def test_raise_before_claim_copy_preserves_incomplete_destination(self) -> None:
@@ -3545,13 +3568,14 @@ class M6GameConsumerTests(unittest.TestCase):
             bundle, bundle_hash = self._build_bundle(root)
             game = root / "staged-recovery"
             create_game_project(game, game_id="staged_recovery", title="Staged Recovery")
+            canonical_game = game.resolve(strict=True)
             from worldforge import composed_game as module
 
             with (
-                patch.object(
+                self._fail_composed_import_stage_copy(
                     module,
-                    "_copy_owned_bundle_into_claim",
-                    side_effect=OSError("injected before claimed directory copy"),
+                    message="injected before claimed directory copy",
+                    after_copy=False,
                 ),
                 self.assertRaisesRegex(OSError, "claimed directory copy"),
             ):
@@ -3561,10 +3585,12 @@ class M6GameConsumerTests(unittest.TestCase):
                     expected_bundle_hash=bundle_hash,
                 )
             stages = tuple(
-                path for path in (game / "game_data").rglob(".*.import-*") if path.is_dir()
+                path
+                for path in (canonical_game / "game_data").rglob(".*.import-*")
+                if path.is_dir()
             )
             self.assertEqual(1, len(stages))
-            incomplete = game / "game_data/compositions"
+            incomplete = canonical_game / "game_data/compositions"
             self.assertFalse(incomplete.exists())
             with self.assertRaisesRegex(
                 ComposedGameError,
@@ -3577,7 +3603,11 @@ class M6GameConsumerTests(unittest.TestCase):
                 )
             self.assertEqual(
                 stages,
-                tuple(path for path in (game / "game_data").rglob(".*.import-*") if path.is_dir()),
+                tuple(
+                    path
+                    for path in (canonical_game / "game_data").rglob(".*.import-*")
+                    if path.is_dir()
+                ),
             )
 
     def test_recoverable_stage_does_not_authorize_foreign_ancestor_tree(self) -> None:
@@ -3590,18 +3620,13 @@ class M6GameConsumerTests(unittest.TestCase):
                 game_id="foreign_stage_ancestor",
                 title="Foreign Stage Ancestor",
             )
-
-            copy_into_claim = composed_game_module._copy_owned_bundle_into_claim
-
-            def copy_then_raise(*args: object, **kwargs: object) -> None:
-                copy_into_claim(*args, **kwargs)
-                raise OSError("injected after private stage copy")
+            canonical_game = game.resolve(strict=True)
 
             with (
-                patch.object(
+                self._fail_composed_import_stage_copy(
                     composed_game_module,
-                    "_copy_owned_bundle_into_claim",
-                    side_effect=copy_then_raise,
+                    message="injected after private stage copy",
+                    after_copy=True,
                 ),
                 self.assertRaisesRegex(OSError, "private stage copy"),
             ):
@@ -3611,7 +3636,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     expected_bundle_hash=bundle_hash,
                 )
 
-            foreign = game / "game_data/compositions"
+            foreign = canonical_game / "game_data/compositions"
             foreign.mkdir()
             (foreign / "sentinel.txt").write_text("foreign\n", encoding="utf-8")
             foreign_identity = composed_game_module.directory_identity(
@@ -4027,19 +4052,14 @@ class M6GameConsumerTests(unittest.TestCase):
             bundle, bundle_hash = self._build_bundle(root)
             game = root / "journal-replacement"
             create_game_project(game, game_id="journal_replacement", title="Journal replacement")
+            canonical_game = game.resolve(strict=True)
             from worldforge import composed_game as module
 
-            copy_into_claim = module._copy_owned_bundle_into_claim
-
-            def copy_then_raise(*args: object, **kwargs: object) -> None:
-                copy_into_claim(*args, **kwargs)
-                raise OSError("injected after claimed directory copy")
-
             with (
-                patch.object(
+                self._fail_composed_import_stage_copy(
                     module,
-                    "_copy_owned_bundle_into_claim",
-                    side_effect=copy_then_raise,
+                    message="injected after claimed directory copy",
+                    after_copy=True,
                 ),
                 self.assertRaisesRegex(OSError, "claimed directory copy"),
             ):
@@ -4048,7 +4068,7 @@ class M6GameConsumerTests(unittest.TestCase):
                     game,
                     expected_bundle_hash=bundle_hash,
                 )
-            control = game / module.CATALOG_PUBLICATION_JOURNAL
+            control = canonical_game / module.CATALOG_PUBLICATION_JOURNAL
             foreign = canonical_json_bytes({"foreign": True})
             control.write_bytes(foreign)
             control.chmod(0o640)
@@ -4076,21 +4096,13 @@ class M6GameConsumerTests(unittest.TestCase):
                         game_id=f"recovery_{case}",
                         title=f"Recovery {case}",
                     )
-                    copy_into_claim = module._copy_owned_bundle_into_claim
-
-                    def copy_then_raise(
-                        *args: object,
-                        copy_exact=copy_into_claim,
-                        **kwargs: object,
-                    ) -> None:
-                        copy_exact(*args, **kwargs)
-                        raise OSError("injected after claimed directory copy")
+                    canonical_game = game.resolve(strict=True)
 
                     with (
-                        patch.object(
+                        self._fail_composed_import_stage_copy(
                             module,
-                            "_copy_owned_bundle_into_claim",
-                            side_effect=copy_then_raise,
+                            message="injected after claimed directory copy",
+                            after_copy=True,
                         ),
                         self.assertRaisesRegex(OSError, "claimed directory copy"),
                     ):
@@ -4099,12 +4111,14 @@ class M6GameConsumerTests(unittest.TestCase):
                             game,
                             expected_bundle_hash=bundle_hash,
                         )
-                    evidence = tuple((game / "game_data").rglob("composed-bundle.manifest.json"))
+                    evidence = tuple(
+                        (canonical_game / "game_data").rglob("composed-bundle.manifest.json")
+                    )
                     self.assertEqual(1, len(evidence))
                     target = (
-                        game / "game_data/worlds.lock.json"
+                        canonical_game / "game_data/worlds.lock.json"
                         if case == "legacy"
-                        else game / "game_data/compositions.lock.json"
+                        else canonical_game / "game_data/compositions.lock.json"
                     )
                     target.write_bytes(canonical_json_bytes({"malformed": True}))
                     with self.assertRaises((ComposedGameError, ValueError)):
@@ -4115,7 +4129,9 @@ class M6GameConsumerTests(unittest.TestCase):
                         )
                     self.assertEqual(
                         evidence,
-                        tuple((game / "game_data").rglob("composed-bundle.manifest.json")),
+                        tuple(
+                            (canonical_game / "game_data").rglob("composed-bundle.manifest.json")
+                        ),
                     )
 
 

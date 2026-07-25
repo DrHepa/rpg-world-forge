@@ -1207,6 +1207,16 @@ class BundlePublicationTests(unittest.TestCase):
                     )
                 raise OSError(f"unexpected DLL: {name}")
 
+            class CtypesProxy:
+                def __init__(self, real_ctypes: object) -> None:
+                    self._real_ctypes = real_ctypes
+
+                def WinDLL(self, name: str, **kwargs: object) -> object:  # noqa: N802
+                    return load_dll(name, **kwargs)
+
+                def __getattr__(self, name: str) -> object:
+                    return getattr(self._real_ctypes, name)
+
             def handle_stat(handle: int):
                 path = handles[handle]
                 if handle == source_handle and not stage.exists():
@@ -1219,6 +1229,7 @@ class BundlePublicationTests(unittest.TestCase):
                     raise FileNotFoundError(candidate)
                 return states[candidate]
 
+            fake_ctypes = CtypesProxy(directory_publish_module.ctypes)
             with (
                 patch.object(
                     directory_publish_module,
@@ -1241,10 +1252,9 @@ class BundlePublicationTests(unittest.TestCase):
                     side_effect=lambda path, flags: os.open(path, flags),
                 ),
                 patch.object(
-                    directory_publish_module.ctypes,
-                    "WinDLL",
-                    create=True,
-                    side_effect=load_dll,
+                    directory_publish_module,
+                    "ctypes",
+                    fake_ctypes,
                 ),
                 patch.object(
                     directory_publish_module.file_stat_module,
@@ -1252,6 +1262,12 @@ class BundlePublicationTests(unittest.TestCase):
                     side_effect=handle_stat,
                 ),
             ):
+                self.assertIs(directory_publish_module.ctypes, fake_ctypes)
+                self.assertIsNot(resource_snapshot_module.ctypes, fake_ctypes)
+                self.assertIsNot(
+                    getattr(resource_snapshot_module.ctypes, "WinDLL", None),
+                    fake_ctypes.WinDLL,
+                )
                 with directory_publish_module._windows_rename_noreplace(  # noqa: SLF001
                     stage,
                     destination,
