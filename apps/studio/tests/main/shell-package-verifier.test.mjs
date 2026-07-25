@@ -9,6 +9,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rename,
   rm,
   stat,
@@ -1148,8 +1149,14 @@ describe(
 
   it("rejects unsafe package outputs before spawning and binds the exact external output", async () => {
     const calls = [];
+    let reservedOutputReal;
     const runner = async (executable, args, options) => {
       calls.push({ args, executable, options });
+      if (args[1] === "--dir") {
+        reservedOutputReal = await realpath(
+          options.env.RWF_STUDIO_PACKAGE_OUTPUT,
+        );
+      }
       return 0;
     };
     const tools = {
@@ -1197,15 +1204,20 @@ describe(
     expect(calls).toHaveLength(0);
 
     const output = path.join(temporaryRoot, "external-shell-output");
+    const canonicalOutput = path.join(
+      await realpath(path.dirname(output)),
+      path.basename(output),
+    );
     const result = await runShellPackage({
       ...tools,
       argv: ["--output", output, "--target", "linux-x64"],
     });
     expect(result).toEqual({
-      output_path: output,
-      package_path: path.join(output, "linux-unpacked"),
+      output_path: canonicalOutput,
+      package_path: path.join(canonicalOutput, "linux-unpacked"),
       target_id: "linux-x64",
     });
+    expect(reservedOutputReal).toBe(canonicalOutput);
     expect(calls).toHaveLength(3);
     const boundOutput = calls[1].options.env.RWF_STUDIO_PACKAGE_OUTPUT;
     expect(path.isAbsolute(boundOutput)).toBe(true);
