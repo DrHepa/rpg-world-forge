@@ -168,6 +168,9 @@ class FakeWindowsHandleApi:
     def duplicate_to_fd(self, handle: int, *, writable: bool) -> int:
         return os.dup(handle)
 
+    def info_from_descriptor(self, descriptor: int) -> object:
+        return self.info(descriptor)
+
     def rename_no_replace(
         self,
         handle: int,
@@ -204,6 +207,22 @@ class FakeWindowsHandleApi:
             except OSError:
                 pass
         os.close(handle)
+
+
+class DistinctIdentityWindowsHandleApi(FakeWindowsHandleApi):
+    """Expose stable Win32 identities that intentionally differ from os.fstat."""
+
+    def info(self, handle: int) -> object:
+        info = super().info(handle)
+        return runtime_inputs._WindowsHandleInfo(
+            identity=(
+                info.identity[0] + (1 << 64),
+                info.identity[1] + (1 << 128),
+            ),
+            attributes=info.attributes,
+            link_count=info.link_count,
+            size=info.size,
+        )
 
 
 def _cache_file(cache: Path, artifact: InputArtifact) -> Path:
@@ -586,43 +605,49 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                     )
 
             directory_seam = WindowsDirectorySeam()
-            inspection = runtime_inputs._inspect_cached(  # noqa: SLF001
-                directory_seam,
-                artifact,
-                retain=True,
-            )
-            self.assertTrue(inspection.valid)
-            self.assertIsNotNone(inspection.pinned)
-            assert inspection.pinned is not None
-            try:
-                runtime_inputs._require_child_identity(  # noqa: SLF001
-                    directory_seam,
-                    artifact.filename,
-                    inspection.identity,
-                    directory=False,
-                    expected_size=artifact.size,
-                )
-                final = runtime_inputs._rehash_pinned(  # noqa: SLF001
+            with patch(
+                "scripts.studio_runtime_inputs._WINDOWS_API",
+                FakeWindowsHandleApi(),
+            ):
+                inspection = runtime_inputs._inspect_cached(  # noqa: SLF001
                     directory_seam,
                     artifact,
-                    inspection.pinned,
+                    retain=True,
                 )
-                native_size[0] = artifact.size + 1
-                with self.assertRaises(RuntimeInputsError) as captured:
+                self.assertTrue(inspection.valid)
+                self.assertIsNotNone(inspection.pinned)
+                self.assertIsNotNone(inspection.windows_identity)
+                assert inspection.pinned is not None
+                assert inspection.windows_identity is not None
+                try:
                     runtime_inputs._require_child_identity(  # noqa: SLF001
                         directory_seam,
                         artifact.filename,
-                        inspection.identity,
+                        inspection.windows_identity,
                         directory=False,
                         expected_size=artifact.size,
                     )
-                changed = runtime_inputs._rehash_pinned(  # noqa: SLF001
-                    directory_seam,
-                    artifact,
-                    inspection.pinned,
-                )
-            finally:
-                inspection.pinned.close()
+                    final = runtime_inputs._rehash_pinned(  # noqa: SLF001
+                        directory_seam,
+                        artifact,
+                        inspection.pinned,
+                    )
+                    native_size[0] = artifact.size + 1
+                    with self.assertRaises(RuntimeInputsError) as captured:
+                        runtime_inputs._require_child_identity(  # noqa: SLF001
+                            directory_seam,
+                            artifact.filename,
+                            inspection.windows_identity,
+                            directory=False,
+                            expected_size=artifact.size,
+                        )
+                    changed = runtime_inputs._rehash_pinned(  # noqa: SLF001
+                        directory_seam,
+                        artifact,
+                        inspection.pinned,
+                    )
+                finally:
+                    inspection.pinned.close()
 
             self.assertTrue(final.valid)
             self.assertEqual(
@@ -1181,6 +1206,72 @@ class StudioRuntimeInputsTests(unittest.TestCase):
             self.assertTrue(target.is_dir())
 
     @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_pinned_identity_accepts_distinct_stable_native_encoding(self) -> None:
+        payload = b"distinct native identity encoding"
+        artifact = _artifact(payload)
+        fake_windows = DistinctIdentityWindowsHandleApi()
+
+        def open_windows_cache(path: Path, *, create: bool) -> object:
+            return runtime_inputs._open_windows_directory(path, (), create=create)
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            _write_cache(cache, artifact, payload)
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                patch(
+                    "scripts.studio_runtime_inputs._open_cache_directory",
+                    side_effect=open_windows_cache,
+                ),
+            ):
+                report = _verify_artifacts(TARGET, cache, (artifact,))
+
+        self.assertTrue(report.valid, report.as_dict())
+        self.assertEqual("verified", report.items[0].status)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_pinned_identity_rejects_final_native_rebinding(self) -> None:
+        payload = b"stable bytes under native rebind"
+        artifact = _artifact(payload)
+        fake_windows = FakeWindowsHandleApi()
+        original_named_info = runtime_inputs._Directory.windows_entry_info
+
+        def open_windows_cache(path: Path, *, create: bool) -> object:
+            return runtime_inputs._open_windows_directory(path, (), create=create)
+
+        def rebound_named_info(directory: object, name: str) -> object:
+            info = original_named_info(directory, name)
+            if info is None:
+                return None
+            return runtime_inputs._WindowsHandleInfo(
+                identity=(info.identity[0], info.identity[1] + 1),
+                attributes=info.attributes,
+                link_count=info.link_count,
+                size=info.size,
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            _write_cache(cache, artifact, payload)
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                patch(
+                    "scripts.studio_runtime_inputs._open_cache_directory",
+                    side_effect=open_windows_cache,
+                ),
+                patch.object(
+                    runtime_inputs._Directory,
+                    "windows_entry_info",
+                    autospec=True,
+                    side_effect=rebound_named_info,
+                ),
+            ):
+                report = _verify_artifacts(TARGET, cache, (artifact,))
+
+        self.assertFalse(report.valid)
+        self.assertEqual("changed", report.items[0].status)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
     def test_windows_owned_temp_mock_revalidates_and_cleans_by_guard(self) -> None:
         payload = b"owned temporary"
         fake_windows = FakeWindowsHandleApi()
@@ -1390,6 +1481,35 @@ class StudioRuntimeInputsTests(unittest.TestCase):
                 list((cache / TARGET / artifact.component).glob(".rwf-input-*.part")),
                 [],
             )
+
+    @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
+    def test_windows_fetch_accepts_distinct_stable_native_identity_and_cleans(self) -> None:
+        payload = b"distinct native fetch identity"
+        artifact = _artifact(payload)
+        fake_windows = DistinctIdentityWindowsHandleApi()
+        opener = FakeOpener(lambda _request: FakeResponse(payload))
+
+        def open_windows_cache(path: Path, *, create: bool) -> object:
+            return runtime_inputs._open_windows_directory(path, (), create=create)
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / "cache"
+            with (
+                patch("scripts.studio_runtime_inputs._WINDOWS_API", fake_windows),
+                patch(
+                    "scripts.studio_runtime_inputs._open_cache_directory",
+                    side_effect=open_windows_cache,
+                ),
+            ):
+                report = _fetch_artifacts(TARGET, cache, (artifact,), opener)
+
+            destination = _cache_file(cache, artifact)
+            self.assertTrue(report.valid, report.as_dict())
+            self.assertEqual("downloaded", report.items[0].status)
+            self.assertEqual(payload, destination.read_bytes())
+            self.assertEqual(1, destination.stat().st_nlink)
+            self.assertEqual(1, len(opener.calls))
+            self.assertEqual([], list(destination.parent.glob(".rwf-input-*.part")))
 
     @unittest.skipUnless(os.name == "posix", "POSIX-backed Windows handle seam")
     def test_windows_collision_waits_beyond_three_yields_for_exact_winner(self) -> None:
@@ -1734,7 +1854,13 @@ class StudioRuntimeInputsTests(unittest.TestCase):
             ):
                 report = _verify_artifacts(TARGET, cache, (artifact,))
 
-            self.assertTrue(report.valid)
+            self.assertTrue(
+                report.valid,
+                {
+                    "attempted": attempted,
+                    "statuses": [item.status for item in report.items],
+                },
+            )
             self.assertEqual(
                 attempted,
                 [

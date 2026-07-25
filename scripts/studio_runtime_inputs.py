@@ -362,6 +362,17 @@ class _WindowsApi:
             size=(int(raw.nFileSizeHigh) << 32) | int(raw.nFileSizeLow),
         )
 
+    def info_from_descriptor(self, descriptor: int) -> _WindowsHandleInfo:
+        try:
+            import msvcrt
+        except ImportError:
+            raise RuntimeInputsError("secure_primitive_unavailable", "cache") from None
+        try:
+            handle = msvcrt.get_osfhandle(descriptor)
+        except (OSError, ValueError):
+            raise RuntimeInputsError("cache_entry_unsafe", "cache") from None
+        return self.info(handle)
+
     def duplicate_to_fd(self, handle: int, *, writable: bool) -> int:
         duplicate = ctypes.c_void_p()
         process = self.current_process()
@@ -625,6 +636,7 @@ class _PinnedCacheFile:
     descriptor: int
     state: os.stat_result
     identity: tuple[int, int]
+    windows_identity: tuple[int, int] | None = None
 
     def close(self) -> None:
         if self.descriptor < 0:
@@ -650,6 +662,7 @@ class _Inspection:
     identity: tuple[int, int] | None = None
     pinned: _PinnedCacheFile | None = None
     windows_sharing_violation: bool = False
+    windows_identity: tuple[int, int] | None = None
 
     @property
     def valid(self) -> bool:
@@ -1701,15 +1714,38 @@ def _inspect_cached(
         if artifact.sha512 is not None and sha512 != artifact.sha512:
             return _Inspection("wrong_sha512")
         identity = _identity(after) if directory.windows_handles else _identity(current)
+        windows_identity: tuple[int, int] | None = None
+        if directory.windows_handles:
+            if _WINDOWS_API is None:
+                return _Inspection("unsafe")
+            native = _WINDOWS_API.info_from_descriptor(descriptor)
+            if (
+                native.directory
+                or native.reparse
+                or native.link_count != 1
+                or native.size != artifact.size
+            ):
+                return _Inspection("unsafe")
+            windows_identity = native.identity
         if retain:
             pinned = _PinnedCacheFile(
                 descriptor=descriptor,
                 state=after,
                 identity=identity,
+                windows_identity=windows_identity,
             )
             descriptor = -1
-            return _Inspection("verified", identity, pinned)
-        return _Inspection("verified", identity)
+            return _Inspection(
+                "verified",
+                identity,
+                pinned,
+                windows_identity=windows_identity,
+            )
+        return _Inspection(
+            "verified",
+            identity,
+            windows_identity=windows_identity,
+        )
     except _WindowsSharingViolation:
         return _Inspection("unsafe", windows_sharing_violation=True)
     except RuntimeInputsError as exc:
@@ -1790,8 +1826,20 @@ def _rehash_pinned(
                 or current.st_size != artifact.size
             ):
                 return _Inspection("changed")
+            if _WINDOWS_API is None or pinned.windows_identity is None:
+                return _Inspection("unsafe")
+            retained_native = _WINDOWS_API.info_from_descriptor(pinned.descriptor)
             native = directory.windows_entry_info(artifact.filename)
-            if native is None or native.identity != pinned.identity or native.size != artifact.size:
+            if (
+                retained_native.directory
+                or retained_native.reparse
+                or retained_native.link_count != 1
+                or retained_native.size != artifact.size
+                or retained_native.identity != pinned.windows_identity
+                or native is None
+                or native.identity != pinned.windows_identity
+                or native.size != artifact.size
+            ):
                 return _Inspection("changed")
         elif not _same_file_state(after, current) or _identity(current) != pinned.identity:
             return _Inspection("changed")
@@ -1799,7 +1847,11 @@ def _rehash_pinned(
             return _Inspection("wrong_sha256")
         if artifact.sha512 is not None and sha512 != artifact.sha512:
             return _Inspection("wrong_sha512")
-        return _Inspection("verified", pinned.identity)
+        return _Inspection(
+            "verified",
+            pinned.identity,
+            windows_identity=pinned.windows_identity,
+        )
     except RuntimeInputsError:
         return _Inspection("unsafe")
     except OSError:
@@ -2640,7 +2692,18 @@ def _fetch_artifacts(
                             not inspection.valid
                             or inspection.identity is None
                             or inspection.pinned is None
+                            or (directory.windows_handles and inspection.windows_identity is None)
                         ):
+                            raise RuntimeInputsError(
+                                "cache_entry_unsafe",
+                                f"artifact.{artifact.component}",
+                            )
+                        child_identity = (
+                            inspection.windows_identity
+                            if directory.windows_handles
+                            else inspection.identity
+                        )
+                        if child_identity is None:
                             raise RuntimeInputsError(
                                 "cache_entry_unsafe",
                                 f"artifact.{artifact.component}",
@@ -2649,7 +2712,7 @@ def _fetch_artifacts(
                         _require_child_identity(
                             directory,
                             artifact.filename,
-                            inspection.identity,
+                            child_identity,
                             directory=False,
                             expected_size=artifact.size,
                         )

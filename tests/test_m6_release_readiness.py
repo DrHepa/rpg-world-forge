@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -71,8 +73,11 @@ def _require_vitest_test_passed(report_path: Path, test_title: str) -> None:
 
 def _run_windows_native_python_tests() -> int:
     root = str(ROOT)
+    source = str(ROOT / "src")
     if root not in sys.path:
         sys.path.insert(0, root)
+    if source not in sys.path:
+        sys.path.insert(0, source)
     suite = unittest.defaultTestLoader.loadTestsFromNames(WINDOWS_NATIVE_PYTHON_TESTS)
     if suite.countTestCases() != len(WINDOWS_NATIVE_PYTHON_TESTS):
         return 1
@@ -213,6 +218,31 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
         self.assertIn(f'--testNamePattern "{WINDOWS_NATIVE_SHELL_TEST}"', studio)
         self.assertIn("--assert-vitest-passed $report", studio)
         self.assertIn("if: runner.os == 'Windows'", studio)
+
+    @unittest.skipIf(os.name == "nt", "isolated import probe is exercised off Windows")
+    def test_windows_native_loader_resolves_source_tree_without_install(self) -> None:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-I",
+                "-S",
+                str(Path(__file__).resolve()),
+                "--run-windows-native-python",
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        output = completed.stdout + completed.stderr
+
+        self.assertEqual(1, completed.returncode, output)
+        self.assertNotIn("_FailedTest", output)
+        self.assertNotIn("ModuleNotFoundError", output)
+        self.assertNotIn("FAILED", output)
+        self.assertIn("Ran 13 tests", output)
+        self.assertIn("OK (skipped=13)", output)
 
     def test_python_quality_gates_cover_the_shell_handle_backend(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
