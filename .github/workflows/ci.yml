@@ -190,11 +190,23 @@ jobs:
           if (Test-Path -LiteralPath $output) {
             throw "strict external package output already exists"
           }
-          npm run package:dir -- --output $output --target win32-x64
+          npm run package:dir -- --output $output --target win32-x64 | Tee-Object -Variable packageOutput
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
-          $unpacked = Join-Path $output "win-unpacked"
+          $packageReport = @($packageOutput)[-1] | ConvertFrom-Json
+          $unpacked = [string]$packageReport.package_path
+          $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd(
+            [IO.Path]::DirectorySeparatorChar
+          )
+          $runnerPrefix = $runnerTemp + [IO.Path]::DirectorySeparatorChar
+          $unpacked = [IO.Path]::GetFullPath($unpacked)
+          if (-not $unpacked.StartsWith(
+            $runnerPrefix,
+            [StringComparison]::OrdinalIgnoreCase
+          )) {
+            throw "package wrapper returned a path outside RUNNER_TEMP"
+          }
           npm run package:verify -- --path $unpacked --target win32-x64
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE

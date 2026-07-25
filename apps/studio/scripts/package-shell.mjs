@@ -8,11 +8,18 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
+import { TextDecoder } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 export const STUDIO_ROOT = path.resolve(SCRIPT_ROOT, "..");
 export const REPOSITORY_ROOT = path.resolve(STUDIO_ROOT, "../..");
+const MAX_BUILDER_ATTEMPTS = 2;
+const MAX_BUILDER_STDOUT_BYTES = 64 * 1024;
+const BUILDER_RETRY_DELAY_MS = 1000;
+const BUILDER_EBUSY_PREFIX = "EBUSY: resource busy or locked";
+const BUILDER_EBUSY_FRAGMENT =
+  `${BUILDER_EBUSY_PREFIX}, rename `;
 
 export class PackageShellError extends Error {
   constructor(code, exitCode = 1) {
@@ -311,16 +318,50 @@ export async function reservePackageOutput(
   fail("secure_primitive_unavailable");
 }
 
+async function captureBoundedStdout(stream, limit) {
+  const chunks = [];
+  let capturedBytes = 0;
+  let stdoutOverflow = false;
+  for await (const value of stream) {
+    const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
+    const remaining = limit - capturedBytes;
+    if (remaining > 0) {
+      const accepted = chunk.subarray(0, remaining);
+      chunks.push(Buffer.from(accepted));
+      capturedBytes += accepted.length;
+      process.stdout.write(accepted);
+    }
+    if (chunk.length > remaining) {
+      stdoutOverflow = true;
+    }
+  }
+  return {
+    stdout: Buffer.concat(chunks, capturedBytes),
+    stdoutOverflow,
+  };
+}
+
 async function defaultRunner(executable, args, options) {
+  const { captureStdoutBytes, ...spawnOptions } = options;
+  const captureStdout =
+    Number.isSafeInteger(captureStdoutBytes) && captureStdoutBytes > 0;
   const child = spawn(executable, args, {
-    ...options,
+    ...spawnOptions,
     shell: false,
-    stdio: "inherit",
+    stdio: captureStdout ? ["inherit", "pipe", "inherit"] : "inherit",
   });
-  return new Promise((resolve, reject) => {
+  const exited = new Promise((resolve, reject) => {
     child.once("error", () => reject(new PackageShellError("package_tool_unavailable")));
     child.once("close", (status) => resolve(status));
   });
+  if (!captureStdout) {
+    return exited;
+  }
+  const [status, captured] = await Promise.all([
+    exited,
+    captureBoundedStdout(child.stdout, captureStdoutBytes),
+  ]);
+  return { status, ...captured };
 }
 
 function requireAbsoluteTool(value) {
@@ -334,9 +375,71 @@ function requireAbsoluteTool(value) {
   return value;
 }
 
+function runnerStatus(result) {
+  if (typeof result === "number" || result === null) {
+    return result;
+  }
+  return result?.status;
+}
+
+function completeOutputLines(output) {
+  const lines = [];
+  let start = 0;
+  for (const match of output.matchAll(/\r\n|\n/g)) {
+    lines.push(output.slice(start, match.index));
+    start = match.index + match[0].length;
+  }
+  return { lines, trailing: output.slice(start) };
+}
+
+function isRetryableWindowsBuilderFailure(result, boundPath) {
+  if (
+    !result ||
+    typeof result !== "object" ||
+    result.stdoutOverflow !== false ||
+    !Buffer.isBuffer(result.stdout) ||
+    result.stdout.length > MAX_BUILDER_STDOUT_BYTES
+  ) {
+    return false;
+  }
+  let output;
+  try {
+    output = new TextDecoder("utf-8", { fatal: true }).decode(
+      result.stdout,
+    );
+  } catch {
+    return false;
+  }
+  if (output.includes("\u001b")) {
+    return false;
+  }
+  const temporaryPath = path.join(boundPath, "win-unpacked.tmp");
+  const finalPath = path.join(boundPath, "win-unpacked");
+  const expected =
+    `  ⨯ ${BUILDER_EBUSY_FRAGMENT}'${temporaryPath}' -> ` +
+    `'${finalPath}'  failedTask=build stackTrace=Error: ` +
+    `${BUILDER_EBUSY_FRAGMENT}'${temporaryPath}' -> '${finalPath}'`;
+  const { lines, trailing } = completeOutputLines(output);
+  const candidates = lines.filter((line) =>
+    line.includes(BUILDER_EBUSY_PREFIX),
+  );
+  return (
+    !trailing.includes(BUILDER_EBUSY_PREFIX) &&
+    candidates.length === 1 &&
+    candidates[0] === expected
+  );
+}
+
+function defaultDelay(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 export async function runShellPackage({
   argv,
   builderCli = path.join(STUDIO_ROOT, "node_modules/electron-builder/cli.js"),
+  delay = defaultDelay,
   npmCli = process.env.npm_execpath,
   pythonExecutable,
   repositoryRoot = REPOSITORY_ROOT,
@@ -365,34 +468,65 @@ export async function runShellPackage({
   if (reboundOutput !== canonicalOutput) {
     fail("package_output_changed");
   }
-  const reservation = await reservationFactory(reboundOutput, {
-    pythonExecutable,
-    repositoryRoot,
-  });
-  try {
-    const platformFlag = targetId === "linux-x64" ? "--linux" : "--win";
-    const packageEnvironment = {
-      ...process.env,
-      RWF_STUDIO_PACKAGE_OUTPUT: reservation.boundPath,
-    };
-    if (
-      (await runner(
+  const platformFlag = targetId === "linux-x64" ? "--linux" : "--win";
+  let activeOutput = reboundOutput;
+  let reservation;
+  for (let attempt = 1; attempt <= MAX_BUILDER_ATTEMPTS; attempt += 1) {
+    reservation = await reservationFactory(activeOutput, {
+      pythonExecutable,
+      repositoryRoot,
+    });
+    let builderResult;
+    try {
+      const packageEnvironment = {
+        ...process.env,
+        RWF_STUDIO_PACKAGE_OUTPUT: reservation.boundPath,
+      };
+      builderResult = await runner(
         nodeExecutable,
         [
           packageTool,
           "--dir",
           platformFlag,
           "--x64",
+          "--publish=never",
           `--config.directories.output=${reservation.boundPath}`,
         ],
         {
+          captureStdoutBytes: MAX_BUILDER_STDOUT_BYTES,
           cwd: STUDIO_ROOT,
           env: packageEnvironment,
         },
-      )) !== 0
-    ) {
+      );
+    } catch (error) {
+      await reservation.close();
+      throw error;
+    }
+    if (runnerStatus(builderResult) === 0) {
+      break;
+    }
+    const retryable =
+      targetId === "win32-x64" &&
+      attempt < MAX_BUILDER_ATTEMPTS &&
+      isRetryableWindowsBuilderFailure(
+        builderResult,
+        reservation.boundPath,
+      );
+    await reservation.close();
+    reservation = undefined;
+    if (!retryable) {
       fail("shell_package_failed");
     }
+    await delay(BUILDER_RETRY_DELAY_MS);
+    activeOutput = await validatePackageOutput(
+      `${canonicalOutput}.retry-${attempt + 1}`,
+      { repositoryRoot },
+    );
+  }
+  if (!reservation) {
+    fail("shell_package_failed");
+  }
+  try {
     const boundUnpacked = path.join(
       reservation.boundPath,
       targetId === "linux-x64" ? "linux-unpacked" : "win-unpacked",
@@ -417,11 +551,11 @@ export async function runShellPackage({
     await reservation.close();
   }
   const unpacked = path.join(
-    canonicalOutput,
+    activeOutput,
     targetId === "linux-x64" ? "linux-unpacked" : "win-unpacked",
   );
   return Object.freeze({
-    output_path: canonicalOutput,
+    output_path: activeOutput,
     package_path: unpacked,
     target_id: targetId,
   });

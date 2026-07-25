@@ -59,6 +59,7 @@ const testPython =
 const maxBackendReportLineBytes = 16 * 1024 * 1024;
 const maxBackendFinalLineBytes = 64;
 const maxBackendTrailingBytes = 64;
+const maxBuilderStdoutBytes = 64 * 1024;
 const verifyPackagedShell = (options) =>
   verifyPackagedShellCore({ ...options, pythonExecutable: testPython });
 const writeShellPackageManifest = (options) =>
@@ -66,6 +67,101 @@ const writeShellPackageManifest = (options) =>
     ...options,
     pythonExecutable: testPython,
   });
+
+function electronBuilderEbusyOutput(
+  boundPath,
+  {
+    lineEnding = "\n",
+    operation = "rename",
+    reportedBoundPath = boundPath,
+    stackBoundPath = reportedBoundPath,
+  } = {},
+) {
+  const reportedTemporary = path.join(
+    reportedBoundPath,
+    "win-unpacked.tmp",
+  );
+  const reportedFinal = path.join(reportedBoundPath, "win-unpacked");
+  const stackTemporary = path.join(stackBoundPath, "win-unpacked.tmp");
+  const stackFinal = path.join(stackBoundPath, "win-unpacked");
+  return Buffer.from(
+    `  ⨯ EBUSY: resource busy or locked, ${operation} '${reportedTemporary}' -> '${reportedFinal}'  failedTask=build stackTrace=Error: EBUSY: resource busy or locked, ${operation} '${stackTemporary}' -> '${stackFinal}'${lineEnding}`,
+    "utf8",
+  );
+}
+
+function createPackageRetryHarness({
+  builderResults,
+  finalizerError,
+  verifierStatus = 0,
+}) {
+  const calls = [];
+  const delayCalls = [];
+  const events = [];
+  const reservations = [];
+  let builderIndex = 0;
+  const reservationFactory = async (outputPath) => {
+    const record = {
+      boundPath: outputPath,
+      closeCount: 0,
+      finalizeCount: 0,
+      outputPath,
+    };
+    reservations.push(record);
+    events.push({ outputPath, type: "reserve" });
+    return {
+      boundPath: record.boundPath,
+      close: async () => {
+        record.closeCount += 1;
+        events.push({ outputPath, type: "close" });
+      },
+      finalize: async () => {
+        record.finalizeCount += 1;
+        events.push({ outputPath, type: "finalize" });
+        if (finalizerError) {
+          throw finalizerError;
+        }
+      },
+    };
+  };
+  const runner = async (executable, args, options) => {
+    const call = { args, executable, options };
+    calls.push(call);
+    if (args[1] === "--dir") {
+      const result = builderResults[builderIndex];
+      builderIndex += 1;
+      return typeof result === "function"
+        ? result(options.env.RWF_STUDIO_PACKAGE_OUTPUT)
+        : result;
+    }
+    if (
+      args[0] ===
+      path.join(studioRoot, "scripts/verify-shell-package.mjs")
+    ) {
+      return verifierStatus;
+    }
+    return 0;
+  };
+  const delay = async (milliseconds) => {
+    delayCalls.push(milliseconds);
+    events.push({ milliseconds, type: "delay" });
+  };
+  return {
+    calls,
+    delay,
+    delayCalls,
+    events,
+    reservations,
+    tools: {
+      builderCli: path.join(temporaryRoot, "electron-builder.js"),
+      delay,
+      npmCli: path.join(temporaryRoot, "npm-cli.js"),
+      pythonExecutable: testPython,
+      reservationFactory,
+      runner,
+    },
+  };
+}
 
 function createHungBackend({
   closeAfterFinal = false,
@@ -1226,8 +1322,12 @@ describe(
       "--dir",
       "--linux",
       "--x64",
+      "--publish=never",
       `--config.directories.output=${boundOutput}`,
     ]);
+    expect(calls[1].options.captureStdoutBytes).toBe(
+      maxBuilderStdoutBytes,
+    );
     expect(calls[2].args).toEqual([
       path.join(studioRoot, "scripts/verify-shell-package.mjs"),
       "--path",
@@ -1261,6 +1361,344 @@ describe(
     });
     expect(callsForRace).toBe(1);
     await expect(stat(movedOutput)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("retries one exact CRLF EBUSY rename on a fresh reservation and returns its package path", async () => {
+    const harness = createPackageRetryHarness({
+      builderResults: [
+        (boundPath) => ({
+          status: 1,
+          stdout: electronBuilderEbusyOutput(boundPath, {
+            lineEnding: "\r\n",
+          }),
+          stdoutOverflow: false,
+        }),
+        { status: 0, stdout: Buffer.alloc(0), stdoutOverflow: false },
+      ],
+    });
+    const output = path.join(temporaryRoot, "retry-success");
+    const result = await runShellPackage({
+      ...harness.tools,
+      argv: ["--output", output, "--target", "win32-x64"],
+    });
+
+    const builderCalls = harness.calls.filter(
+      ({ args }) => args[1] === "--dir",
+    );
+    const verifierCalls = harness.calls.filter(
+      ({ args }) =>
+        args[0] ===
+        path.join(studioRoot, "scripts/verify-shell-package.mjs"),
+    );
+    expect(builderCalls).toHaveLength(2);
+    expect(harness.reservations).toHaveLength(2);
+    expect(harness.reservations[0].outputPath).not.toBe(
+      harness.reservations[1].outputPath,
+    );
+    expect(harness.delayCalls).toEqual([1000]);
+    expect(harness.events.map(({ type }) => type)).toEqual([
+      "reserve",
+      "close",
+      "delay",
+      "reserve",
+      "finalize",
+      "close",
+    ]);
+    expect(harness.reservations[0]).toMatchObject({
+      closeCount: 1,
+      finalizeCount: 0,
+    });
+    expect(harness.reservations[1]).toMatchObject({
+      closeCount: 1,
+      finalizeCount: 1,
+    });
+    for (const call of builderCalls) {
+      expect(call.args).toContain("--publish=never");
+      expect(call.options.captureStdoutBytes).toBe(
+        maxBuilderStdoutBytes,
+      );
+    }
+    expect(verifierCalls).toHaveLength(1);
+    expect(verifierCalls[0].args).toEqual([
+      path.join(studioRoot, "scripts/verify-shell-package.mjs"),
+      "--path",
+      path.join(harness.reservations[1].boundPath, "win-unpacked"),
+      "--target",
+      "win32-x64",
+    ]);
+    expect(result).toEqual({
+      output_path: harness.reservations[1].outputPath,
+      package_path: path.join(
+        harness.reservations[1].outputPath,
+        "win-unpacked",
+      ),
+      target_id: "win32-x64",
+    });
+  });
+
+  it("stops after two exact LF EBUSY rename failures", async () => {
+    const exactFailure = (boundPath) => ({
+      status: 1,
+      stdout: electronBuilderEbusyOutput(boundPath),
+      stdoutOverflow: false,
+    });
+    const harness = createPackageRetryHarness({
+      builderResults: [exactFailure, exactFailure],
+    });
+    await expect(
+      runShellPackage({
+        ...harness.tools,
+        argv: [
+          "--output",
+          path.join(temporaryRoot, "retry-exhausted"),
+          "--target",
+          "win32-x64",
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "shell_package_failed" });
+
+    expect(
+      harness.calls.filter(({ args }) => args[1] === "--dir"),
+    ).toHaveLength(2);
+    expect(harness.delayCalls).toEqual([1000]);
+    expect(harness.reservations).toHaveLength(2);
+    expect(
+      harness.reservations.map(
+        ({ closeCount, finalizeCount }) => ({
+          closeCount,
+          finalizeCount,
+        }),
+      ),
+    ).toEqual([
+      { closeCount: 1, finalizeCount: 0 },
+      { closeCount: 1, finalizeCount: 0 },
+    ]);
+  });
+
+  it.each([
+    [
+      "invalid UTF-8",
+      (boundPath) => ({
+        status: 1,
+        stdout: Buffer.concat([
+          Buffer.from([0xff]),
+          electronBuilderEbusyOutput(boundPath),
+        ]),
+        stdoutOverflow: false,
+      }),
+    ],
+    [
+      "stdout overflow",
+      (boundPath) => ({
+        status: 1,
+        stdout: electronBuilderEbusyOutput(boundPath),
+        stdoutOverflow: true,
+      }),
+    ],
+    [
+      "ANSI-altered output",
+      (boundPath) => ({
+        status: 1,
+        stdout: Buffer.concat([
+          Buffer.from("\u001b[31m", "utf8"),
+          electronBuilderEbusyOutput(boundPath),
+        ]),
+        stdoutOverflow: false,
+      }),
+    ],
+    [
+      "partial line",
+      (boundPath) => ({
+        status: 1,
+        stdout: electronBuilderEbusyOutput(boundPath, {
+          lineEnding: "",
+        }),
+        stdoutOverflow: false,
+      }),
+    ],
+    [
+      "duplicate lines",
+      (boundPath) => ({
+        status: 1,
+        stdout: Buffer.concat([
+          electronBuilderEbusyOutput(boundPath),
+          electronBuilderEbusyOutput(boundPath),
+        ]),
+        stdoutOverflow: false,
+      }),
+    ],
+    [
+      "ambiguous lines",
+      (boundPath) => ({
+        status: 1,
+        stdout: Buffer.concat([
+          electronBuilderEbusyOutput(boundPath),
+          electronBuilderEbusyOutput(boundPath, {
+            reportedBoundPath: `${boundPath}-other`,
+          }),
+        ]),
+        stdoutOverflow: false,
+      }),
+    ],
+    [
+      "ambiguous operations",
+      (boundPath) => ({
+        status: 1,
+        stdout: Buffer.concat([
+          electronBuilderEbusyOutput(boundPath),
+          electronBuilderEbusyOutput(boundPath, {
+            operation: "copy",
+          }),
+        ]),
+        stdoutOverflow: false,
+      }),
+    ],
+    [
+      "stderr-only signature",
+      (boundPath) => ({
+        status: 1,
+        stderr: electronBuilderEbusyOutput(boundPath),
+        stdout: Buffer.alloc(0),
+        stdoutOverflow: false,
+      }),
+    ],
+    [
+      "wrong reported path",
+      (boundPath) => ({
+        status: 1,
+        stdout: electronBuilderEbusyOutput(boundPath, {
+          reportedBoundPath: `${boundPath}-other`,
+        }),
+        stdoutOverflow: false,
+      }),
+    ],
+    [
+      "wrong operation",
+      (boundPath) => ({
+        status: 1,
+        stdout: electronBuilderEbusyOutput(boundPath, {
+          operation: "copy",
+        }),
+        stdoutOverflow: false,
+      }),
+    ],
+    [
+      "wrong stack path",
+      (boundPath) => ({
+        status: 1,
+        stdout: electronBuilderEbusyOutput(boundPath, {
+          stackBoundPath: `${boundPath}-other`,
+        }),
+        stdoutOverflow: false,
+      }),
+    ],
+  ])("does not retry a %s", async (_label, builderResult) => {
+    const harness = createPackageRetryHarness({
+      builderResults: [builderResult],
+    });
+    await expect(
+      runShellPackage({
+        ...harness.tools,
+        argv: [
+          "--output",
+          path.join(
+            temporaryRoot,
+            `no-retry-${_label.replaceAll(" ", "-")}`,
+          ),
+          "--target",
+          "win32-x64",
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "shell_package_failed" });
+
+    expect(
+      harness.calls.filter(({ args }) => args[1] === "--dir"),
+    ).toHaveLength(1);
+    expect(harness.delayCalls).toEqual([]);
+    expect(harness.reservations).toHaveLength(1);
+    expect(harness.reservations[0]).toMatchObject({
+      closeCount: 1,
+      finalizeCount: 0,
+    });
+  });
+
+  it("does not retry a verifier failure", async () => {
+    const harness = createPackageRetryHarness({
+      builderResults: [
+        { status: 0, stdout: Buffer.alloc(0), stdoutOverflow: false },
+      ],
+      verifierStatus: 1,
+    });
+    await expect(
+      runShellPackage({
+        ...harness.tools,
+        argv: [
+          "--output",
+          path.join(temporaryRoot, "verifier-no-retry"),
+          "--target",
+          "win32-x64",
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "shell_package_verification_failed",
+    });
+
+    expect(
+      harness.calls.filter(({ args }) => args[1] === "--dir"),
+    ).toHaveLength(1);
+    expect(harness.delayCalls).toEqual([]);
+    expect(harness.reservations[0]).toMatchObject({
+      closeCount: 1,
+      finalizeCount: 0,
+    });
+  });
+
+  it("does not retry a finalizer failure", async () => {
+    const harness = createPackageRetryHarness({
+      builderResults: [
+        { status: 0, stdout: Buffer.alloc(0), stdoutOverflow: false },
+      ],
+      finalizerError: new PackageShellError("package_output_changed"),
+    });
+    await expect(
+      runShellPackage({
+        ...harness.tools,
+        argv: [
+          "--output",
+          path.join(temporaryRoot, "finalizer-no-retry"),
+          "--target",
+          "win32-x64",
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "package_output_changed" });
+
+    expect(
+      harness.calls.filter(({ args }) => args[1] === "--dir"),
+    ).toHaveLength(1);
+    expect(harness.delayCalls).toEqual([]);
+    expect(harness.reservations[0]).toMatchObject({
+      closeCount: 1,
+      finalizeCount: 1,
+    });
+  });
+
+  it("reverifies the exact Windows package path reported by the wrapper", async () => {
+    const workflow = await readFile(
+      path.resolve(studioRoot, "../../.github/workflows/ci.yml"),
+      "utf8",
+    );
+    expect(workflow).toContain(
+      "npm run package:dir -- --output $output --target win32-x64 | Tee-Object -Variable packageOutput",
+    );
+    expect(workflow).toContain(
+      "$packageReport = @($packageOutput)[-1] | ConvertFrom-Json",
+    );
+    expect(workflow).toContain(
+      "$unpacked = [string]$packageReport.package_path",
+    );
+    expect(workflow).not.toContain(
+      '$unpacked = Join-Path $output "win-unpacked"',
+    );
   });
 
   it.skipIf(!canVerifySecurely)(
