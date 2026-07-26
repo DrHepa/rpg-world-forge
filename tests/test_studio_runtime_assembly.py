@@ -2539,9 +2539,10 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             api.close = mock.Mock()
             return api
 
-        for status, expected in (
-            (0xC0000034 - (1 << 32), "file_missing"),
-            (0xC00000BA - (1 << 32), "file_unsafe"),
+        for status, create, expected, expected_exit_code in (
+            (0xC0000034 - (1 << 32), False, "file_missing", 1),
+            (0xC00000BA - (1 << 32), False, "file_unsafe", 1),
+            (0xC0000035 - (1 << 32), True, "output_exists", 2),
         ):
             with self.subTest(expected=expected):
                 api = api_with_status(status)
@@ -2550,13 +2551,44 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                         7,
                         "leaf",
                         directory=False,
-                        create=False,
+                        create=create,
                         missing_code="file_missing",
                         failure_code="file_unsafe",
                         field="forge_source_root",
                     )
                 self.assertEqual(caught.exception.code, expected)
+                self.assertEqual(caught.exception.exit_code, expected_exit_code)
+                self.assertEqual(caught.exception.native_status, status & 0xFFFFFFFF)
                 api.close.assert_not_called()
+
+    def test_windows_ntstatus_metadata_is_internal_only(self) -> None:
+        failure = assembly.RuntimeAssemblyError(
+            "filesystem_identity_changed",
+            "private_path",
+            blockers=("blocked_notice",),
+            exit_code=2,
+            native_status=0xC0000043,
+        )
+
+        self.assertEqual(0xC0000043, failure.native_status)
+        self.assertEqual("filesystem_identity_changed", str(failure))
+        self.assertEqual(
+            {
+                "code": "filesystem_identity_changed",
+                "field": "private_path",
+                "open_blocker_codes": ["blocked_notice"],
+            },
+            failure.as_dict(),
+        )
+        serialized = json.dumps(failure.as_dict(), sort_keys=True)
+        self.assertNotIn("native_status", serialized)
+        self.assertNotIn(str(0xC0000043), serialized)
+
+    def test_windows_lock_status_constants_are_exact(self) -> None:
+        self.assertEqual(0xC0000043, assembly._WindowsOutputApi.STATUS_SHARING_VIOLATION)
+        self.assertEqual(0xC0000054, assembly._WindowsOutputApi.STATUS_FILE_LOCK_CONFLICT)
+        self.assertEqual(0xC0000055, assembly._WindowsOutputApi.STATUS_LOCK_NOT_GRANTED)
+        self.assertEqual(0xC0000056, assembly._WindowsOutputApi.STATUS_DELETE_PENDING)
 
     def test_windows_output_readers_share_retained_writer_without_admitting_writers(
         self,
@@ -2837,6 +2869,31 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             owned_api.FILE_SHARE_READ | owned_api.FILE_SHARE_WRITE,
             owned_calls[1][1],
         )
+        owned_reader_access, owned_reader_share = owned_calls[1]
+        self.assertTrue(owned_reader_access & owned_api.FILE_LIST_DIRECTORY)
+        self.assertFalse(owned_reader_access & owned_api.FILE_ADD_FILE)
+        self.assertEqual(
+            owned_api.FILE_SHARE_READ | owned_api.FILE_SHARE_WRITE,
+            owned_reader_share,
+        )
+
+        writable_api, writable_calls = make_api()
+        writable_api.relative(
+            7,
+            "writable-leaf",
+            directory=True,
+            create=False,
+            writable=True,
+            share_write=True,
+            field="output",
+        )
+        writable_access, writable_share = writable_calls[0]
+        self.assertTrue(writable_access & writable_api.FILE_LIST_DIRECTORY)
+        self.assertTrue(writable_access & writable_api.FILE_ADD_FILE)
+        self.assertTrue(writable_access & writable_api.FILE_ADD_SUBDIRECTORY)
+        self.assertTrue(writable_access & writable_api.FILE_WRITE_ATTRIBUTES)
+        self.assertEqual(writable_api.FILE_SHARE_READ, writable_share)
+        self.assertFalse(writable_share & writable_api.FILE_SHARE_WRITE)
 
     def test_windows_directory_entries_bound_paginated_rows_including_dots(
         self,

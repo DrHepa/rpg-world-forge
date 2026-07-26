@@ -148,18 +148,36 @@ name to that retained identity. The checked-in electron-builder output is a
 required environment macro, and the wrapper supplies the same retained path as
 an exact command-line override. There is no working in-repo default.
 
-After-pack creates a canonical
-`resources/shell-package-manifest.json` only after statically checking the
-hardened fuse wire. Verification never launches Electron. It retains the
-package root, directories, and regular files while hashing; rejects symlinks,
-hardlinks, replacements, aliases, empty extra directories, and extra files;
-checks the ASAR entrypoints; and compares the committed runtime manifest,
-Codex protocol provenance/tree, runtime sources, and runtime package/source
-schemas byte for byte. Process builds first remove the generated process tree,
-Vite empties the renderer tree, and electron-builder is limited to the exact
-five clean build files plus its sanitized `package.json`. The verifier pins the
-clean `dist-electron` and `dist-renderer` source snapshots through final binding
-and requires exact ASAR file/directory equality plus matching sizes and hashes;
+Electron-builder `afterPack` only flips the audited Electron fuses. After
+electron-builder exits, the supported `npm run package:dir` parent wrapper
+writes the canonical `resources/shell-package-manifest.json` through the
+hardened snapshot backend, verifies the package, and finalizes the reserved
+output identity. Invoking raw `electron-builder` directly is unsupported: it
+leaves an incomplete, unverified directory without the wrapper-owned manifest
+or finalization, so that directory must never be published or treated as a
+package. On Windows only, the parent wrapper permits one immediate manifest
+publication retry when the first backend terminates before its report with
+either exact `windows_snapshot_package_sharing_conflict` or
+`windows_snapshot_source_sharing_conflict` code. The setup code
+`windows_snapshot_setup_sharing_conflict` is non-retryable and fails closed. It
+waits for the failed backend process and its private snapshot handles to be
+fully reaped; failed snapshot files remain preserved as described below. It
+then reuses the same retained output identity, package path, source, target, and
+Python executable without sleeping, rebuilding, or reserving another directory.
+Existing or partial manifests and callback, publication, finalization, cleanup,
+timeout, protocol, verification, or second sharing failures are never retried.
+Verification never launches Electron. It retains the package root, directories,
+and regular files while hashing; rejects symlinks, hardlinks, replacements,
+aliases, empty extra directories, and extra files; checks the ASAR entrypoints;
+and compares the committed runtime manifest, Codex protocol provenance/tree,
+runtime sources, and runtime package/source schemas byte for byte. The pinned
+Electron 43.2.0 Windows shell root includes exactly the literal `dxcompiler.dll`
+and `dxil.dll` DXC pair; missing or additional root files fail closed. Process
+builds first remove the generated process tree, Vite empties the renderer tree,
+and electron-builder is limited to the exact five clean build files plus its
+sanitized `package.json`. The verifier pins the clean
+`dist-electron` and `dist-renderer` source snapshots through final binding and
+requires exact ASAR file/directory equality plus matching sizes and hashes;
 stale files and hidden vendor/runtime payloads are rejected.
 
 The result is deliberately `shell_only`, with no Python or Codex runtime
@@ -173,10 +191,16 @@ absolute Python 3.11/3.12 path in `RWF_STUDIO_BUILD_PYTHON` and never searches
 `PATH`; unavailable primitives fail closed. The Windows backend marks only the
 two snapshot files that it created for deletion through their retained
 delete-capable handles, revalidates them, and closes those handles while the
-snapshot directory binding is still guarded. The resulting empty unique
-temporary directory is intentionally left for OS or CI-job cleanup. The Node
-caller never recursively removes a snapshot pathname after the backend releases
-its guards, and failed or uncertain snapshots are preserved fail-closed.
+snapshot directory binding is still guarded. On successful finalization it
+captures the root identity, closes every package, source, snapshot-chain, and
+guard handle, then reopens that exact root with delete, list, read-attribute,
+and synchronize access while sharing reads and writes but never deletion. It
+revalidates the same non-reparse directory identity, proves emptiness by
+enumerating the retained handle, marks that handle for deletion, closes it, and
+only then acknowledges finalization. Neither Python nor Node uses path-based or
+recursive snapshot cleanup. Failed or uncertain roots, including identity,
+reparse, nonempty, open, disposition, or close failures, are preserved
+fail-closed and no final acknowledgement is emitted.
 
 ## Redistribution remains blocked
 

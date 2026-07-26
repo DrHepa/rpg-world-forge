@@ -180,6 +180,8 @@ const TARGETS = Object.freeze({
       "chrome_100_percent.pak",
       "chrome_200_percent.pak",
       "d3dcompiler_47.dll",
+      "dxcompiler.dll",
+      "dxil.dll",
       "ffmpeg.dll",
       "icudtl.dat",
       "libEGL.dll",
@@ -223,6 +225,18 @@ const WINDOWS_SNAPSHOT_ERROR_CODES = new Set([
   "snapshot_cleanup_failed",
   "snapshot_directory_not_empty",
   "unsupported_python",
+  "windows_snapshot_cleanup_failed",
+  "windows_snapshot_finalize_failed",
+  "windows_snapshot_package_failed",
+  "windows_snapshot_package_sharing_conflict",
+  "windows_snapshot_setup_failed",
+  "windows_snapshot_setup_sharing_conflict",
+  "windows_snapshot_source_failed",
+  "windows_snapshot_source_sharing_conflict",
+]);
+const WINDOWS_RETRYABLE_SNAPSHOT_SHARING_CODES = new Set([
+  "windows_snapshot_package_sharing_conflict",
+  "windows_snapshot_source_sharing_conflict",
 ]);
 
 export class ShellPackageError extends Error {
@@ -470,7 +484,11 @@ function createWindowsBackendProtocolReader(stream) {
   }
 
   function onError() {
-    stopWithError("windows_backend_failed");
+    stopWithError(
+      lineIndex === 0
+        ? "windows_backend_ready_failed"
+        : "windows_backend_final_failed",
+    );
   }
 
   stream.on("close", onClose);
@@ -578,12 +596,17 @@ async function waitBounded(promise, timeoutMs) {
   }
 }
 
-async function nextBackendLine(reader, lineIndex, timeoutMs) {
+async function nextBackendLine(
+  reader,
+  lineIndex,
+  timeoutMs,
+  failureCode,
+) {
   let result;
   try {
     result = await waitBounded(reader.lines[lineIndex], timeoutMs);
   } catch {
-    fail("windows_backend_failed");
+    fail(failureCode);
   }
   if (result === WAIT_TIMEOUT) {
     fail(
@@ -596,19 +619,19 @@ async function nextBackendLine(reader, lineIndex, timeoutMs) {
     throw result.error;
   }
   if (result.kind === "cancelled") {
-    fail("windows_backend_failed");
+    fail(failureCode);
   }
   return result.kind === "line"
     ? { done: false, value: result.value }
     : { done: true };
 }
 
-async function requireBackendProtocolEnd(reader, timeoutMs) {
+async function requireBackendProtocolEnd(reader, timeoutMs, failureCode) {
   let result;
   try {
     result = await waitBounded(reader.end, timeoutMs);
   } catch {
-    fail("windows_backend_failed");
+    fail(failureCode);
   }
   if (result === WAIT_TIMEOUT) {
     fail("windows_backend_timeout");
@@ -617,11 +640,11 @@ async function requireBackendProtocolEnd(reader, timeoutMs) {
     throw result.error;
   }
   if (result.kind !== "end") {
-    fail("windows_backend_failed");
+    fail(failureCode);
   }
 }
 
-function failForWindowsBackendExit(state, stderr) {
+function failForWindowsBackendExit(state, stderr, failureCode) {
   if (state === WAIT_TIMEOUT) {
     fail("windows_backend_timeout");
   }
@@ -633,12 +656,12 @@ function failForWindowsBackendExit(state, stderr) {
     state.status !== 0 ||
     state.error !== undefined
   ) {
-    fail(parseWindowsSnapshotError(stderr()) ?? "windows_backend_failed");
+    fail(parseWindowsSnapshotError(stderr()) ?? failureCode);
   }
   fail("windows_backend_invalid");
 }
 
-function requireSuccessfulWindowsBackendExit(state, stderr) {
+function requireSuccessfulWindowsBackendExit(state, stderr, failureCode) {
   if (state === WAIT_TIMEOUT) {
     fail("windows_backend_timeout");
   }
@@ -650,7 +673,7 @@ function requireSuccessfulWindowsBackendExit(state, stderr) {
     state.status !== 0 ||
     state.error !== undefined
   ) {
-    fail(parseWindowsSnapshotError(stderr()) ?? "windows_backend_failed");
+    fail(parseWindowsSnapshotError(stderr()) ?? failureCode);
   }
 }
 
@@ -1973,6 +1996,7 @@ export async function withWindowsBackend(
   callback,
   {
     parseEvidence = windowsTreeEvidence,
+    protocolReaderFactory = createWindowsBackendProtocolReader,
     spawnBackend = spawn,
     terminationTimeoutMs = DEFAULT_WINDOWS_BACKEND_TERMINATION_TIMEOUT_MS,
     timeoutMs = DEFAULT_WINDOWS_BACKEND_TIMEOUT_MS,
@@ -2041,16 +2065,24 @@ export async function withWindowsBackend(
     child.stderr,
     MAX_WINDOWS_BACKEND_STDERR_BYTES,
   );
-  const protocol = createWindowsBackendProtocolReader(child.stdout);
+  const protocol = protocolReaderFactory(child.stdout);
   let callbackResult;
+  let callbackStarted = false;
+  let cleanupFailed = false;
   let completed = false;
   let failure;
   try {
-    const first = await nextBackendLine(protocol, 0, timeoutMs);
+    const first = await nextBackendLine(
+      protocol,
+      0,
+      timeoutMs,
+      "windows_backend_ready_failed",
+    );
     if (first.done) {
       failForWindowsBackendExit(
         await waitBounded(lifecycle.result, timeoutMs),
         stderr.bytes,
+        "windows_backend_ready_failed",
       );
     }
     if (
@@ -2064,16 +2096,23 @@ export async function withWindowsBackend(
       "windows_backend_invalid",
     );
     const evidence = parseEvidence(report, targetId, snapshotRoot);
+    callbackStarted = true;
     const outcome = await callback({ evidence, report, snapshotRoot });
     const { result, ...command } = outcome;
     if (!endBackendInput(child, canonicalJsonBytes(command))) {
-      fail("windows_backend_failed");
+      fail("windows_backend_command_failed");
     }
-    const final = await nextBackendLine(protocol, 1, timeoutMs);
+    const final = await nextBackendLine(
+      protocol,
+      1,
+      timeoutMs,
+      "windows_backend_final_failed",
+    );
     if (final.done) {
       failForWindowsBackendExit(
         await waitBounded(lifecycle.result, timeoutMs),
         stderr.bytes,
+        "windows_backend_final_failed",
       );
     }
     if (
@@ -2086,28 +2125,54 @@ export async function withWindowsBackend(
     ) {
       fail("windows_backend_invalid");
     }
-    await requireBackendProtocolEnd(protocol, timeoutMs);
+    await requireBackendProtocolEnd(
+      protocol,
+      timeoutMs,
+      "windows_backend_final_failed",
+    );
     requireSuccessfulWindowsBackendExit(
       await waitBounded(lifecycle.result, timeoutMs),
       stderr.bytes,
+      "windows_backend_exit_failed",
     );
     completed = true;
     callbackResult = result;
   } catch (error) {
     failure = error;
   } finally {
+    const prepublicationSharingFailure =
+      !callbackStarted &&
+      failure instanceof ShellPackageError &&
+      WINDOWS_RETRYABLE_SNAPSHOT_SHARING_CODES.has(failure.code);
+    if (
+      prepublicationSharingFailure &&
+      (
+        lifecycle.current?.kind !== "close" ||
+        lifecycle.current.status !== 1 ||
+        lifecycle.current.signal !== null ||
+        lifecycle.current.error !== undefined
+      )
+    ) {
+      cleanupFailed = true;
+    }
     try {
       protocol.cancel();
     } catch {
+      cleanupFailed = true;
       if (!failure) {
-        failure = new ShellPackageError("windows_backend_failed");
+        failure = new ShellPackageError(
+          "windows_backend_cleanup_failed",
+        );
       }
     }
     try {
       stderr.cancel();
     } catch {
+      cleanupFailed = true;
       if (!failure) {
-        failure = new ShellPackageError("windows_backend_failed");
+        failure = new ShellPackageError(
+          "windows_backend_cleanup_failed",
+        );
       }
     }
     if (!completed) {
@@ -2122,21 +2187,37 @@ export async function withWindowsBackend(
               failure.code === "windows_backend_timeout",
           },
         );
-        if (!reaped && !failure) {
-          failure = new ShellPackageError("windows_backend_failed");
+        if (!reaped) {
+          cleanupFailed = true;
+          if (!failure) {
+            failure = new ShellPackageError(
+              "windows_backend_cleanup_failed",
+            );
+          }
         }
       } catch {
+        cleanupFailed = true;
         if (!failure) {
-          failure = new ShellPackageError("windows_backend_failed");
+          failure = new ShellPackageError(
+            "windows_backend_cleanup_failed",
+          );
         }
       }
     }
     try {
       lifecycle.cancel();
     } catch {
+      cleanupFailed = true;
       if (!failure) {
-        failure = new ShellPackageError("windows_backend_failed");
+        failure = new ShellPackageError(
+          "windows_backend_cleanup_failed",
+        );
       }
+    }
+    if (prepublicationSharingFailure && cleanupFailed) {
+      failure = new ShellPackageError(
+        "windows_backend_cleanup_failed",
+      );
     }
   }
   if (failure) {
@@ -2231,41 +2312,78 @@ async function validateManifestDocument(
   }
 }
 
-export async function writeShellPackageManifest({
-  outputPath,
-  pythonExecutable,
+async function buildWindowsManifestPublicationCommand({
+  evidence,
+  fuseReader,
   targetId,
-  sourceRoot = STUDIO_ROOT,
-  fuseReader = readStaticFuses,
-} = {}) {
-  if (process.platform === "win32") {
-    await withWindowsBackend(
-      {
-        outputPath,
-        pythonExecutable,
-        sourceRoot,
-        targetId,
-      },
-      async ({ evidence }) => {
-        if (evidence.tree.files.has(SHELL_MANIFEST_PATH)) {
-          fail("shell_manifest_already_exists");
-        }
-        const document = await createManifestDocument(
-          evidence.tree,
-          targetId,
-          fuseReader,
-          evidence.committed,
+}) {
+  if (evidence.tree.files.has(SHELL_MANIFEST_PATH)) {
+    fail("shell_manifest_already_exists");
+  }
+  const document = await createManifestDocument(
+    evidence.tree,
+    targetId,
+    fuseReader,
+    evidence.committed,
+  );
+  validateManifestSchema(document, evidence.schemaBytes);
+  const payload = canonicalJsonBytes(document);
+  return {
+    action: "publish",
+    payload: payload.toString("base64"),
+    result: null,
+  };
+}
+
+export async function writeShellPackageManifest(
+  {
+    outputPath,
+    pythonExecutable,
+    targetId,
+    sourceRoot = STUDIO_ROOT,
+    fuseReader = readStaticFuses,
+  } = {},
+  {
+    buildWindowsPublicationCommand = buildWindowsManifestPublicationCommand,
+    hostPlatform = process.platform,
+    verifyPackage = verifyPackagedShell,
+    windowsBackend = withWindowsBackend,
+  } = {},
+) {
+  if (hostPlatform === "win32") {
+    const backendOptions = Object.freeze({
+      outputPath,
+      pythonExecutable,
+      sourceRoot,
+      targetId,
+    });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let callbackStarted = false;
+      try {
+        await windowsBackend(
+          backendOptions,
+          async ({ evidence }) => {
+            callbackStarted = true;
+            return buildWindowsPublicationCommand({
+              evidence,
+              fuseReader,
+              targetId,
+            });
+          },
         );
-        validateManifestSchema(document, evidence.schemaBytes);
-        const payload = canonicalJsonBytes(document);
-        return {
-          action: "publish",
-          payload: payload.toString("base64"),
-          result: null,
-        };
-      },
-    );
-    return verifyPackagedShell({
+        break;
+      } catch (error) {
+        if (
+          attempt !== 0 ||
+          callbackStarted ||
+          !(error instanceof ShellPackageError) ||
+          !WINDOWS_RETRYABLE_SNAPSHOT_SHARING_CODES.has(error.code)
+        ) {
+          throw error;
+        }
+      }
+    }
+    return verifyPackage({
       outputPath,
       pythonExecutable,
       sourceRoot,

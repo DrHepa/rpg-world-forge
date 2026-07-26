@@ -159,12 +159,14 @@ class RuntimeAssemblyError(ValueError):
         *,
         blockers: Iterable[str] = (),
         exit_code: int = 1,
+        native_status: int | None = None,
     ) -> None:
         super().__init__(code)
         self.code = code
         self.field = field
         self.blockers = tuple(blockers)
         self.exit_code = exit_code
+        self.native_status = native_status
 
     def as_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {"code": self.code, "field": self.field}
@@ -378,8 +380,15 @@ def _fail(
     *,
     blockers: Iterable[str] = (),
     exit_code: int = 1,
+    native_status: int | None = None,
 ) -> NoReturn:
-    raise RuntimeAssemblyError(code, field, blockers=blockers, exit_code=exit_code)
+    raise RuntimeAssemblyError(
+        code,
+        field,
+        blockers=blockers,
+        exit_code=exit_code,
+        native_status=native_status,
+    )
 
 
 def _identity(info: os.stat_result) -> tuple[int, int]:
@@ -3625,6 +3634,10 @@ class _WindowsOutputApi:
     STATUS_OBJECT_NAME_NOT_FOUND = 0xC0000034
     STATUS_OBJECT_NAME_COLLISION = 0xC0000035
     STATUS_OBJECT_PATH_NOT_FOUND = 0xC000003A
+    STATUS_SHARING_VIOLATION = 0xC0000043
+    STATUS_FILE_LOCK_CONFLICT = 0xC0000054
+    STATUS_LOCK_NOT_GRANTED = 0xC0000055
+    STATUS_DELETE_PENDING = 0xC0000056
     STATUS_NO_MORE_FILES = 0x80000006
     FILE_ID_BOTH_DIRECTORY_INFORMATION = 37
     DIRECTORY_QUERY_BYTES = 64 * 1024
@@ -3947,7 +3960,12 @@ class _WindowsOutputApi:
         if status < 0:
             status_code = status & 0xFFFFFFFF
             if create and status_code == self.STATUS_OBJECT_NAME_COLLISION:
-                _fail("output_exists", field, exit_code=2)
+                _fail(
+                    "output_exists",
+                    field,
+                    exit_code=2,
+                    native_status=status_code,
+                )
             if (
                 not create
                 and missing_code is not None
@@ -3958,9 +3976,13 @@ class _WindowsOutputApi:
                     self.STATUS_OBJECT_PATH_NOT_FOUND,
                 }
             ):
-                _fail(missing_code, field)
+                _fail(missing_code, field, native_status=status_code)
             default_failure = "output_create_failed" if create else "filesystem_identity_changed"
-            _fail(failure_code or default_failure, field)
+            _fail(
+                failure_code or default_failure,
+                field,
+                native_status=status_code,
+            )
         value = self.ctypes.cast(output, self.ctypes.c_void_p).value
         if value is None:
             _fail("secure_primitive_unavailable", field)

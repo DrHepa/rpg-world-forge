@@ -88,19 +88,37 @@ electron-builder through both its required environment macro and command-line
 override. Linux packages through the retained directory descriptor under
 `/proc`; Windows keeps a stdlib guard process and no-delete handle chain alive.
 The requested name is rebound to the retained identity before success, so a
-replacement cannot redirect build output into the repository. The after-pack
-hook statically
-hardens Electron fuses and writes an exact
-`shell_only` inventory. The verifier pins the package tree, validates the ASAR
+replacement cannot redirect build output into the repository. Electron-builder
+`afterPack` only flips the audited Electron fuses. After electron-builder exits,
+the supported `npm run package:dir` parent wrapper writes the exact `shell_only`
+inventory at `resources/shell-package-manifest.json` through the hardened
+snapshot backend, verifies the package, and finalizes the reserved output
+identity. Invoking raw `electron-builder` directly is unsupported: it leaves an
+incomplete, unverified directory without the wrapper-owned manifest or
+finalization, so that directory must never be published or treated as a
+package. On Windows only, manifest publication permits one immediate retry when
+the first backend terminates before its report with either exact code:
+`windows_snapshot_package_sharing_conflict` or
+`windows_snapshot_source_sharing_conflict`. The setup code
+`windows_snapshot_setup_sharing_conflict` is non-retryable and fails closed.
+The retry starts only after that failed backend process and its private
+snapshot handles are fully reaped; failed snapshot files remain preserved as
+described below. It reuses the same retained output identity and exact inputs,
+and performs no sleep, rebuild, or re-reservation. Any existing manifest or
+callback, publication, finalization, cleanup, timeout, protocol, or second
+sharing failure remains fail-closed and is never retried. The verifier pins
+the package tree, validates the ASAR
 entrypoints, compares the runtime manifest, Codex protocol provenance, runtime
 source contract, and schemas byte for byte, and rejects missing, altered,
-linked, replaced, or extra resources. Each process build first removes its
+linked, replaced, or extra resources. The pinned Electron 43.2.0 Windows shell root
+includes exactly the literal `dxcompiler.dll` and `dxil.dll` DXC pair; missing
+or additional root files fail closed. Each process build first removes its
 generated process tree and Vite empties its renderer tree. Electron-builder can
 select only the five exact clean build files plus its sanitized `package.json`;
 the verifier pins those clean source trees and requires identical ASAR file,
-directory, size, and hash inventories. Extra vendors, executables, runtimes,
-or stale outputs therefore fail instead of being hidden by `shell_only`. It
-does not launch the GUI.
+directory, size, and hash inventories. Extra vendors, executables, runtimes, or
+stale outputs therefore fail instead of being hidden by `shell_only`. It does
+not launch the GUI.
 
 This is not a self-contained release: Python and Codex runtimes are absent,
 `release_ready` is false, and redistribution remains blocked by the seven
@@ -111,10 +129,15 @@ static ASAR and fuse inspection against retained private snapshots. Set
 `RWF_STUDIO_BUILD_PYTHON` to an absolute supported Python 3.11/3.12 executable
 for Windows build and verification; the tool never searches `PATH`. Windows
 deletes only its two private snapshot files through their still-retained
-delete-capable handles. It deliberately leaves the now-empty unique temporary
-directory for OS or CI-job cleanup rather than recursively deleting a pathname
-after its anti-replacement guards have been released. A failed or uncertain
-snapshot is likewise preserved fail-closed.
+delete-capable handles. On a successful finalization it records the snapshot
+root identity, closes every package, source, snapshot-chain, and guard handle,
+then reopens that exact root without delete sharing. The backend revalidates
+that the handle still names the same non-reparse directory, proves through
+handle-relative enumeration that it is empty, and marks it for deletion through
+that retained handle before emitting the final acknowledgement. It never calls
+path-based or recursive cleanup. A failed or uncertain snapshot, identity
+check, enumeration, disposition, or handle close is preserved fail-closed and
+withholds the acknowledgement.
 
 Tests use only `tests/fixtures/app-server`. They never log in, start a model,
 contact a provider, or enable network access.

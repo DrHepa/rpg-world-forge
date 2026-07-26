@@ -11,6 +11,11 @@ import { createInterface } from "node:readline";
 import { TextDecoder } from "node:util";
 import { fileURLToPath } from "node:url";
 
+import {
+  ShellPackageError,
+  writeShellPackageManifest,
+} from "./shell-package-verifier.mjs";
+
 const SCRIPT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 export const STUDIO_ROOT = path.resolve(SCRIPT_ROOT, "..");
 export const REPOSITORY_ROOT = path.resolve(STUDIO_ROOT, "../..");
@@ -440,6 +445,7 @@ export async function runShellPackage({
   argv,
   builderCli = path.join(STUDIO_ROOT, "node_modules/electron-builder/cli.js"),
   delay = defaultDelay,
+  manifestWriter = writeShellPackageManifest,
   npmCli = process.env.npm_execpath,
   pythonExecutable,
   repositoryRoot = REPOSITORY_ROOT,
@@ -531,6 +537,18 @@ export async function runShellPackage({
       reservation.boundPath,
       targetId === "linux-x64" ? "linux-unpacked" : "win-unpacked",
     );
+    try {
+      await manifestWriter({
+        outputPath: boundUnpacked,
+        pythonExecutable,
+        targetId,
+      });
+    } catch (error) {
+      if (error instanceof ShellPackageError) {
+        fail(error.code);
+      }
+      fail("package_failed");
+    }
     if (
       (await runner(
         nodeExecutable,

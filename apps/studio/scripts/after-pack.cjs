@@ -37,13 +37,4 @@ module.exports = async function applyStudioFuses(context) {
     [FuseV1Options.OnlyLoadAppFromAsar]: true,
     [FuseV1Options.GrantFileProtocolExtraPrivileges]: false,
   });
-
-  const {
-    targetFromAfterPackContext,
-    writeShellPackageManifest,
-  } = await import("./shell-package-verifier.mjs");
-  await writeShellPackageManifest({
-    outputPath: path.resolve(context.appOutDir),
-    targetId: targetFromAfterPackContext(context),
-  });
 };

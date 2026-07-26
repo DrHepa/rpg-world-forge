@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn
@@ -45,6 +46,8 @@ SOURCE_COPY_MAP = (
         "resources/packaging/shell-package-manifest.schema.json",
     ),
 )
+WINDOWS_PREPUBLICATION_BUSY_NTSTATUS = frozenset({0xC0000043, 0xC0000055})
+WINDOWS_PREPUBLICATION_BUSY_WINERROR = frozenset({32, 33})
 
 
 class SnapshotError(RuntimeError):
@@ -55,6 +58,50 @@ class SnapshotError(RuntimeError):
 
 def _fail(code: str) -> NoReturn:
     raise SnapshotError(code)
+
+
+def _run_windows_snapshot_phase(
+    action: Callable[[], Any],
+    failure_code: str,
+    *,
+    sharing_conflict_code: str | None,
+) -> Any:
+    from isoworld.content.resource_snapshot import ResourceSnapshotError
+    from scripts.studio_runtime_assembly import RuntimeAssemblyError
+
+    try:
+        return action()
+    except SnapshotError:
+        raise
+    except ResourceSnapshotError:
+        _fail(failure_code)
+    except RuntimeAssemblyError as error:
+        if (
+            sharing_conflict_code is not None
+            and error.native_status in WINDOWS_PREPUBLICATION_BUSY_NTSTATUS
+        ):
+            _fail(sharing_conflict_code)
+        _fail(failure_code)
+    except OSError as error:
+        if (
+            sharing_conflict_code is not None
+            and getattr(error, "winerror", None) in WINDOWS_PREPUBLICATION_BUSY_WINERROR
+        ):
+            _fail(sharing_conflict_code)
+        _fail(failure_code)
+
+
+def _complete_windows_snapshot_cleanup(
+    *,
+    delete_snapshots: Callable[[], None],
+    close_handles: Callable[[], None],
+    delete_root: Callable[[], None],
+    acknowledge: Callable[[], None],
+) -> None:
+    delete_snapshots()
+    close_handles()
+    delete_root()
+    acknowledge()
 
 
 def _canonical_bytes(value: Any) -> bytes:
@@ -113,6 +160,7 @@ class _Directory:
     name: str
     parent: _Directory | None
     relative: str
+    retained_writable: bool = False
 
 
 @dataclass(slots=True)
@@ -256,9 +304,16 @@ class _WindowsReader:
             )
         )
         if status < 0:
-            if create and (status & 0xFFFFFFFF) == self.STATUS_OBJECT_NAME_COLLISION:
+            status_code = status & 0xFFFFFFFF
+            if create and status_code == self.STATUS_OBJECT_NAME_COLLISION:
                 _fail("shell_manifest_already_exists")
-            _fail("package_entry_changed")
+            from scripts.studio_runtime_assembly import RuntimeAssemblyError
+
+            raise RuntimeAssemblyError(
+                "package_entry_changed",
+                field,
+                native_status=status_code,
+            )
         value = self.ctypes.cast(output, self.ctypes.c_void_p).value
         if value is None:
             _fail("secure_primitive_unavailable")
@@ -303,7 +358,7 @@ class _WindowsReader:
             self.ctypes.byref(disposition),
             self.ctypes.sizeof(disposition),
         ):
-            _fail("snapshot_cleanup_failed")
+            _fail("windows_snapshot_cleanup_failed")
 
     def reset(self, handle: int) -> None:
         if not self.SetFilePointerEx(
@@ -355,19 +410,110 @@ class _WindowsReader:
             _fail("shell_manifest_publish_failed")
 
 
+class _WindowsSnapshotRootCleanup:
+    DELETE = 0x00010000
+    FILE_LIST_DIRECTORY = 0x0001
+    FILE_READ_ATTRIBUTES = 0x0080
+    SYNCHRONIZE = 0x00100000
+    FILE_SHARE_READ = 0x00000001
+    FILE_SHARE_WRITE = 0x00000002
+    FILE_SHARE_DELETE = 0x00000004
+    OPEN_EXISTING = 3
+    FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
+    FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
+    FILE_DISPOSITION_INFO_CLASS = 4
+    FileDispositionInfo: Any
+
+    def __init__(self, api: Any) -> None:
+        self.api = api
+        self.ctypes = api.ctypes
+        self.wintypes = api.wintypes
+
+        class FileDispositionInfo(self.ctypes.Structure):
+            _fields_ = [("DeleteFile", self.wintypes.BOOL)]
+
+        type(self).FileDispositionInfo = FileDispositionInfo
+        self.SetFileInformationByHandle = api.kernel32.SetFileInformationByHandle
+        self.SetFileInformationByHandle.argtypes = [
+            self.wintypes.HANDLE,
+            self.ctypes.c_int,
+            self.wintypes.LPVOID,
+            self.wintypes.DWORD,
+        ]
+        self.SetFileInformationByHandle.restype = self.wintypes.BOOL
+
+    def delete_empty(self, root: Path, expected_identity: tuple[int, int]) -> None:
+        handle: int | None = None
+        failed = False
+        try:
+            opened = self.api.CreateFileW(
+                str(root),
+                self.DELETE
+                | self.FILE_LIST_DIRECTORY
+                | self.FILE_READ_ATTRIBUTES
+                | self.SYNCHRONIZE,
+                self.FILE_SHARE_READ | self.FILE_SHARE_WRITE,
+                None,
+                self.OPEN_EXISTING,
+                self.FILE_FLAG_BACKUP_SEMANTICS | self.FILE_FLAG_OPEN_REPARSE_POINT,
+                None,
+            )
+            value = self.ctypes.cast(opened, self.ctypes.c_void_p).value
+            if value in {None, self.ctypes.c_void_p(-1).value}:
+                raise OSError
+            handle = int(value)
+            state = self.api.state(handle, "package")
+            if state.identity != expected_identity or not state.is_directory or state.is_reparse:
+                raise OSError
+            entries = self.api.directory_entries(
+                handle,
+                "package",
+                unsafe_code="windows_snapshot_cleanup_failed",
+            )
+            if entries:
+                raise OSError
+            disposition = self.FileDispositionInfo(True)
+            if not self.SetFileInformationByHandle(
+                self.wintypes.HANDLE(handle),
+                self.FILE_DISPOSITION_INFO_CLASS,
+                self.ctypes.byref(disposition),
+                self.ctypes.sizeof(disposition),
+            ):
+                raise OSError
+        except Exception:
+            failed = True
+        finally:
+            if handle is not None:
+                try:
+                    self.api.close(handle)
+                except Exception:
+                    failed = True
+        if failed:
+            _fail("windows_snapshot_cleanup_failed")
+
+
 class _WindowsPinnedTree:
     def __init__(
         self,
         root: Path,
         *,
+        allow_manifest_publication: bool = False,
+        share_write: bool = False,
         snapshot_chain: Any | None = None,
         snapshot_root: Path | None = None,
         snapshot_paths: dict[str, str] | None = None,
+        writable_leaf: bool = False,
     ) -> None:
         from scripts.studio_runtime_assembly import _WindowsDirectoryChain
 
         self.root = root
-        self.chain = _WindowsDirectoryChain(root, "package")
+        self.chain = _WindowsDirectoryChain(
+            root,
+            "package",
+            share_write=share_write,
+            writable_leaf=writable_leaf,
+        )
+        self.allow_manifest_publication = allow_manifest_publication
         self.api = self.chain.api
         self.reader = _WindowsReader(self.api)
         self.snapshot_chain = snapshot_chain
@@ -414,7 +560,9 @@ class _WindowsPinnedTree:
                 os.scandir(directory.absolute),
                 key=lambda entry: entry.name.encode("utf-8", "strict"),
             )
-        except OSError:
+        except OSError as error:
+            if getattr(error, "winerror", None) in WINDOWS_PREPUBLICATION_BUSY_WINERROR:
+                raise
             _fail("package_directory_changed")
         directory.children = tuple(entry.name for entry in entries)
         for entry in entries:
@@ -432,7 +580,9 @@ class _WindowsPinnedTree:
             self.aliases[alias] = relative
             try:
                 info = entry.stat(follow_symlinks=False)
-            except OSError:
+            except OSError as error:
+                if getattr(error, "winerror", None) in WINDOWS_PREPUBLICATION_BUSY_WINERROR:
+                    raise
                 _fail("package_entry_changed")
             is_reparse = bool(
                 getattr(info, "st_file_attributes", 0)
@@ -441,12 +591,14 @@ class _WindowsPinnedTree:
             if is_reparse or stat.S_ISLNK(info.st_mode):
                 _fail("package_non_regular_entry")
             if stat.S_ISDIR(info.st_mode):
+                retained_writable = self.allow_manifest_publication and relative == "resources"
                 handle = self.api.relative(
                     directory.handle,
                     name,
                     directory=True,
                     create=False,
                     field="package",
+                    writable=retained_writable,
                 )
                 self.extra_handles.append(handle)
                 state = self.api.state(handle, "package")
@@ -458,6 +610,7 @@ class _WindowsPinnedTree:
                     name=name,
                     parent=directory,
                     relative=relative,
+                    retained_writable=retained_writable,
                 )
                 self.directories[relative] = child
                 self._scan(child, depth + 1)
@@ -505,6 +658,8 @@ class _WindowsPinnedTree:
             )
 
     def publish_manifest(self, payload: bytes) -> None:
+        from scripts.studio_runtime_assembly import RuntimeAssemblyError
+
         if len(payload) > MAX_CONTROL_BYTES:
             _fail("shell_manifest_publish_failed")
         if SHELL_MANIFEST_PATH in self.files:
@@ -512,10 +667,16 @@ class _WindowsPinnedTree:
         resources = self.directories.get("resources")
         if resources is None:
             _fail("package_resource_directory_missing")
-        handle = self.reader.create(resources.handle, "shell-package-manifest.json")
-        self.extra_handles.append(handle)
-        self.reader.write(handle, payload)
-        state = self.api.state(handle, "package")
+        try:
+            handle = self.reader.create(
+                resources.handle,
+                "shell-package-manifest.json",
+            )
+            self.extra_handles.append(handle)
+            self.reader.write(handle, payload)
+            state = self.api.state(handle, "package")
+        except RuntimeAssemblyError:
+            _fail("shell_manifest_publish_failed")
         record = _File(
             handle=handle,
             identity=state.identity,
@@ -555,6 +716,7 @@ class _WindowsPinnedTree:
                     directory=True,
                     create=False,
                     field="package",
+                    share_write=directory.retained_writable,
                 )
                 try:
                     if self.api.state(reopened, "package").identity != directory.identity:
@@ -621,19 +783,11 @@ class _WindowsPinnedTree:
                 continue
             handle = self.snapshot_handles.get(record.snapshot_name)
             if handle is None:
-                _fail("snapshot_cleanup_failed")
+                _fail("windows_snapshot_cleanup_failed")
             self.reader.delete_owned_snapshot(handle)
         while self.snapshot_handles:
             _name, handle = self.snapshot_handles.popitem()
             self.api.close(handle)
-        if self.snapshot_root is None:
-            _fail("snapshot_cleanup_failed")
-        try:
-            with os.scandir(self.snapshot_root) as entries:
-                if any(entries):
-                    _fail("snapshot_cleanup_failed")
-        except OSError:
-            _fail("snapshot_cleanup_failed")
 
     def close(self) -> None:
         while self.snapshot_handles:
@@ -651,6 +805,26 @@ class _WindowsPinnedTree:
             self.chain.close()
         except BaseException:
             pass
+
+    def close_strict(self) -> None:
+        failed = False
+        while self.snapshot_handles:
+            _name, handle = self.snapshot_handles.popitem()
+            try:
+                self.api.close(handle)
+            except Exception:
+                failed = True
+        while self.extra_handles:
+            try:
+                self.api.close(self.extra_handles.pop())
+            except Exception:
+                failed = True
+        try:
+            self.chain.close()
+        except Exception:
+            failed = True
+        if failed:
+            _fail("windows_snapshot_cleanup_failed")
 
     def report(self, target: str, snapshot_root: Path) -> dict[str, Any]:
         files = [
@@ -932,31 +1106,126 @@ def _serve(argv: list[str]) -> None:
     )
     from scripts.studio_runtime_assembly import _WindowsDirectoryChain
 
-    package_guard = _windows_lock_directory(package_root)
+    package_guard: int | None = None
     snapshot_guard: int | None = None
     snapshot_chain: Any | None = None
+    snapshot_api: Any | None = None
+    snapshot_identity: tuple[int, int] | None = None
     package: _WindowsPinnedTree | None = None
     source_trees: list[_WindowsPinnedTree] = []
+    failure: Exception | None = None
+
+    def close_retained_handles(*, strict: bool) -> None:
+        nonlocal package_guard, snapshot_guard, snapshot_chain, package
+
+        close_failed = False
+        while source_trees:
+            tree = source_trees.pop()
+            try:
+                tree.close_strict() if strict else tree.close()
+            except Exception:
+                close_failed = True
+        if package is not None:
+            tree = package
+            package = None
+            try:
+                tree.close_strict() if strict else tree.close()
+            except Exception:
+                close_failed = True
+        if snapshot_chain is not None:
+            chain = snapshot_chain
+            snapshot_chain = None
+            try:
+                chain.close()
+            except Exception:
+                close_failed = True
+        if snapshot_guard is not None:
+            guard = snapshot_guard
+            snapshot_guard = None
+            try:
+                _windows_close_handle(guard)
+            except Exception:
+                close_failed = True
+        if package_guard is not None:
+            guard = package_guard
+            package_guard = None
+            try:
+                _windows_close_handle(guard)
+            except Exception:
+                close_failed = True
+        if strict and close_failed:
+            _fail("windows_snapshot_cleanup_failed")
+
     try:
-        snapshot_guard = _windows_lock_directory(snapshot_root)
-        snapshot_chain = _WindowsDirectoryChain(snapshot_root, "package")
-        with os.scandir(snapshot_root) as entries:
-            if any(entries):
-                _fail("snapshot_directory_not_empty")
+        package_guard = _run_windows_snapshot_phase(
+            lambda: _windows_lock_directory(package_root),
+            "windows_snapshot_setup_failed",
+            sharing_conflict_code="windows_snapshot_setup_sharing_conflict",
+        )
+        snapshot_guard = _run_windows_snapshot_phase(
+            lambda: _windows_lock_directory(snapshot_root),
+            "windows_snapshot_setup_failed",
+            sharing_conflict_code="windows_snapshot_setup_sharing_conflict",
+        )
+        snapshot_chain = _run_windows_snapshot_phase(
+            lambda: _WindowsDirectoryChain(
+                snapshot_root,
+                "package",
+                writable_leaf=True,
+                share_write=True,
+            ),
+            "windows_snapshot_setup_failed",
+            sharing_conflict_code="windows_snapshot_setup_sharing_conflict",
+        )
+        snapshot_api = snapshot_chain.api
+        snapshot_state = _run_windows_snapshot_phase(
+            lambda: snapshot_api.state(snapshot_chain.leaf, "package"),
+            "windows_snapshot_setup_failed",
+            sharing_conflict_code="windows_snapshot_setup_sharing_conflict",
+        )
+        if not snapshot_state.is_directory or snapshot_state.is_reparse:
+            _fail("windows_snapshot_setup_failed")
+        snapshot_identity = snapshot_state.identity
+
+        def require_empty_snapshot() -> None:
+            with os.scandir(snapshot_root) as entries:
+                if any(entries):
+                    _fail("snapshot_directory_not_empty")
+
+        _run_windows_snapshot_phase(
+            require_empty_snapshot,
+            "windows_snapshot_setup_failed",
+            sharing_conflict_code="windows_snapshot_setup_sharing_conflict",
+        )
         executable = (
             "rpg-world-forge-studio" if target == "linux-x64" else "RPG World Forge Studio.exe"
         )
-        package = _WindowsPinnedTree(
-            package_root,
-            snapshot_chain=snapshot_chain,
-            snapshot_root=snapshot_root,
-            snapshot_paths={
-                APP_ASAR_PATH: "app.asar",
-                executable: "electron-executable.bin",
-            },
+        package = _run_windows_snapshot_phase(
+            lambda: _WindowsPinnedTree(
+                package_root,
+                allow_manifest_publication=True,
+                share_write=True,
+                snapshot_chain=snapshot_chain,
+                snapshot_root=snapshot_root,
+                snapshot_paths={
+                    APP_ASAR_PATH: "app.asar",
+                    executable: "electron-executable.bin",
+                },
+                writable_leaf=False,
+            ),
+            "windows_snapshot_package_failed",
+            sharing_conflict_code="windows_snapshot_package_sharing_conflict",
         )
-        source_trees, asar_source = _compare_sources(package, source_root)
-        report = package.report(target, snapshot_root)
+        source_trees, asar_source = _run_windows_snapshot_phase(
+            lambda: _compare_sources(package, source_root),
+            "windows_snapshot_source_failed",
+            sharing_conflict_code="windows_snapshot_source_sharing_conflict",
+        )
+        report = _run_windows_snapshot_phase(
+            lambda: package.report(target, snapshot_root),
+            "windows_snapshot_package_failed",
+            sharing_conflict_code="windows_snapshot_package_sharing_conflict",
+        )
         report["asar_source"] = asar_source
         sys.stdout.buffer.write(_canonical_bytes(report))
         sys.stdout.buffer.flush()
@@ -977,23 +1246,60 @@ def _serve(argv: list[str]) -> None:
             package.publish_manifest(payload)
         else:
             _fail("invalid_backend_command")
-        package.finalize()
-        for tree in source_trees:
-            tree.finalize()
-        snapshot_chain.require_bindings()
-        package.cleanup_snapshots()
-        sys.stdout.buffer.write(_canonical_bytes({"status": "finalized"}))
-        sys.stdout.buffer.flush()
+
+        def finalize_snapshot() -> None:
+            package.finalize()
+            for tree in source_trees:
+                tree.finalize()
+            snapshot_chain.require_bindings()
+
+        _run_windows_snapshot_phase(
+            finalize_snapshot,
+            "windows_snapshot_finalize_failed",
+            sharing_conflict_code=None,
+        )
+
+        def acknowledge() -> None:
+            sys.stdout.buffer.write(_canonical_bytes({"status": "finalized"}))
+            sys.stdout.buffer.flush()
+
+        if snapshot_api is None or snapshot_identity is None:
+            _fail("windows_snapshot_cleanup_failed")
+        _complete_windows_snapshot_cleanup(
+            delete_snapshots=lambda: _run_windows_snapshot_phase(
+                package.cleanup_snapshots,
+                "windows_snapshot_cleanup_failed",
+                sharing_conflict_code=None,
+            ),
+            close_handles=lambda: _run_windows_snapshot_phase(
+                lambda: close_retained_handles(strict=True),
+                "windows_snapshot_cleanup_failed",
+                sharing_conflict_code=None,
+            ),
+            delete_root=lambda: _run_windows_snapshot_phase(
+                lambda: _WindowsSnapshotRootCleanup(snapshot_api).delete_empty(
+                    snapshot_root,
+                    snapshot_identity,
+                ),
+                "windows_snapshot_cleanup_failed",
+                sharing_conflict_code=None,
+            ),
+            acknowledge=acknowledge,
+        )
+    except Exception as error:
+        failure = error
     finally:
-        for tree in reversed(source_trees):
-            tree.close()
-        if package is not None:
-            package.close()
-        if snapshot_chain is not None:
-            snapshot_chain.close()
-        if snapshot_guard is not None:
-            _windows_close_handle(snapshot_guard)
-        _windows_close_handle(package_guard)
+        try:
+            _run_windows_snapshot_phase(
+                lambda: close_retained_handles(strict=failure is None),
+                "windows_snapshot_cleanup_failed",
+                sharing_conflict_code=None,
+            )
+        except Exception as cleanup_error:
+            if failure is None:
+                failure = cleanup_error
+    if failure is not None:
+        raise failure
 
 
 def main() -> int:

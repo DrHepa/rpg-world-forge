@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   chmod,
@@ -48,6 +48,7 @@ const require = createRequire(import.meta.url);
 const asar = require("@electron/asar");
 const testRoot = path.dirname(fileURLToPath(import.meta.url));
 const studioRoot = path.resolve(testRoot, "../..");
+const repositoryRoot = path.resolve(studioRoot, "../..");
 const canVerifySecurely = ["linux", "win32"].includes(process.platform);
 const fixtureFuseReader = async () => staticFuseFixture();
 const testPython =
@@ -93,11 +94,14 @@ function electronBuilderEbusyOutput(
 function createPackageRetryHarness({
   builderResults,
   finalizerError,
+  manifestError,
+  pythonExecutable = testPython,
   verifierStatus = 0,
 }) {
   const calls = [];
   const delayCalls = [];
   const events = [];
+  const manifestCalls = [];
   const reservations = [];
   let builderIndex = 0;
   const reservationFactory = async (outputPath) => {
@@ -130,17 +134,27 @@ function createPackageRetryHarness({
     if (args[1] === "--dir") {
       const result = builderResults[builderIndex];
       builderIndex += 1;
-      return typeof result === "function"
+      const resolved = typeof result === "function"
         ? result(options.env.RWF_STUDIO_PACKAGE_OUTPUT)
         : result;
+      events.push({ type: "builder-exit" });
+      return resolved;
     }
     if (
       args[0] ===
       path.join(studioRoot, "scripts/verify-shell-package.mjs")
     ) {
+      events.push({ type: "verify" });
       return verifierStatus;
     }
     return 0;
+  };
+  const manifestWriter = async (options) => {
+    manifestCalls.push(options);
+    events.push({ type: "manifest" });
+    if (manifestError) {
+      throw manifestError;
+    }
   };
   const delay = async (milliseconds) => {
     delayCalls.push(milliseconds);
@@ -151,12 +165,14 @@ function createPackageRetryHarness({
     delay,
     delayCalls,
     events,
+    manifestCalls,
     reservations,
     tools: {
       builderCli: path.join(temporaryRoot, "electron-builder.js"),
       delay,
+      manifestWriter,
       npmCli: path.join(temporaryRoot, "npm-cli.js"),
-      pythonExecutable: testPython,
+      pythonExecutable,
       reservationFactory,
       runner,
     },
@@ -166,10 +182,14 @@ function createPackageRetryHarness({
 function createHungBackend({
   closeAfterFinal = false,
   closeAfterKillErrors = [],
+  exitAfterStart = false,
+  exitStatus = 1,
+  finalExitStatus = 0,
   finalOutput,
   initialOutput = '{"status":"ready"}\n',
   killErrorSignals = [],
   reapOnKill = true,
+  stderrOutput,
 } = {}) {
   const child = new EventEmitter();
   child.exitCode = null;
@@ -211,7 +231,7 @@ function createHungBackend({
       child.stdout.write(finalOutput);
     }
     if (closeAfterFinal) {
-      close(0, null);
+      close(finalExitStatus, null);
     }
   });
   child.start = () => {
@@ -221,6 +241,12 @@ function createHungBackend({
         child.emit("spawn");
         if (initialOutput !== undefined) {
           child.stdout.write(initialOutput);
+        }
+        if (stderrOutput !== undefined) {
+          child.stderr.write(stderrOutput);
+        }
+        if (exitAfterStart) {
+          close(exitStatus, null);
         }
       });
     }
@@ -245,7 +271,29 @@ function shellPackageFailure(operation) {
   throw new Error("expected shell package verification to fail");
 }
 
+async function packageShellFailure(operation) {
+  try {
+    await operation();
+  } catch (error) {
+    expect(error).toBeInstanceOf(PackageShellError);
+    return error;
+  }
+  throw new Error("expected Studio shell packaging to fail");
+}
+
+async function shellBackendFailure(operation) {
+  try {
+    await operation();
+  } catch (error) {
+    expect(error).toBeInstanceOf(ShellPackageError);
+    return error;
+  }
+  throw new Error("expected Studio shell snapshot backend to fail");
+}
+
 let temporaryRoot;
+let originalTemporaryEnvironment;
+const temporaryEnvironmentKeys = ["TEMP", "TMP", "TMPDIR"];
 const bases = new Map();
 
 async function makeAsar(destination, { extraPath } = {}) {
@@ -370,6 +418,18 @@ async function cloneCommittedSource(label) {
 
 beforeAll(async () => {
   temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "rwf-shell-verifier-"));
+  originalTemporaryEnvironment = Object.fromEntries(
+    temporaryEnvironmentKeys.map((key) => [
+      key,
+      {
+        present: Object.hasOwn(process.env, key),
+        value: process.env[key],
+      },
+    ]),
+  );
+  for (const key of temporaryEnvironmentKeys) {
+    process.env[key] = temporaryRoot;
+  }
   if (canVerifySecurely) {
     await createBase("linux-x64");
     await createBase("win32-x64");
@@ -377,9 +437,64 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
+  if (originalTemporaryEnvironment) {
+    for (const key of temporaryEnvironmentKeys) {
+      const original = originalTemporaryEnvironment[key];
+      if (original.present) {
+        process.env[key] = original.value;
+      } else {
+        delete process.env[key];
+      }
+    }
+  }
   if (temporaryRoot) {
     await rm(temporaryRoot, { force: true, recursive: true });
   }
+});
+
+describe("suite temporary root hygiene", () => {
+  it("contains Node and backend snapshot roots under the suite root", async () => {
+    expect(os.tmpdir()).toBe(temporaryRoot);
+
+    let backendArguments;
+    let backendOptions;
+    const child = createHungBackend({
+      exitAfterStart: true,
+      initialOutput: Buffer.alloc(0),
+    });
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        async () => {
+          throw new Error("callback must not run");
+        },
+        {
+          spawnBackend: (_executable, arguments_, options) => {
+            backendArguments = arguments_;
+            backendOptions = options;
+            return child.start();
+          },
+          timeoutMs: 100,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "windows_backend_ready_failed" });
+
+    const snapshotFlag = backendArguments.indexOf("--snapshot-dir");
+    expect(snapshotFlag).toBeGreaterThanOrEqual(0);
+    const snapshotRoot = backendArguments[snapshotFlag + 1];
+    expect(path.dirname(snapshotRoot)).toBe(temporaryRoot);
+    expect(isWithin(temporaryRoot, snapshotRoot)).toBe(true);
+    expect(backendOptions.env).toMatchObject({
+      TEMP: temporaryRoot,
+      TMP: temporaryRoot,
+    });
+  });
 });
 
 describe("raw ASAR header enumeration", () => {
@@ -509,6 +624,347 @@ describe("raw ASAR header enumeration", () => {
 });
 
 describe("Windows boundary helpers", () => {
+  it.each([
+    "windows_snapshot_package_sharing_conflict",
+    "windows_snapshot_source_sharing_conflict",
+  ])("retries one exact %s on the same publication identity", async (code) => {
+    const backendCalls = [];
+    const events = [];
+    const verificationCalls = [];
+    const result = await writeShellPackageManifestCore(
+      {
+        fuseReader: fixtureFuseReader,
+        outputPath: path.join(temporaryRoot, "retained-publication-retry"),
+        pythonExecutable: testPython ?? process.execPath,
+        sourceRoot: studioRoot,
+        targetId: "win32-x64",
+      },
+      {
+        buildWindowsPublicationCommand: async () => {
+          events.push("publish");
+          return {
+            action: "publish",
+            payload: "e30K",
+            result: null,
+          };
+        },
+        hostPlatform: "win32",
+        verifyPackage: async (options) => {
+          events.push("verification");
+          verificationCalls.push(options);
+          return { status: "verified" };
+        },
+        windowsBackend: async (options, callback) => {
+          backendCalls.push(options);
+          events.push(`publication-${backendCalls.length}`);
+          if (backendCalls.length === 1) {
+            throw new ShellPackageError(code);
+          }
+          const command = await callback({ evidence: {} });
+          expect(command).toMatchObject({ action: "publish" });
+        },
+      },
+    );
+
+    expect(result).toEqual({ status: "verified" });
+    expect(backendCalls).toHaveLength(2);
+    expect(backendCalls[1]).toBe(backendCalls[0]);
+    expect(backendCalls[0]).toEqual({
+      outputPath: path.join(
+        temporaryRoot,
+        "retained-publication-retry",
+      ),
+      pythonExecutable: testPython ?? process.execPath,
+      sourceRoot: studioRoot,
+      targetId: "win32-x64",
+    });
+    expect(verificationCalls).toHaveLength(1);
+    expect(events).toEqual([
+      "publication-1",
+      "publication-2",
+      "publish",
+      "verification",
+    ]);
+  });
+
+  it.each([
+    "windows_snapshot_package_sharing_conflict",
+    "windows_snapshot_source_sharing_conflict",
+  ])("stops after a second exact %s", async (code) => {
+    const failures = [
+      new ShellPackageError(code),
+      new ShellPackageError(code),
+    ];
+    let publicationCalls = 0;
+    let verificationCalls = 0;
+    await expect(
+      writeShellPackageManifestCore(
+        {
+          outputPath: path.join(
+            temporaryRoot,
+            "retained-publication-exhausted",
+          ),
+          pythonExecutable: testPython ?? process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        {
+          buildWindowsPublicationCommand: async () => {
+            throw new Error("publication callback must not run");
+          },
+          hostPlatform: "win32",
+          verifyPackage: async () => {
+            verificationCalls += 1;
+          },
+          windowsBackend: async () => {
+            const failure = failures[publicationCalls];
+            publicationCalls += 1;
+            throw failure;
+          },
+        },
+      ),
+    ).rejects.toBe(failures[1]);
+    expect(publicationCalls).toBe(2);
+    expect(verificationCalls).toBe(0);
+  });
+
+  it.each([
+    [
+      "duck typed package sharing",
+      Object.assign(new Error("private duck failure"), {
+        code: "windows_snapshot_package_sharing_conflict",
+      }),
+    ],
+    [
+      "duck typed source sharing",
+      Object.assign(new Error("private duck failure"), {
+        code: "windows_snapshot_source_sharing_conflict",
+      }),
+    ],
+    [
+      "legacy common sharing",
+      new ShellPackageError("windows_snapshot_sharing_conflict"),
+    ],
+    [
+      "setup sharing",
+      new ShellPackageError("windows_snapshot_setup_sharing_conflict"),
+    ],
+    [
+      "setup failure",
+      new ShellPackageError("windows_snapshot_setup_failed"),
+    ],
+    [
+      "timeout",
+      new ShellPackageError("windows_backend_timeout"),
+    ],
+    [
+      "protocol",
+      new ShellPackageError("windows_backend_invalid"),
+    ],
+    [
+      "publication",
+      new ShellPackageError("shell_manifest_publish_failed"),
+    ],
+    [
+      "finalization",
+      new ShellPackageError("windows_snapshot_finalize_failed"),
+    ],
+    [
+      "cleanup",
+      new ShellPackageError("windows_snapshot_cleanup_failed"),
+    ],
+  ])("does not retry a %s publication failure", async (_label, failure) => {
+    let publicationCalls = 0;
+    let verificationCalls = 0;
+    await expect(
+      writeShellPackageManifestCore(
+        {
+          outputPath: path.join(
+            temporaryRoot,
+            `publication-no-retry-${_label.replaceAll(" ", "-")}`,
+          ),
+          pythonExecutable: testPython ?? process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        {
+          hostPlatform: "win32",
+          verifyPackage: async () => {
+            verificationCalls += 1;
+          },
+          windowsBackend: async () => {
+            publicationCalls += 1;
+            throw failure;
+          },
+        },
+      ),
+    ).rejects.toBe(failure);
+    expect(publicationCalls).toBe(1);
+    expect(verificationCalls).toBe(0);
+  });
+
+  it.each([
+    "windows_snapshot_package_sharing_conflict",
+    "windows_snapshot_source_sharing_conflict",
+  ])("does not retry %s thrown by the publication callback", async (code) => {
+    const failure = new ShellPackageError(code);
+    let publicationCalls = 0;
+    let callbackCalls = 0;
+    await expect(
+      writeShellPackageManifestCore(
+        {
+          outputPath: path.join(
+            temporaryRoot,
+            "publication-callback-no-retry",
+          ),
+          pythonExecutable: testPython ?? process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        {
+          buildWindowsPublicationCommand: async () => {
+            callbackCalls += 1;
+            throw failure;
+          },
+          hostPlatform: "win32",
+          verifyPackage: async () => {
+            throw new Error("verification must not run");
+          },
+          windowsBackend: async (_options, callback) => {
+            publicationCalls += 1;
+            await callback({ evidence: {} });
+          },
+        },
+      ),
+    ).rejects.toBe(failure);
+    expect(publicationCalls).toBe(1);
+    expect(callbackCalls).toBe(1);
+  });
+
+  it("fails closed when the retry observes any existing manifest", async () => {
+    let publicationCalls = 0;
+    let verificationCalls = 0;
+    await expect(
+      writeShellPackageManifestCore(
+        {
+          outputPath: path.join(
+            temporaryRoot,
+            "publication-existing-manifest",
+          ),
+          pythonExecutable: testPython ?? process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        {
+          hostPlatform: "win32",
+          verifyPackage: async () => {
+            verificationCalls += 1;
+          },
+          windowsBackend: async (_options, callback) => {
+            publicationCalls += 1;
+            if (publicationCalls === 1) {
+              throw new ShellPackageError(
+                "windows_snapshot_package_sharing_conflict",
+              );
+            }
+            await callback({
+              evidence: {
+                tree: {
+                  files: new Map([[SHELL_MANIFEST_PATH, {}]]),
+                },
+              },
+            });
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "shell_manifest_already_exists",
+    });
+    expect(publicationCalls).toBe(2);
+    expect(verificationCalls).toBe(0);
+  });
+
+  it.each([
+    "windows_snapshot_package_sharing_conflict",
+    "windows_snapshot_source_sharing_conflict",
+  ])("never retries %s from the verification backend", async (code) => {
+    const failure = new ShellPackageError(code);
+    let publicationCalls = 0;
+    let verificationCalls = 0;
+    await expect(
+      writeShellPackageManifestCore(
+        {
+          outputPath: path.join(
+            temporaryRoot,
+            "verification-sharing-no-retry",
+          ),
+          pythonExecutable: testPython ?? process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        {
+          buildWindowsPublicationCommand: async () => ({
+            action: "publish",
+            payload: "e30K",
+            result: null,
+          }),
+          hostPlatform: "win32",
+          verifyPackage: async () => {
+            verificationCalls += 1;
+            throw failure;
+          },
+          windowsBackend: async (_options, callback) => {
+            publicationCalls += 1;
+            await callback({ evidence: {} });
+          },
+        },
+      ),
+    ).rejects.toBe(failure);
+    expect(publicationCalls).toBe(1);
+    expect(verificationCalls).toBe(1);
+  });
+
+  it("keeps the successful Windows path to one publication and one verification", async () => {
+    const events = [];
+    await expect(
+      writeShellPackageManifestCore(
+        {
+          outputPath: path.join(
+            temporaryRoot,
+            "publication-first-success",
+          ),
+          pythonExecutable: testPython ?? process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        {
+          buildWindowsPublicationCommand: async () => {
+            events.push("publish");
+            return {
+              action: "publish",
+              payload: "e30K",
+              result: null,
+            };
+          },
+          hostPlatform: "win32",
+          verifyPackage: async () => {
+            events.push("verification");
+            return { status: "verified" };
+          },
+          windowsBackend: async (_options, callback) => {
+            events.push("publication");
+            await callback({ evidence: {} });
+          },
+        },
+      ),
+    ).resolves.toEqual({ status: "verified" });
+    expect(events).toEqual([
+      "publication",
+      "publish",
+      "verification",
+    ]);
+  });
+
   it("treats cross-volume Windows paths as external", () => {
     expect(
       isWithin(
@@ -527,18 +983,34 @@ describe("Windows boundary helpers", () => {
   });
 
   it("accepts only bounded exact allowlisted snapshot errors", () => {
-    expect(
-      parseWindowsSnapshotError(
-        Buffer.from(
-          "Studio shell snapshot failed: packaged_resource_mismatch\r\n",
-          "utf8",
+    for (const code of [
+      "packaged_resource_mismatch",
+      "windows_snapshot_cleanup_failed",
+      "windows_snapshot_finalize_failed",
+      "windows_snapshot_package_failed",
+      "windows_snapshot_package_sharing_conflict",
+      "windows_snapshot_setup_failed",
+      "windows_snapshot_setup_sharing_conflict",
+      "windows_snapshot_source_failed",
+      "windows_snapshot_source_sharing_conflict",
+    ]) {
+      expect(
+        parseWindowsSnapshotError(
+          Buffer.from(
+            `Studio shell snapshot failed: ${code}\r\n`,
+            "utf8",
+          ),
         ),
-      ),
-    ).toBe("packaged_resource_mismatch");
+      ).toBe(code);
+    }
     for (const invalid of [
       Buffer.from("Studio shell snapshot failed: backend_failure\n", "utf8"),
       Buffer.from(
         "Studio shell snapshot failed: invalid_backend_command\n",
+        "utf8",
+      ),
+      Buffer.from(
+        "Studio shell snapshot failed: windows_snapshot_sharing_conflict\n",
         "utf8",
       ),
       Buffer.from(
@@ -559,6 +1031,261 @@ describe("Windows boundary helpers", () => {
     ]) {
       expect(parseWindowsSnapshotError(invalid)).toBeNull();
     }
+  });
+
+  it.each([
+    [
+      "shell_manifest_publish_failed",
+      "shell_manifest_publish_failed",
+    ],
+    [
+      "windows_snapshot_setup_sharing_conflict",
+      "windows_snapshot_setup_sharing_conflict",
+    ],
+    [
+      "windows_snapshot_package_sharing_conflict",
+      "windows_snapshot_package_sharing_conflict",
+    ],
+    [
+      "windows_snapshot_source_sharing_conflict",
+      "windows_snapshot_source_sharing_conflict",
+    ],
+    ["private_backend_path", "windows_backend_ready_failed"],
+  ])(
+    "maps backend %s evidence to redacted %s",
+    async (backendCode, expectedCode) => {
+      let callbackRan = false;
+      const child = createHungBackend({
+        exitAfterStart: true,
+        initialOutput: Buffer.alloc(0),
+        stderrOutput: Buffer.from(
+          `Studio shell snapshot failed: ${backendCode}\n`,
+          "utf8",
+        ),
+      });
+      const observed = await shellBackendFailure(() =>
+        withWindowsBackend(
+          {
+            outputPath: temporaryRoot,
+            pythonExecutable: process.execPath,
+            sourceRoot: studioRoot,
+            targetId: "win32-x64",
+          },
+          async () => {
+            callbackRan = true;
+            return { action: "finalize", result: null };
+          },
+          {
+            parseEvidence: (report) => report,
+            spawnBackend: () => child.start(),
+            timeoutMs: 100,
+            terminationTimeoutMs: 20,
+          },
+        ),
+      );
+
+      expect(callbackRan).toBe(false);
+      expect(observed).toMatchObject({
+        code: expectedCode,
+        message: expectedCode,
+        name: "ShellPackageError",
+      });
+      expect(observed.message).not.toContain(backendCode === expectedCode
+        ? "private"
+        : backendCode);
+      expectBackendLifecycleDetached(child);
+    },
+  );
+
+  it.each([
+    {
+      code: "windows_backend_ready_failed",
+      createChild: () =>
+        createHungBackend({
+          exitAfterStart: true,
+          initialOutput: Buffer.alloc(0),
+          stderrOutput: Buffer.from("private ready failure\n", "utf8"),
+        }),
+    },
+    {
+      code: "windows_backend_command_failed",
+      createChild: () => {
+        const child = createHungBackend();
+        child.stdin.end = () => {
+          throw new Error("private command failure");
+        };
+        return child;
+      },
+    },
+    {
+      code: "windows_backend_final_failed",
+      createChild: () =>
+        createHungBackend({
+          closeAfterFinal: true,
+          finalExitStatus: 1,
+          stderrOutput: Buffer.from("private final failure\n", "utf8"),
+        }),
+    },
+    {
+      code: "windows_backend_exit_failed",
+      createChild: () =>
+        createHungBackend({
+          closeAfterFinal: true,
+          finalExitStatus: 1,
+          finalOutput: '{"status":"finalized"}\n',
+          stderrOutput: Buffer.from("private exit failure\n", "utf8"),
+        }),
+    },
+  ])("reports the exact $code transport stage", async ({ code, createChild }) => {
+    const child = createChild();
+    const observed = await shellBackendFailure(() =>
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        async () => ({ action: "finalize", result: null }),
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 100,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    );
+
+    expect(observed).toMatchObject({
+      code,
+      message: code,
+      name: "ShellPackageError",
+    });
+    expect(observed.message).not.toContain("private");
+    expectBackendLifecycleDetached(child);
+  });
+
+  it("reports cleanup failure only when no earlier failure exists", async () => {
+    const child = createHungBackend({
+      closeAfterFinal: true,
+      finalOutput: '{"status":"finalized"}\n',
+    });
+    const observed = await shellBackendFailure(() =>
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        async () => ({ action: "finalize", result: null }),
+        {
+          parseEvidence: (report) => report,
+          protocolReaderFactory: () => ({
+            cancel() {
+              throw new Error("private cleanup failure");
+            },
+            end: Promise.resolve({ kind: "end" }),
+            hasPendingLineOverflow: () => false,
+            lines: [
+              Promise.resolve({
+                kind: "line",
+                value: Buffer.from('{"status":"ready"}', "utf8"),
+              }),
+              Promise.resolve({
+                kind: "line",
+                value: Buffer.from('{"status":"finalized"}', "utf8"),
+              }),
+            ],
+          }),
+          spawnBackend: () => child.start(),
+          timeoutMs: 100,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    );
+
+    expect(observed).toMatchObject({
+      code: "windows_backend_cleanup_failed",
+      message: "windows_backend_cleanup_failed",
+      name: "ShellPackageError",
+    });
+    expect(observed.message).not.toContain("private");
+    expectBackendLifecycleDetached(child);
+  });
+
+  it("does not expose a retryable sharing code when backend cleanup fails", async () => {
+    const child = createHungBackend({
+      exitAfterStart: true,
+      initialOutput: Buffer.alloc(0),
+      stderrOutput: Buffer.from(
+        "Studio shell snapshot failed: windows_snapshot_package_sharing_conflict\n",
+        "utf8",
+      ),
+    });
+    const observed = await shellBackendFailure(() =>
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        async () => {
+          throw new Error("callback must not run");
+        },
+        {
+          protocolReaderFactory: () => ({
+            cancel() {
+              throw new Error("private cleanup failure");
+            },
+            end: Promise.resolve({ kind: "end" }),
+            hasPendingLineOverflow: () => false,
+            lines: [
+              Promise.resolve({ kind: "done" }),
+              Promise.resolve({ kind: "done" }),
+            ],
+          }),
+          spawnBackend: () => child.start(),
+          timeoutMs: 100,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    );
+
+    expect(observed).toMatchObject({
+      code: "windows_backend_cleanup_failed",
+      message: "windows_backend_cleanup_failed",
+      name: "ShellPackageError",
+    });
+    expectBackendLifecycleDetached(child);
+  });
+
+  it.each([
+    new ShellPackageError("electron_root_layout_mismatch"),
+    new Error("private callback validation"),
+  ])("preserves callback failures without transport relabeling", async (original) => {
+    const child = createHungBackend();
+    await expect(
+      withWindowsBackend(
+        {
+          outputPath: temporaryRoot,
+          pythonExecutable: process.execPath,
+          sourceRoot: studioRoot,
+          targetId: "win32-x64",
+        },
+        async () => {
+          throw original;
+        },
+        {
+          parseEvidence: (report) => report,
+          spawnBackend: () => child.start(),
+          timeoutMs: 20,
+          terminationTimeoutMs: 20,
+        },
+      ),
+    ).rejects.toBe(original);
+    expectBackendLifecycleDetached(child);
   });
 
   it("maps a missing backend executable without an unhandled rejection", async () => {
@@ -926,6 +1653,117 @@ describe(
   "Studio packaged shell verifier",
   { timeout: process.platform === "win32" ? 60_000 : 10_000 },
   () => {
+  it("pins the literal Electron 43.2.0 Windows root inventory", () => {
+    expect(targetFixtureLayout("win32-x64").rootFiles).toEqual([
+      "LICENSE.electron.txt",
+      "LICENSES.chromium.html",
+      "RPG World Forge Studio.exe",
+      "chrome_100_percent.pak",
+      "chrome_200_percent.pak",
+      "d3dcompiler_47.dll",
+      "dxcompiler.dll",
+      "dxil.dll",
+      "ffmpeg.dll",
+      "icudtl.dat",
+      "libEGL.dll",
+      "libGLESv2.dll",
+      "resources.pak",
+      "snapshot_blob.bin",
+      "v8_context_snapshot.bin",
+      "vk_swiftshader.dll",
+      "vk_swiftshader_icd.json",
+      "vulkan-1.dll",
+    ]);
+  });
+
+  it("opens the Windows package snapshot reader with guard-compatible sharing", () => {
+    const pythonExecutable =
+      testPython ?? (process.platform === "win32" ? "python" : "python3");
+    const probe = spawnSync(
+      pythonExecutable,
+      [
+        "-B",
+        "-c",
+        `
+import json
+import sys
+import types
+from pathlib import Path
+
+from apps.studio.scripts import shell_package_snapshot as snapshot
+
+calls = []
+
+class FakeApi:
+    @staticmethod
+    def state(_handle, _field):
+        return types.SimpleNamespace(
+            identity=(7, 11),
+            is_directory=True,
+            is_reparse=False,
+        )
+
+class FakeChain:
+    def __init__(self, *args, **kwargs):
+        calls.append({
+            "args": [
+                value.as_posix() if isinstance(value, Path) else str(value)
+                for value in args
+            ],
+            "kwargs": kwargs,
+        })
+        if kwargs != {"share_write": True, "writable_leaf": False}:
+            raise PermissionError("guard-incompatible package reader")
+        self.api = FakeApi()
+        self.leaf = 1
+
+    def close(self):
+        pass
+
+module = types.ModuleType("scripts.studio_runtime_assembly")
+module._WindowsDirectoryChain = FakeChain
+sys.modules[module.__name__] = module
+snapshot._WindowsReader = lambda api: types.SimpleNamespace(api=api)
+original_scan = snapshot._WindowsPinnedTree._scan
+snapshot._WindowsPinnedTree._scan = lambda *_args: None
+try:
+    snapshot._WindowsPinnedTree(
+        Path("C:/guarded-package"),
+        share_write=True,
+        writable_leaf=False,
+    )
+finally:
+    snapshot._WindowsPinnedTree._scan = original_scan
+print(json.dumps(calls, sort_keys=True))
+`,
+      ],
+      {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+        env: process.env,
+        maxBuffer: 64 * 1024,
+      },
+    );
+    expect({
+      signal: probe.signal,
+      status: probe.status,
+      stderr: probe.stderr,
+    }).toEqual({
+      signal: null,
+      status: 0,
+      stderr: "",
+    });
+    expect(JSON.parse(probe.stdout)).toEqual([
+      {
+        args: ["C:/guarded-package", "package"],
+        kwargs: {
+          share_write: true,
+          writable_leaf: false,
+        },
+      },
+    ]);
+  });
+
   it.skipIf(!canVerifySecurely)(
     "verifies exact Linux and Windows x64 shell-only layouts",
     async () => {
@@ -956,6 +1794,31 @@ describe(
         });
         expect(result.verified_files).toBeGreaterThan(900);
       }
+    },
+  );
+
+  it.skipIf(!canVerifySecurely)(
+    "rejects missing and extra Windows Electron root files",
+    async () => {
+      const missing = await cloneBase("win32-x64", "missing-dxcompiler");
+      await rm(path.join(missing, "dxcompiler.dll"));
+      await expect(
+        verifyPackagedShell({
+          fuseReader: fixtureFuseReader,
+          outputPath: missing,
+          targetId: "win32-x64",
+        }),
+      ).rejects.toMatchObject({ code: "electron_root_layout_mismatch" });
+
+      const extra = await cloneBase("win32-x64", "extra-root-dll");
+      await writeFile(path.join(extra, "dxcompiler-copy.dll"), "extra\n");
+      await expect(
+        verifyPackagedShell({
+          fuseReader: fixtureFuseReader,
+          outputPath: extra,
+          targetId: "win32-x64",
+        }),
+      ).rejects.toMatchObject({ code: "electron_root_layout_mismatch" });
     },
   );
 
@@ -1245,6 +2108,7 @@ describe(
 
   it("rejects unsafe package outputs before spawning and binds the exact external output", async () => {
     const calls = [];
+    const manifestCalls = [];
     let reservedOutputReal;
     const runner = async (executable, args, options) => {
       calls.push({ args, executable, options });
@@ -1257,6 +2121,9 @@ describe(
     };
     const tools = {
       builderCli: path.join(temporaryRoot, "electron-builder.js"),
+      manifestWriter: async (options) => {
+        manifestCalls.push(options);
+      },
       npmCli: path.join(temporaryRoot, "npm-cli.js"),
       pythonExecutable: testPython,
       runner,
@@ -1335,6 +2202,13 @@ describe(
       "--target",
       "linux-x64",
     ]);
+    expect(manifestCalls).toEqual([
+      {
+        outputPath: path.join(boundOutput, "linux-unpacked"),
+        pythonExecutable: testPython,
+        targetId: "linux-x64",
+      },
+    ]);
     expect((await stat(output)).isDirectory()).toBe(true);
 
     const racedOutput = path.join(temporaryRoot, "raced-shell-output");
@@ -1364,6 +2238,7 @@ describe(
   });
 
   it("retries one exact CRLF EBUSY rename on a fresh reservation and returns its package path", async () => {
+    const pythonExecutable = path.join(temporaryRoot, "python.exe");
     const harness = createPackageRetryHarness({
       builderResults: [
         (boundPath) => ({
@@ -1375,6 +2250,7 @@ describe(
         }),
         { status: 0, stdout: Buffer.alloc(0), stdoutOverflow: false },
       ],
+      pythonExecutable,
     });
     const output = path.join(temporaryRoot, "retry-success");
     const result = await runShellPackage({
@@ -1398,9 +2274,13 @@ describe(
     expect(harness.delayCalls).toEqual([1000]);
     expect(harness.events.map(({ type }) => type)).toEqual([
       "reserve",
+      "builder-exit",
       "close",
       "delay",
       "reserve",
+      "builder-exit",
+      "manifest",
+      "verify",
       "finalize",
       "close",
     ]);
@@ -1425,6 +2305,16 @@ describe(
       path.join(harness.reservations[1].boundPath, "win-unpacked"),
       "--target",
       "win32-x64",
+    ]);
+    expect(harness.manifestCalls).toEqual([
+      {
+        outputPath: path.join(
+          harness.reservations[1].boundPath,
+          "win-unpacked",
+        ),
+        pythonExecutable,
+        targetId: "win32-x64",
+      },
     ]);
     expect(result).toEqual({
       output_path: harness.reservations[1].outputPath,
@@ -1652,6 +2542,118 @@ describe(
       finalizeCount: 0,
     });
   });
+
+  it.each(["linux-x64", "win32-x64"])(
+    "fails closed without retrying when %s post-builder manifest publication fails",
+    async (targetId) => {
+      const manifestError = Object.assign(
+        new Error("private manifest path must stay redacted"),
+        { code: "shell_manifest_publish_failed" },
+      );
+      const harness = createPackageRetryHarness({
+        builderResults: [
+          { status: 0, stdout: Buffer.alloc(0), stdoutOverflow: false },
+        ],
+        manifestError,
+      });
+      const observed = await packageShellFailure(() =>
+        runShellPackage({
+          ...harness.tools,
+          argv: [
+            "--output",
+            path.join(
+              temporaryRoot,
+              `manifest-no-retry-${targetId}`,
+            ),
+            "--target",
+            targetId,
+          ],
+        }),
+      );
+      expect(observed).toMatchObject({
+        code: "package_failed",
+        message: "package_failed",
+        name: "PackageShellError",
+      });
+      expect(observed).not.toHaveProperty(
+        "message",
+        manifestError.message,
+      );
+
+      expect(
+        harness.calls.filter(({ args }) => args[1] === "--dir"),
+      ).toHaveLength(1);
+      expect(
+        harness.calls.filter(
+          ({ args }) =>
+            args[0] ===
+            path.join(studioRoot, "scripts/verify-shell-package.mjs"),
+        ),
+      ).toHaveLength(0);
+      expect(harness.delayCalls).toEqual([]);
+      expect(harness.manifestCalls).toHaveLength(1);
+      expect(harness.events.map(({ type }) => type)).toEqual([
+        "reserve",
+        "builder-exit",
+        "manifest",
+        "close",
+      ]);
+      expect(harness.reservations[0]).toMatchObject({
+        closeCount: 1,
+        finalizeCount: 0,
+      });
+    },
+  );
+
+  it.each([
+    "windows_backend_failed",
+    "shell_manifest_publish_failed",
+  ])(
+    "preserves bounded %s manifest failure evidence without its message",
+    async (code) => {
+      const manifestError = new ShellPackageError(
+        code,
+        `private manifest detail for ${code}`,
+      );
+      const harness = createPackageRetryHarness({
+        builderResults: [
+          { status: 0, stdout: Buffer.alloc(0), stdoutOverflow: false },
+        ],
+        manifestError,
+      });
+      const observed = await packageShellFailure(() =>
+        runShellPackage({
+          ...harness.tools,
+          argv: [
+            "--output",
+            path.join(temporaryRoot, `bounded-manifest-${code}`),
+            "--target",
+            "win32-x64",
+          ],
+        }),
+      );
+
+      expect(observed).toMatchObject({
+        code,
+        message: code,
+        name: "PackageShellError",
+      });
+      expect(observed).not.toHaveProperty(
+        "message",
+        manifestError.message,
+      );
+      expect(harness.events.map(({ type }) => type)).toEqual([
+        "reserve",
+        "builder-exit",
+        "manifest",
+        "close",
+      ]);
+      expect(harness.reservations[0]).toMatchObject({
+        closeCount: 1,
+        finalizeCount: 0,
+      });
+    },
+  );
 
   it("does not retry a finalizer failure", async () => {
     const harness = createPackageRetryHarness({
