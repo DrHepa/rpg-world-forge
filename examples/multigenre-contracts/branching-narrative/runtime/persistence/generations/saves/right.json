@@ -1,0 +1,68 @@
+{
+  "content_hash": "6027c01f43301ae0328db285cea3e9d054e5048b38bea49214c08e64da5cd76a",
+  "format": "world-forge.persistence_generation",
+  "format_version": 1,
+  "kind": "save",
+  "operation": "write",
+  "parent_hashes": [],
+  "payload": {
+    "bindings": {
+      "execution_semantics": {
+        "content_hash": "f43fa43e4c54a2910ae8a99fbbfc0b2556359f95c1c88abef59a2508c9ea5983",
+        "version": 1
+      },
+      "gamepack": {
+        "content_hash": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+        "format": "world-forge.gamepack",
+        "format_version": 1,
+        "id": "branching_narrative"
+      },
+      "runtime_api": {
+        "id": "gamepack_runtime",
+        "version": "1.0.0"
+      },
+      "runtime_bundle": {
+        "content_hash": "c1d27383c0f816135f637c4ae0345741f65a563c8b99a7556734c11f08f48f31",
+        "format": "world-forge.game_runtime_bundle",
+        "format_version": 1,
+        "id": "game_runtime_bundle_72bfb9be044f4742627750e64edc459d93efbe4f6cd38047"
+      },
+      "runtime_composition": {
+        "content_hash": "7a5d2f0aaa6ff0f5f68643c868adfd8fef4947d999b0bcc9a0d245bf538a1994",
+        "format": "world-forge.game_runtime_composition",
+        "format_version": 1,
+        "id": "runtime_composition_b378850799890a8db800f4b68bfcee7b3af7ece5"
+      }
+    },
+    "content_hash": "d859d8edbe71ac8092065799b94582210927c0abd32ff6d007a21b2b548d30c9",
+    "format": "world-forge.game_save",
+    "format_version": 1,
+    "save_id": "game_save_065b7d858c223f7467e5a7ca46cc7f51d86bf183520acff7",
+    "state": {
+      "classification": {
+        "ending_ids": [
+          "ending_right"
+        ],
+        "ending_kind": "success",
+        "failure_ids": [],
+        "goal_ids": [
+          "reach_right"
+        ],
+        "recovery_action_ids": [],
+        "terminal": true
+      },
+      "restored_state_hash": "a91e46da8e98f6b24bc1add282a76463426477e08d5ab7a0cca5d2df27e23a89",
+      "saved": {
+        "choice_state": "right",
+        "knowledge": [
+          "learned_right"
+        ],
+        "wf_internal_narrative_cursor": "ending_right"
+      },
+      "saved_hash": "a91e46da8e98f6b24bc1add282a76463426477e08d5ab7a0cca5d2df27e23a89"
+    }
+  },
+  "payload_hash": "d859d8edbe71ac8092065799b94582210927c0abd32ff6d007a21b2b548d30c9",
+  "sequence": 0,
+  "slot": "right"
+}

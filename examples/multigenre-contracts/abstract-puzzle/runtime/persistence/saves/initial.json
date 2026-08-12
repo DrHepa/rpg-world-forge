@@ -1,0 +1,59 @@
+{
+  "bindings": {
+    "execution_semantics": {
+      "content_hash": "f43fa43e4c54a2910ae8a99fbbfc0b2556359f95c1c88abef59a2508c9ea5983",
+      "version": 1
+    },
+    "gamepack": {
+      "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "abstract_puzzle"
+    },
+    "runtime_api": {
+      "id": "gamepack_runtime",
+      "version": "1.0.0"
+    },
+    "runtime_bundle": {
+      "content_hash": "a31c78621f8b824bce53faed5626d716e10a280c367449e811d62d0e359fb374",
+      "format": "world-forge.game_runtime_bundle",
+      "format_version": 1,
+      "id": "game_runtime_bundle_8e671ce34a653c62d12cb67dae47a73a7708fa3feca425b0"
+    },
+    "runtime_composition": {
+      "content_hash": "c1dfd0f58d00b245fcd68aee83f25c0bb7a0dfc4b38a5f3abddbe3c35b015451",
+      "format": "world-forge.game_runtime_composition",
+      "format_version": 1,
+      "id": "runtime_composition_a0b24f677435859d28937c9e97cf6af44c2d2b2b"
+    }
+  },
+  "content_hash": "411ad089045a59d6a777a483284d5b2c2afbfe9f7ba11fea83f8d934d7a83b3e",
+  "format": "world-forge.game_save",
+  "format_version": 1,
+  "save_id": "game_save_374c6ba9e6a2572069f3ceec54eaabfb373629ea44a6db1c",
+  "state": {
+    "classification": {
+      "ending_ids": [],
+      "ending_kind": null,
+      "failure_ids": [],
+      "goal_ids": [],
+      "recovery_action_ids": [],
+      "terminal": false
+    },
+    "restored_state_hash": "0e45dbe418fea6b992d47cc9099d83a733c57ea64ae2c994d2d1e225f9a14bad",
+    "saved": {
+      "board": [
+        "B",
+        "A",
+        "C"
+      ],
+      "move_count": 0,
+      "target": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    "saved_hash": "0e45dbe418fea6b992d47cc9099d83a733c57ea64ae2c994d2d1e225f9a14bad"
+  }
+}

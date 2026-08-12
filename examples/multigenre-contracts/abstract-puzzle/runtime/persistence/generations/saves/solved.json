@@ -1,0 +1,74 @@
+{
+  "content_hash": "b65aee71850fdb4fff58df6ffc64c2942bed4ecc0e3b617792c8e4287c86fe41",
+  "format": "world-forge.persistence_generation",
+  "format_version": 1,
+  "kind": "save",
+  "operation": "write",
+  "parent_hashes": [],
+  "payload": {
+    "bindings": {
+      "execution_semantics": {
+        "content_hash": "f43fa43e4c54a2910ae8a99fbbfc0b2556359f95c1c88abef59a2508c9ea5983",
+        "version": 1
+      },
+      "gamepack": {
+        "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+        "format": "world-forge.gamepack",
+        "format_version": 1,
+        "id": "abstract_puzzle"
+      },
+      "runtime_api": {
+        "id": "gamepack_runtime",
+        "version": "1.0.0"
+      },
+      "runtime_bundle": {
+        "content_hash": "a31c78621f8b824bce53faed5626d716e10a280c367449e811d62d0e359fb374",
+        "format": "world-forge.game_runtime_bundle",
+        "format_version": 1,
+        "id": "game_runtime_bundle_8e671ce34a653c62d12cb67dae47a73a7708fa3feca425b0"
+      },
+      "runtime_composition": {
+        "content_hash": "c1dfd0f58d00b245fcd68aee83f25c0bb7a0dfc4b38a5f3abddbe3c35b015451",
+        "format": "world-forge.game_runtime_composition",
+        "format_version": 1,
+        "id": "runtime_composition_a0b24f677435859d28937c9e97cf6af44c2d2b2b"
+      }
+    },
+    "content_hash": "06f209e4bbbbdc4014a09f7c2980a6812bb46a36671fb925146814141dd136ea",
+    "format": "world-forge.game_save",
+    "format_version": 1,
+    "save_id": "game_save_c71e4564559d31e03b6df4af412c39bc6e8527fbc1b62980",
+    "state": {
+      "classification": {
+        "ending_ids": [
+          "puzzle_complete"
+        ],
+        "ending_kind": "success",
+        "failure_ids": [],
+        "goal_ids": [
+          "solved"
+        ],
+        "recovery_action_ids": [],
+        "terminal": true
+      },
+      "restored_state_hash": "aebcc840113a83fcdceafc2ddab957ecd42198d1cd5c76812065fe720aa906ca",
+      "saved": {
+        "board": [
+          "A",
+          "B",
+          "C"
+        ],
+        "move_count": 1,
+        "target": [
+          "A",
+          "B",
+          "C"
+        ]
+      },
+      "saved_hash": "aebcc840113a83fcdceafc2ddab957ecd42198d1cd5c76812065fe720aa906ca"
+    }
+  },
+  "payload_hash": "06f209e4bbbbdc4014a09f7c2980a6812bb46a36671fb925146814141dd136ea",
+  "sequence": 0,
+  "slot": "solved"
+}

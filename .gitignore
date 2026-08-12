@@ -12,3 +12,20 @@ node_modules/
 .DS_Store
 *.log
 saves/
+# Canonical generated multigenre persistence fixtures are source fixtures, not user saves.
+!examples/multigenre-contracts/abstract-puzzle/runtime/persistence/saves/
+examples/multigenre-contracts/abstract-puzzle/runtime/persistence/saves/*
+!examples/multigenre-contracts/abstract-puzzle/runtime/persistence/saves/initial.json
+!examples/multigenre-contracts/abstract-puzzle/runtime/persistence/saves/solved.json
+!examples/multigenre-contracts/abstract-puzzle/runtime/persistence/generations/saves/
+examples/multigenre-contracts/abstract-puzzle/runtime/persistence/generations/saves/*
+!examples/multigenre-contracts/abstract-puzzle/runtime/persistence/generations/saves/initial.json
+!examples/multigenre-contracts/abstract-puzzle/runtime/persistence/generations/saves/solved.json
+!examples/multigenre-contracts/branching-narrative/runtime/persistence/saves/
+examples/multigenre-contracts/branching-narrative/runtime/persistence/saves/*
+!examples/multigenre-contracts/branching-narrative/runtime/persistence/saves/left.json
+!examples/multigenre-contracts/branching-narrative/runtime/persistence/saves/right.json
+!examples/multigenre-contracts/branching-narrative/runtime/persistence/generations/saves/
+examples/multigenre-contracts/branching-narrative/runtime/persistence/generations/saves/*
+!examples/multigenre-contracts/branching-narrative/runtime/persistence/generations/saves/left.json
+!examples/multigenre-contracts/branching-narrative/runtime/persistence/generations/saves/right.json
