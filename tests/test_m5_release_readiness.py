@@ -29,8 +29,20 @@ PIP_AUDIT_ACTION_SHA = "1220774d901786e6f652ae159f7b6bc8fea6d266"
 SETUP_NODE_SHA = "49933ea5288caeca8642d1e84afbd3f7d6820020"
 GITLEAKS_CHECKSUM_FILE_SHA256 = "061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae"
 GITLEAKS_LINUX_X64_SHA256 = "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
-GITLEAKS_IGNORED_FINGERPRINT = (
-    "92b3134cb549bb625fcd71b202096c308e74ff09:tests/test_architecture.py:aws-access-token:405"
+GITLEAKS_IGNORED_FINGERPRINTS = (
+    # Intentional AWS-shaped historical fixture used to prove architecture redaction.
+    "92b3134cb549bb625fcd71b202096c308e74ff09:tests/test_architecture.py:aws-access-token:405",
+    # Intentional credential-shaped HEAD fixtures used to prove runtime-notice rejection.
+    "047b04b53e1c30c1c9590e88b7b4d25e45989aab:"
+    "apps/studio/tests/main/generic-asset-contracts.test.ts:aws-access-token:1059",
+    "047b04b53e1c30c1c9590e88b7b4d25e45989aab:"
+    "apps/studio/tests/main/generic-asset-contracts.test.ts:jwt:1053",
+    "047b04b53e1c30c1c9590e88b7b4d25e45989aab:"
+    "apps/studio/tests/main/generic-asset-contracts.test.ts:jwt:1057",
+    "047b04b53e1c30c1c9590e88b7b4d25e45989aab:"
+    "apps/studio/tests/main/generic-asset-contracts.test.ts:jwt:1061",
+    "047b04b53e1c30c1c9590e88b7b4d25e45989aab:"
+    "tests/test_multigenre_asset_production.py:aws-access-token:2571",
 )
 
 
@@ -151,7 +163,7 @@ class M5ReleaseReadinessTests(unittest.TestCase):
             for line in (ROOT / ".gitleaksignore").read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.lstrip().startswith("#")
         ]
-        self.assertEqual([GITLEAKS_IGNORED_FINGERPRINT], ignored)
+        self.assertEqual(list(GITLEAKS_IGNORED_FINGERPRINTS), ignored)
 
     def test_dependency_audit_combines_python_and_studio_lock_security_without_check_drift(
         self,
