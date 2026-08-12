@@ -1,0 +1,143 @@
+{
+  "asset": {
+    "asset_id": "narrative_ui_font",
+    "content_hash": "6ccea45b94c41e7f34c12c3f428d61a0a281bbeba8db8a050e9e8e66027f3748"
+  },
+  "authority": {
+    "artifact_snapshot_hash": "e61740b836a5ad90ea77774df737a36232bfb3436e7bae48710f322f73e3b11c",
+    "producer_job_id": "fixture-branching-narrative-review",
+    "producer_operation": "asset.qa.review",
+    "producer_output_position": 0,
+    "root_generation": 1,
+    "source_revision": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+    "workflow_status_hash": null,
+    "workspace_id": "fixture-branching-narrative"
+  },
+  "blockers": [],
+  "content_hash": "4a164a0409f77a489d6784b2ada1df29a20be93c8e6d7f30e08e794ff4d2df01",
+  "criteria": [
+    {
+      "criterion_index": 0,
+      "criterion_sha256": "37c69cd97d5a85e5cc841340cbfc07d1c266bb5a7a94b3b7a9e8b8db95835ebe",
+      "decision": "approved"
+    },
+    {
+      "criterion_index": 1,
+      "criterion_sha256": "1011a89946c83a67619822427f6662fb944a60d4c9148711d641acd1bdf1f113",
+      "decision": "approved"
+    },
+    {
+      "criterion_index": 2,
+      "criterion_sha256": "1d5b61e155400f2f01c71b0e4b4ef966693371e9921c3b5181650607ee98cb77",
+      "decision": "approved"
+    },
+    {
+      "criterion_index": 3,
+      "criterion_sha256": "d879e3de5dc3486c4532300136b8b9f5f564e73a9376f313c7f09d11b7530601",
+      "decision": "approved"
+    },
+    {
+      "criterion_index": 4,
+      "criterion_sha256": "ce2875b86f61de0b1763da885b7627e222f270754bc6afc575ff72f27e58b897",
+      "decision": "approved"
+    },
+    {
+      "criterion_index": 5,
+      "criterion_sha256": "f7661b18ddb412bc1ebd8718a2f1cfc68f0d496e15c434b36fd16820891d1eed",
+      "decision": "approved"
+    }
+  ],
+  "format": "world-forge.asset_qa_review_receipt",
+  "format_version": 1,
+  "lineage": {
+    "asset_subject": {
+      "content_hash": "6fd06c5f7cd165c24815dce3651b6d3c00a55af7b8b4cfe8cccf08880d81c436",
+      "format": "world-forge.asset_subject",
+      "format_version": 1,
+      "id": "asset_subject_efe08b26fd743010caa1e27f472b67300594df87e3b955da"
+    },
+    "gamepack": {
+      "content_hash": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "branching_narrative"
+    },
+    "inventory": {
+      "content_hash": "30ce782cac942ca1388a6d588b337315b041255f6b19ece15de32660856411fb",
+      "format": "world-forge.asset_inventory",
+      "format_version": 1,
+      "id": "asset_inventory_aad1ff36087fa98580e94a50251becee8573446a82f94644"
+    },
+    "processing_receipt": {
+      "content_hash": "455b34fa4730406269b9f3b535d1a2a9461d6eaac6ad72e36d4d769a34a45ca8",
+      "format": "world-forge.asset_processing_receipt",
+      "format_version": 1,
+      "id": "narrative_ui_font_processing_receipt"
+    },
+    "provenance": {
+      "content_hash": "46c6dbb770e84f595989e5902e9589d18bf9025727028e75d529b7055e1e5517",
+      "format": "world-forge.asset_provenance_record",
+      "format_version": 1,
+      "id": "narrative_ui_font_provenance"
+    },
+    "qa_report": {
+      "content_hash": "718da120a7b57b4ac27d78c06b7e281b92f78520e3c2c8fd4ea8f3704d2b286a",
+      "format": "world-forge.asset_qa_report",
+      "format_version": 1,
+      "id": "narrative_ui_font_qa"
+    },
+    "receipt": {
+      "content_hash": "302cd0ba724b01d2ed8333845f28042e93155750288959428567a33967432971",
+      "format": "world-forge.asset_production_receipt",
+      "format_version": 1,
+      "id": "narrative_ui_font_receipt"
+    },
+    "recipe": {
+      "content_hash": "692f522d9290b6c699d025dc37a84b40ea09bac8a62f58eecd5600dbf3ccef40",
+      "format": "world-forge.asset_processing_recipe",
+      "format_version": 1,
+      "id": "narrative_ui_font_recipe"
+    },
+    "request": {
+      "content_hash": "6ae7b43a97edadaf6488542fe9d37ad40cf9ca3f15a2b12e10435df1dabc6168",
+      "format": "world-forge.asset_production_request",
+      "format_version": 1,
+      "id": "narrative_ui_font_production"
+    },
+    "selection": {
+      "content_hash": "d3cf181977fbaae7a43b386bdebd2d2499781cd8efd9a06defd32447243c45bb",
+      "format": "world-forge.asset_selection",
+      "format_version": 1,
+      "id": "narrative_ui_font_selection"
+    },
+    "specification": {
+      "content_hash": "c4f43e0b3946a41d06acdb5d38592e46cd639ac7a4186131ef1a59581059e06c",
+      "format": "world-forge.asset_spec",
+      "format_version": 1,
+      "id": "asset_spec_33a7372ab32b16c2841f4319ca650431650f26b2eb864d96"
+    },
+    "style": {
+      "content_hash": "eeeb3646e1d147a8d12dea84f4679a040e345f46515fa93549ae99c1c050f3ce",
+      "format": "world-forge.asset_style",
+      "format_version": 1,
+      "id": "asset_style_9af744600a9d03176b05b09be22a9de246854f8bed5d739a"
+    },
+    "target": {
+      "content_hash": "d09f6f717b61572dfa370fedab2e0a3ddb6b28cb2334f64da29c1adc58d25162",
+      "format": "world-forge.asset_target",
+      "format_version": 1,
+      "id": "asset_target_bcecafb47e27ced2a30ad4cffe40f990348fca66cd0df9f2"
+    }
+  },
+  "review_receipt_id": "branching_narrative_font_qa_review",
+  "reviewed_output": {
+    "candidate_artifact_id": "narrative_ui_font_candidate",
+    "locator": "assets/production/narrative_ui_font/processed/font/narrative-ui.ttf",
+    "media_type": "font/ttf",
+    "role": "font",
+    "runtime_path": "assets/fonts/narrative-ui.ttf",
+    "sha256": "c7362ddaf3102b66b24e4ea5a566b9cd339b082b14165fc73ba04f76f8a2273e",
+    "size_bytes": 28748
+  },
+  "status": "approved"
+}

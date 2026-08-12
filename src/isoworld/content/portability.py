@@ -4,9 +4,11 @@ import unicodedata
 from pathlib import PurePosixPath
 
 WINDOWS_RESERVED_NAMES = frozenset(
-    {"aux", "con", "nul", "prn"}
+    {"aux", "con", "conin$", "conout$", "nul", "prn"}
     | {f"com{number}" for number in range(1, 10)}
     | {f"lpt{number}" for number in range(1, 10)}
+    | {f"com{number}" for number in "¹²³"}
+    | {f"lpt{number}" for number in "¹²³"}
 )
 
 

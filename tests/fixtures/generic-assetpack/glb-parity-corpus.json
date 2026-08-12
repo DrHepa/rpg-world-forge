@@ -1,0 +1,179 @@
+{
+  "cases": [
+    {
+      "expected_valid": true,
+      "id": "baseline",
+      "operations": []
+    },
+    {
+      "expected_valid": false,
+      "id": "empty_node_name",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "nodes",
+            0,
+            "name"
+          ],
+          "value": ""
+        }
+      ]
+    },
+    {
+      "expected_valid": false,
+      "id": "empty_animation_name",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "animations",
+            0,
+            "name"
+          ],
+          "value": ""
+        }
+      ]
+    },
+    {
+      "expected_valid": false,
+      "id": "normalized_index_accessor",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "accessors",
+            1,
+            "normalized"
+          ],
+          "value": true
+        }
+      ]
+    },
+    {
+      "expected_valid": false,
+      "id": "matrix_with_translation",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "nodes",
+            0,
+            "matrix"
+          ],
+          "value": [
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "op": "set",
+          "path": [
+            "nodes",
+            0,
+            "translation"
+          ],
+          "value": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "expected_valid": false,
+      "id": "multiple_node_parents",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "nodes"
+          ],
+          "value": [
+            {
+              "children": [
+                2
+              ],
+              "name": "ParentA"
+            },
+            {
+              "children": [
+                2
+              ],
+              "name": "ParentB"
+            },
+            {
+              "mesh": 0,
+              "name": "Child"
+            }
+          ]
+        },
+        {
+          "op": "set",
+          "path": [
+            "scenes",
+            0,
+            "nodes"
+          ],
+          "value": [
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "expected_valid": false,
+      "id": "scene_references_non_root",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "nodes"
+          ],
+          "value": [
+            {
+              "children": [
+                1
+              ],
+              "name": "Parent"
+            },
+            {
+              "mesh": 0,
+              "name": "Child"
+            }
+          ]
+        },
+        {
+          "op": "set",
+          "path": [
+            "scenes",
+            0,
+            "nodes"
+          ],
+          "value": [
+            1
+          ]
+        }
+      ]
+    }
+  ],
+  "format": "world-forge.generic_assetpack_glb_parity_corpus",
+  "format_version": 1,
+  "source": "examples/m5-neutral/assetpack/processed/neutral_actor_3d/neutral_actor_3d.glb"
+}

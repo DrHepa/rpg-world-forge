@@ -5,12 +5,14 @@ import { pathToFileURL } from "node:url";
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   net,
   protocol,
   session,
 } from "electron";
 
+import { resolveStudioEnvironment } from "../../scripts/studio-environment.mjs";
 import { ForgeServiceSupervisor, UnavailableForgeService, type ForgeServiceClient } from "./forge-service";
 import {
   UnavailableCodexBridge,
@@ -21,6 +23,7 @@ import {
   ApplicationLifecycleCoordinator,
   ApplicationQuitGate,
 } from "./app-lifecycle";
+import { createStudioAuthorityModalClient } from "./authority-modal";
 import { registerStudioIpc } from "./ipc";
 import { resolveCodexRuntime, resolveForgeServiceLaunch } from "./runtime-manifest";
 import {
@@ -31,7 +34,12 @@ import {
   STUDIO_ENTRY_URL,
   STUDIO_SCHEME,
 } from "./security";
+import {
+  pinLegacyStudioUserDataRoot,
+  STUDIO_PRODUCT_NAME,
+} from "./studio-identity";
 
+resolveStudioEnvironment(process.env);
 protocol.registerSchemesAsPrivileged([
   {
     scheme: STUDIO_SCHEME,
@@ -45,6 +53,7 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+pinLegacyStudioUserDataRoot(app);
 app.enableSandbox();
 
 if (!app.requestSingleInstanceLock()) {
@@ -74,7 +83,15 @@ async function startApplication(
   const codex = await createCodexBridge(service, dataDir);
   lifecycle.ownCodex(codex);
   const window = createMainWindow();
-  const unregisterIpc = registerStudioIpc(ipcMain, window, service, codex);
+  const unregisterIpc = registerStudioIpc(
+    ipcMain,
+    window,
+    service,
+    codex,
+    dialog,
+    undefined,
+    { authorityModal: createStudioAuthorityModalClient(ipcMain) },
+  );
   lifecycle.ownIpc(unregisterIpc);
   await window.loadURL(STUDIO_ENTRY_URL);
 }
@@ -122,7 +139,7 @@ function createMainWindow(): BrowserWindow {
     minWidth: 860,
     minHeight: 620,
     show: false,
-    title: "RPG World Forge Studio",
+    title: STUDIO_PRODUCT_NAME,
     backgroundColor: "#11151c",
     autoHideMenuBar: true,
     webPreferences: {

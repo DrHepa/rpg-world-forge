@@ -1,0 +1,250 @@
+{
+  "actions": [
+    {
+      "core_verb_id": "direct",
+      "id": "direct_faction",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "faction_campaign"
+        },
+        {
+          "kind": "system",
+          "source_id": "faction_influence_system"
+        }
+      ]
+    },
+    {
+      "core_verb_id": "restart",
+      "id": "restart_scenario",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "faction_campaign"
+        }
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "action_id": null,
+      "id": "scenario_ready",
+      "operator": "constant",
+      "value": true
+    },
+    {
+      "action_id": null,
+      "comparison": "greater_or_equal",
+      "id": "victory_condition",
+      "left": {
+        "kind": "state",
+        "state_id": "faction_influence"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 3,
+        "value_type": "integer"
+      }
+    }
+  ],
+  "content_hash": "3cb02d841901c126401580064efb5f2cdbeb7e57cd9ae3e1a7db15965d11b5ba",
+  "effects": [
+    {
+      "action_id": "direct_faction",
+      "amount": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      },
+      "id": "advance_progress",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "faction_influence"
+    },
+    {
+      "action_id": "restart_scenario",
+      "id": "reset_progress",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "faction_influence"
+    }
+  ],
+  "endings": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [],
+      "id": "scenario_complete",
+      "kind": "success",
+      "presentation_hook_ids": [
+        "ending_feedback"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "progress_advanced"
+    },
+    {
+      "id": "scenario_restarted"
+    }
+  ],
+  "extensions": [],
+  "failures": [],
+  "format": "world-forge.logic_module",
+  "format_version": 1,
+  "goals": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "id": "authored_victory",
+      "success_ending_id": "scenario_complete"
+    }
+  ],
+  "mechanics": [
+    {
+      "action_id": "direct_faction",
+      "asset_binding_ids": [
+        "strategy_map_visual"
+      ],
+      "authoritative_state_ids": [
+        "faction_influence"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "direct",
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "faction_direction",
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ]
+    },
+    {
+      "action_id": "restart_scenario",
+      "asset_binding_ids": [
+        "strategy_map_visual"
+      ],
+      "authoritative_state_ids": [
+        "faction_influence"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "restart",
+      "effect_ids": [
+        "reset_progress"
+      ],
+      "event_ids": [
+        "scenario_restarted"
+      ],
+      "id": "restart_mechanic",
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ]
+    }
+  ],
+  "module_id": "faction_strategy_logic",
+  "presentation_hooks": [
+    {
+      "asset_binding_ids": [
+        "strategy_map_visual"
+      ],
+      "id": "ending_feedback",
+      "kind": "ending"
+    },
+    {
+      "asset_binding_ids": [
+        "strategy_map_visual"
+      ],
+      "id": "progress_feedback",
+      "kind": "feedback"
+    },
+    {
+      "asset_binding_ids": [
+        "strategy_map_visual"
+      ],
+      "id": "progress_view",
+      "kind": "board"
+    }
+  ],
+  "project_id": "faction_strategy",
+  "rules": [
+    {
+      "action_id": "direct_faction",
+      "condition_ids": [],
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "advance_rule",
+      "order": 0
+    },
+    {
+      "action_id": "restart_scenario",
+      "condition_ids": [],
+      "effect_ids": [
+        "reset_progress"
+      ],
+      "event_ids": [
+        "scenario_restarted"
+      ],
+      "id": "restart_rule",
+      "order": 1
+    }
+  ],
+  "state_variables": [
+    {
+      "id": "faction_influence",
+      "initial": 0,
+      "maximum": 3,
+      "minimum": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "integer"
+    }
+  ],
+  "title": "Neutral authored strategy logic"
+}

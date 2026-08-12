@@ -15,6 +15,7 @@ from worldforge.asset_io import (
     artifact_reference,
     bind_content_hash,
     write_json_atomic,
+    write_json_cooperative_replace,
 )
 from worldforge.asset_manifest_v3 import bind_asset_plan
 from worldforge.assets import init_asset_manifest, validate_asset_manifest
@@ -391,10 +392,9 @@ class M5PlanTests(unittest.TestCase):
                 manifest.parent,
                 "target-copy.json",
             )
-            write_json_atomic(
+            write_json_cooperative_replace(
                 manifest,
                 bind_content_hash(manifest_raw),
-                overwrite=True,
             )
             canonical_report = root / "p12-target-substitution.json"
             write_json_atomic(
@@ -452,7 +452,7 @@ class M5PlanTests(unittest.TestCase):
                 "content_hash": pack["content_hash"],
             }
             manifest_raw = bind_content_hash(manifest_raw)
-            write_json_atomic(manifest, manifest_raw, overwrite=True)
+            write_json_cooperative_replace(manifest, manifest_raw)
             manifest_copy = root / "assets/manifest-copy.json"
             manifest_copy.write_bytes(manifest.read_bytes())
 
@@ -502,7 +502,7 @@ class M5PlanTests(unittest.TestCase):
                         },
                     }
                 )
-                write_json_atomic(manifest, wrong_content_hash, overwrite=True)
+                write_json_cooperative_replace(manifest, wrong_content_hash)
                 _, content_hash_errors = validate_phase_report(root, matching_path)
 
                 wrong_sha = bind_content_hash(
@@ -514,10 +514,10 @@ class M5PlanTests(unittest.TestCase):
                         },
                     }
                 )
-                write_json_atomic(manifest, wrong_sha, overwrite=True)
+                write_json_cooperative_replace(manifest, wrong_sha)
                 _, sha_errors = validate_phase_report(root, matching_path)
 
-                write_json_atomic(manifest, manifest_raw, overwrite=True)
+                write_json_cooperative_replace(manifest, manifest_raw)
                 completed = complete_phase(root, matching_path)
 
             self.assertEqual([], matching_errors)
@@ -575,7 +575,7 @@ class M5PlanTests(unittest.TestCase):
                     expected_manifest_hash="0" * 64,
                 )
 
-    def test_bind_plan_cas_preserves_manifest_changed_during_validation(self) -> None:
+    def test_bind_plan_cooperative_hash_preserves_change_before_lock(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "world"
             _, manifest, inventory_path, _ = _prepare_bound_plan(root)
@@ -583,7 +583,7 @@ class M5PlanTests(unittest.TestCase):
             concurrent = json.loads(json.dumps(initial))
             concurrent["generation_policy"]["enabled_routes"] = ["local", "openai"]
             concurrent = bind_content_hash(concurrent)
-            original_write = asset_manifest_module.write_json_atomic
+            original_write = asset_manifest_module.write_json_cooperative_replace
 
             def change_manifest_before_publish(
                 path: str | Path,
@@ -597,7 +597,7 @@ class M5PlanTests(unittest.TestCase):
             with (
                 patch.object(
                     asset_manifest_module,
-                    "write_json_atomic",
+                    "write_json_cooperative_replace",
                     side_effect=change_manifest_before_publish,
                 ),
                 self.assertRaisesRegex(AssetContractError, "Content changed before publishing"),

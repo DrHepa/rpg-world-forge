@@ -1,0 +1,1295 @@
+{
+  "$id": "https://world-forge.local/schemas/creation-profile.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "world": {
+            "properties": {
+              "presence": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "presence"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "world"
+        ]
+      },
+      "then": {
+        "properties": {
+          "gameplay": {
+            "properties": {
+              "dependencies": {
+                "properties": {
+                  "authored": {
+                    "not": {
+                      "contains": {
+                        "pattern": "^world:",
+                        "type": "string"
+                      }
+                    },
+                    "type": "array"
+                  },
+                  "procedural": {
+                    "not": {
+                      "contains": {
+                        "pattern": "^world:",
+                        "type": "string"
+                      }
+                    },
+                    "type": "array"
+                  },
+                  "systemic": {
+                    "not": {
+                      "contains": {
+                        "pattern": "^world:",
+                        "type": "string"
+                      }
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "production": {
+            "properties": {
+              "content_modes": {
+                "properties": {
+                  "world": {
+                    "const": "not_applicable"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "runtime_target": {
+            "properties": {
+              "optional_features": {
+                "not": {
+                  "contains": {
+                    "pattern": "^world:",
+                    "type": "string"
+                  }
+                },
+                "type": "array"
+              },
+              "required_features": {
+                "not": {
+                  "contains": {
+                    "pattern": "^world:",
+                    "type": "string"
+                  }
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "narrative": {
+            "properties": {
+              "requirement": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "requirement"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "narrative"
+        ]
+      },
+      "then": {
+        "properties": {
+          "gameplay": {
+            "properties": {
+              "dependencies": {
+                "properties": {
+                  "authored": {
+                    "not": {
+                      "contains": {
+                        "pattern": "^narrative:",
+                        "type": "string"
+                      }
+                    },
+                    "type": "array"
+                  },
+                  "procedural": {
+                    "not": {
+                      "contains": {
+                        "pattern": "^narrative:",
+                        "type": "string"
+                      }
+                    },
+                    "type": "array"
+                  },
+                  "systemic": {
+                    "not": {
+                      "contains": {
+                        "pattern": "^narrative:",
+                        "type": "string"
+                      }
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "production": {
+            "properties": {
+              "content_modes": {
+                "properties": {
+                  "narrative": {
+                    "const": "not_applicable"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "runtime_target": {
+            "properties": {
+              "optional_features": {
+                "not": {
+                  "contains": {
+                    "pattern": "^narrative:",
+                    "type": "string"
+                  }
+                },
+                "type": "array"
+              },
+              "required_features": {
+                "not": {
+                  "contains": {
+                    "pattern": "^narrative:",
+                    "type": "string"
+                  }
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "presentation": {
+              "properties": {
+                "mode": {
+                  "const": "text"
+                }
+              },
+              "type": "object"
+            },
+            "runtime_target": {
+              "properties": {
+                "presentation_mode": {
+                  "const": "text"
+                }
+              },
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "presentation": {
+              "properties": {
+                "mode": {
+                  "const": "2d"
+                }
+              },
+              "type": "object"
+            },
+            "runtime_target": {
+              "properties": {
+                "presentation_mode": {
+                  "const": "2d"
+                }
+              },
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "presentation": {
+              "properties": {
+                "mode": {
+                  "const": "2_5d"
+                }
+              },
+              "type": "object"
+            },
+            "runtime_target": {
+              "properties": {
+                "presentation_mode": {
+                  "const": "2_5d"
+                }
+              },
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "presentation": {
+              "properties": {
+                "mode": {
+                  "const": "3d"
+                }
+              },
+              "type": "object"
+            },
+            "runtime_target": {
+              "properties": {
+                "presentation_mode": {
+                  "const": "3d"
+                }
+              },
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "presentation": {
+              "properties": {
+                "mode": {
+                  "const": "mixed"
+                }
+              },
+              "type": "object"
+            },
+            "runtime_target": {
+              "properties": {
+                "presentation_mode": {
+                  "const": "mixed"
+                }
+              },
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "presentation": {
+              "properties": {
+                "mode": {
+                  "const": "vr"
+                }
+              },
+              "type": "object"
+            },
+            "runtime_target": {
+              "properties": {
+                "presentation_mode": {
+                  "const": "vr"
+                }
+              },
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "presentation": {
+              "properties": {
+                "mode": {
+                  "const": "ar"
+                }
+              },
+              "type": "object"
+            },
+            "runtime_target": {
+              "properties": {
+                "presentation_mode": {
+                  "const": "ar"
+                }
+              },
+              "type": "object"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "experience": {
+      "$ref": "#/$defs/experience"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/extension"
+      },
+      "type": "array"
+    },
+    "fiction": {
+      "$ref": "#/$defs/fiction"
+    },
+    "format": {
+      "const": "world-forge.creation_profile"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "gameplay": {
+      "$ref": "#/$defs/gameplay"
+    },
+    "narrative": {
+      "$ref": "#/$defs/narrative"
+    },
+    "presentation": {
+      "$ref": "#/$defs/presentation"
+    },
+    "production": {
+      "$ref": "#/$defs/production"
+    },
+    "profile_id": {
+      "$ref": "#/$defs/id"
+    },
+    "project_id": {
+      "$ref": "#/$defs/id"
+    },
+    "runtime_target": {
+      "$ref": "#/$defs/runtimeTarget"
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "world": {
+      "$ref": "#/$defs/world"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "profile_id",
+    "project_id",
+    "title",
+    "experience",
+    "gameplay",
+    "world",
+    "narrative",
+    "fiction",
+    "presentation",
+    "production",
+    "runtime_target",
+    "extensions",
+    "content_hash"
+  ],
+  "title": "World Forge creation profile v1",
+  "type": "object",
+  "$defs": {
+    "accessibility": {
+      "additionalProperties": false,
+      "properties": {
+        "captions": {
+          "type": "boolean"
+        },
+        "color_independence": {
+          "type": "boolean"
+        },
+        "high_contrast": {
+          "type": "boolean"
+        },
+        "keyboard_only": {
+          "type": "boolean"
+        },
+        "reduced_motion": {
+          "type": "boolean"
+        },
+        "remapping": {
+          "type": "boolean"
+        },
+        "screen_reader_structure": {
+          "type": "boolean"
+        },
+        "text_scaling": {
+          "type": "boolean"
+        },
+        "timing_alternatives": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "remapping",
+        "keyboard_only",
+        "captions",
+        "text_scaling",
+        "high_contrast",
+        "color_independence",
+        "reduced_motion",
+        "timing_alternatives",
+        "screen_reader_structure"
+      ],
+      "type": "object"
+    },
+    "acceptedLogicFormat": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "versions": {
+          "items": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "format",
+        "versions"
+      ],
+      "type": "object"
+    },
+    "coreVerb": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id",
+        "description"
+      ],
+      "type": "object"
+    },
+    "dependencies": {
+      "additionalProperties": false,
+      "properties": {
+        "authored": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "procedural": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "systemic": {
+          "$ref": "#/$defs/tokenArray"
+        }
+      },
+      "required": [
+        "authored",
+        "systemic",
+        "procedural"
+      ],
+      "type": "object"
+    },
+    "experience": {
+      "additionalProperties": false,
+      "properties": {
+        "audiences": {
+          "$ref": "#/$defs/nonEmptyStringArray"
+        },
+        "experience_goals": {
+          "$ref": "#/$defs/nonEmptyStringArray"
+        },
+        "player_promise": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "player_promise",
+        "audiences",
+        "experience_goals"
+      ],
+      "type": "object"
+    },
+    "extension": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "$ref": "#/$defs/extensionId"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "required",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "extensionId": {
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$",
+      "type": "string"
+    },
+    "fiction": {
+      "additionalProperties": false,
+      "properties": {
+        "genres": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "tags": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "tones": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "required": [
+        "genres",
+        "tones",
+        "tags"
+      ],
+      "type": "object"
+    },
+    "gameplay": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "primary_family": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "primary_family"
+            ]
+          },
+          "then": {
+            "properties": {
+              "challenge_model": {
+                "const": "none"
+              },
+              "core_loop": {
+                "maxItems": 0,
+                "type": "array"
+              },
+              "core_verbs": {
+                "maxItems": 0,
+                "type": "array"
+              },
+              "dependencies": {
+                "properties": {
+                  "authored": {
+                    "maxItems": 0,
+                    "type": "array"
+                  },
+                  "procedural": {
+                    "maxItems": 0,
+                    "type": "array"
+                  },
+                  "systemic": {
+                    "maxItems": 0,
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              },
+              "failure_recovery": {
+                "const": "none"
+              },
+              "goal_model": {
+                "const": "none"
+              },
+              "mechanic_tags": {
+                "maxItems": 0,
+                "type": "array"
+              },
+              "player_role": {
+                "const": "none"
+              },
+              "progression": {
+                "const": "none"
+              },
+              "rule_model": {
+                "const": "none"
+              },
+              "secondary_families": {
+                "maxItems": 0,
+                "type": "array"
+              },
+              "session_structure": {
+                "const": "none"
+              },
+              "social_topology": {
+                "const": "none"
+              },
+              "teleology": {
+                "const": "none"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "core_loop": {
+                "minItems": 1,
+                "type": "array"
+              },
+              "core_verbs": {
+                "minItems": 1,
+                "type": "array"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "challenge_model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "core_loop": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "core_verbs": {
+          "items": {
+            "$ref": "#/$defs/coreVerb"
+          },
+          "type": "array"
+        },
+        "dependencies": {
+          "$ref": "#/$defs/dependencies"
+        },
+        "failure_recovery": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "goal_model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "mechanic_tags": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "player_role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "primary_family": {
+          "$ref": "#/$defs/gameplayFamily"
+        },
+        "progression": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "rule_model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "secondary_families": {
+          "items": {
+            "$ref": "#/$defs/gameplayFamily"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "session_structure": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "social_topology": {
+          "enum": [
+            "none",
+            "single_player",
+            "local_cooperative",
+            "local_competitive",
+            "online_cooperative",
+            "online_competitive",
+            "massively_multiplayer"
+          ]
+        },
+        "teleology": {
+          "enum": [
+            "none",
+            "finite",
+            "infinite",
+            "open_ended"
+          ]
+        }
+      },
+      "required": [
+        "primary_family",
+        "secondary_families",
+        "mechanic_tags",
+        "player_role",
+        "core_verbs",
+        "core_loop",
+        "rule_model",
+        "goal_model",
+        "challenge_model",
+        "failure_recovery",
+        "progression",
+        "teleology",
+        "session_structure",
+        "social_topology",
+        "dependencies"
+      ],
+      "type": "object"
+    },
+    "gameplayFamily": {
+      "enum": [
+        "none",
+        "action",
+        "adventure",
+        "educational",
+        "narrative",
+        "puzzle",
+        "rhythm",
+        "role_playing",
+        "sandbox",
+        "simulation",
+        "sports",
+        "strategy"
+      ]
+    },
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "locale": {
+      "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
+      "type": "string"
+    },
+    "localization": {
+      "additionalProperties": false,
+      "properties": {
+        "externalized_text": {
+          "type": "boolean"
+        },
+        "source_locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "supported_locales": {
+          "items": {
+            "$ref": "#/$defs/locale"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "source_locale",
+        "supported_locales",
+        "externalized_text"
+      ],
+      "type": "object"
+    },
+    "narrative": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "requirement": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "requirement"
+            ]
+          },
+          "then": {
+            "properties": {
+              "agency": {
+                "const": "none"
+              },
+              "authorship_mode": {
+                "const": "none"
+              },
+              "canon_variability": {
+                "const": "none"
+              },
+              "delivery_channels": {
+                "maxItems": 0,
+                "type": "array"
+              },
+              "endings": {
+                "const": "none"
+              },
+              "focalization": {
+                "const": "none"
+              },
+              "information_model": {
+                "const": "none"
+              },
+              "pacing": {
+                "const": "none"
+              },
+              "protagonist_model": {
+                "const": "none"
+              },
+              "topology": {
+                "const": "none"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "agency": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "authorship_mode": {
+          "enum": [
+            "none",
+            "authored",
+            "emergent",
+            "procedural",
+            "player_authored",
+            "social",
+            "hybrid"
+          ]
+        },
+        "canon_variability": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "delivery_channels": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "endings": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "focalization": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "information_model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "pacing": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "protagonist_model": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "requirement": {
+          "enum": [
+            "none",
+            "optional",
+            "required"
+          ]
+        },
+        "topology": {
+          "enum": [
+            "none",
+            "linear",
+            "foldback",
+            "branching",
+            "branch_and_bottleneck",
+            "hub_and_spoke",
+            "modular",
+            "storylet",
+            "loop_reset",
+            "episodic",
+            "seasonal",
+            "open_ended"
+          ]
+        }
+      },
+      "required": [
+        "requirement",
+        "authorship_mode",
+        "topology",
+        "delivery_channels",
+        "protagonist_model",
+        "agency",
+        "focalization",
+        "canon_variability",
+        "pacing",
+        "endings",
+        "information_model"
+      ],
+      "type": "object"
+    },
+    "nonEmptyStringArray": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "accessibility": {
+          "$ref": "#/$defs/accessibility"
+        },
+        "audio_role": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "camera": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "input_assumptions": {
+          "$ref": "#/$defs/nonEmptyTokenArray"
+        },
+        "localization": {
+          "$ref": "#/$defs/localization"
+        },
+        "mode": {
+          "$ref": "#/$defs/presentationMode"
+        },
+        "perspective": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "ui_density": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "visual_language": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "camera",
+        "perspective",
+        "visual_language",
+        "ui_density",
+        "audio_role",
+        "input_assumptions",
+        "accessibility",
+        "localization"
+      ],
+      "type": "object"
+    },
+    "presentationMode": {
+      "enum": [
+        "text",
+        "2d",
+        "2_5d",
+        "3d",
+        "mixed",
+        "vr",
+        "ar"
+      ]
+    },
+    "production": {
+      "additionalProperties": false,
+      "properties": {
+        "content_modes": {
+          "$ref": "#/$defs/productionModes"
+        },
+        "human_review": {
+          "type": "boolean"
+        },
+        "licensing_required": {
+          "type": "boolean"
+        },
+        "provenance_required": {
+          "type": "boolean"
+        },
+        "qa_required": {
+          "type": "boolean"
+        },
+        "reproducibility": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "seed_policy": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "selection_policy": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "content_modes",
+        "seed_policy",
+        "reproducibility",
+        "selection_policy",
+        "human_review",
+        "provenance_required",
+        "licensing_required",
+        "qa_required"
+      ],
+      "type": "object"
+    },
+    "productionMode": {
+      "enum": [
+        "authored",
+        "modular",
+        "deterministic_procedural",
+        "generated_at_authoring_time",
+        "player_generated",
+        "hybrid",
+        "not_applicable"
+      ]
+    },
+    "productionModes": {
+      "additionalProperties": false,
+      "properties": {
+        "assets": {
+          "$ref": "#/$defs/productionMode"
+        },
+        "gameplay": {
+          "$ref": "#/$defs/productionMode"
+        },
+        "narrative": {
+          "$ref": "#/$defs/productionMode"
+        },
+        "world": {
+          "$ref": "#/$defs/productionMode"
+        }
+      },
+      "required": [
+        "gameplay",
+        "world",
+        "narrative",
+        "assets"
+      ],
+      "type": "object"
+    },
+    "runtimeTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_logic_formats": {
+          "items": {
+            "$ref": "#/$defs/acceptedLogicFormat"
+          },
+          "type": "array"
+        },
+        "asset_formats": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "input_capabilities": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "optional_features": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "packaging_target": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "platforms": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "presentation_mode": {
+          "$ref": "#/$defs/presentationMode"
+        },
+        "renderer": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "replay_expected": {
+          "type": "boolean"
+        },
+        "requested_adapter": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required_features": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "save_expected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requested_adapter",
+        "accepted_logic_formats",
+        "required_features",
+        "optional_features",
+        "presentation_mode",
+        "platforms",
+        "renderer",
+        "input_capabilities",
+        "asset_formats",
+        "save_expected",
+        "replay_expected",
+        "packaging_target"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "stringArray": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "token": {
+      "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_.-]*)?$",
+      "type": "string"
+    },
+    "tokenArray": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "nonEmptyTokenArray": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "world": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "presence": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "presence"
+            ]
+          },
+          "then": {
+            "properties": {
+              "persistence": {
+                "const": "none"
+              },
+              "scale": {
+                "const": "none"
+              },
+              "simulated_domains": {
+                "maxItems": 0,
+                "type": "array"
+              },
+              "simulation_depth": {
+                "const": "none"
+              },
+              "spatial_structure": {
+                "const": "none"
+              },
+              "spatial_topology": {
+                "const": "none"
+              },
+              "time_model": {
+                "const": "none"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "persistence": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "presence": {
+          "enum": [
+            "none",
+            "abstract",
+            "symbolic",
+            "diegetic"
+          ]
+        },
+        "scale": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "simulated_domains": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "simulation_depth": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "spatial_structure": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "spatial_topology": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "time_model": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "presence",
+        "spatial_topology",
+        "scale",
+        "time_model",
+        "simulation_depth",
+        "simulated_domains",
+        "persistence",
+        "spatial_structure"
+      ],
+      "type": "object"
+    }
+  }
+}

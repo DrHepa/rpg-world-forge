@@ -1,0 +1,123 @@
+{
+  "asset": {
+    "asset_id": "season_dashboard",
+    "content_hash": "77c5f58115c7888e0cc11575cbdad0c22bdf8523317b8a4a7be5e65dc720e517"
+  },
+  "authority": {
+    "artifact_snapshot_hash": "3f2a65b7bc9299860ec0418deaf80a1ad682aa31aa8fdb91e7e8e3a8474054a8",
+    "producer_job_id": "fixture-sports-career-review",
+    "producer_operation": "asset.qa.review",
+    "producer_output_position": 0,
+    "root_generation": 1,
+    "source_revision": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+    "workflow_status_hash": null,
+    "workspace_id": "fixture-sports-career"
+  },
+  "blockers": [],
+  "content_hash": "6ab91692a64f4a289a628d5aace3777641d7027297b6711378cda27a70b017d7",
+  "criteria": [
+    {
+      "criterion_index": 0,
+      "criterion_sha256": "0794d4e08250ebbb270e890d1f9d2096a1e168cf2c7baf29f3a04df0aad6192f",
+      "decision": "approved"
+    },
+    {
+      "criterion_index": 1,
+      "criterion_sha256": "e991c6f2b8752eb7bed04b1233f0ddd884d8c42f885abfa782e75fb7c88c1704",
+      "decision": "approved"
+    }
+  ],
+  "format": "world-forge.asset_qa_review_receipt",
+  "format_version": 1,
+  "lineage": {
+    "asset_subject": {
+      "content_hash": "0dd2f03aa2b3c4582d616d22507704445ddcf2c58691003c02f00a109b57d48d",
+      "format": "world-forge.asset_subject",
+      "format_version": 1,
+      "id": "asset_subject_9259c4cbd29829b3b6f9a90f269567bd757f86f0239d3292"
+    },
+    "gamepack": {
+      "content_hash": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "sports_career"
+    },
+    "inventory": {
+      "content_hash": "0a9fde3f496d850756e029acf56aa0a875109f7f831a921474d43e8f63115a6c",
+      "format": "world-forge.asset_inventory",
+      "format_version": 1,
+      "id": "asset_inventory_53dd128ca6758a57c68caf9beea84a9f1aea18a1e4a6577d"
+    },
+    "processing_receipt": {
+      "content_hash": "c6efab5f90c867c946bef09cf8c41a308e28d3e43be449aaf069d5f20aea4f67",
+      "format": "world-forge.asset_processing_receipt",
+      "format_version": 1,
+      "id": "season_dashboard_processing_receipt"
+    },
+    "provenance": {
+      "content_hash": "5bcfc786ecc5d53c64055d7f25d2d7797d944a17553dee7be9045bf89affa930",
+      "format": "world-forge.asset_provenance_record",
+      "format_version": 1,
+      "id": "season_dashboard_provenance"
+    },
+    "qa_report": {
+      "content_hash": "22c926cc4b5f5202fb8b0370c7bfa26ff301c9c4c90a20aed1e005da57e77e87",
+      "format": "world-forge.asset_qa_report",
+      "format_version": 1,
+      "id": "season_dashboard_qa"
+    },
+    "receipt": {
+      "content_hash": "9b8fa562f5498c2868fcfbd33938ef6818fc78393f87ceda71eba75cb9d5743a",
+      "format": "world-forge.asset_production_receipt",
+      "format_version": 1,
+      "id": "season_dashboard_receipt"
+    },
+    "recipe": {
+      "content_hash": "763cf4a7ad8f0c8403be16c3df5b1f6a1482e9d8c0dc81aeff5d5d302b672e0d",
+      "format": "world-forge.asset_processing_recipe",
+      "format_version": 1,
+      "id": "season_dashboard_recipe"
+    },
+    "request": {
+      "content_hash": "dc4893f3e33474480fc588a2b4542fc86caee285885e2e98f418a69d9d381311",
+      "format": "world-forge.asset_production_request",
+      "format_version": 1,
+      "id": "season_dashboard_production"
+    },
+    "selection": {
+      "content_hash": "2cc0ffeee9207df8ec709b5591eca41124e1ff5b6b35f30a1b5563837a9def42",
+      "format": "world-forge.asset_selection",
+      "format_version": 1,
+      "id": "season_dashboard_selection"
+    },
+    "specification": {
+      "content_hash": "7fc8bfa376b0970404591c18e6a8aae17019d6977a94090d62e308b4788497f4",
+      "format": "world-forge.asset_spec",
+      "format_version": 1,
+      "id": "asset_spec_15d864c0c10fb7ad1ee124cf26c75f496e62d8592b024c50"
+    },
+    "style": {
+      "content_hash": "6a33cb6231d5071d8c3d56e9f336738655d1e53fa56f066246f7f656b2faca64",
+      "format": "world-forge.asset_style",
+      "format_version": 1,
+      "id": "asset_style_6827ba36b8acb65b58aa6905c784297b839593fa9e5abf14"
+    },
+    "target": {
+      "content_hash": "afece1ac52756f93bc2ce0ecf34406b860a6400f77f9355a9a12bdf1e598d2d2",
+      "format": "world-forge.asset_target",
+      "format_version": 1,
+      "id": "asset_target_53adc0b6b9cbfff5a698a8d997726483c1b7f53760922ebe"
+    }
+  },
+  "review_receipt_id": "sports_career_texture_qa_review",
+  "reviewed_output": {
+    "candidate_artifact_id": "season_dashboard_candidate",
+    "locator": "assets/production/season_dashboard/processed/texture/season-dashboard.png",
+    "media_type": "image/png",
+    "role": "texture",
+    "runtime_path": "assets/ui/season-dashboard.png",
+    "sha256": "6ce813f1705c2c84b3578142cd68cec4c38a3d3c1183362a47a21176637833f6",
+    "size_bytes": 1193
+  },
+  "status": "approved"
+}

@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import worldforge.game_boundary as game_boundary_module
 import worldforge.game_boundary_policy as boundary_policy_module
+from gamepack_runtime.distribution import _python_boundary_findings
 from worldforge.game_boundary import audit_game_repository
 from worldforge.runtime_audit import audit_runtime
 
@@ -296,16 +297,67 @@ class ArchitectureTests(unittest.TestCase):
             (root / "pyproject.toml").write_text(
                 "[project]\n"
                 'name = "example-game"\n'
-                'dependencies = ["raylib==6.0.1.0", "rpg-world-forge", "openai>=1"]\n',
+                "dependencies = [\n"
+                '  "raylib==6.0.1.0",\n'
+                '  "rpg-world-forge",\n'
+                '  "world-forge",\n'
+                '  "openai>=1",\n'
+                "]\n",
                 encoding="utf-8",
             )
 
             findings = audit_game_repository(root)
 
-            self.assertEqual(2, len(findings))
+            self.assertEqual(
+                ["openai>=1", "rpg-world-forge", "world-forge"],
+                sorted(finding.detail for finding in findings),
+            )
             self.assertTrue(
                 all(finding.rule == "forbidden_game_dependency" for finding in findings)
             )
+
+    def test_game_repository_pep_normalizes_forge_names_without_substrings(self) -> None:
+        for requirement in ("RPG_world.forge", "WORLD.FORGE"):
+            with self.subTest(requirement=requirement), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "requirements.txt").write_text(
+                    f"{requirement}==0.7.0\n",
+                    encoding="utf-8",
+                )
+                findings = audit_game_repository(root)
+                self.assertEqual(
+                    [(requirement + "==0.7.0", "forbidden_game_dependency")],
+                    [(finding.detail, finding.rule) for finding in findings],
+                )
+
+        for requirement in ("world-forge-tools", "my-rpg-world-forge-addon"):
+            with self.subTest(requirement=requirement), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "requirements.txt").write_text(
+                    f"{requirement}==1.0\n",
+                    encoding="utf-8",
+                )
+                self.assertEqual([], audit_game_repository(root))
+
+    def test_independent_runtime_pep_normalizes_forge_distribution_names(self) -> None:
+        findings = _python_boundary_findings(
+            {
+                "requirements.txt": (b"RPG_world.forge==0.7.0\nworld-forge-tools==1.0\n"),
+                "pyproject.toml": (
+                    b"[project]\n"
+                    b'name = "neutral-game"\n'
+                    b'dependencies = ["WORLD.FORGE", "my-rpg-world-forge-addon"]\n'
+                ),
+            }
+        )
+
+        self.assertEqual(
+            [
+                "pyproject.toml: Forge distribution dependency",
+                "requirements.txt: Forge distribution dependency",
+            ],
+            findings,
+        )
 
     def test_game_repository_rejects_mcp_npm_dependencies(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

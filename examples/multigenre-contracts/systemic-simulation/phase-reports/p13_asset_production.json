@@ -1,0 +1,126 @@
+{
+  "content_hash": "2507b8647237878feaebd33c1d85be6160c9db16dfceca10a2296327876214af",
+  "evidence": [
+    {
+      "claim": "The exact creation profile was reviewed.",
+      "evidence_id": "reviewed_profile",
+      "subject": {
+        "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "systemic_simulation_profile"
+      }
+    }
+  ],
+  "extensions": [],
+  "format": "world-forge.phase_report",
+  "format_version": 3,
+  "invalidation_dependencies": [
+    {
+      "content_hash": "c70efddbe10523a3a8324626d5216845ef2542cf4dc1a7b6ebb1578638071743",
+      "format": "world-forge.activity_module",
+      "format_version": 1,
+      "id": "simulation_activities"
+    },
+    {
+      "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "systemic_simulation_profile"
+    },
+    {
+      "content_hash": "f7eeb1b758344fd625ebcda17e714afae2b4f98490f023e0f5d41e12bca62046",
+      "format": "world-forge.creation_readiness",
+      "format_version": 1,
+      "id": "readiness_5bc455a1fe0474422dc5d7ff"
+    },
+    {
+      "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "systemic_simulation"
+    },
+    {
+      "content_hash": "0f4cbd42fa20d1afa2bce95e3fce6ef7daae7e5e159d1271c633e45b9716dce6",
+      "format": "world-forge.game_analysis",
+      "format_version": 1,
+      "id": "analysis_070d09d07b87afd2"
+    },
+    {
+      "content_hash": "070d09d07b87afd20b72d882f3567559603991759d09331e82d79acef6796924",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "systemic_simulation"
+    },
+    {
+      "content_hash": "42c1aa67d8cded5ba2ac6448502f9de884c522917ab44048b0ca2ceea8d5324b",
+      "format": "world-forge.logic_module",
+      "format_version": 1,
+      "id": "simulation_logic"
+    },
+    {
+      "content_hash": "64a869bf5de72926c1cabceaf263d8460351e8e0f499e9290fe4eef3f7ccd373",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "systemic_simulation"
+    },
+    {
+      "content_hash": "8615f4533eb4e19b71249d9fc388bf33df1062989c6bc5464a01233e964673b2",
+      "format": "world-forge.system_module",
+      "format_version": 1,
+      "id": "simulation_rules"
+    },
+    {
+      "content_hash": "48b1e3166e201632ef62d81f8b56642df286bef96d85e62b5af29b8b4c166b1e",
+      "format": "world-forge.world_module",
+      "format_version": 1,
+      "id": "simulation_space"
+    }
+  ],
+  "output_evidence": {
+    "content_hash": "00d2d3306dcd26e8b7e41693b52b74cca0dd4a5cd98c4317ee3e150070ba02af",
+    "format": "world-forge.phase_output_evidence",
+    "format_version": 2,
+    "id": "p13_asset_production_output",
+    "phase": "p13_asset_production",
+    "reviewer": {
+      "id": "lead_reviewer",
+      "role": "validation_analyst"
+    },
+    "role": "runtime_compatibility",
+    "subject": {
+      "content_hash": "f7eeb1b758344fd625ebcda17e714afae2b4f98490f023e0f5d41e12bca62046",
+      "format": "world-forge.creation_readiness",
+      "format_version": 1,
+      "id": "readiness_5bc455a1fe0474422dc5d7ff"
+    }
+  },
+  "phase": "p13_asset_production",
+  "profile": {
+    "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "systemic_simulation_profile"
+  },
+  "project": {
+    "content_hash": "64a869bf5de72926c1cabceaf263d8460351e8e0f499e9290fe4eef3f7ccd373",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "systemic_simulation"
+  },
+  "rationale": {
+    "code": "phase_ready",
+    "message": "The exact reviewed profile and artifact evidence support this phase status."
+  },
+  "reviewer": {
+    "id": "lead_reviewer",
+    "role": "validation_analyst"
+  },
+  "source_manifest": {
+    "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "systemic_simulation"
+  },
+  "status": "ready"
+}

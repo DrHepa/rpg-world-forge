@@ -1,0 +1,50 @@
+{
+  "content_hash": "81fcbe8d71a062c70c343a14ae8bb674badd602bd3a176ff148f636b86a95801",
+  "extensions": [],
+  "format": "world-forge.system_module",
+  "format_version": 1,
+  "module_id": "faction_strategy_systems",
+  "project_id": "faction_strategy",
+  "systems": [
+    {
+      "asset_binding_ids": [
+        "strategy_map_visual"
+      ],
+      "effect_ids": [
+        "direct_north_1_influence",
+        "direct_north_1_record_target",
+        "direct_north_1_spend",
+        "direct_north_1_turn",
+        "direct_north_2_influence",
+        "direct_north_2_record_target",
+        "direct_north_2_spend",
+        "direct_north_2_turn",
+        "direct_south_1_influence",
+        "direct_south_1_record_target",
+        "direct_south_1_spend",
+        "direct_south_1_turn",
+        "direct_south_2_influence",
+        "direct_south_2_record_target",
+        "direct_south_2_spend",
+        "direct_south_2_turn"
+      ],
+      "event_ids": [
+        "faction_directed"
+      ],
+      "id": "faction_influence_system",
+      "precondition_ids": [
+        "allocation_available_for_direct_north_1",
+        "allocation_available_for_direct_north_2",
+        "allocation_available_for_direct_south_1",
+        "allocation_available_for_direct_south_2",
+        "turn_available_for_direct_north_1",
+        "turn_available_for_direct_north_2",
+        "turn_available_for_direct_south_1",
+        "turn_available_for_direct_south_2"
+      ],
+      "system_type": "economy",
+      "title": "reach the authored faction influence victory threshold"
+    }
+  ],
+  "title": "North and South faction theater"
+}

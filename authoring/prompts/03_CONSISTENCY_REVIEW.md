@@ -1,5 +1,9 @@
 # Session: consistency and reachability review
 
+> **Retained legacy-world prompt.** This review targets RPG facts, actors, arcs,
+> dialogue, scenes, and quests. Generic projects use their profile-selected
+> bounded analyzer and typed-module gates instead.
+
 Receive already-authored facts, actors, arcs, dialogue, scenes, and quests. Do
 not rewrite canon automatically.
 

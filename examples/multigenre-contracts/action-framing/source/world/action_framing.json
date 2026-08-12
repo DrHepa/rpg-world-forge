@@ -1,0 +1,17 @@
+{
+  "content_hash": "31632bcf802e1e602ae5b35e0ee059286a54fd23514ad4dcdefb3a9f55dfb088",
+  "extensions": [],
+  "format": "world-forge.world_module",
+  "format_version": 1,
+  "module_id": "action_framing_space",
+  "module_type": "space",
+  "project_id": "action_framing",
+  "spaces": [
+    {
+      "id": "action_framing_space",
+      "name": "Authored mission arena",
+      "topology": "diegetic"
+    }
+  ],
+  "title": "Authored mission arena"
+}

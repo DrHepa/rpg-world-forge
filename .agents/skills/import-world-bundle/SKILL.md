@@ -5,6 +5,11 @@ description: Import one verified immutable world release into an existing standa
 
 # Import a world bundle
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Verify and atomically import one immutable release in G03. Do not author,

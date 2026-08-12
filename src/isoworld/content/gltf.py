@@ -1369,8 +1369,8 @@ def _max_texture_dimension(
     return maximum
 
 
-def inspect_glb(
-    path: str | Path,
+def inspect_glb_bytes(
+    data: bytes,
     *,
     allowed_extensions: Collection[str] = DEFAULT_ALLOWED_EXTENSIONS,
     allow_external_uris: bool = False,
@@ -1379,7 +1379,7 @@ def inspect_glb(
     required_node_names: Collection[str] = (),
     required_animation_names: Collection[str] = (),
 ) -> dict[str, Any]:
-    """Inspect a GLB without invoking Blender, a renderer, or extension code.
+    """Inspect retained GLB bytes without invoking external or renderer code.
 
     The returned dictionary contains only structural facts derived from the
     container and its JSON document. ``required_node_names`` and
@@ -1389,6 +1389,8 @@ def inspect_glb(
     ``GLBError``.
     """
 
+    if not isinstance(data, bytes):
+        raise GLBError("GLB payload must be bytes")
     if not isinstance(allow_external_uris, bool):
         raise GLBError("allow_external_uris must be a boolean")
     max_bytes = _integer(
@@ -1404,9 +1406,8 @@ def inspect_glb(
         required_animation_names,
         context="required_animation_names",
     )
-
-    source = Path(path)
-    data = _read_regular_file(source, max_bytes=max_bytes)
+    if len(data) > max_bytes:
+        raise GLBError(f"GLB exceeds the {max_bytes}-byte limit")
     if len(data) < 20:
         raise GLBError("GLB is shorter than its header and JSON chunk")
     magic, version, declared_length = struct.unpack_from("<4sII", data)
@@ -1502,6 +1503,15 @@ def inspect_glb(
     for name, maximum in normalized_budgets.items():
         if metrics[name] > maximum:
             raise GLBError(f"GLB {name} budget exceeded: {metrics[name]} > {maximum}")
+    production_metrics = {
+        "nodes": metrics["nodes"],
+        "meshes": metrics["meshes"],
+        "primitives": sum(len(mesh["primitives"]) for mesh in _object_array(document, "meshes")),
+        "materials": metrics["materials"],
+        "joints": sum(len(skin["joints"]) for skin in _object_array(document, "skins")),
+        "animations": metrics["animations"],
+        "triangles": metrics["triangles"],
+    }
 
     return {
         "byte_length": len(data),
@@ -1513,4 +1523,38 @@ def inspect_glb(
         "embedded_uris": len(embedded_uris),
         "max_texture_dimension": max_texture_dimension,
         "metrics": metrics,
+        "production_metrics": production_metrics,
     }
+
+
+def inspect_glb(
+    path: str | Path,
+    *,
+    allowed_extensions: Collection[str] = DEFAULT_ALLOWED_EXTENSIONS,
+    allow_external_uris: bool = False,
+    budgets: Mapping[str, int] | None = None,
+    max_bytes: int = MAX_GLB_BYTES,
+    required_node_names: Collection[str] = (),
+    required_animation_names: Collection[str] = (),
+) -> dict[str, Any]:
+    """Inspect a retained standalone GLB file through the byte-bound validator."""
+
+    checked_max_bytes = _integer(
+        max_bytes,
+        context="max_bytes",
+        minimum=1,
+        maximum=MAX_GLB_BYTES,
+    )
+    source = Path(path)
+    data = _read_regular_file(source, max_bytes=checked_max_bytes)
+    inspection = inspect_glb_bytes(
+        data,
+        allowed_extensions=allowed_extensions,
+        allow_external_uris=allow_external_uris,
+        budgets=budgets,
+        max_bytes=checked_max_bytes,
+        required_node_names=required_node_names,
+        required_animation_names=required_animation_names,
+    )
+    inspection.pop("production_metrics", None)
+    return inspection

@@ -1,0 +1,17 @@
+{
+  "content_hash": "48b1e3166e201632ef62d81f8b56642df286bef96d85e62b5af29b8b4c166b1e",
+  "extensions": [],
+  "format": "world-forge.world_module",
+  "format_version": 1,
+  "module_id": "simulation_space",
+  "module_type": "space",
+  "project_id": "systemic_simulation",
+  "spaces": [
+    {
+      "id": "system_state_space",
+      "name": "Bounded state space",
+      "topology": "abstract"
+    }
+  ],
+  "title": "Abstract simulation space"
+}

@@ -5,6 +5,11 @@ description: Refine one authorized Modly 3D candidate through bounded Blender MC
 
 # Refine a Modly output
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Use Blender MCP to make a finite approved repair/export pass on one selected

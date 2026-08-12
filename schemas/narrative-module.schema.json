@@ -1,0 +1,280 @@
+{
+  "$id": "https://world-forge.local/schemas/narrative-module.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "entry_unit_ids": {
+      "$ref": "#/$defs/nonEmptyIdArray"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/extension"
+      },
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.narrative_module"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "module_id": {
+      "$ref": "#/$defs/id"
+    },
+    "project_id": {
+      "$ref": "#/$defs/id"
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "units": {
+      "items": {
+        "$ref": "#/$defs/unit"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "module_id",
+    "project_id",
+    "title",
+    "entry_unit_ids",
+    "units",
+    "extensions",
+    "content_hash"
+  ],
+  "title": "World Forge typed narrative module v1",
+  "type": "object",
+  "$defs": {
+    "choiceOption": {
+      "additionalProperties": false,
+      "properties": {
+        "condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "next_unit_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "next_unit_id",
+        "condition_ids",
+        "effect_ids"
+      ],
+      "type": "object"
+    },
+    "extension": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$",
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "required",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "idArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "nonEmptyIdArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "unit": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "unit_type": {
+                "const": "choice"
+              }
+            },
+            "required": [
+              "unit_type"
+            ]
+          },
+          "then": {
+            "propertyNames": {
+              "not": {
+                "const": "ending_kind"
+              }
+            },
+            "properties": {
+              "options": {}
+            },
+            "required": [
+              "options"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "unit_type": {
+                "const": "ending"
+              }
+            },
+            "required": [
+              "unit_type"
+            ]
+          },
+          "then": {
+            "propertyNames": {
+              "not": {
+                "const": "options"
+              }
+            },
+            "properties": {
+              "ending_kind": {},
+              "next_unit_ids": {
+                "maxItems": 0,
+                "type": "array"
+              }
+            },
+            "required": [
+              "ending_kind"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "unit_type": {
+                "enum": [
+                  "choice",
+                  "ending"
+                ]
+              }
+            },
+            "required": [
+              "unit_type"
+            ]
+          },
+          "else": {
+            "propertyNames": {
+              "not": {
+                "enum": [
+                  "options",
+                  "ending_kind"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "ending_kind": {
+          "enum": [
+            "success",
+            "failure",
+            "neutral"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "next_unit_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/choiceOption"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "prerequisite_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "unit_type": {
+          "enum": [
+            "arc",
+            "beat",
+            "scene",
+            "dialogue",
+            "storylet",
+            "clue",
+            "reveal",
+            "memory",
+            "episode",
+            "choice",
+            "ending"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "unit_type",
+        "title",
+        "prerequisite_ids",
+        "effect_ids",
+        "next_unit_ids",
+        "asset_binding_ids"
+      ],
+      "type": "object"
+    }
+  }
+}

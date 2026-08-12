@@ -1,0 +1,60 @@
+{
+  "content_hash": "b1f606f5b66afe42079079a4ae39d6520df580019ebea3a1ac17820eb4135f15",
+  "entry_unit_ids": [
+    "storylet_entry"
+  ],
+  "extensions": [],
+  "format": "world-forge.narrative_module",
+  "format_version": 1,
+  "module_id": "modular_roguelite_narrative",
+  "project_id": "modular_roguelite",
+  "title": "Authored modular roguelite storylets",
+  "units": [
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "effect_ids": [],
+      "id": "storylet_entry",
+      "next_unit_ids": [
+        "storylet_resolution"
+      ],
+      "prerequisite_ids": [
+        "run_at_entry_depth",
+        "run_is_active"
+      ],
+      "title": "Modular expedition storylet entry",
+      "unit_type": "storylet"
+    },
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "effect_ids": [],
+      "id": "storylet_resolution",
+      "next_unit_ids": [
+        "run_conclusion"
+      ],
+      "prerequisite_ids": [
+        "run_is_active",
+        "storylet_progressed"
+      ],
+      "title": "Modular expedition storylet resolution",
+      "unit_type": "storylet"
+    },
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "effect_ids": [],
+      "ending_kind": "success",
+      "id": "run_conclusion",
+      "next_unit_ids": [],
+      "prerequisite_ids": [
+        "victory_condition"
+      ],
+      "title": "Authored conclusion for the bounded roguelite run",
+      "unit_type": "ending"
+    }
+  ]
+}

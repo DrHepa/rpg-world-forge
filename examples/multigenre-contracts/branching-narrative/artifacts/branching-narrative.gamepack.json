@@ -1,0 +1,933 @@
+{
+  "analysis_requirements": {
+    "analyzer_id": "worldforge.branching_narrative_exhaustive",
+    "analyzer_version": 1,
+    "content_hash": "c71a37f11cab3d7257a1ebbdd2fed9282d951669a930272662a0b0b5eb88c55f",
+    "limits": {
+      "candidate_evaluations": 262144,
+      "depth": 512,
+      "parameter_combinations_per_action": 4096,
+      "state_bytes": 65536,
+      "states": 16384,
+      "total_state_bytes": 67108864,
+      "total_witness_steps": 4096,
+      "witness_traces": 128
+    },
+    "profile": "branching_narrative",
+    "reason_code": null
+  },
+  "asset_requirements": [
+    {
+      "accepted_formats": [
+        "asset:font",
+        "asset:png"
+      ],
+      "binding_id": "choice_panel",
+      "referencing_subjects": [
+        {
+          "id": "choose_left_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "choose_right_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "central_choice",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "choice_panel_hook",
+          "kind": "presentation_hook"
+        }
+      ],
+      "required": true,
+      "roles": [
+        "mechanic_feedback",
+        "narrative_ui",
+        "text_ui"
+      ],
+      "usage_contexts": [
+        "mechanic",
+        "mechanic:text",
+        "narrative",
+        "presentation:text"
+      ]
+    },
+    {
+      "accepted_formats": [
+        "asset:font",
+        "asset:png"
+      ],
+      "binding_id": "ending_panel",
+      "referencing_subjects": [
+        {
+          "id": "ending_left",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_right",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_panel_hook",
+          "kind": "presentation_hook"
+        }
+      ],
+      "required": true,
+      "roles": [
+        "ending_ui",
+        "narrative_ui"
+      ],
+      "usage_contexts": [
+        "narrative",
+        "presentation:ending"
+      ]
+    }
+  ],
+  "content_hash": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+  "format": "world-forge.gamepack",
+  "format_version": 1,
+  "game": {
+    "default_locale": "en",
+    "id": "branching_narrative",
+    "title": "Branching Narrative",
+    "version": "1.0.0"
+  },
+  "localization": {
+    "externalized_text": true,
+    "references": [
+      {
+        "field": "title",
+        "key": "game.branching_narrative.title",
+        "source_text": "Branching Narrative",
+        "subject_id": "branching_narrative",
+        "subject_kind": "game"
+      },
+      {
+        "field": "title",
+        "key": "narrative_module.branching_units.title",
+        "source_text": "Neutral branching units",
+        "subject_id": "branching_units",
+        "subject_kind": "narrative_module"
+      },
+      {
+        "field": "label",
+        "key": "narrative_option.central_choice_choose_left.label",
+        "source_text": "Choose the left symbol",
+        "subject_id": "central_choice_choose_left",
+        "subject_kind": "narrative_option"
+      },
+      {
+        "field": "label",
+        "key": "narrative_option.central_choice_choose_right.label",
+        "source_text": "Choose the right symbol",
+        "subject_id": "central_choice_choose_right",
+        "subject_kind": "narrative_option"
+      },
+      {
+        "field": "title",
+        "key": "narrative_unit.central_choice.title",
+        "source_text": "A visible choice",
+        "subject_id": "central_choice",
+        "subject_kind": "narrative_unit"
+      },
+      {
+        "field": "title",
+        "key": "narrative_unit.ending_left.title",
+        "source_text": "Left ending",
+        "subject_id": "ending_left",
+        "subject_kind": "narrative_unit"
+      },
+      {
+        "field": "title",
+        "key": "narrative_unit.ending_right.title",
+        "source_text": "Right ending",
+        "subject_id": "ending_right",
+        "subject_kind": "narrative_unit"
+      }
+    ],
+    "source_locale": "en",
+    "supported_locales": [
+      "en"
+    ]
+  },
+  "logic": {
+    "actions": [
+      {
+        "core_verb_id": "choose",
+        "id": "choose_left",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "choice_panel_hook"
+        ],
+        "required_feature_ids": [
+          "logic:branching_choice",
+          "logic:persistent_variables"
+        ],
+        "rule_ids": [
+          "choose_left_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "narrative_option",
+            "option_id": "choose_left",
+            "source_id": "central_choice"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "choose",
+        "id": "choose_right",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "choice_panel_hook"
+        ],
+        "required_feature_ids": [
+          "logic:branching_choice",
+          "logic:persistent_variables"
+        ],
+        "rule_ids": [
+          "choose_right_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "narrative_option",
+            "option_id": "choose_right",
+            "source_id": "central_choice"
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "action_id": "choose_left",
+        "comparison": "equal",
+        "id": "choice_available_left",
+        "left": {
+          "kind": "state",
+          "state_id": "choice_state"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "unchosen",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "choose_right",
+        "comparison": "equal",
+        "id": "choice_available_right",
+        "left": {
+          "kind": "state",
+          "state_id": "choice_state"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "unchosen",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "equal",
+        "id": "ending_left",
+        "left": {
+          "kind": "state",
+          "state_id": "choice_state"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "left",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "equal",
+        "id": "ending_right",
+        "left": {
+          "kind": "state",
+          "state_id": "choice_state"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "right",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "equal",
+        "id": "remember_left",
+        "left": {
+          "kind": "state",
+          "state_id": "knowledge"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": [
+            "learned_left"
+          ],
+          "value_type": "string_array"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "equal",
+        "id": "remember_right",
+        "left": {
+          "kind": "state",
+          "state_id": "knowledge"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": [
+            "learned_right"
+          ],
+          "value_type": "string_array"
+        }
+      }
+    ],
+    "core_verbs": [
+      {
+        "description": "Select one authored option.",
+        "id": "choose"
+      }
+    ],
+    "effects": [
+      {
+        "action_id": "choose_left",
+        "array_state_id": "knowledge",
+        "id": "record_left",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "append_unique",
+        "value": {
+          "kind": "literal",
+          "value": "learned_left",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "choose_right",
+        "array_state_id": "knowledge",
+        "id": "record_right",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "append_unique",
+        "value": {
+          "kind": "literal",
+          "value": "learned_right",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "choose_left",
+        "id": "remember_left",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "choice_state",
+        "value": {
+          "kind": "literal",
+          "value": "left",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "choose_right",
+        "id": "remember_right",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "choice_state",
+        "value": {
+          "kind": "literal",
+          "value": "right",
+          "value_type": "string"
+        }
+      }
+    ],
+    "endings": [
+      {
+        "condition_ids": [
+          "ending_left",
+          "remember_left"
+        ],
+        "event_ids": [
+          "choice_left"
+        ],
+        "id": "ending_left",
+        "kind": "success",
+        "presentation_hook_ids": [
+          "ending_panel_hook"
+        ]
+      },
+      {
+        "condition_ids": [
+          "ending_right",
+          "remember_right"
+        ],
+        "event_ids": [
+          "choice_right"
+        ],
+        "id": "ending_right",
+        "kind": "success",
+        "presentation_hook_ids": [
+          "ending_panel_hook"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "id": "choice_left"
+      },
+      {
+        "id": "choice_right"
+      }
+    ],
+    "execution_semantics": {
+      "active_failure_recovery": "intersection",
+      "condition_collections": "and",
+      "condition_snapshot": "pre_transition",
+      "effect_order": "rule_order_then_reference_order",
+      "effect_state_operands": "current_candidate_state",
+      "ending_match": "exactly_one",
+      "event_commit": "after_success_rule_reference_order",
+      "invalid_transition": "reject_without_mutation",
+      "narrative_transition": "source_effects_then_cursor_atomic",
+      "owned_action_rules": "all_required",
+      "semantics_version": 1,
+      "terminal_precedence": "endings_before_failures"
+    },
+    "failures": [],
+    "goals": [
+      {
+        "condition_ids": [
+          "ending_left",
+          "remember_left"
+        ],
+        "id": "reach_left",
+        "success_ending_id": "ending_left"
+      },
+      {
+        "condition_ids": [
+          "ending_right",
+          "remember_right"
+        ],
+        "id": "reach_right",
+        "success_ending_id": "ending_right"
+      }
+    ],
+    "initial_state": {
+      "choice_state": "unchosen",
+      "knowledge": [],
+      "wf_internal_narrative_cursor": "central_choice"
+    },
+    "mechanics": [
+      {
+        "action_id": "choose_left",
+        "asset_binding_ids": [
+          "choice_panel"
+        ],
+        "authoritative_state_ids": [
+          "choice_state",
+          "knowledge"
+        ],
+        "condition_ids": [
+          "choice_available_left"
+        ],
+        "core_verb_id": "choose",
+        "effect_ids": [
+          "record_left",
+          "remember_left"
+        ],
+        "event_ids": [
+          "choice_left"
+        ],
+        "id": "choose_left_mechanic",
+        "presentation_hook_ids": [
+          "choice_panel_hook"
+        ],
+        "required_feature_ids": [
+          "logic:branching_choice",
+          "logic:persistent_variables"
+        ],
+        "rule_ids": [
+          "choose_left_rule"
+        ]
+      },
+      {
+        "action_id": "choose_right",
+        "asset_binding_ids": [
+          "choice_panel"
+        ],
+        "authoritative_state_ids": [
+          "choice_state",
+          "knowledge"
+        ],
+        "condition_ids": [
+          "choice_available_right"
+        ],
+        "core_verb_id": "choose",
+        "effect_ids": [
+          "record_right",
+          "remember_right"
+        ],
+        "event_ids": [
+          "choice_right"
+        ],
+        "id": "choose_right_mechanic",
+        "presentation_hook_ids": [
+          "choice_panel_hook"
+        ],
+        "required_feature_ids": [
+          "logic:branching_choice",
+          "logic:persistent_variables"
+        ],
+        "rule_ids": [
+          "choose_right_rule"
+        ]
+      }
+    ],
+    "narrative_cursor": {
+      "allowed_values": [
+        "central_choice",
+        "ending_left",
+        "ending_right"
+      ],
+      "compiler_owned": true,
+      "id": "wf_internal_narrative_cursor",
+      "initial": "central_choice",
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "string"
+    },
+    "narrative_transitions": [
+      {
+        "action_id": "choose_left",
+        "atomic_source_condition_ids": [
+          "choice_available_left"
+        ],
+        "atomic_source_effect_ids": [
+          "record_left",
+          "remember_left"
+        ],
+        "compiler_owned": true,
+        "effect": {
+          "compiler_owned": true,
+          "cursor_state_id": "wf_internal_narrative_cursor",
+          "id": "wf_internal_advance_choose_left",
+          "invalid_transition_policy": "reject_transition",
+          "operation": "set_cursor",
+          "value": "ending_left"
+        },
+        "id": "wf_internal_transition_choose_left",
+        "option_id": "choose_left",
+        "precondition": {
+          "compiler_owned": true,
+          "cursor_state_id": "wf_internal_narrative_cursor",
+          "id": "wf_internal_cursor_at_choose_left",
+          "operator": "cursor_equals",
+          "value": "central_choice"
+        },
+        "source_unit_id": "central_choice",
+        "target_unit_id": "ending_left"
+      },
+      {
+        "action_id": "choose_right",
+        "atomic_source_condition_ids": [
+          "choice_available_right"
+        ],
+        "atomic_source_effect_ids": [
+          "record_right",
+          "remember_right"
+        ],
+        "compiler_owned": true,
+        "effect": {
+          "compiler_owned": true,
+          "cursor_state_id": "wf_internal_narrative_cursor",
+          "id": "wf_internal_advance_choose_right",
+          "invalid_transition_policy": "reject_transition",
+          "operation": "set_cursor",
+          "value": "ending_right"
+        },
+        "id": "wf_internal_transition_choose_right",
+        "option_id": "choose_right",
+        "precondition": {
+          "compiler_owned": true,
+          "cursor_state_id": "wf_internal_narrative_cursor",
+          "id": "wf_internal_cursor_at_choose_right",
+          "operator": "cursor_equals",
+          "value": "central_choice"
+        },
+        "source_unit_id": "central_choice",
+        "target_unit_id": "ending_right"
+      }
+    ],
+    "presentation_hooks": [
+      {
+        "asset_binding_ids": [
+          "choice_panel"
+        ],
+        "id": "choice_panel_hook",
+        "kind": "text"
+      },
+      {
+        "asset_binding_ids": [
+          "ending_panel"
+        ],
+        "id": "ending_panel_hook",
+        "kind": "ending"
+      }
+    ],
+    "rules": [
+      {
+        "action_id": "choose_left",
+        "condition_ids": [
+          "choice_available_left"
+        ],
+        "effect_ids": [
+          "record_left",
+          "remember_left"
+        ],
+        "event_ids": [
+          "choice_left"
+        ],
+        "id": "choose_left_rule",
+        "order": 0
+      },
+      {
+        "action_id": "choose_right",
+        "condition_ids": [
+          "choice_available_right"
+        ],
+        "effect_ids": [
+          "record_right",
+          "remember_right"
+        ],
+        "event_ids": [
+          "choice_right"
+        ],
+        "id": "choose_right_rule",
+        "order": 1
+      }
+    ],
+    "source": {
+      "content_hash": "a877d9b2701b45f761c03554df04a23791b9151e68383d7f03907d7b93aff75e",
+      "format": "world-forge.logic_module",
+      "format_version": 1,
+      "id": "branching_logic"
+    },
+    "state_schema": [
+      {
+        "allowed_values": [
+          "left",
+          "right",
+          "unchosen"
+        ],
+        "id": "choice_state",
+        "initial": "unchosen",
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "string"
+      },
+      {
+        "allowed_values": [
+          "learned_left",
+          "learned_right"
+        ],
+        "id": "knowledge",
+        "initial": [],
+        "max_items": 1,
+        "min_items": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "string_array"
+      },
+      {
+        "allowed_values": [
+          "central_choice",
+          "ending_left",
+          "ending_right"
+        ],
+        "compiler_owned": true,
+        "id": "wf_internal_narrative_cursor",
+        "initial": "central_choice",
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "string"
+      }
+    ],
+    "title": "Neutral authored branching-choice logic"
+  },
+  "mechanic_requirements": [
+    {
+      "action_id": "choose_left",
+      "core_verb_id": "choose",
+      "mechanic_id": "choose_left_mechanic",
+      "required_feature_ids": [
+        "logic:branching_choice",
+        "logic:persistent_variables"
+      ]
+    },
+    {
+      "action_id": "choose_right",
+      "core_verb_id": "choose",
+      "mechanic_id": "choose_right_mechanic",
+      "required_feature_ids": [
+        "logic:branching_choice",
+        "logic:persistent_variables"
+      ]
+    }
+  ],
+  "modules": {
+    "activities": [],
+    "narrative": [
+      {
+        "entry_unit_ids": [
+          "central_choice"
+        ],
+        "source": {
+          "content_hash": "29512bafe8701029b4c53b2408346d9133cc4845c86aa05ee80edace950ccdaf",
+          "format": "world-forge.narrative_module",
+          "format_version": 1,
+          "id": "branching_units"
+        },
+        "title": "Neutral branching units",
+        "units": [
+          {
+            "asset_binding_ids": [
+              "choice_panel"
+            ],
+            "effect_ids": [],
+            "id": "central_choice",
+            "next_unit_ids": [
+              "ending_left",
+              "ending_right"
+            ],
+            "options": [
+              {
+                "condition_ids": [
+                  "choice_available_left"
+                ],
+                "effect_ids": [
+                  "record_left",
+                  "remember_left"
+                ],
+                "id": "choose_left",
+                "label": "Choose the left symbol",
+                "next_unit_id": "ending_left"
+              },
+              {
+                "condition_ids": [
+                  "choice_available_right"
+                ],
+                "effect_ids": [
+                  "record_right",
+                  "remember_right"
+                ],
+                "id": "choose_right",
+                "label": "Choose the right symbol",
+                "next_unit_id": "ending_right"
+              }
+            ],
+            "prerequisite_ids": [],
+            "title": "A visible choice",
+            "unit_type": "choice"
+          },
+          {
+            "asset_binding_ids": [
+              "ending_panel"
+            ],
+            "effect_ids": [],
+            "ending_kind": "success",
+            "id": "ending_left",
+            "next_unit_ids": [],
+            "prerequisite_ids": [
+              "remember_left"
+            ],
+            "title": "Left ending",
+            "unit_type": "ending"
+          },
+          {
+            "asset_binding_ids": [
+              "ending_panel"
+            ],
+            "effect_ids": [],
+            "ending_kind": "success",
+            "id": "ending_right",
+            "next_unit_ids": [],
+            "prerequisite_ids": [
+              "remember_right"
+            ],
+            "title": "Right ending",
+            "unit_type": "ending"
+          }
+        ]
+      }
+    ],
+    "systems": [],
+    "world": []
+  },
+  "presentation": {
+    "accessibility": {
+      "captions": true,
+      "color_independence": true,
+      "high_contrast": true,
+      "keyboard_only": true,
+      "reduced_motion": true,
+      "remapping": true,
+      "screen_reader_structure": true,
+      "text_scaling": true,
+      "timing_alternatives": true
+    },
+    "audio_role": "optional feedback",
+    "camera": "none",
+    "input_assumptions": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "localization": {
+      "externalized_text": true,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "mode": "text",
+    "perspective": "text interface",
+    "ui_density": "low",
+    "visual_language": "high-contrast text panels"
+  },
+  "provenance": [
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "branching_narrative_profile"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "3f3ed623c2f26208c60762888e8aa544f877bd198664c16e64ccbfd7f41226cf",
+        "format": "world-forge.creation_source_manifest",
+        "format_version": 1,
+        "id": "branching_narrative"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "a877d9b2701b45f761c03554df04a23791b9151e68383d7f03907d7b93aff75e",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "branching_logic"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "29512bafe8701029b4c53b2408346d9133cc4845c86aa05ee80edace950ccdaf",
+        "format": "world-forge.narrative_module",
+        "format_version": 1,
+        "id": "branching_units"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "4675a74458c29e1fa8e4b99acfa8e4ac501ea0e0e3bcec11c207e95644146c03",
+        "format": "world-forge.project",
+        "format_version": 1,
+        "id": "branching_narrative"
+      }
+    }
+  ],
+  "registered_extensions": [],
+  "runtime_requirements": {
+    "accepted_logic_formats": [
+      {
+        "format": "world-forge.gamepack",
+        "versions": [
+          1
+        ]
+      }
+    ],
+    "asset_formats": [
+      "asset:font",
+      "asset:png"
+    ],
+    "input_capabilities": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "optional_features": [
+      "audio:sfx"
+    ],
+    "packaging_target": "standalone desktop directory",
+    "platform_matrix": [
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:linux",
+        "platform_id": "platform:linux_x86_64",
+        "renderer": "raylib"
+      },
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:windows",
+        "platform_id": "platform:windows_x86_64",
+        "renderer": "raylib"
+      }
+    ],
+    "presentation": {
+      "camera": "none",
+      "mode": "text",
+      "perspective": "text interface",
+      "renderer": "raylib"
+    },
+    "replay_expected": true,
+    "requested_adapter": "gamepack_raylib_2d_text",
+    "required_features": [
+      "logic:branching_choice",
+      "logic:persistent_variables"
+    ],
+    "save_expected": true
+  },
+  "source": {
+    "logic_modules": [
+      {
+        "content_hash": "a877d9b2701b45f761c03554df04a23791b9151e68383d7f03907d7b93aff75e",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "branching_logic"
+      }
+    ],
+    "profile": {
+      "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "branching_narrative_profile"
+    },
+    "project": {
+      "content_hash": "4675a74458c29e1fa8e4b99acfa8e4ac501ea0e0e3bcec11c207e95644146c03",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "branching_narrative"
+    },
+    "source_manifest": {
+      "content_hash": "3f3ed623c2f26208c60762888e8aa544f877bd198664c16e64ccbfd7f41226cf",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "branching_narrative"
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "artifacts": [
+    {
+      "content_hash": "0f4cbd42fa20d1afa2bce95e3fce6ef7daae7e5e159d1271c633e45b9716dce6",
+      "format": "world-forge.game_analysis",
+      "format_version": 1,
+      "id": "analysis_070d09d07b87afd2"
+    },
+    {
+      "content_hash": "070d09d07b87afd20b72d882f3567559603991759d09331e82d79acef6796924",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "systemic_simulation"
+    }
+  ],
+  "content_hash": "1641a9251f6b7270938dfb0670a8dcbaeb151e9e4742292d944ee09a0715f070",
+  "format": "world-forge.creation_handoff",
+  "format_version": 1,
+  "handoff_id": "handoff_0f3f8f0ee9ac0b0017e60c62",
+  "handoff_status": "authoring_ready",
+  "profile": {
+    "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "systemic_simulation_profile"
+  },
+  "project": {
+    "content_hash": "64a869bf5de72926c1cabceaf263d8460351e8e0f499e9290fe4eef3f7ccd373",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "systemic_simulation"
+  },
+  "readiness": {
+    "content_hash": "f7eeb1b758344fd625ebcda17e714afae2b4f98490f023e0f5d41e12bca62046",
+    "format": "world-forge.creation_readiness",
+    "format_version": 1,
+    "id": "readiness_5bc455a1fe0474422dc5d7ff"
+  },
+  "release_blockers": [
+    "native_evidence_missing",
+    "packaging_evidence_missing",
+    "runtime_adapter_not_requested"
+  ],
+  "source_manifest": {
+    "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "systemic_simulation"
+  },
+  "workflow_status": {
+    "content_hash": "24d945193f5dfe8ff7d7134421a9f718bafa2bcc2e54d3a8f45c425f24f3d87e",
+    "format": "world-forge.creation_workflow_status",
+    "format_version": 1,
+    "id": "systemic_simulation_workflow"
+  }
+}

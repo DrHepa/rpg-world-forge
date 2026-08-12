@@ -1,0 +1,2630 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-forge.local/schemas/studio-protocol-v3.schema.json",
+  "title": "World Forge Studio generic creation protocol v3",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    },
+    {
+      "$ref": "#/$defs/errorEnvelope"
+    }
+  ],
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "creationScaffoldIdentifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "method": {
+      "enum": [
+        "service.initialize",
+        "creation_root_grant.create",
+        "creation_root_grant.get",
+        "creation_root_grant.revoke",
+        "creation_workspace.create",
+        "creation_workspace.recover",
+        "creation_workspace.register",
+        "creation_workspace.get",
+        "creation_workspace.list",
+        "creation_workspace.open",
+        "creation_document.list",
+        "creation_document.read",
+        "creation_changeset.create",
+        "creation_changeset.get",
+        "creation_changeset.list",
+        "creation_changeset.diff",
+        "creation_changeset.approve",
+        "creation_changeset.reject",
+        "creation_changeset.apply",
+        "creation_changeset.recover",
+        "creation_workflow.get",
+        "creation_workflow.reconcile",
+        "creation_phase.read",
+        "creation_phase.validate",
+        "creation_phase.complete",
+        "creation_phase.reopen",
+        "creation_readiness.inspect"
+      ]
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "protocol",
+        "protocol_version",
+        "kind",
+        "request_id"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "rpg-world-forge.studio_protocol"
+        },
+        "protocol_version": {
+          "const": 3
+        },
+        "kind": {
+          "enum": [
+            "request",
+            "response",
+            "error"
+          ]
+        },
+        "request_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "emptyParams": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "grantCreateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "display_name",
+        "path",
+        "expected_project_hash"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "role": {
+          "enum": [
+            "existing_root",
+            "new_target"
+          ]
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32767
+        },
+        "expected_project_hash": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "role": {
+              "const": "existing_root"
+            },
+            "expected_project_hash": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "required": [
+            "role",
+            "expected_project_hash"
+          ]
+        },
+        {
+          "properties": {
+            "role": {
+              "const": "new_target"
+            },
+            "expected_project_hash": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "role",
+            "expected_project_hash"
+          ]
+        }
+      ]
+    },
+    "grantIdParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "grantMutationParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "expected_generation"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_generation": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "workspaceCreateParams": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/workspaceCreateLibraryParams"
+        },
+        {
+          "$ref": "#/$defs/workspaceCreateGameParams"
+        }
+      ]
+    },
+    "workspaceCreateLibraryParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "expected_grant_generation",
+        "project_kind",
+        "project_id",
+        "title",
+        "default_locale",
+        "project_version"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_grant_generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "project_kind": {
+          "enum": [
+            "asset_library",
+            "universe_library"
+          ]
+        },
+        "project_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "default_locale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "project_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "workspaceCreateGameParams": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/workspaceCreateGameWithoutNarrativeParams"
+        },
+        {
+          "$ref": "#/$defs/workspaceCreateGameWithNarrativeParams"
+        }
+      ]
+    },
+    "workspaceCreateGameWithoutNarrativeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "expected_grant_generation",
+        "project_kind",
+        "project_id",
+        "title",
+        "default_locale",
+        "project_version",
+        "gameplay_family",
+        "initial_core_verb",
+        "initial_core_loop",
+        "world_presence",
+        "narrative_requirement",
+        "narrative_authorship",
+        "narrative_topology",
+        "presentation_mode",
+        "runtime_support_intent"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_grant_generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "project_kind": {
+          "const": "game"
+        },
+        "project_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "default_locale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "project_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "gameplay_family": {
+          "enum": [
+            "action",
+            "adventure",
+            "educational",
+            "narrative",
+            "puzzle",
+            "rhythm",
+            "role_playing",
+            "sandbox",
+            "simulation",
+            "sports",
+            "strategy"
+          ]
+        },
+        "initial_core_verb": {
+          "$ref": "#/$defs/creationScaffoldIdentifier"
+        },
+        "initial_core_loop": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        },
+        "world_presence": {
+          "enum": [
+            "none",
+            "abstract",
+            "symbolic",
+            "diegetic"
+          ]
+        },
+        "narrative_requirement": {
+          "const": "none"
+        },
+        "narrative_authorship": {
+          "const": "none"
+        },
+        "narrative_topology": {
+          "const": "none"
+        },
+        "presentation_mode": {
+          "enum": [
+            "text",
+            "2d",
+            "2_5d",
+            "3d",
+            "mixed",
+            "vr",
+            "ar"
+          ]
+        },
+        "runtime_support_intent": {
+          "enum": [
+            "authoring_only",
+            "compatibility_assessment"
+          ]
+        }
+      }
+    },
+    "workspaceCreateGameWithNarrativeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "expected_grant_generation",
+        "project_kind",
+        "project_id",
+        "title",
+        "default_locale",
+        "project_version",
+        "gameplay_family",
+        "initial_core_verb",
+        "initial_core_loop",
+        "world_presence",
+        "narrative_requirement",
+        "narrative_authorship",
+        "narrative_topology",
+        "presentation_mode",
+        "runtime_support_intent"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_grant_generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "project_kind": {
+          "const": "game"
+        },
+        "project_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "default_locale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "project_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "gameplay_family": {
+          "enum": [
+            "action",
+            "adventure",
+            "educational",
+            "narrative",
+            "puzzle",
+            "rhythm",
+            "role_playing",
+            "sandbox",
+            "simulation",
+            "sports",
+            "strategy"
+          ]
+        },
+        "initial_core_verb": {
+          "$ref": "#/$defs/creationScaffoldIdentifier"
+        },
+        "initial_core_loop": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        },
+        "world_presence": {
+          "enum": [
+            "none",
+            "abstract",
+            "symbolic",
+            "diegetic"
+          ]
+        },
+        "narrative_requirement": {
+          "enum": [
+            "optional",
+            "required"
+          ]
+        },
+        "narrative_authorship": {
+          "enum": [
+            "authored",
+            "emergent",
+            "procedural",
+            "player_authored",
+            "social",
+            "hybrid"
+          ]
+        },
+        "narrative_topology": {
+          "enum": [
+            "linear",
+            "foldback",
+            "branching",
+            "branch_and_bottleneck",
+            "hub_and_spoke",
+            "modular",
+            "storylet",
+            "loop_reset",
+            "episodic",
+            "seasonal",
+            "open_ended"
+          ]
+        },
+        "presentation_mode": {
+          "enum": [
+            "text",
+            "2d",
+            "2_5d",
+            "3d",
+            "mixed",
+            "vr",
+            "ar"
+          ]
+        },
+        "runtime_support_intent": {
+          "enum": [
+            "authoring_only",
+            "compatibility_assessment"
+          ]
+        }
+      }
+    },
+    "workspaceRegisterParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "expected_grant_generation",
+        "expected_project_hash"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_grant_generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expected_project_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "workspaceIdParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        }
+      }
+    },
+    "workspaceRecoverParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "expected_root_generation"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "expected_root_generation": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "revisionParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "expected_source_revision"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "expected_source_revision": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "documentReadParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "expected_source_revision",
+        "path"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "expected_source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "x-world-forge-portable-path": true
+        }
+      }
+    },
+    "nullableSha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "creationAuthorityProperties": {
+      "type": "object",
+      "required": [
+        "workspace_id",
+        "expected_root_generation",
+        "expected_source_revision",
+        "expected_workflow_status_hash"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "expected_root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expected_source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_workflow_status_hash": {
+          "$ref": "#/$defs/nullableSha256"
+        }
+      }
+    },
+    "changesetInputOperation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "path",
+            "expected_base_file_sha256",
+            "expected_base_size",
+            "proposed_file_sha256",
+            "proposed_size",
+            "document"
+          ],
+          "properties": {
+            "operation": {
+              "const": "create"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "x-world-forge-portable-path": true
+            },
+            "expected_base_file_sha256": {
+              "type": "null"
+            },
+            "expected_base_size": {
+              "type": "null"
+            },
+            "proposed_file_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "proposed_size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            },
+            "document": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "path",
+            "expected_base_file_sha256",
+            "expected_base_size",
+            "proposed_file_sha256",
+            "proposed_size",
+            "document"
+          ],
+          "properties": {
+            "operation": {
+              "const": "replace"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "x-world-forge-portable-path": true
+            },
+            "expected_base_file_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_base_size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            },
+            "proposed_file_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "proposed_size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            },
+            "document": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation",
+            "path",
+            "expected_base_file_sha256",
+            "expected_base_size",
+            "proposed_file_sha256",
+            "proposed_size"
+          ],
+          "properties": {
+            "operation": {
+              "const": "delete"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "x-world-forge-portable-path": true
+            },
+            "expected_base_file_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_base_size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            },
+            "proposed_file_sha256": {
+              "type": "null"
+            },
+            "proposed_size": {
+              "type": "null"
+            }
+          }
+        }
+      ]
+    },
+    "changesetCreateParams": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/creationAuthorityProperties"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "operations"
+          ],
+          "properties": {
+            "changeset_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "operations": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/changesetInputOperation"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "changesetIdParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changeset_id"
+      ],
+      "properties": {
+        "changeset_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "changesetListParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "status": {
+          "enum": [
+            "staged",
+            "approved",
+            "applying",
+            "applied",
+            "rejected",
+            "recovery_required"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      }
+    },
+    "changesetActionParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changeset_id",
+        "expected_record_hash",
+        "expected_review_sha256"
+      ],
+      "properties": {
+        "changeset_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_record_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_review_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "changesetApplyParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changeset_id",
+        "expected_record_hash",
+        "expected_review_sha256",
+        "expected_root_generation"
+      ],
+      "properties": {
+        "changeset_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_record_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_review_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "changesetRecoverParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changeset_id",
+        "mode",
+        "expected_record_hash",
+        "expected_review_sha256",
+        "expected_root_generation"
+      ],
+      "properties": {
+        "changeset_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "mode": {
+          "enum": [
+            "resume",
+            "rollback"
+          ]
+        },
+        "expected_record_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_review_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "artifactRegistry": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": {
+        "type": "object"
+      }
+    },
+    "workflowReconcileParams": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/creationAuthorityProperties"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "artifact_registry"
+          ],
+          "properties": {
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "artifact_registry": {
+              "$ref": "#/$defs/artifactRegistry"
+            }
+          }
+        }
+      ]
+    },
+    "phaseReportParams": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/creationAuthorityProperties"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "report",
+            "artifact_registry"
+          ],
+          "properties": {
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "report": {
+              "type": "object"
+            },
+            "artifact_registry": {
+              "$ref": "#/$defs/artifactRegistry"
+            }
+          }
+        }
+      ]
+    },
+    "phaseReadParams": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/creationAuthorityProperties"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "phase_id",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash"
+          ],
+          "properties": {
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "phase_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "phaseCompleteParams": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/creationAuthorityProperties"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "report",
+            "artifact_registry"
+          ],
+          "properties": {
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "report": {
+              "type": "object"
+            },
+            "artifact_registry": {
+              "$ref": "#/$defs/artifactRegistry"
+            }
+          }
+        }
+      ]
+    },
+    "phaseReopenParams": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/creationAuthorityProperties"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "phase_id",
+            "reason",
+            "approved_by"
+          ],
+          "properties": {
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "phase_id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "approved_by": {
+              "$ref": "#/$defs/entityId"
+            }
+          }
+        }
+      ]
+    },
+    "request": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "protocol",
+            "protocol_version",
+            "kind",
+            "request_id",
+            "method",
+            "params"
+          ],
+          "properties": {
+            "protocol": {
+              "const": "rpg-world-forge.studio_protocol"
+            },
+            "protocol_version": {
+              "const": 3
+            },
+            "kind": {
+              "const": "request"
+            },
+            "request_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "method": {
+              "$ref": "#/$defs/method"
+            },
+            "params": {}
+          }
+        },
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "service.initialize",
+                    "creation_workspace.list"
+                  ]
+                },
+                "params": {
+                  "$ref": "#/$defs/emptyParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_root_grant.create"
+                },
+                "params": {
+                  "$ref": "#/$defs/grantCreateParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_root_grant.get"
+                },
+                "params": {
+                  "$ref": "#/$defs/grantIdParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_root_grant.revoke"
+                },
+                "params": {
+                  "$ref": "#/$defs/grantMutationParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_workspace.create"
+                },
+                "params": {
+                  "$ref": "#/$defs/workspaceCreateParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_workspace.recover"
+                },
+                "params": {
+                  "$ref": "#/$defs/workspaceRecoverParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_workspace.register"
+                },
+                "params": {
+                  "$ref": "#/$defs/workspaceRegisterParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "creation_workspace.get",
+                    "creation_workspace.open",
+                    "creation_workflow.get",
+                    "creation_readiness.inspect"
+                  ]
+                },
+                "params": {
+                  "$ref": "#/$defs/workspaceIdParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_document.list"
+                },
+                "params": {
+                  "$ref": "#/$defs/revisionParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_document.read"
+                },
+                "params": {
+                  "$ref": "#/$defs/documentReadParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_changeset.create"
+                },
+                "params": {
+                  "$ref": "#/$defs/changesetCreateParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "creation_changeset.get",
+                    "creation_changeset.diff"
+                  ]
+                },
+                "params": {
+                  "$ref": "#/$defs/changesetIdParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_changeset.list"
+                },
+                "params": {
+                  "$ref": "#/$defs/changesetListParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "creation_changeset.approve",
+                    "creation_changeset.reject"
+                  ]
+                },
+                "params": {
+                  "$ref": "#/$defs/changesetActionParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_changeset.apply"
+                },
+                "params": {
+                  "$ref": "#/$defs/changesetApplyParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_changeset.recover"
+                },
+                "params": {
+                  "$ref": "#/$defs/changesetRecoverParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_workflow.reconcile"
+                },
+                "params": {
+                  "$ref": "#/$defs/workflowReconcileParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_phase.read"
+                },
+                "params": {
+                  "$ref": "#/$defs/phaseReadParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_phase.validate"
+                },
+                "params": {
+                  "$ref": "#/$defs/phaseReportParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_phase.complete"
+                },
+                "params": {
+                  "$ref": "#/$defs/phaseCompleteParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_phase.reopen"
+                },
+                "params": {
+                  "$ref": "#/$defs/phaseReopenParams"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "documentSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "id",
+        "content_hash",
+        "file_sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "x-world-forge-portable-path": true
+        },
+        "format": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "format_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "file_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "initializeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service",
+        "service_version",
+        "protocol",
+        "protocol_version",
+        "methods",
+        "capabilities"
+      ],
+      "properties": {
+        "service": {
+          "const": "world-forge.studio"
+        },
+        "service_version": {
+          "const": 3
+        },
+        "protocol": {
+          "const": "rpg-world-forge.studio_protocol"
+        },
+        "protocol_version": {
+          "const": 3
+        },
+        "methods": {
+          "type": "array",
+          "minItems": 27,
+          "maxItems": 27,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/method"
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "generic_creation",
+            "safe_project_creation",
+            "read_only_documents",
+            "profile_editing",
+            "generic_jobs",
+            "reviewed_changesets",
+            "workflow_mutations",
+            "inline_phase_reports"
+          ],
+          "properties": {
+            "generic_creation": {
+              "const": true
+            },
+            "safe_project_creation": {
+              "const": true
+            },
+            "read_only_documents": {
+              "const": true
+            },
+            "profile_editing": {
+              "const": true
+            },
+            "generic_jobs": {
+              "const": false
+            },
+            "reviewed_changesets": {
+              "const": true
+            },
+            "workflow_mutations": {
+              "const": true
+            },
+            "inline_phase_reports": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "grantResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant"
+      ],
+      "properties": {
+        "grant": {
+          "$ref": "studio-creation-root-grant.schema.json"
+        }
+      }
+    },
+    "workspaceResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace"
+      ],
+      "properties": {
+        "workspace": {
+          "$ref": "studio-creation-workspace.schema.json"
+        }
+      }
+    },
+    "workspaceRecoverResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace",
+        "state"
+      ],
+      "properties": {
+        "workspace": {
+          "$ref": "studio-creation-workspace.schema.json"
+        },
+        "state": {
+          "enum": [
+            "complete",
+            "cleanup_pending"
+          ]
+        }
+      }
+    },
+    "workspaceListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspaces"
+      ],
+      "properties": {
+        "workspaces": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "studio-creation-workspace.schema.json"
+          }
+        }
+      }
+    },
+    "workspaceOpenResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace",
+        "route",
+        "project_kind",
+        "source_revision",
+        "workflow_status_hash",
+        "current_phase"
+      ],
+      "properties": {
+        "workspace": {
+          "$ref": "studio-creation-workspace.schema.json"
+        },
+        "route": {
+          "const": "generic"
+        },
+        "project_kind": {
+          "enum": [
+            "game",
+            "asset_library",
+            "universe_library"
+          ]
+        },
+        "source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "workflow_status_hash": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "current_phase": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "documentListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "documents",
+        "source_revision"
+      ],
+      "properties": {
+        "documents": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "#/$defs/documentSummary"
+          }
+        },
+        "source_revision": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "documentReadResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document",
+        "source_revision"
+      ],
+      "properties": {
+        "source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "document": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "format",
+            "format_version",
+            "id",
+            "content_hash",
+            "file_sha256",
+            "document"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "x-world-forge-portable-path": true
+            },
+            "format": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "format_version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "file_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "document": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "workflowResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workflow"
+      ],
+      "properties": {
+        "workflow": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "source_revision",
+            "status_hash",
+            "current_phase",
+            "revision",
+            "status"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "missing",
+                "not_started",
+                "active",
+                "complete",
+                "invalid"
+              ]
+            },
+            "source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "status_hash": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/sha256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "current_phase": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "revision": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "status": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "changesetResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changeset"
+      ],
+      "properties": {
+        "changeset": {
+          "$ref": "studio-creation-changeset.schema.json"
+        }
+      }
+    },
+    "changesetListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changesets"
+      ],
+      "properties": {
+        "changesets": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "studio-creation-changeset.schema.json"
+          }
+        }
+      }
+    },
+    "changesetDiffOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "path",
+        "expected_base_file_sha256",
+        "expected_base_size",
+        "proposed_file_sha256",
+        "proposed_size",
+        "size_delta"
+      ],
+      "properties": {
+        "operation": {
+          "enum": [
+            "create",
+            "replace",
+            "delete"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "x-world-forge-portable-path": true
+        },
+        "expected_base_file_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "expected_base_size": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proposed_file_sha256": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "proposed_size": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size_delta": {
+          "type": "integer",
+          "minimum": -16777216,
+          "maximum": 16777216
+        }
+      }
+    },
+    "changesetDiffResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "diff"
+      ],
+      "properties": {
+        "diff": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "changeset_id",
+            "workspace_id",
+            "expected_source_revision",
+            "proposed_source_revision",
+            "review_sha256",
+            "operations"
+          ],
+          "properties": {
+            "changeset_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "proposed_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "review_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "operations": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/$defs/changesetDiffOperation"
+              }
+            }
+          }
+        }
+      }
+    },
+    "workspaceWorkflowResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace",
+        "workflow"
+      ],
+      "properties": {
+        "workspace": {
+          "$ref": "studio-creation-workspace.schema.json"
+        },
+        "workflow": {
+          "$ref": "#/$defs/workflowResult/properties/workflow"
+        }
+      }
+    },
+    "changesetApplyResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changeset",
+        "workspace",
+        "workflow"
+      ],
+      "properties": {
+        "changeset": {
+          "$ref": "studio-creation-changeset.schema.json"
+        },
+        "workspace": {
+          "$ref": "studio-creation-workspace.schema.json"
+        },
+        "workflow": {
+          "$ref": "#/$defs/workflowResult/properties/workflow"
+        }
+      }
+    },
+    "changesetRecoverResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changeset",
+        "workspace",
+        "workflow",
+        "outcome"
+      ],
+      "properties": {
+        "changeset": {
+          "$ref": "studio-creation-changeset.schema.json"
+        },
+        "workspace": {
+          "$ref": "studio-creation-workspace.schema.json"
+        },
+        "workflow": {
+          "$ref": "#/$defs/workflowResult/properties/workflow"
+        },
+        "outcome": {
+          "enum": [
+            "not_needed",
+            "rolled_back",
+            "committed"
+          ]
+        }
+      }
+    },
+    "phaseValidateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace",
+        "workflow",
+        "report"
+      ],
+      "properties": {
+        "workspace": {
+          "$ref": "studio-creation-workspace.schema.json"
+        },
+        "workflow": {
+          "$ref": "#/$defs/workflowResult/properties/workflow"
+        },
+        "report": {
+          "type": "object"
+        }
+      }
+    },
+    "phaseReadResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace",
+        "workflow",
+        "reference",
+        "report"
+      ],
+      "properties": {
+        "workspace": {
+          "$ref": "studio-creation-workspace.schema.json"
+        },
+        "workflow": {
+          "$ref": "#/$defs/workflowResult/properties/workflow"
+        },
+        "reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "phase",
+            "status",
+            "content_hash",
+            "invalidation_dependencies"
+          ],
+          "properties": {
+            "phase": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+            },
+            "status": {
+              "enum": [
+                "ready",
+                "not_applicable"
+              ]
+            },
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "invalidation_dependencies": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1024,
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "report": {
+          "type": "object"
+        }
+      }
+    },
+    "readinessResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "readiness"
+      ],
+      "properties": {
+        "readiness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "source_revision",
+            "workflow_status_hash",
+            "current_phase",
+            "release",
+            "blocker_reason_codes",
+            "report"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "missing",
+                "not_started",
+                "invalid",
+                "authoring_ready",
+                "implementation_ready",
+                "blocked"
+              ]
+            },
+            "source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "workflow_status_hash": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/sha256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "current_phase": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "release": {
+              "enum": [
+                "blocked",
+                "ready"
+              ]
+            },
+            "blocker_reason_codes": {
+              "type": "array",
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+              }
+            },
+            "report": {
+              "oneOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "response": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "protocol",
+            "protocol_version",
+            "kind",
+            "request_id",
+            "method",
+            "result"
+          ],
+          "properties": {
+            "protocol": {
+              "const": "rpg-world-forge.studio_protocol"
+            },
+            "protocol_version": {
+              "const": 3
+            },
+            "kind": {
+              "const": "response"
+            },
+            "request_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "method": {
+              "$ref": "#/$defs/method"
+            },
+            "result": {}
+          }
+        },
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "service.initialize"
+                },
+                "result": {
+                  "$ref": "#/$defs/initializeResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "creation_root_grant.create",
+                    "creation_root_grant.get",
+                    "creation_root_grant.revoke"
+                  ]
+                },
+                "result": {
+                  "$ref": "#/$defs/grantResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "creation_workspace.create",
+                    "creation_workspace.register",
+                    "creation_workspace.get"
+                  ]
+                },
+                "result": {
+                  "$ref": "#/$defs/workspaceResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_workspace.recover"
+                },
+                "result": {
+                  "$ref": "#/$defs/workspaceRecoverResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_workspace.list"
+                },
+                "result": {
+                  "$ref": "#/$defs/workspaceListResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_workspace.open"
+                },
+                "result": {
+                  "$ref": "#/$defs/workspaceOpenResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_document.list"
+                },
+                "result": {
+                  "$ref": "#/$defs/documentListResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_document.read"
+                },
+                "result": {
+                  "$ref": "#/$defs/documentReadResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_workflow.get"
+                },
+                "result": {
+                  "$ref": "#/$defs/workflowResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "creation_changeset.create",
+                    "creation_changeset.get",
+                    "creation_changeset.approve",
+                    "creation_changeset.reject"
+                  ]
+                },
+                "result": {
+                  "$ref": "#/$defs/changesetResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_changeset.list"
+                },
+                "result": {
+                  "$ref": "#/$defs/changesetListResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_changeset.diff"
+                },
+                "result": {
+                  "$ref": "#/$defs/changesetDiffResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_changeset.apply"
+                },
+                "result": {
+                  "$ref": "#/$defs/changesetApplyResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_changeset.recover"
+                },
+                "result": {
+                  "$ref": "#/$defs/changesetRecoverResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "creation_workflow.reconcile",
+                    "creation_phase.complete",
+                    "creation_phase.reopen"
+                  ]
+                },
+                "result": {
+                  "$ref": "#/$defs/workspaceWorkflowResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_phase.read"
+                },
+                "result": {
+                  "$ref": "#/$defs/phaseReadResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_phase.validate"
+                },
+                "result": {
+                  "$ref": "#/$defs/phaseValidateResult"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "creation_readiness.inspect"
+                },
+                "result": {
+                  "$ref": "#/$defs/readinessResult"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "errorEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "protocol_version",
+        "kind",
+        "request_id",
+        "error"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "rpg-world-forge.studio_protocol"
+        },
+        "protocol_version": {
+          "const": 3
+        },
+        "kind": {
+          "const": "error"
+        },
+        "request_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/entityId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "details"
+          ],
+          "properties": {
+            "code": {
+              "enum": [
+                "invalid_request",
+                "not_found",
+                "conflict",
+                "invalid_state",
+                "internal_error",
+                "recovery_ambiguous",
+                "recovery_failed"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "details": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

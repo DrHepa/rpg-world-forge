@@ -5,6 +5,11 @@ description: Implement validated texture, atlas, font, shader, render-texture, a
 
 # Implement graphics resources
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Implement only G23 verified graphics-resource acquisition, ownership, lookup,

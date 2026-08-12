@@ -1,0 +1,58 @@
+{
+  "acceptance_criteria": [
+    "Mission progress and framing context remain distinguishable without color.",
+    "The bounded action state remains readable at the reference resolution."
+  ],
+  "asset": {
+    "asset_id": "action_hud",
+    "content_hash": "e4313d39e0d0a09245ffa5be7bc58d5b14707b22eb42775f4a55375e97b87b57"
+  },
+  "asset_subject": {
+    "content_hash": "95c24c228facc0f49fdbf67c0c09af0604a1e20c37da43b7461d7605315466e4",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_b5515b8b15c591d03ee19f0b9ad83d3a4047552bf70f5fd9"
+  },
+  "content_hash": "aac475a0c5841e811945e40f0ce2262147c099dc50bb108699cebbbd834090bd",
+  "format": "world-forge.asset_spec",
+  "format_version": 1,
+  "inventory": {
+    "content_hash": "f8090c021d6e4b6497db783d7ff16bbbd961f3d1bd4ec5e68e6e60bbe3581e27",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_013a8c4d25ff85b1a541c4a4ceedb7339f5ddf883f34a33f"
+  },
+  "outputs": [
+    {
+      "expectations": {
+        "color_type": "rgba8",
+        "height": 256,
+        "kind": "png",
+        "max_bytes": 262144,
+        "width": 256
+      },
+      "media_type": "image/png",
+      "role": "texture",
+      "runtime_path": "assets/ui/action-hud.png"
+    }
+  ],
+  "production_class": "procedural_offline",
+  "review_requirements": {
+    "evidence_required": true,
+    "human_review_required": true,
+    "qa_profile": "action_information_hierarchy"
+  },
+  "spec_id": "asset_spec_2b734aaad5b0f3c4d15481697474f2a0141508bd9d2112b6",
+  "style": {
+    "content_hash": "3598dd37fb8489f10523d8d734d4e2cc4449678690be05d9acba58653afdd673",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_06a44be3d5cc949c2ee34b8bb39f991ef43461d7812cb699"
+  },
+  "target": {
+    "content_hash": "284d6835a486e5d5289aaf8b661f3a240155870f84f15eb1764293d25bba920c",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_5e7739cb414629f4e3e890c2da30caefc22c7f757de251f9"
+  }
+}

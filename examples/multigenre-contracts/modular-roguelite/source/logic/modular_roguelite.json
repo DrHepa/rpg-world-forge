@@ -1,0 +1,727 @@
+{
+  "actions": [
+    {
+      "core_verb_id": "venture",
+      "id": "advance_expedition",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "roguelite:run_reset"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "roguelite_run"
+        },
+        {
+          "kind": "system",
+          "source_id": "storylet_sequence"
+        }
+      ]
+    },
+    {
+      "core_verb_id": "venture",
+      "id": "endure_storylet_hazard",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "roguelite:run_reset"
+      ],
+      "rule_ids": [
+        "endure_hazard_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "roguelite_run"
+        },
+        {
+          "kind": "system",
+          "source_id": "storylet_sequence"
+        }
+      ]
+    },
+    {
+      "core_verb_id": "venture",
+      "id": "fall_to_storylet_hazard",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "roguelite:run_reset"
+      ],
+      "rule_ids": [
+        "fall_hazard_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "roguelite_run"
+        },
+        {
+          "kind": "system",
+          "source_id": "storylet_sequence"
+        }
+      ]
+    },
+    {
+      "core_verb_id": "recover",
+      "id": "recover_after_death",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "recovery_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "roguelite_run"
+        },
+        {
+          "kind": "system",
+          "source_id": "storylet_sequence"
+        }
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "action_id": "advance_expedition",
+      "comparison": "less_than",
+      "id": "advance_depth_available",
+      "left": {
+        "kind": "state",
+        "state_id": "run_depth"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 3,
+        "value_type": "integer"
+      }
+    },
+    {
+      "action_id": "advance_expedition",
+      "comparison": "equal",
+      "id": "advance_run_active",
+      "left": {
+        "kind": "state",
+        "state_id": "run_active"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": true,
+        "value_type": "boolean"
+      }
+    },
+    {
+      "action_id": null,
+      "comparison": "less_or_equal",
+      "id": "death_condition",
+      "left": {
+        "kind": "state",
+        "state_id": "run_health"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 0,
+        "value_type": "integer"
+      }
+    },
+    {
+      "action_id": "endure_storylet_hazard",
+      "comparison": "greater_than",
+      "id": "endure_health_available",
+      "left": {
+        "kind": "state",
+        "state_id": "run_health"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      }
+    },
+    {
+      "action_id": "endure_storylet_hazard",
+      "comparison": "equal",
+      "id": "endure_run_active",
+      "left": {
+        "kind": "state",
+        "state_id": "run_active"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": true,
+        "value_type": "boolean"
+      }
+    },
+    {
+      "action_id": "fall_to_storylet_hazard",
+      "comparison": "equal",
+      "id": "fall_health_critical",
+      "left": {
+        "kind": "state",
+        "state_id": "run_health"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      }
+    },
+    {
+      "action_id": "fall_to_storylet_hazard",
+      "comparison": "equal",
+      "id": "fall_run_active",
+      "left": {
+        "kind": "state",
+        "state_id": "run_active"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": true,
+        "value_type": "boolean"
+      }
+    },
+    {
+      "action_id": "recover_after_death",
+      "comparison": "less_or_equal",
+      "id": "recovery_health_depleted",
+      "left": {
+        "kind": "state",
+        "state_id": "run_health"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 0,
+        "value_type": "integer"
+      }
+    },
+    {
+      "action_id": "recover_after_death",
+      "comparison": "equal",
+      "id": "recovery_run_inactive",
+      "left": {
+        "kind": "state",
+        "state_id": "run_active"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": false,
+        "value_type": "boolean"
+      }
+    },
+    {
+      "action_id": null,
+      "comparison": "equal",
+      "id": "run_at_entry_depth",
+      "left": {
+        "kind": "state",
+        "state_id": "run_depth"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 0,
+        "value_type": "integer"
+      }
+    },
+    {
+      "action_id": null,
+      "comparison": "equal",
+      "id": "run_is_active",
+      "left": {
+        "kind": "state",
+        "state_id": "run_active"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": true,
+        "value_type": "boolean"
+      }
+    },
+    {
+      "action_id": null,
+      "comparison": "equal",
+      "id": "run_is_inactive",
+      "left": {
+        "kind": "state",
+        "state_id": "run_active"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": false,
+        "value_type": "boolean"
+      }
+    },
+    {
+      "action_id": null,
+      "id": "scenario_ready",
+      "operator": "constant",
+      "value": true
+    },
+    {
+      "action_id": null,
+      "comparison": "greater_or_equal",
+      "id": "storylet_progressed",
+      "left": {
+        "kind": "state",
+        "state_id": "run_depth"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      }
+    },
+    {
+      "action_id": null,
+      "comparison": "greater_or_equal",
+      "id": "victory_condition",
+      "left": {
+        "kind": "state",
+        "state_id": "run_depth"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 3,
+        "value_type": "integer"
+      }
+    }
+  ],
+  "content_hash": "509ef20177804e39b9acbe708f86661d7b437237ded64e5baa672d65595fe864",
+  "effects": [
+    {
+      "action_id": "advance_expedition",
+      "amount": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      },
+      "id": "advance_progress",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "run_depth"
+    },
+    {
+      "action_id": "endure_storylet_hazard",
+      "amount": {
+        "kind": "literal",
+        "value": -1,
+        "value_type": "integer"
+      },
+      "id": "consume_run_health",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "run_health"
+    },
+    {
+      "action_id": "fall_to_storylet_hazard",
+      "id": "deactivate_run",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "set",
+      "state_id": "run_active",
+      "value": {
+        "kind": "literal",
+        "value": false,
+        "value_type": "boolean"
+      }
+    },
+    {
+      "action_id": "fall_to_storylet_hazard",
+      "amount": {
+        "kind": "literal",
+        "value": -1,
+        "value_type": "integer"
+      },
+      "id": "deplete_run_health",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "run_health"
+    },
+    {
+      "action_id": "recover_after_death",
+      "id": "reactivate_run",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "run_active"
+    },
+    {
+      "action_id": "recover_after_death",
+      "amount": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      },
+      "id": "record_run_death",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "run_deaths"
+    },
+    {
+      "action_id": "recover_after_death",
+      "id": "reset_run_depth",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "run_depth"
+    },
+    {
+      "action_id": "recover_after_death",
+      "id": "restore_run_health",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "run_health"
+    }
+  ],
+  "endings": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [],
+      "id": "scenario_complete",
+      "kind": "success",
+      "presentation_hook_ids": [
+        "ending_feedback"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "hazard_endured"
+    },
+    {
+      "id": "progress_advanced"
+    },
+    {
+      "id": "run_failed"
+    },
+    {
+      "id": "run_recovered"
+    }
+  ],
+  "extensions": [],
+  "failures": [
+    {
+      "condition_ids": [
+        "death_condition",
+        "run_is_inactive"
+      ],
+      "id": "run_failed",
+      "recovery_action_ids": [
+        "recover_after_death"
+      ]
+    }
+  ],
+  "format": "world-forge.logic_module",
+  "format_version": 1,
+  "goals": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "id": "authored_victory",
+      "success_ending_id": "scenario_complete"
+    }
+  ],
+  "mechanics": [
+    {
+      "action_id": "recover_after_death",
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "run_active",
+        "run_deaths",
+        "run_depth",
+        "run_health"
+      ],
+      "condition_ids": [
+        "recovery_health_depleted",
+        "recovery_run_inactive"
+      ],
+      "core_verb_id": "recover",
+      "effect_ids": [
+        "reactivate_run",
+        "record_run_death",
+        "reset_run_depth",
+        "restore_run_health"
+      ],
+      "event_ids": [
+        "run_recovered"
+      ],
+      "id": "death_recovery",
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "recovery_rule"
+      ]
+    },
+    {
+      "action_id": "advance_expedition",
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "run_active",
+        "run_depth"
+      ],
+      "condition_ids": [
+        "advance_depth_available",
+        "advance_run_active"
+      ],
+      "core_verb_id": "venture",
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "expedition_advance",
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "roguelite:run_reset"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ]
+    },
+    {
+      "action_id": "endure_storylet_hazard",
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "run_active",
+        "run_health"
+      ],
+      "condition_ids": [
+        "endure_health_available",
+        "endure_run_active"
+      ],
+      "core_verb_id": "venture",
+      "effect_ids": [
+        "consume_run_health"
+      ],
+      "event_ids": [
+        "hazard_endured"
+      ],
+      "id": "storylet_hazard_endurance",
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "roguelite:run_reset"
+      ],
+      "rule_ids": [
+        "endure_hazard_rule"
+      ]
+    },
+    {
+      "action_id": "fall_to_storylet_hazard",
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "run_active",
+        "run_health"
+      ],
+      "condition_ids": [
+        "fall_health_critical",
+        "fall_run_active"
+      ],
+      "core_verb_id": "venture",
+      "effect_ids": [
+        "deactivate_run",
+        "deplete_run_health"
+      ],
+      "event_ids": [
+        "run_failed"
+      ],
+      "id": "storylet_hazard_fall",
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "roguelite:run_reset"
+      ],
+      "rule_ids": [
+        "fall_hazard_rule"
+      ]
+    }
+  ],
+  "module_id": "modular_roguelite_logic",
+  "presentation_hooks": [
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "id": "ending_feedback",
+      "kind": "ending"
+    },
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "id": "progress_feedback",
+      "kind": "feedback"
+    },
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "id": "progress_view",
+      "kind": "board"
+    }
+  ],
+  "project_id": "modular_roguelite",
+  "rules": [
+    {
+      "action_id": "advance_expedition",
+      "condition_ids": [
+        "advance_depth_available",
+        "advance_run_active"
+      ],
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "advance_rule",
+      "order": 0
+    },
+    {
+      "action_id": "endure_storylet_hazard",
+      "condition_ids": [
+        "endure_health_available",
+        "endure_run_active"
+      ],
+      "effect_ids": [
+        "consume_run_health"
+      ],
+      "event_ids": [
+        "hazard_endured"
+      ],
+      "id": "endure_hazard_rule",
+      "order": 1
+    },
+    {
+      "action_id": "fall_to_storylet_hazard",
+      "condition_ids": [
+        "fall_health_critical",
+        "fall_run_active"
+      ],
+      "effect_ids": [
+        "deactivate_run",
+        "deplete_run_health"
+      ],
+      "event_ids": [
+        "run_failed"
+      ],
+      "id": "fall_hazard_rule",
+      "order": 2
+    },
+    {
+      "action_id": "recover_after_death",
+      "condition_ids": [
+        "recovery_health_depleted",
+        "recovery_run_inactive"
+      ],
+      "effect_ids": [
+        "reactivate_run",
+        "record_run_death",
+        "reset_run_depth",
+        "restore_run_health"
+      ],
+      "event_ids": [
+        "run_recovered"
+      ],
+      "id": "recovery_rule",
+      "order": 3
+    }
+  ],
+  "state_variables": [
+    {
+      "id": "run_active",
+      "initial": true,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "boolean"
+    },
+    {
+      "id": "run_deaths",
+      "initial": 0,
+      "maximum": 99,
+      "minimum": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "integer"
+    },
+    {
+      "id": "run_depth",
+      "initial": 0,
+      "maximum": 3,
+      "minimum": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "integer"
+    },
+    {
+      "id": "run_health",
+      "initial": 2,
+      "maximum": 2,
+      "minimum": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "integer"
+    }
+  ],
+  "title": "Neutral authored roguelite logic"
+}

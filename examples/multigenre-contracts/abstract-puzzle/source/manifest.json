@@ -1,0 +1,45 @@
+{
+  "content_hash": "e0edb5879591acca1cf3a24a60f280ec1fd2b18054fe0ebfb80045f37b3fbb37",
+  "extensions": [],
+  "format": "world-forge.creation_source_manifest",
+  "format_version": 1,
+  "modules": {
+    "activity_modules": [
+      {
+        "content_hash": "150e167e7117227b1d0162fba631016314d127f83aeb18f2b72c41a66e479c51",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "puzzle_activities",
+        "path": "activities/puzzle.json"
+      }
+    ],
+    "logic_modules": [
+      {
+        "content_hash": "ccd925b19b39385d3209e4ee9bb5d687d382a3df3cf59918b8e05ddcf6010332",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "puzzle_logic",
+        "path": "logic/puzzle.json"
+      }
+    ],
+    "narrative_modules": [],
+    "system_modules": [
+      {
+        "content_hash": "b3d4bfe67c1bddf85371521e178517f0f6ab266c4ee3365364408d8c9a610507",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "puzzle_rules",
+        "path": "systems/rules.json"
+      }
+    ],
+    "world_modules": []
+  },
+  "profile": {
+    "content_hash": "5184f408db69b0ee4543ad86885a8373fdfe9f4c7aebfd36d0c7a6d62a984774",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "abstract_puzzle_profile",
+    "path": "profile.json"
+  },
+  "project_id": "abstract_puzzle"
+}

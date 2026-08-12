@@ -1,0 +1,45 @@
+{
+  "activities": [
+    {
+      "activity_type": "scenario",
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "effect_ids": [
+        "advance_progress",
+        "reset_progress"
+      ],
+      "end_condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [
+        "progress_advanced",
+        "scenario_restarted"
+      ],
+      "failure_condition_ids": [],
+      "id": "career_season",
+      "participant_ids": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "provenance": "authored neutral sports fixture",
+      "spatial_context_ids": [],
+      "start_condition_ids": [
+        "scenario_ready"
+      ],
+      "success_condition_ids": [
+        "victory_condition"
+      ],
+      "title": "one reviewed season within an authored sports career",
+      "validation_profile": "authoring_only"
+    }
+  ],
+  "content_hash": "f18cc4175952726a39a8368e6935469a2a1d4de0f5f0adaa902779c49a95e5e0",
+  "extensions": [],
+  "format": "world-forge.activity_module",
+  "format_version": 1,
+  "module_id": "sports_career_activities",
+  "project_id": "sports_career",
+  "title": "Sports Career authored activity"
+}

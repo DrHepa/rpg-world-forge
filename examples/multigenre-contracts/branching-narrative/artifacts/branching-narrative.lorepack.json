@@ -1,0 +1,186 @@
+{
+  "content_hash": "bca4f48552b4143e69fa16562708ef27538538e7e06faece1f0566ff72a6477b",
+  "dependencies": [],
+  "extensions": [],
+  "format": "world-forge.lorepack",
+  "format_version": 1,
+  "localization": {
+    "references": [
+      {
+        "field": "title",
+        "key": "module.branching_units.title",
+        "locale": "en",
+        "module_id": "branching_units",
+        "parent_id": "branching_units",
+        "subject_id": "branching_units",
+        "subject_kind": "module"
+      },
+      {
+        "field": "label",
+        "key": "narrative.branching_units.central_choice.choose_left.label",
+        "locale": "en",
+        "module_id": "branching_units",
+        "parent_id": "central_choice",
+        "subject_id": "choose_left",
+        "subject_kind": "choice_option"
+      },
+      {
+        "field": "label",
+        "key": "narrative.branching_units.central_choice.choose_right.label",
+        "locale": "en",
+        "module_id": "branching_units",
+        "parent_id": "central_choice",
+        "subject_id": "choose_right",
+        "subject_kind": "choice_option"
+      },
+      {
+        "field": "title",
+        "key": "narrative.branching_units.central_choice.title",
+        "locale": "en",
+        "module_id": "branching_units",
+        "parent_id": "branching_units",
+        "subject_id": "central_choice",
+        "subject_kind": "narrative_unit"
+      },
+      {
+        "field": "title",
+        "key": "narrative.branching_units.ending_left.title",
+        "locale": "en",
+        "module_id": "branching_units",
+        "parent_id": "branching_units",
+        "subject_id": "ending_left",
+        "subject_kind": "narrative_unit"
+      },
+      {
+        "field": "title",
+        "key": "narrative.branching_units.ending_right.title",
+        "locale": "en",
+        "module_id": "branching_units",
+        "parent_id": "branching_units",
+        "subject_id": "ending_right",
+        "subject_kind": "narrative_unit"
+      }
+    ],
+    "source_locale": "en",
+    "supported_locales": [
+      "en"
+    ]
+  },
+  "lorepack_id": "branching_narrative_lore",
+  "narrative_projections": [
+    {
+      "content_hash": "96b6c609ee32d2866694b7ca5e02a7c8a787e8c06c76347f46849bcd13bdce14",
+      "entry_unit_ids": [
+        "central_choice"
+      ],
+      "format": "world-forge.lore_narrative_projection",
+      "format_version": 1,
+      "projection_id": "branching_units",
+      "source": {
+        "content_hash": "29512bafe8701029b4c53b2408346d9133cc4845c86aa05ee80edace950ccdaf",
+        "format": "world-forge.narrative_module",
+        "format_version": 1,
+        "id": "branching_units"
+      },
+      "title": "Neutral branching units",
+      "units": [
+        {
+          "id": "central_choice",
+          "next_unit_ids": [
+            "ending_left",
+            "ending_right"
+          ],
+          "options": [
+            {
+              "id": "choose_left",
+              "label": "Choose the left symbol",
+              "next_unit_id": "ending_left"
+            },
+            {
+              "id": "choose_right",
+              "label": "Choose the right symbol",
+              "next_unit_id": "ending_right"
+            }
+          ],
+          "title": "A visible choice",
+          "unit_type": "choice"
+        },
+        {
+          "ending_kind": "success",
+          "id": "ending_left",
+          "next_unit_ids": [],
+          "title": "Left ending",
+          "unit_type": "ending"
+        },
+        {
+          "ending_kind": "success",
+          "id": "ending_right",
+          "next_unit_ids": [],
+          "title": "Right ending",
+          "unit_type": "ending"
+        }
+      ]
+    }
+  ],
+  "profile": {
+    "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "branching_narrative_profile"
+  },
+  "project": {
+    "content_hash": "4675a74458c29e1fa8e4b99acfa8e4ac501ea0e0e3bcec11c207e95644146c03",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "branching_narrative"
+  },
+  "provenance": [
+    {
+      "kind": "source_contract",
+      "provenance_id": "source_10e95d34b653a06e5a8c59957a486f69d0aeec51e6e58382",
+      "subject": {
+        "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "branching_narrative_profile"
+      }
+    },
+    {
+      "kind": "source_contract",
+      "provenance_id": "source_29512bafe8701029b4c53b2408346d9133cc4845c86aa05e",
+      "subject": {
+        "content_hash": "29512bafe8701029b4c53b2408346d9133cc4845c86aa05ee80edace950ccdaf",
+        "format": "world-forge.narrative_module",
+        "format_version": 1,
+        "id": "branching_units"
+      }
+    },
+    {
+      "kind": "source_contract",
+      "provenance_id": "source_3f3ed623c2f26208c60762888e8aa544f877bd198664c16e",
+      "subject": {
+        "content_hash": "3f3ed623c2f26208c60762888e8aa544f877bd198664c16e64ccbfd7f41226cf",
+        "format": "world-forge.creation_source_manifest",
+        "format_version": 1,
+        "id": "branching_narrative"
+      }
+    },
+    {
+      "kind": "source_contract",
+      "provenance_id": "source_4675a74458c29e1fa8e4b99acfa8e4ac501ea0e0e3bcec11",
+      "subject": {
+        "content_hash": "4675a74458c29e1fa8e4b99acfa8e4ac501ea0e0e3bcec11c207e95644146c03",
+        "format": "world-forge.project",
+        "format_version": 1,
+        "id": "branching_narrative"
+      }
+    }
+  ],
+  "source_manifest": {
+    "content_hash": "3f3ed623c2f26208c60762888e8aa544f877bd198664c16e64ccbfd7f41226cf",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "branching_narrative"
+  },
+  "world_projections": []
+}

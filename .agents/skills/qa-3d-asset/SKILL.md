@@ -5,6 +5,11 @@ description: Run read-only contract, lineage, license, and neutral-GLB QA for on
 
 # QA a 3D asset
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Evaluate one processed 3D asset independently of its production executor.

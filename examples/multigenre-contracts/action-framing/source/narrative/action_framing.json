@@ -1,0 +1,41 @@
+{
+  "content_hash": "76da592c31d755218d9a3f9e1d9bfee3308d47770a7e519088c869d8a2de6d2a",
+  "entry_unit_ids": [
+    "mission_framing"
+  ],
+  "extensions": [],
+  "format": "world-forge.narrative_module",
+  "format_version": 1,
+  "module_id": "action_framing_narrative",
+  "project_id": "action_framing",
+  "title": "Authored action framing narrative",
+  "units": [
+    {
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "effect_ids": [],
+      "id": "mission_framing",
+      "next_unit_ids": [
+        "mission_conclusion"
+      ],
+      "prerequisite_ids": [],
+      "title": "Authored framing narrative for the action mission",
+      "unit_type": "scene"
+    },
+    {
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "effect_ids": [],
+      "ending_kind": "success",
+      "id": "mission_conclusion",
+      "next_unit_ids": [],
+      "prerequisite_ids": [
+        "victory_condition"
+      ],
+      "title": "Authored conclusion for the bounded action mission",
+      "unit_type": "ending"
+    }
+  ]
+}

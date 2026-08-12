@@ -9,6 +9,7 @@ import {
   lstat,
   mkdtemp,
   open,
+  readFile,
   readdir,
 } from "node:fs/promises";
 import os from "node:os";
@@ -22,6 +23,15 @@ import {
   getCurrentFuseWire,
 } from "@electron/fuses";
 import Ajv2020 from "ajv/dist/2020.js";
+import { GAME_PACKAGE_ENTRY } from "./verify-game-package.mjs";
+import { GAME_RUNTIME_BUNDLE_ENTRY } from "./verify-game-runtime-bundle.mjs";
+import {
+  GENERIC_MATERIALIZATION_CONTRACTS_ENTRY,
+} from "./verify-materialization-contracts.mjs";
+import { GAME_PERSISTENCE_ENTRY } from "./verify-game-persistence.mjs";
+import { GENERIC_ASSET_RUNTIME_ENTRY } from "./verify-generic-asset-runtime.mjs";
+import { GENERIC_HEADLESS_ENTRY } from "./verify-generic-headless.mjs";
+import { resolveStudioEnvironment } from "./studio-environment.mjs";
 
 const require = createRequire(import.meta.url);
 const asar = require("@electron/asar");
@@ -150,7 +160,7 @@ const LOCALES = Object.freeze([
 
 const TARGETS = Object.freeze({
   "linux-x64": {
-    executable: "rpg-world-forge-studio",
+    executable: "world-forge-studio",
     rootFiles: [
       "LICENSE.electron.txt",
       "LICENSES.chromium.html",
@@ -165,18 +175,18 @@ const TARGETS = Object.freeze({
       "libvk_swiftshader.so",
       "libvulkan.so.1",
       "resources.pak",
-      "rpg-world-forge-studio",
+      "world-forge-studio",
       "snapshot_blob.bin",
       "v8_context_snapshot.bin",
       "vk_swiftshader_icd.json",
     ],
   },
   "win32-x64": {
-    executable: "RPG World Forge Studio.exe",
+    executable: "World Forge Studio.exe",
     rootFiles: [
       "LICENSE.electron.txt",
       "LICENSES.chromium.html",
-      "RPG World Forge Studio.exe",
+      "World Forge Studio.exe",
       "chrome_100_percent.pak",
       "chrome_200_percent.pak",
       "d3dcompiler_47.dll",
@@ -1565,7 +1575,18 @@ function inspectAsar(record, sourceRecords) {
       sourceRecords.map((source) => [source.relative, source]),
     );
     for (const required of [
+      GENERIC_ASSET_RUNTIME_ENTRY,
+      GAME_PACKAGE_ENTRY,
+      GAME_PERSISTENCE_ENTRY,
+      GAME_RUNTIME_BUNDLE_ENTRY,
+      GENERIC_HEADLESS_ENTRY,
+      GENERIC_MATERIALIZATION_CONTRACTS_ENTRY,
+      "dist-electron/main/generic-runtime-contracts.cjs",
       "dist-electron/main/index.cjs",
+      "dist-electron/authority-modal/index.html",
+      "dist-electron/authority-modal/preload.cjs",
+      "dist-electron/authority-modal/renderer.js",
+      "dist-electron/authority-modal/style.css",
       "dist-electron/preload/index.cjs",
       "dist-renderer/index.html",
     ]) {
@@ -1598,7 +1619,7 @@ function inspectAsar(record, sourceRecords) {
     );
     const packageDocument = parseJson(packageBytes, "app_asar_package_invalid");
     if (
-      packageDocument?.name !== "@rpg-world-forge/studio" ||
+      packageDocument?.name !== "@world-forge/studio" ||
       packageDocument?.version !== "0.1.0" ||
       packageDocument?.private !== true ||
       packageDocument?.type !== "module" ||
@@ -1630,6 +1651,55 @@ function inspectAsar(record, sourceRecords) {
   } finally {
     asar.uncache(archivePath);
   }
+}
+
+async function verifyRetainedAsar(record, verifier) {
+  if (verifier === undefined) {
+    return null;
+  }
+  if (typeof verifier !== "function") {
+    fail("invalid_arguments");
+  }
+  let bytes;
+  if (record.handle) {
+    bytes = await readRecord(record);
+  } else if (typeof record.snapshotPath === "string") {
+    try {
+      bytes = await readFile(record.snapshotPath);
+    } catch {
+      fail("package_file_changed");
+    }
+  } else {
+    fail("source_evidence_missing");
+  }
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  if (bytes.length !== record.size || digest !== record.sha256) {
+    fail("package_file_changed");
+  }
+  const snapshot = Object.freeze({
+    bytes,
+    logical_path: APP_ASAR_PATH,
+    sha256: record.sha256,
+    size: record.size,
+  });
+  let evidence;
+  try {
+    evidence = await verifier(snapshot);
+  } catch {
+    fail("generic_asset_runtime_smoke_failed");
+  }
+  if (
+    bytes.length !== record.size ||
+    createHash("sha256").update(bytes).digest("hex") !== record.sha256 ||
+    evidence === null ||
+    typeof evidence !== "object" ||
+    evidence.status !== "verified" ||
+    evidence.artifact_sha256 !== record.sha256 ||
+    evidence.artifact_size_bytes !== record.size
+  ) {
+    fail("generic_asset_runtime_smoke_mismatch");
+  }
+  return Object.freeze(evidence);
 }
 
 async function readStaticFuses(executableRecord) {
@@ -1969,9 +2039,10 @@ function windowsTreeEvidence(report, targetId, snapshotRoot) {
 }
 
 function windowsPythonExecutable(explicit) {
+  const studioEnvironment = resolveStudioEnvironment(process.env);
   const executable =
     explicit ??
-    process.env.RWF_STUDIO_BUILD_PYTHON ??
+    studioEnvironment.BUILD_PYTHON ??
     process.env.PYTHON ??
     (process.env.pythonLocation
       ? path.join(process.env.pythonLocation, "python.exe")
@@ -2433,6 +2504,7 @@ export async function verifyPackagedShell({
   beforeFinalBinding,
   outputPath,
   pythonExecutable,
+  retainedAsarVerifier,
   sourceRoot = STUDIO_ROOT,
   targetId,
   fuseReader = readStaticFuses,
@@ -2471,6 +2543,14 @@ export async function verifyPackagedShell({
           evidence.committed,
           evidence.schemaBytes,
         );
+        const appAsar = evidence.tree.files.get(APP_ASAR_PATH);
+        if (!appAsar) {
+          fail("shell_entrypoint_missing");
+        }
+        const retainedAsarEvidence = await verifyRetainedAsar(
+          appAsar,
+          retainedAsarVerifier,
+        );
         if (beforeFinalBinding) {
           await beforeFinalBinding();
         }
@@ -2482,6 +2562,12 @@ export async function verifyPackagedShell({
             release_ready: false,
             target_id: targetId,
             verified_files: document.inventory.length + 1,
+            app_asar: Object.freeze({
+              path: APP_ASAR_PATH,
+              sha256: appAsar.sha256,
+              size: appAsar.size,
+            }),
+            retained_asar_verification: retainedAsarEvidence,
           }),
         };
       },
@@ -2507,6 +2593,14 @@ export async function verifyPackagedShell({
       fuseReader,
       committed,
     );
+    const appAsar = tree.files.get(APP_ASAR_PATH);
+    if (!appAsar) {
+      fail("shell_entrypoint_missing");
+    }
+    const retainedAsarEvidence = await verifyRetainedAsar(
+      appAsar,
+      retainedAsarVerifier,
+    );
     if (beforeFinalBinding) {
       await beforeFinalBinding();
     }
@@ -2518,6 +2612,12 @@ export async function verifyPackagedShell({
       release_ready: false,
       target_id: targetId,
       verified_files: document.inventory.length + 1,
+      app_asar: Object.freeze({
+        path: APP_ASAR_PATH,
+        sha256: appAsar.sha256,
+        size: appAsar.size,
+      }),
+      retained_asar_verification: retainedAsarEvidence,
     });
   } finally {
     await committed?.close();

@@ -1,0 +1,85 @@
+{
+  "asset_subject": {
+    "content_hash": "0dd2f03aa2b3c4582d616d22507704445ddcf2c58691003c02f00a109b57d48d",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_9259c4cbd29829b3b6f9a90f269567bd757f86f0239d3292"
+  },
+  "audio": {
+    "rationale": "No audio asset is required by this bounded release target.",
+    "status": "not_applicable"
+  },
+  "content_hash": "6a33cb6231d5071d8c3d56e9f336738655d1e53fa56f066246f7f656b2faca64",
+  "format": "world-forge.asset_style",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "sports_career"
+  },
+  "review": {
+    "evidence": [
+      {
+        "content_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "evidence_id": "style_review"
+      }
+    ],
+    "rationale": "The visual and audio directions were reviewed against the runtime target.",
+    "reviewer_id": "asset_director"
+  },
+  "style_id": "asset_style_6827ba36b8acb65b58aa6905c784297b839593fa9e5abf14",
+  "target": {
+    "content_hash": "afece1ac52756f93bc2ce0ecf34406b860a6400f77f9355a9a12bdf1e598d2d2",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_53adc0b6b9cbfff5a698a8d997726483c1b7f53760922ebe"
+  },
+  "visual": {
+    "accessibility": {
+      "captions": true,
+      "keyboard_only": true,
+      "screen_reader_structure": true
+    },
+    "aspect_ratio": {
+      "height": 9,
+      "width": 16
+    },
+    "camera": "fixed",
+    "coordinate_system": "screen_2d",
+    "localization": {
+      "expansion_budget_percent": 35,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "motion": {
+      "direction": "State changes use brief non-essential transitions.",
+      "reduced_motion": true
+    },
+    "palette": {
+      "color_independent": true,
+      "direction": "A restrained neutral palette keeps interactive states distinct.",
+      "minimum_contrast_ratio": 7
+    },
+    "presentation_mode": "2d",
+    "readability": {
+      "minimum_feature_pixels": 2,
+      "silhouette_direction": "Every interactive state remains identifiable without color."
+    },
+    "reference_resolution": {
+      "height": 720,
+      "width": 1280
+    },
+    "typography": {
+      "direction": "Use a highly legible interface family with stable metrics.",
+      "minimum_text_scale_percent": 200
+    },
+    "ui": {
+      "density": "low",
+      "hierarchy": "Primary action, current state, and outcome feedback remain distinct."
+    },
+    "visual_language": "high-contrast geometric symbols"
+  }
+}

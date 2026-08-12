@@ -1,0 +1,217 @@
+{
+  "adapter": {
+    "adapter_id": null,
+    "adapter_version": null,
+    "status": "absent"
+  },
+  "content_hash": "d5409aefdc3fdb098a6dd61a866d1e4d67687cca0584cc2abc00baa7a3fd017e",
+  "features": [
+    {
+      "extension": null,
+      "feature_id": "logic:deterministic_actions",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "extension": null,
+      "feature_id": "logic:finite_state",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "extension": null,
+      "feature_id": "roguelite:run_reset",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    }
+  ],
+  "format": "world-forge.mechanic_capability_ledger",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "73a63d1dfc360893198abfdb1502f94595f08570aaead157d531f6cf80cfa8ea",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "modular_roguelite"
+  },
+  "ledger_id": "modular_roguelite_authoring_capabilities",
+  "mechanics": [
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "run_active",
+        "run_deaths",
+        "run_depth",
+        "run_health"
+      ],
+      "condition_ids": [
+        "recovery_health_depleted",
+        "recovery_run_inactive"
+      ],
+      "core_verb_id": "recover",
+      "effect_ids": [
+        "reactivate_run",
+        "record_run_death",
+        "reset_run_depth",
+        "restore_run_health"
+      ],
+      "extension": null,
+      "mechanic_id": "death_recovery",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "recovery_rule"
+      ],
+      "runtime_action_id": "recover_after_death",
+      "save_replay": {
+        "event_ids": [
+          "run_recovered"
+        ],
+        "state_ids": [
+          "run_active",
+          "run_deaths",
+          "run_depth",
+          "run_health"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "run_active",
+        "run_depth"
+      ],
+      "condition_ids": [
+        "advance_depth_available",
+        "advance_run_active"
+      ],
+      "core_verb_id": "venture",
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "extension": null,
+      "mechanic_id": "expedition_advance",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "advance_rule"
+      ],
+      "runtime_action_id": "advance_expedition",
+      "save_replay": {
+        "event_ids": [
+          "progress_advanced"
+        ],
+        "state_ids": [
+          "run_active",
+          "run_depth"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "run_active",
+        "run_health"
+      ],
+      "condition_ids": [
+        "endure_health_available",
+        "endure_run_active"
+      ],
+      "core_verb_id": "venture",
+      "effect_ids": [
+        "consume_run_health"
+      ],
+      "extension": null,
+      "mechanic_id": "storylet_hazard_endurance",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "endure_hazard_rule"
+      ],
+      "runtime_action_id": "endure_storylet_hazard",
+      "save_replay": {
+        "event_ids": [
+          "hazard_endured"
+        ],
+        "state_ids": [
+          "run_active",
+          "run_health"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "run_active",
+        "run_health"
+      ],
+      "condition_ids": [
+        "fall_health_critical",
+        "fall_run_active"
+      ],
+      "core_verb_id": "venture",
+      "effect_ids": [
+        "deactivate_run",
+        "deplete_run_health"
+      ],
+      "extension": null,
+      "mechanic_id": "storylet_hazard_fall",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "fall_hazard_rule"
+      ],
+      "runtime_action_id": "fall_to_storylet_hazard",
+      "save_replay": {
+        "event_ids": [
+          "run_failed"
+        ],
+        "state_ids": [
+          "run_active",
+          "run_health"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    }
+  ]
+}

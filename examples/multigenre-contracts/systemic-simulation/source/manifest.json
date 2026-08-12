@@ -1,0 +1,53 @@
+{
+  "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+  "extensions": [],
+  "format": "world-forge.creation_source_manifest",
+  "format_version": 1,
+  "modules": {
+    "activity_modules": [
+      {
+        "content_hash": "c70efddbe10523a3a8324626d5216845ef2542cf4dc1a7b6ebb1578638071743",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "simulation_activities",
+        "path": "activities/simulation.json"
+      }
+    ],
+    "logic_modules": [
+      {
+        "content_hash": "42c1aa67d8cded5ba2ac6448502f9de884c522917ab44048b0ca2ceea8d5324b",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "simulation_logic",
+        "path": "logic/simulation.json"
+      }
+    ],
+    "narrative_modules": [],
+    "system_modules": [
+      {
+        "content_hash": "8615f4533eb4e19b71249d9fc388bf33df1062989c6bc5464a01233e964673b2",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "simulation_rules",
+        "path": "systems/simulation.json"
+      }
+    ],
+    "world_modules": [
+      {
+        "content_hash": "48b1e3166e201632ef62d81f8b56642df286bef96d85e62b5af29b8b4c166b1e",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "simulation_space",
+        "path": "world/space.json"
+      }
+    ]
+  },
+  "profile": {
+    "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "systemic_simulation_profile",
+    "path": "profile.json"
+  },
+  "project_id": "systemic_simulation"
+}

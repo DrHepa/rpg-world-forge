@@ -1,0 +1,26 @@
+{
+  "content_hash": "0c723bbcf65dd0da112a51a0192ff233d71464165e38642e01ad37b973797bcf",
+  "extensions": [],
+  "format": "world-forge.system_module",
+  "format_version": 1,
+  "module_id": "modular_roguelite_systems",
+  "project_id": "modular_roguelite",
+  "systems": [
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "storylet_sequence",
+      "precondition_ids": [],
+      "system_type": "simulation_scenario",
+      "title": "complete the reviewed expedition depth"
+    }
+  ],
+  "title": "Modular expedition route"
+}

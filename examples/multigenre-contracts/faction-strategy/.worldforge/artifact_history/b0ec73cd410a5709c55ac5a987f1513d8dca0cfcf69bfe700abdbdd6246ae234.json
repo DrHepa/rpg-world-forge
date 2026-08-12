@@ -1,0 +1,53 @@
+{
+  "content_hash": "b0ec73cd410a5709c55ac5a987f1513d8dca0cfcf69bfe700abdbdd6246ae234",
+  "extensions": [],
+  "format": "world-forge.creation_source_manifest",
+  "format_version": 1,
+  "modules": {
+    "activity_modules": [
+      {
+        "content_hash": "7c1ee35736bc6acb175a55248a23c4578b35401b7dac4c7b6e892647354e3d45",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "faction_strategy_activities",
+        "path": "activities/faction_strategy.json"
+      }
+    ],
+    "logic_modules": [
+      {
+        "content_hash": "3cb02d841901c126401580064efb5f2cdbeb7e57cd9ae3e1a7db15965d11b5ba",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "faction_strategy_logic",
+        "path": "logic/faction_strategy.json"
+      }
+    ],
+    "narrative_modules": [],
+    "system_modules": [
+      {
+        "content_hash": "4dcd8b9754ceeed4035bace81bce1c5cd6609f360743eb1742720e906b569e68",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "faction_strategy_systems",
+        "path": "systems/faction_strategy.json"
+      }
+    ],
+    "world_modules": [
+      {
+        "content_hash": "8c04342d35b1b5e91fdc3dcb072999e80f305bb15a98f4339e508e0f37eae934",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "faction_strategy_space",
+        "path": "world/faction_strategy.json"
+      }
+    ]
+  },
+  "profile": {
+    "content_hash": "54592057f53899e7a8aff9e6ed7c1036d343e4272dec3ff08f5377a42be0bb9e",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "faction_strategy_profile",
+    "path": "profile.json"
+  },
+  "project_id": "faction_strategy"
+}

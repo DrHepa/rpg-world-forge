@@ -3,7 +3,7 @@
 This guide defines the supported raylib boundary for generated 2D/2.5D game
 repositories. It is an implementation guide for agents and maintainers, not a
 claim that raylib is a complete game engine. Simulation and content contracts
-remain owned by RPG World Forge; raylib owns the window, input polling,
+remain owned by World Forge; raylib owns the window, input polling,
 graphics, and audio presentation boundary.
 
 ## Verified baseline

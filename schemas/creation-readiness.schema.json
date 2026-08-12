@@ -1,0 +1,299 @@
+{
+  "$defs": {
+    "dimensions": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "enum": [
+            "absent",
+            "declared",
+            "verified"
+          ]
+        },
+        "assets": {
+          "enum": [
+            "unplanned",
+            "planned",
+            "produced",
+            "processed",
+            "sealed",
+            "failed"
+          ]
+        },
+        "authoring": {
+          "const": "valid"
+        },
+        "compilation": {
+          "enum": [
+            "not_requested",
+            "compiled",
+            "unsupported",
+            "failed"
+          ]
+        },
+        "execution": {
+          "items": {
+            "$ref": "#/$defs/execution"
+          },
+          "maxItems": 32,
+          "minItems": 0,
+          "type": "array"
+        },
+        "packaging": {
+          "enum": [
+            "unverified",
+            "verified",
+            "failed"
+          ]
+        },
+        "release": {
+          "enum": [
+            "blocked",
+            "ready"
+          ]
+        }
+      },
+      "required": [
+        "authoring",
+        "compilation",
+        "assets",
+        "adapter",
+        "execution",
+        "packaging",
+        "release"
+      ],
+      "type": "object"
+    },
+    "execution": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array"
+        },
+        "platform": {
+          "pattern": "^platform:[a-z0-9_.-]+$",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "untested",
+            "headless_verified",
+            "native_verified",
+            "failed"
+          ]
+        }
+      },
+      "required": [
+        "platform",
+        "status",
+        "evidence_ids"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "format": {
+                "const": "world-forge.game_runtime_bundle"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^game_runtime_bundle_[0-9a-f]{48}$",
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "manifestIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_source_manifest"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "profileIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_profile"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "projectIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.project"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/creation-readiness.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "blocker_reason_codes": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "dimensions": {
+      "$ref": "#/$defs/dimensions"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/identity"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.creation_readiness"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "profile": {
+      "$ref": "#/$defs/profileIdentity"
+    },
+    "project": {
+      "$ref": "#/$defs/projectIdentity"
+    },
+    "readiness_id": {
+      "$ref": "#/$defs/id"
+    },
+    "release_ready": {
+      "type": "boolean"
+    },
+    "source_manifest": {
+      "$ref": "#/$defs/manifestIdentity"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "readiness_id",
+    "project",
+    "profile",
+    "source_manifest",
+    "dimensions",
+    "blocker_reason_codes",
+    "release_ready",
+    "evidence",
+    "content_hash"
+  ],
+  "title": "World Forge creation readiness v1",
+  "type": "object"
+}

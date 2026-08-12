@@ -78,6 +78,31 @@ PHASE_REPORT_PATH_KEYS = (
     "visual_bible_path",
     "worldpack_path",
 )
+WORKFLOW_STATUS_ALLOWED_KEYS = frozenset(
+    {
+        "asset_inventory",
+        "asset_manifest",
+        "asset_target",
+        "assetpack",
+        "audio_bible",
+        "canon_locked",
+        "compatibility_report",
+        "completed_phases",
+        "current_phase",
+        "format",
+        "format_version",
+        "lead_agent",
+        "release_hash",
+        "release_package",
+        "renderpack",
+        "revision",
+        "visual_bible",
+        "world_id",
+        "world_version",
+        "worldpack_hash",
+        "worldpack_path",
+    }
+)
 
 
 class WorkflowError(ValueError):
@@ -220,6 +245,12 @@ def validate_workflow_status(
     expected_world_id: str | None = None,
 ) -> None:
     """Validate the phase machine and its release evidence without doing I/O."""
+
+    unknown = set(status) - WORKFLOW_STATUS_ALLOWED_KEYS
+    if unknown:
+        raise WorkflowError(
+            f"Workflow status contains unknown fields: {', '.join(sorted(unknown))}"
+        )
 
     status_version = status.get("format_version")
     if (

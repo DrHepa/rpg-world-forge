@@ -1,0 +1,25 @@
+{
+  "content_hash": "a31e343b137ed6794db39fb60a5ed9da4e9b74ef8e396f2b104d38d21629b612",
+  "default_locale": "en",
+  "extensions": [],
+  "format": "world-forge.project",
+  "format_version": 1,
+  "profile": {
+    "content_hash": "54592057f53899e7a8aff9e6ed7c1036d343e4272dec3ff08f5377a42be0bb9e",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "faction_strategy_profile",
+    "path": "profile.json"
+  },
+  "project_id": "faction_strategy",
+  "project_kind": "game",
+  "project_version": "1.0.0",
+  "source_manifest": {
+    "content_hash": "b0ec73cd410a5709c55ac5a987f1513d8dca0cfcf69bfe700abdbdd6246ae234",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "faction_strategy",
+    "path": "source/manifest.json"
+  },
+  "title": "Faction Strategy"
+}

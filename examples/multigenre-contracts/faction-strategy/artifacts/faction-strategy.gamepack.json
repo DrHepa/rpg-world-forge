@@ -1,0 +1,1442 @@
+{
+  "analysis_requirements": {
+    "analyzer_id": "worldforge.unsupported_profile",
+    "analyzer_version": 1,
+    "content_hash": "70f8d5bda649774eb4bcb543f9db7a430c7a74998577896bd9cdb9dd18844382",
+    "limits": {
+      "candidate_evaluations": 262144,
+      "depth": 512,
+      "parameter_combinations_per_action": 4096,
+      "state_bytes": 65536,
+      "states": 16384,
+      "total_state_bytes": 67108864,
+      "total_witness_steps": 4096,
+      "witness_traces": 128
+    },
+    "profile": "unsupported",
+    "reason_code": "analysis_profile_unsupported"
+  },
+  "asset_requirements": [
+    {
+      "accepted_formats": [
+        "asset:png"
+      ],
+      "binding_id": "strategy_map_visual",
+      "referencing_subjects": [
+        {
+          "id": "faction_campaign",
+          "kind": "activity"
+        },
+        {
+          "id": "faction_direction",
+          "kind": "mechanic"
+        },
+        {
+          "id": "faction_direction_north_2",
+          "kind": "mechanic"
+        },
+        {
+          "id": "faction_direction_south_1",
+          "kind": "mechanic"
+        },
+        {
+          "id": "faction_direction_south_2",
+          "kind": "mechanic"
+        },
+        {
+          "id": "restart_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "faction_influence_system",
+          "kind": "system"
+        }
+      ],
+      "required": true,
+      "roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "system_feedback"
+      ],
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "7a1f8b4f8436a73a4df5653987061d7f965abc9248f45367c928a87e1110bf63",
+  "format": "world-forge.gamepack",
+  "format_version": 1,
+  "game": {
+    "default_locale": "en",
+    "id": "faction_strategy",
+    "title": "Faction Strategy",
+    "version": "1.0.0"
+  },
+  "localization": {
+    "externalized_text": true,
+    "references": [
+      {
+        "field": "title",
+        "key": "activity.faction_campaign.title",
+        "source_text": "authored turns toward a declared faction victory",
+        "subject_id": "faction_campaign",
+        "subject_kind": "activity"
+      },
+      {
+        "field": "title",
+        "key": "activity_module.faction_strategy_activities.title",
+        "source_text": "Faction Strategy authored activity",
+        "subject_id": "faction_strategy_activities",
+        "subject_kind": "activity_module"
+      },
+      {
+        "field": "title",
+        "key": "game.faction_strategy.title",
+        "source_text": "Faction Strategy",
+        "subject_id": "faction_strategy",
+        "subject_kind": "game"
+      },
+      {
+        "field": "title",
+        "key": "system.faction_influence_system.title",
+        "source_text": "reach the authored faction influence victory threshold",
+        "subject_id": "faction_influence_system",
+        "subject_kind": "system"
+      },
+      {
+        "field": "title",
+        "key": "system_module.faction_strategy_systems.title",
+        "source_text": "North and South faction theater",
+        "subject_id": "faction_strategy_systems",
+        "subject_kind": "system_module"
+      },
+      {
+        "field": "title",
+        "key": "world_module.faction_strategy_space.title",
+        "source_text": "North and South faction theater",
+        "subject_id": "faction_strategy_space",
+        "subject_kind": "world_module"
+      }
+    ],
+    "source_locale": "en",
+    "supported_locales": [
+      "en"
+    ]
+  },
+  "logic": {
+    "actions": [
+      {
+        "core_verb_id": "direct",
+        "id": "direct_north_1",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "strategy:turn_order"
+        ],
+        "rule_ids": [
+          "direct_north_1_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "faction_campaign"
+          },
+          {
+            "kind": "system",
+            "source_id": "faction_influence_system"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "direct",
+        "id": "direct_north_2",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "strategy:turn_order"
+        ],
+        "rule_ids": [
+          "direct_north_2_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "faction_campaign"
+          },
+          {
+            "kind": "system",
+            "source_id": "faction_influence_system"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "direct",
+        "id": "direct_south_1",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "strategy:turn_order"
+        ],
+        "rule_ids": [
+          "direct_south_1_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "faction_campaign"
+          },
+          {
+            "kind": "system",
+            "source_id": "faction_influence_system"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "direct",
+        "id": "direct_south_2",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "strategy:turn_order"
+        ],
+        "rule_ids": [
+          "direct_south_2_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "faction_campaign"
+          },
+          {
+            "kind": "system",
+            "source_id": "faction_influence_system"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "restart",
+        "id": "restart_scenario",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "restart_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "faction_campaign"
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "action_id": "direct_north_1",
+        "comparison": "greater_or_equal",
+        "id": "allocation_available_for_direct_north_1",
+        "left": {
+          "kind": "state",
+          "state_id": "command_points"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "direct_north_2",
+        "comparison": "greater_or_equal",
+        "id": "allocation_available_for_direct_north_2",
+        "left": {
+          "kind": "state",
+          "state_id": "command_points"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "direct_south_1",
+        "comparison": "greater_or_equal",
+        "id": "allocation_available_for_direct_south_1",
+        "left": {
+          "kind": "state",
+          "state_id": "command_points"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "direct_south_2",
+        "comparison": "greater_or_equal",
+        "id": "allocation_available_for_direct_south_2",
+        "left": {
+          "kind": "state",
+          "state_id": "command_points"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": null,
+        "id": "scenario_ready",
+        "operator": "constant",
+        "value": true
+      },
+      {
+        "action_id": "direct_north_1",
+        "comparison": "greater_than",
+        "id": "turn_available_for_direct_north_1",
+        "left": {
+          "kind": "state",
+          "state_id": "turns_remaining"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "direct_north_2",
+        "comparison": "greater_than",
+        "id": "turn_available_for_direct_north_2",
+        "left": {
+          "kind": "state",
+          "state_id": "turns_remaining"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "direct_south_1",
+        "comparison": "greater_than",
+        "id": "turn_available_for_direct_south_1",
+        "left": {
+          "kind": "state",
+          "state_id": "turns_remaining"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "direct_south_2",
+        "comparison": "greater_than",
+        "id": "turn_available_for_direct_south_2",
+        "left": {
+          "kind": "state",
+          "state_id": "turns_remaining"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "greater_or_equal",
+        "id": "victory_condition",
+        "left": {
+          "kind": "state",
+          "state_id": "north_influence"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        }
+      }
+    ],
+    "core_verbs": [
+      {
+        "description": "Advance the authored strategy scenario.",
+        "id": "direct"
+      },
+      {
+        "description": "Restart the bounded authored scenario.",
+        "id": "restart"
+      }
+    ],
+    "effects": [
+      {
+        "action_id": "direct_north_1",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "direct_north_1_influence",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "north_influence"
+      },
+      {
+        "action_id": "direct_north_1",
+        "id": "direct_north_1_record_target",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_directed_faction",
+        "value": {
+          "kind": "literal",
+          "value": "north",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "direct_north_1",
+        "amount": {
+          "kind": "literal",
+          "value": -1,
+          "value_type": "integer"
+        },
+        "id": "direct_north_1_spend",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "command_points"
+      },
+      {
+        "action_id": "direct_north_1",
+        "amount": {
+          "kind": "literal",
+          "value": -1,
+          "value_type": "integer"
+        },
+        "id": "direct_north_1_turn",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "turns_remaining"
+      },
+      {
+        "action_id": "direct_north_2",
+        "amount": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        },
+        "id": "direct_north_2_influence",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "north_influence"
+      },
+      {
+        "action_id": "direct_north_2",
+        "id": "direct_north_2_record_target",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_directed_faction",
+        "value": {
+          "kind": "literal",
+          "value": "north",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "direct_north_2",
+        "amount": {
+          "kind": "literal",
+          "value": -2,
+          "value_type": "integer"
+        },
+        "id": "direct_north_2_spend",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "command_points"
+      },
+      {
+        "action_id": "direct_north_2",
+        "amount": {
+          "kind": "literal",
+          "value": -1,
+          "value_type": "integer"
+        },
+        "id": "direct_north_2_turn",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "turns_remaining"
+      },
+      {
+        "action_id": "direct_south_1",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "direct_south_1_influence",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "south_influence"
+      },
+      {
+        "action_id": "direct_south_1",
+        "id": "direct_south_1_record_target",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_directed_faction",
+        "value": {
+          "kind": "literal",
+          "value": "south",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "direct_south_1",
+        "amount": {
+          "kind": "literal",
+          "value": -1,
+          "value_type": "integer"
+        },
+        "id": "direct_south_1_spend",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "command_points"
+      },
+      {
+        "action_id": "direct_south_1",
+        "amount": {
+          "kind": "literal",
+          "value": -1,
+          "value_type": "integer"
+        },
+        "id": "direct_south_1_turn",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "turns_remaining"
+      },
+      {
+        "action_id": "direct_south_2",
+        "amount": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        },
+        "id": "direct_south_2_influence",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "south_influence"
+      },
+      {
+        "action_id": "direct_south_2",
+        "id": "direct_south_2_record_target",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_directed_faction",
+        "value": {
+          "kind": "literal",
+          "value": "south",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "direct_south_2",
+        "amount": {
+          "kind": "literal",
+          "value": -2,
+          "value_type": "integer"
+        },
+        "id": "direct_south_2_spend",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "command_points"
+      },
+      {
+        "action_id": "direct_south_2",
+        "amount": {
+          "kind": "literal",
+          "value": -1,
+          "value_type": "integer"
+        },
+        "id": "direct_south_2_turn",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "turns_remaining"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_command_points",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "command_points"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_last_directed_faction",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "last_directed_faction"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_north_influence",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "north_influence"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_south_influence",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "south_influence"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_turns_remaining",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "turns_remaining"
+      }
+    ],
+    "endings": [
+      {
+        "condition_ids": [
+          "victory_condition"
+        ],
+        "event_ids": [],
+        "id": "scenario_complete",
+        "kind": "success",
+        "presentation_hook_ids": [
+          "ending_feedback"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "id": "faction_directed"
+      },
+      {
+        "id": "scenario_restarted"
+      }
+    ],
+    "execution_semantics": {
+      "active_failure_recovery": "intersection",
+      "condition_collections": "and",
+      "condition_snapshot": "pre_transition",
+      "effect_order": "rule_order_then_reference_order",
+      "effect_state_operands": "current_candidate_state",
+      "ending_match": "exactly_one",
+      "event_commit": "after_success_rule_reference_order",
+      "invalid_transition": "reject_without_mutation",
+      "narrative_transition": "source_effects_then_cursor_atomic",
+      "owned_action_rules": "all_required",
+      "semantics_version": 1,
+      "terminal_precedence": "endings_before_failures"
+    },
+    "failures": [],
+    "goals": [
+      {
+        "condition_ids": [
+          "victory_condition"
+        ],
+        "id": "authored_victory",
+        "success_ending_id": "scenario_complete"
+      }
+    ],
+    "initial_state": {
+      "command_points": 4,
+      "last_directed_faction": "none",
+      "north_influence": 0,
+      "south_influence": 0,
+      "turns_remaining": 3
+    },
+    "mechanics": [
+      {
+        "action_id": "direct_north_1",
+        "asset_binding_ids": [
+          "strategy_map_visual"
+        ],
+        "authoritative_state_ids": [
+          "command_points",
+          "last_directed_faction",
+          "north_influence",
+          "turns_remaining"
+        ],
+        "condition_ids": [
+          "allocation_available_for_direct_north_1",
+          "turn_available_for_direct_north_1"
+        ],
+        "core_verb_id": "direct",
+        "effect_ids": [
+          "direct_north_1_influence",
+          "direct_north_1_record_target",
+          "direct_north_1_spend",
+          "direct_north_1_turn"
+        ],
+        "event_ids": [
+          "faction_directed"
+        ],
+        "id": "faction_direction",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "strategy:turn_order"
+        ],
+        "rule_ids": [
+          "direct_north_1_rule"
+        ]
+      },
+      {
+        "action_id": "direct_north_2",
+        "asset_binding_ids": [
+          "strategy_map_visual"
+        ],
+        "authoritative_state_ids": [
+          "command_points",
+          "last_directed_faction",
+          "north_influence",
+          "turns_remaining"
+        ],
+        "condition_ids": [
+          "allocation_available_for_direct_north_2",
+          "turn_available_for_direct_north_2"
+        ],
+        "core_verb_id": "direct",
+        "effect_ids": [
+          "direct_north_2_influence",
+          "direct_north_2_record_target",
+          "direct_north_2_spend",
+          "direct_north_2_turn"
+        ],
+        "event_ids": [
+          "faction_directed"
+        ],
+        "id": "faction_direction_north_2",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "strategy:turn_order"
+        ],
+        "rule_ids": [
+          "direct_north_2_rule"
+        ]
+      },
+      {
+        "action_id": "direct_south_1",
+        "asset_binding_ids": [
+          "strategy_map_visual"
+        ],
+        "authoritative_state_ids": [
+          "command_points",
+          "last_directed_faction",
+          "south_influence",
+          "turns_remaining"
+        ],
+        "condition_ids": [
+          "allocation_available_for_direct_south_1",
+          "turn_available_for_direct_south_1"
+        ],
+        "core_verb_id": "direct",
+        "effect_ids": [
+          "direct_south_1_influence",
+          "direct_south_1_record_target",
+          "direct_south_1_spend",
+          "direct_south_1_turn"
+        ],
+        "event_ids": [
+          "faction_directed"
+        ],
+        "id": "faction_direction_south_1",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "strategy:turn_order"
+        ],
+        "rule_ids": [
+          "direct_south_1_rule"
+        ]
+      },
+      {
+        "action_id": "direct_south_2",
+        "asset_binding_ids": [
+          "strategy_map_visual"
+        ],
+        "authoritative_state_ids": [
+          "command_points",
+          "last_directed_faction",
+          "south_influence",
+          "turns_remaining"
+        ],
+        "condition_ids": [
+          "allocation_available_for_direct_south_2",
+          "turn_available_for_direct_south_2"
+        ],
+        "core_verb_id": "direct",
+        "effect_ids": [
+          "direct_south_2_influence",
+          "direct_south_2_record_target",
+          "direct_south_2_spend",
+          "direct_south_2_turn"
+        ],
+        "event_ids": [
+          "faction_directed"
+        ],
+        "id": "faction_direction_south_2",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "strategy:turn_order"
+        ],
+        "rule_ids": [
+          "direct_south_2_rule"
+        ]
+      },
+      {
+        "action_id": "restart_scenario",
+        "asset_binding_ids": [
+          "strategy_map_visual"
+        ],
+        "authoritative_state_ids": [
+          "command_points",
+          "last_directed_faction",
+          "north_influence",
+          "south_influence",
+          "turns_remaining"
+        ],
+        "condition_ids": [],
+        "core_verb_id": "restart",
+        "effect_ids": [
+          "reset_command_points",
+          "reset_last_directed_faction",
+          "reset_north_influence",
+          "reset_south_influence",
+          "reset_turns_remaining"
+        ],
+        "event_ids": [
+          "scenario_restarted"
+        ],
+        "id": "restart_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "restart_rule"
+        ]
+      }
+    ],
+    "narrative_cursor": null,
+    "narrative_transitions": [],
+    "presentation_hooks": [
+      {
+        "asset_binding_ids": [
+          "strategy_map_visual"
+        ],
+        "id": "ending_feedback",
+        "kind": "ending"
+      },
+      {
+        "asset_binding_ids": [
+          "strategy_map_visual"
+        ],
+        "id": "progress_feedback",
+        "kind": "feedback"
+      },
+      {
+        "asset_binding_ids": [
+          "strategy_map_visual"
+        ],
+        "id": "progress_view",
+        "kind": "board"
+      }
+    ],
+    "rules": [
+      {
+        "action_id": "direct_north_1",
+        "condition_ids": [
+          "allocation_available_for_direct_north_1",
+          "turn_available_for_direct_north_1"
+        ],
+        "effect_ids": [
+          "direct_north_1_influence",
+          "direct_north_1_record_target",
+          "direct_north_1_spend",
+          "direct_north_1_turn"
+        ],
+        "event_ids": [
+          "faction_directed"
+        ],
+        "id": "direct_north_1_rule",
+        "order": 0
+      },
+      {
+        "action_id": "direct_north_2",
+        "condition_ids": [
+          "allocation_available_for_direct_north_2",
+          "turn_available_for_direct_north_2"
+        ],
+        "effect_ids": [
+          "direct_north_2_influence",
+          "direct_north_2_record_target",
+          "direct_north_2_spend",
+          "direct_north_2_turn"
+        ],
+        "event_ids": [
+          "faction_directed"
+        ],
+        "id": "direct_north_2_rule",
+        "order": 1
+      },
+      {
+        "action_id": "direct_south_1",
+        "condition_ids": [
+          "allocation_available_for_direct_south_1",
+          "turn_available_for_direct_south_1"
+        ],
+        "effect_ids": [
+          "direct_south_1_influence",
+          "direct_south_1_record_target",
+          "direct_south_1_spend",
+          "direct_south_1_turn"
+        ],
+        "event_ids": [
+          "faction_directed"
+        ],
+        "id": "direct_south_1_rule",
+        "order": 2
+      },
+      {
+        "action_id": "direct_south_2",
+        "condition_ids": [
+          "allocation_available_for_direct_south_2",
+          "turn_available_for_direct_south_2"
+        ],
+        "effect_ids": [
+          "direct_south_2_influence",
+          "direct_south_2_record_target",
+          "direct_south_2_spend",
+          "direct_south_2_turn"
+        ],
+        "event_ids": [
+          "faction_directed"
+        ],
+        "id": "direct_south_2_rule",
+        "order": 3
+      },
+      {
+        "action_id": "restart_scenario",
+        "condition_ids": [],
+        "effect_ids": [
+          "reset_command_points",
+          "reset_last_directed_faction",
+          "reset_north_influence",
+          "reset_south_influence",
+          "reset_turns_remaining"
+        ],
+        "event_ids": [
+          "scenario_restarted"
+        ],
+        "id": "restart_rule",
+        "order": 4
+      }
+    ],
+    "source": {
+      "content_hash": "d45a4da056b36b772d9aa0b4d5258984e5c521fe546e40ad53ac6fc1bdaef065",
+      "format": "world-forge.logic_module",
+      "format_version": 1,
+      "id": "faction_strategy_logic"
+    },
+    "state_schema": [
+      {
+        "id": "command_points",
+        "initial": 4,
+        "maximum": 4,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      },
+      {
+        "allowed_values": [
+          "none",
+          "north",
+          "south"
+        ],
+        "id": "last_directed_faction",
+        "initial": "none",
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "string"
+      },
+      {
+        "id": "north_influence",
+        "initial": 0,
+        "maximum": 4,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      },
+      {
+        "id": "south_influence",
+        "initial": 0,
+        "maximum": 4,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      },
+      {
+        "id": "turns_remaining",
+        "initial": 3,
+        "maximum": 3,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      }
+    ],
+    "title": "Neutral authored strategy logic"
+  },
+  "mechanic_requirements": [
+    {
+      "action_id": "direct_north_1",
+      "core_verb_id": "direct",
+      "mechanic_id": "faction_direction",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "strategy:turn_order"
+      ]
+    },
+    {
+      "action_id": "direct_north_2",
+      "core_verb_id": "direct",
+      "mechanic_id": "faction_direction_north_2",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "strategy:turn_order"
+      ]
+    },
+    {
+      "action_id": "direct_south_1",
+      "core_verb_id": "direct",
+      "mechanic_id": "faction_direction_south_1",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "strategy:turn_order"
+      ]
+    },
+    {
+      "action_id": "direct_south_2",
+      "core_verb_id": "direct",
+      "mechanic_id": "faction_direction_south_2",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "strategy:turn_order"
+      ]
+    },
+    {
+      "action_id": "restart_scenario",
+      "core_verb_id": "restart",
+      "mechanic_id": "restart_mechanic",
+      "required_feature_ids": [
+        "logic:finite_state"
+      ]
+    }
+  ],
+  "modules": {
+    "activities": [
+      {
+        "activities": [
+          {
+            "activity_type": "scenario",
+            "asset_binding_ids": [
+              "strategy_map_visual"
+            ],
+            "effect_ids": [
+              "direct_north_1_influence",
+              "direct_north_1_record_target",
+              "direct_north_1_spend",
+              "direct_north_1_turn",
+              "direct_north_2_influence",
+              "direct_north_2_record_target",
+              "direct_north_2_spend",
+              "direct_north_2_turn",
+              "direct_south_1_influence",
+              "direct_south_1_record_target",
+              "direct_south_1_spend",
+              "direct_south_1_turn",
+              "direct_south_2_influence",
+              "direct_south_2_record_target",
+              "direct_south_2_spend",
+              "direct_south_2_turn",
+              "reset_command_points",
+              "reset_last_directed_faction",
+              "reset_north_influence",
+              "reset_south_influence",
+              "reset_turns_remaining"
+            ],
+            "end_condition_ids": [
+              "victory_condition"
+            ],
+            "event_ids": [
+              "faction_directed",
+              "scenario_restarted"
+            ],
+            "failure_condition_ids": [],
+            "id": "faction_campaign",
+            "participant_ids": [],
+            "presentation_hook_ids": [
+              "progress_feedback",
+              "progress_view"
+            ],
+            "spatial_context_ids": [],
+            "start_condition_ids": [
+              "scenario_ready"
+            ],
+            "success_condition_ids": [
+              "victory_condition"
+            ],
+            "title": "authored turns toward a declared faction victory"
+          }
+        ],
+        "source": {
+          "content_hash": "371952107550b18f61ba0c61486232b878866a68b5234e1706e7a659733cf67b",
+          "format": "world-forge.activity_module",
+          "format_version": 1,
+          "id": "faction_strategy_activities"
+        },
+        "title": "Faction Strategy authored activity"
+      }
+    ],
+    "narrative": [],
+    "systems": [
+      {
+        "source": {
+          "content_hash": "81fcbe8d71a062c70c343a14ae8bb674badd602bd3a176ff148f636b86a95801",
+          "format": "world-forge.system_module",
+          "format_version": 1,
+          "id": "faction_strategy_systems"
+        },
+        "systems": [
+          {
+            "asset_binding_ids": [
+              "strategy_map_visual"
+            ],
+            "effect_ids": [
+              "direct_north_1_influence",
+              "direct_north_1_record_target",
+              "direct_north_1_spend",
+              "direct_north_1_turn",
+              "direct_north_2_influence",
+              "direct_north_2_record_target",
+              "direct_north_2_spend",
+              "direct_north_2_turn",
+              "direct_south_1_influence",
+              "direct_south_1_record_target",
+              "direct_south_1_spend",
+              "direct_south_1_turn",
+              "direct_south_2_influence",
+              "direct_south_2_record_target",
+              "direct_south_2_spend",
+              "direct_south_2_turn"
+            ],
+            "event_ids": [
+              "faction_directed"
+            ],
+            "id": "faction_influence_system",
+            "precondition_ids": [
+              "allocation_available_for_direct_north_1",
+              "allocation_available_for_direct_north_2",
+              "allocation_available_for_direct_south_1",
+              "allocation_available_for_direct_south_2",
+              "turn_available_for_direct_north_1",
+              "turn_available_for_direct_north_2",
+              "turn_available_for_direct_south_1",
+              "turn_available_for_direct_south_2"
+            ],
+            "system_type": "economy",
+            "title": "reach the authored faction influence victory threshold"
+          }
+        ],
+        "title": "North and South faction theater"
+      }
+    ],
+    "world": [
+      {
+        "module_type": "space",
+        "records": [
+          {
+            "id": "faction_strategy_space",
+            "name": "North and South faction theater",
+            "topology": "diegetic"
+          }
+        ],
+        "source": {
+          "content_hash": "8c04342d35b1b5e91fdc3dcb072999e80f305bb15a98f4339e508e0f37eae934",
+          "format": "world-forge.world_module",
+          "format_version": 1,
+          "id": "faction_strategy_space"
+        },
+        "title": "North and South faction theater"
+      }
+    ]
+  },
+  "presentation": {
+    "accessibility": {
+      "captions": true,
+      "color_independence": true,
+      "high_contrast": true,
+      "keyboard_only": true,
+      "reduced_motion": true,
+      "remapping": true,
+      "screen_reader_structure": true,
+      "text_scaling": true,
+      "timing_alternatives": true
+    },
+    "audio_role": "optional feedback",
+    "camera": "fixed",
+    "input_assumptions": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "localization": {
+      "externalized_text": true,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "mode": "2d",
+    "perspective": "orthographic board",
+    "ui_density": "low",
+    "visual_language": "high-contrast geometric symbols"
+  },
+  "provenance": [
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "371952107550b18f61ba0c61486232b878866a68b5234e1706e7a659733cf67b",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "faction_strategy_activities"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "1fea4301e5a0d2a68acefa4bb1f00144398d2c7aa849ed6bb867b8340a4668a7",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "faction_strategy_profile"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "81641b56a45600b3b39089f8b618614a883879e4f33dc87f9b03caae9a825dd9",
+        "format": "world-forge.creation_source_manifest",
+        "format_version": 1,
+        "id": "faction_strategy"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "d45a4da056b36b772d9aa0b4d5258984e5c521fe546e40ad53ac6fc1bdaef065",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "faction_strategy_logic"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "89b21af4caa9607dcc8683be7f8b5da2b031089dd30ee92754cde2f1376e9679",
+        "format": "world-forge.project",
+        "format_version": 1,
+        "id": "faction_strategy"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "81fcbe8d71a062c70c343a14ae8bb674badd602bd3a176ff148f636b86a95801",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "faction_strategy_systems"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "8c04342d35b1b5e91fdc3dcb072999e80f305bb15a98f4339e508e0f37eae934",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "faction_strategy_space"
+      }
+    }
+  ],
+  "registered_extensions": [],
+  "runtime_requirements": {
+    "accepted_logic_formats": [
+      {
+        "format": "world-forge.gamepack",
+        "versions": [
+          1
+        ]
+      }
+    ],
+    "asset_formats": [
+      "asset:png"
+    ],
+    "input_capabilities": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "optional_features": [
+      "audio:sfx"
+    ],
+    "packaging_target": "standalone desktop directory",
+    "platform_matrix": [
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:linux",
+        "platform_id": "platform:linux_x86_64",
+        "renderer": "raylib"
+      },
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:windows",
+        "platform_id": "platform:windows_x86_64",
+        "renderer": "raylib"
+      }
+    ],
+    "presentation": {
+      "camera": "fixed",
+      "mode": "2d",
+      "perspective": "orthographic board",
+      "renderer": "raylib"
+    },
+    "replay_expected": true,
+    "requested_adapter": null,
+    "required_features": [
+      "logic:deterministic_actions",
+      "logic:finite_state",
+      "strategy:turn_order"
+    ],
+    "save_expected": true
+  },
+  "source": {
+    "logic_modules": [
+      {
+        "content_hash": "d45a4da056b36b772d9aa0b4d5258984e5c521fe546e40ad53ac6fc1bdaef065",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "faction_strategy_logic"
+      }
+    ],
+    "profile": {
+      "content_hash": "1fea4301e5a0d2a68acefa4bb1f00144398d2c7aa849ed6bb867b8340a4668a7",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "faction_strategy_profile"
+    },
+    "project": {
+      "content_hash": "89b21af4caa9607dcc8683be7f8b5da2b031089dd30ee92754cde2f1376e9679",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "faction_strategy"
+    },
+    "source_manifest": {
+      "content_hash": "81641b56a45600b3b39089f8b618614a883879e4f33dc87f9b03caae9a825dd9",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "faction_strategy"
+    }
+  }
+}

@@ -1,0 +1,798 @@
+{
+  "$id": "https://world-forge.local/schemas/generic-asset-spec.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "acceptance_criteria": {
+      "items": {
+        "$ref": "#/$defs/runtimeString"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "asset": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/id"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "asset_id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "asset_subject": {
+      "$ref": "#/$defs/assetSubjectIdentity"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "world-forge.asset_spec"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "inventory": {
+      "$ref": "#/$defs/inventoryIdentity"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/$defs/output"
+      },
+      "maxItems": 4,
+      "minItems": 1,
+      "type": "array"
+    },
+    "production_class": {
+      "enum": [
+        "human",
+        "procedural_offline",
+        "external_authoring",
+        "generative_authoring"
+      ]
+    },
+    "review_requirements": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_required": {
+          "const": true
+        },
+        "human_review_required": {
+          "const": true
+        },
+        "qa_profile": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "human_review_required",
+        "qa_profile",
+        "evidence_required"
+      ],
+      "type": "object"
+    },
+    "spec_id": {
+      "$ref": "#/$defs/id"
+    },
+    "style": {
+      "$ref": "#/$defs/styleIdentity"
+    },
+    "target": {
+      "$ref": "#/$defs/targetIdentity"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "spec_id",
+    "asset_subject",
+    "target",
+    "style",
+    "inventory",
+    "asset",
+    "outputs",
+    "acceptance_criteria",
+    "production_class",
+    "review_requirements",
+    "content_hash"
+  ],
+  "title": "World Forge asset specification v1",
+  "type": "object",
+  "$defs": {
+    "assetSubjectIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_subject"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "expectation": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/pngExpectation"
+        },
+        {
+          "$ref": "#/$defs/wavExpectation"
+        },
+        {
+          "$ref": "#/$defs/fontExpectation"
+        },
+        {
+          "$ref": "#/$defs/glslExpectation"
+        },
+        {
+          "$ref": "#/$defs/jsonExpectation"
+        },
+        {
+          "$ref": "#/$defs/glbExpectation"
+        }
+      ]
+    },
+    "pngExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "color_type": {
+          "enum": [
+            "rgba8",
+            "rgb8",
+            "grayscale8"
+          ]
+        },
+        "height": {
+          "maximum": 16384,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "png"
+        },
+        "max_bytes": {
+          "$ref": "#/$defs/maxBytes"
+        },
+        "width": {
+          "maximum": 16384,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "width",
+        "height",
+        "color_type",
+        "max_bytes"
+      ],
+      "type": "object"
+    },
+    "wavExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "channels": {
+          "enum": [
+            1,
+            2
+          ]
+        },
+        "frames": {
+          "maximum": 192000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "kind": {
+          "const": "wav_pcm16"
+        },
+        "max_bytes": {
+          "$ref": "#/$defs/maxBytes"
+        },
+        "sample_rate": {
+          "maximum": 192000,
+          "minimum": 8000,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "channels",
+        "sample_rate",
+        "frames",
+        "max_bytes"
+      ],
+      "type": "object"
+    },
+    "fontExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "container": {
+          "enum": [
+            "ttf",
+            "otf"
+          ]
+        },
+        "glyph_ranges": {
+          "items": {
+            "maxLength": 15,
+            "pattern": "^U\\+[0-9A-F]{4,6}-[0-9A-F]{4,6}$",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true,
+          "x-world-forge-canonical-glyph-ranges": true
+        },
+        "kind": {
+          "const": "font"
+        },
+        "max_bytes": {
+          "$ref": "#/$defs/maxBytes"
+        },
+        "max_glyphs": {
+          "maximum": 1114112,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "container",
+        "glyph_ranges",
+        "max_glyphs",
+        "max_bytes"
+      ],
+      "type": "object"
+    },
+    "glslExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "glsl"
+        },
+        "max_bytes": {
+          "$ref": "#/$defs/maxBytes"
+        },
+        "max_lines": {
+          "maximum": 65536,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "stage": {
+          "enum": [
+            "vertex",
+            "fragment"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "stage",
+        "max_lines",
+        "max_bytes"
+      ],
+      "type": "object"
+    },
+    "jsonExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "schema_json"
+        },
+        "max_bytes": {
+          "$ref": "#/$defs/maxBytes"
+        },
+        "max_records": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "schema_id": {
+          "$ref": "#/$defs/runtimeShortString"
+        },
+        "schema_version": {
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "schema_id",
+        "schema_version",
+        "max_records",
+        "max_bytes"
+      ],
+      "type": "object"
+    },
+    "glbExpectation": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "glb"
+        },
+        "max_animations": {
+          "maximum": 16384,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_bytes": {
+          "$ref": "#/$defs/maxBytes"
+        },
+        "max_joints": {
+          "maximum": 4096,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_materials": {
+          "maximum": 16384,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_meshes": {
+          "maximum": 16384,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_nodes": {
+          "maximum": 65536,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_primitives": {
+          "maximum": 262144,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_triangles": {
+          "maximum": 100000000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "max_nodes",
+        "max_meshes",
+        "max_primitives",
+        "max_materials",
+        "max_joints",
+        "max_animations",
+        "max_triangles",
+        "max_bytes"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "inventoryIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_inventory"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "maxBytes": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "output": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$ref": "#/$defs/physicalOutput"
+        }
+      ],
+      "properties": {
+        "expectations": {
+          "$ref": "#/$defs/expectation"
+        },
+        "media_type": {
+          "enum": [
+            "application/json",
+            "audio/wav",
+            "font/otf",
+            "font/ttf",
+            "image/png",
+            "model/gltf-binary",
+            "text/x-glsl"
+          ]
+        },
+        "role": {
+          "enum": [
+            "animation",
+            "audio",
+            "clipset",
+            "collision",
+            "font",
+            "fragment_shader",
+            "localized_text",
+            "model",
+            "skeleton",
+            "texture",
+            "vertex_shader"
+          ]
+        },
+        "runtime_path": {
+          "$ref": "#/$defs/path"
+        }
+      },
+      "required": [
+        "role",
+        "media_type",
+        "runtime_path",
+        "expectations"
+      ],
+      "type": "object"
+    },
+    "physicalOutput": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/pngOutput"
+        },
+        {
+          "$ref": "#/$defs/wavOutput"
+        },
+        {
+          "$ref": "#/$defs/ttfOutput"
+        },
+        {
+          "$ref": "#/$defs/otfOutput"
+        },
+        {
+          "$ref": "#/$defs/jsonOutput"
+        },
+        {
+          "$ref": "#/$defs/fragmentOutput"
+        },
+        {
+          "$ref": "#/$defs/vertexOutput"
+        },
+        {
+          "$ref": "#/$defs/glbOutput"
+        }
+      ]
+    },
+    "pngOutput": {
+      "properties": {
+        "expectations": {
+          "$ref": "#/$defs/pngExpectation"
+        },
+        "media_type": {
+          "const": "image/png"
+        },
+        "role": {
+          "const": "texture"
+        }
+      },
+      "required": [
+        "role",
+        "media_type",
+        "expectations"
+      ],
+      "type": "object"
+    },
+    "wavOutput": {
+      "properties": {
+        "expectations": {
+          "$ref": "#/$defs/wavExpectation"
+        },
+        "media_type": {
+          "const": "audio/wav"
+        },
+        "role": {
+          "const": "audio"
+        }
+      },
+      "required": [
+        "role",
+        "media_type",
+        "expectations"
+      ],
+      "type": "object"
+    },
+    "ttfOutput": {
+      "properties": {
+        "expectations": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/fontExpectation"
+            },
+            {
+              "properties": {
+                "container": {
+                  "const": "ttf"
+                }
+              },
+              "required": [
+                "container"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "media_type": {
+          "const": "font/ttf"
+        },
+        "role": {
+          "const": "font"
+        }
+      },
+      "required": [
+        "role",
+        "media_type",
+        "expectations"
+      ],
+      "type": "object"
+    },
+    "otfOutput": {
+      "properties": {
+        "expectations": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/fontExpectation"
+            },
+            {
+              "properties": {
+                "container": {
+                  "const": "otf"
+                }
+              },
+              "required": [
+                "container"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "media_type": {
+          "const": "font/otf"
+        },
+        "role": {
+          "const": "font"
+        }
+      },
+      "required": [
+        "role",
+        "media_type",
+        "expectations"
+      ],
+      "type": "object"
+    },
+    "jsonOutput": {
+      "properties": {
+        "expectations": {
+          "$ref": "#/$defs/jsonExpectation"
+        },
+        "media_type": {
+          "const": "application/json"
+        },
+        "role": {
+          "enum": [
+            "clipset",
+            "localized_text"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "media_type",
+        "expectations"
+      ],
+      "type": "object"
+    },
+    "fragmentOutput": {
+      "properties": {
+        "expectations": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/glslExpectation"
+            },
+            {
+              "properties": {
+                "stage": {
+                  "const": "fragment"
+                }
+              },
+              "required": [
+                "stage"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "media_type": {
+          "const": "text/x-glsl"
+        },
+        "role": {
+          "const": "fragment_shader"
+        }
+      },
+      "required": [
+        "role",
+        "media_type",
+        "expectations"
+      ],
+      "type": "object"
+    },
+    "vertexOutput": {
+      "properties": {
+        "expectations": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/glslExpectation"
+            },
+            {
+              "properties": {
+                "stage": {
+                  "const": "vertex"
+                }
+              },
+              "required": [
+                "stage"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "media_type": {
+          "const": "text/x-glsl"
+        },
+        "role": {
+          "const": "vertex_shader"
+        }
+      },
+      "required": [
+        "role",
+        "media_type",
+        "expectations"
+      ],
+      "type": "object"
+    },
+    "glbOutput": {
+      "properties": {
+        "expectations": {
+          "$ref": "#/$defs/glbExpectation"
+        },
+        "media_type": {
+          "const": "model/gltf-binary"
+        },
+        "role": {
+          "enum": [
+            "animation",
+            "collision",
+            "model",
+            "skeleton"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "media_type",
+        "expectations"
+      ],
+      "type": "object"
+    },
+    "path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+      "type": "string",
+      "x-world-forge-portable-runtime-path": true
+    },
+    "runtimeShortString": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/runtimeString"
+        },
+        {
+          "maxLength": 256,
+          "type": "string"
+        }
+      ]
+    },
+    "runtimeString": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?!\\s*(?:[A-Za-z][A-Za-z0-9+.-]*://|[Ff][Ii][Ll][Ee]:[\\\\/]|[A-Za-z]:[\\\\/]|[\\\\/]{2}|/|@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:@[^\\s/\\\\]+)?\\s*$|(?:[Pp][Rr][Oo][Vv][Ii][Dd][Ee][Rr](?:_[Ii][Dd])?|[Mm][Oo][Dd][Ee][Ll](?:_[Ii][Dd])?|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Pp][Rr][Oo][Mm][Pp][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Ee][Nn][Dd][Pp][Oo][Ii][Nn][Tt])\\s*(?:=|:\\s*|\\s+[Ii][Ss]\\s+)|\\.{1,2}(?:[\\\\/]|\\s*$)))(?![\\s\\S]*[\\\\/]\\.{1,2}(?:[\\\\/]|\\s*$))(?!\\s*[^/\\\\\\r\\n]+(?:[\\\\/][^/\\\\\\r\\n]+)+\\.[A-Za-z0-9][A-Za-z0-9._-]*\\s*$)[\\s\\S]*$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "styleIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_style"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "targetIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_target"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  }
+}

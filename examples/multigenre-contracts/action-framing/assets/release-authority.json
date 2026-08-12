@@ -1,0 +1,38 @@
+{
+  "authority": {
+    "artifact_snapshot_hash": "387a04cec605a4ce33d8053b5487aa6cef46cef5415fcbf3dea32f9b7e139f62",
+    "producer_job_id": "fixture-action-framing-release",
+    "producer_operation": "asset.release.authorize",
+    "producer_output_position": 0,
+    "root_generation": 1,
+    "source_revision": "cadf114a3e2ed9a74d8664137c2a09888e5383468fbb98e9ded7bd79acbca506",
+    "workflow_status_hash": null,
+    "workspace_id": "fixture-action-framing"
+  },
+  "blockers": [],
+  "candidate_assetpack": {
+    "content_hash": "a0557e82d7b226dc6d62e9116c725f947ca7f42ff3cf5852b106d0a3c5c1dffa",
+    "format": "world-forge.assetpack",
+    "format_version": 1,
+    "id": "assetpack_3383cd0795dd908464983eb3a4774fd92b58e36f4271114a"
+  },
+  "candidate_manifest": {
+    "content_hash": "c0ecd53ea961f2b8cbcda94c2f16b49ebb17f666d320bb4a8ab85ebfcf280353",
+    "format": "world-forge.asset_manifest",
+    "format_version": 1,
+    "id": "action_framing_asset_manifest"
+  },
+  "content_hash": "71df41f9815c29738f2a76a855982e56d0872e582852fe03f9e4eb798f29b543",
+  "format": "world-forge.asset_release_authority",
+  "format_version": 1,
+  "qa_reviews": [
+    {
+      "content_hash": "407c82bdb56c8335f4ed0d8368ae9433336b7c15fd8551c570ec81917f907bc5",
+      "format": "world-forge.asset_qa_review_receipt",
+      "format_version": 1,
+      "id": "action_framing_texture_qa_review"
+    }
+  ],
+  "release_authority_id": "action_framing_asset_release",
+  "status": "authorized"
+}

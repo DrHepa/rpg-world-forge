@@ -1,0 +1,82 @@
+{
+  "content_hash": "29512bafe8701029b4c53b2408346d9133cc4845c86aa05ee80edace950ccdaf",
+  "entry_unit_ids": [
+    "central_choice"
+  ],
+  "extensions": [],
+  "format": "world-forge.narrative_module",
+  "format_version": 1,
+  "module_id": "branching_units",
+  "project_id": "branching_narrative",
+  "title": "Neutral branching units",
+  "units": [
+    {
+      "asset_binding_ids": [
+        "choice_panel"
+      ],
+      "effect_ids": [],
+      "id": "central_choice",
+      "next_unit_ids": [
+        "ending_left",
+        "ending_right"
+      ],
+      "options": [
+        {
+          "condition_ids": [
+            "choice_available_left"
+          ],
+          "effect_ids": [
+            "record_left",
+            "remember_left"
+          ],
+          "id": "choose_left",
+          "label": "Choose the left symbol",
+          "next_unit_id": "ending_left"
+        },
+        {
+          "condition_ids": [
+            "choice_available_right"
+          ],
+          "effect_ids": [
+            "record_right",
+            "remember_right"
+          ],
+          "id": "choose_right",
+          "label": "Choose the right symbol",
+          "next_unit_id": "ending_right"
+        }
+      ],
+      "prerequisite_ids": [],
+      "title": "A visible choice",
+      "unit_type": "choice"
+    },
+    {
+      "asset_binding_ids": [
+        "ending_panel"
+      ],
+      "effect_ids": [],
+      "ending_kind": "success",
+      "id": "ending_left",
+      "next_unit_ids": [],
+      "prerequisite_ids": [
+        "remember_left"
+      ],
+      "title": "Left ending",
+      "unit_type": "ending"
+    },
+    {
+      "asset_binding_ids": [
+        "ending_panel"
+      ],
+      "effect_ids": [],
+      "ending_kind": "success",
+      "id": "ending_right",
+      "next_unit_ids": [],
+      "prerequisite_ids": [
+        "remember_right"
+      ],
+      "title": "Right ending",
+      "unit_type": "ending"
+    }
+  ]
+}

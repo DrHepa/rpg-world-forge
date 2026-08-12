@@ -1,6 +1,6 @@
 # Third-party notices
 
-RPG World Forge itself is MIT-licensed. The audited M5 development, asset, and
+World Forge itself is MIT-licensed. The audited M5 development, asset, and
 release toolchain uses these pinned third-party distributions:
 
 - Pillow 12.3.0 — Pillow project, HPND License.

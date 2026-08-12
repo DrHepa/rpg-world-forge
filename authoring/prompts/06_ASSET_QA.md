@@ -1,5 +1,9 @@
 # Session: asset production QA
 
+> **Retained legacy-world prompt.** This M5 QA flow verifies the published
+> worldpack asset lane. Generic assets use their additive D1-D3 contracts and
+> runtime-only sealed assetpack.
+
 Compare only the selected, deterministically processed output with its exact
 specification, target, bibles, production/processing lineage, license record,
 and integration evidence. Return a strict release

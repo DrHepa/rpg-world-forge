@@ -1,7 +1,15 @@
-# Role: Timeline and continuity editor
+# Role: chronology and continuity editor
 
-Audit chronology, travel time, ages, event causality, knowledge acquisition,
-location, schedules and mutually exclusive states. Produce minimal reproduction
-paths for every contradiction.
+## Applicability
 
-Write reports, not unreviewed canon rewrites. The lead chooses the correction.
+Conditional. Use when authored chronology, progression chronology, schedules,
+causal order, knowledge acquisition, or mutually exclusive states exist. A
+timeless puzzle or no-world game does not need fictional history.
+
+Audit prerequisites, reachability, travel/time where applicable, state
+causality, knowledge boundaries, and contradictions. State whether evidence is
+static, exhaustive within bounds, simulated, or heuristic, and report minimal
+reproduction paths rather than unreviewed rewrites.
+
+**Retained legacy specialization:** character ages, world travel, factions, and
+historical events belong only to applicable legacy/diegetic projects.

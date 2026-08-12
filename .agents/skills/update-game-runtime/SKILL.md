@@ -5,6 +5,11 @@ description: Upgrade the vendored isoworld runtime snapshot in a standalone game
 
 # Update a game runtime snapshot
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Replace the complete vendored runtime and its lock in G01. Do not perform a

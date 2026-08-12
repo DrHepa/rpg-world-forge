@@ -1,0 +1,463 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-forge.local/schemas/studio-creation-output-grant.schema.json",
+  "title": "World Forge Studio creation output grant v5",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "grant_id",
+    "workspace_id",
+    "kind",
+    "display_name",
+    "state",
+    "generation",
+    "publication",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "format": {
+      "const": "world-forge.studio_creation_output_grant"
+    },
+    "format_version": {
+      "enum": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    "grant_id": {
+      "$ref": "#/$defs/entityId"
+    },
+    "workspace_id": {
+      "$ref": "#/$defs/workspaceId"
+    },
+    "kind": {
+      "enum": [
+        "generic_assetpack_directory",
+        "game_runtime_bundle_directory",
+        "game_materialization_bundle_directory",
+        "standalone_game_directory",
+        "game_package_file"
+      ]
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "state": {
+      "enum": [
+        "ready",
+        "reserved",
+        "published",
+        "recovery_required",
+        "revoked"
+      ]
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "publication": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/publication"
+        },
+        {
+          "$ref": "#/$defs/runtimePublication"
+        },
+        {
+          "$ref": "#/$defs/materializationPublication"
+        },
+        {
+          "$ref": "#/$defs/standalonePublication"
+        },
+        {
+          "$ref": "#/$defs/gamePackagePublication"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "created_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "updated_at": {
+      "$ref": "#/$defs/timestamp"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "published"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "publication": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/publication"
+              },
+              {
+                "$ref": "#/$defs/runtimePublication"
+              },
+              {
+                "$ref": "#/$defs/materializationPublication"
+              },
+              {
+                "$ref": "#/$defs/standalonePublication"
+              },
+              {
+                "$ref": "#/$defs/gamePackagePublication"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "not": {
+          "properties": {
+            "state": {
+              "const": "published"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        }
+      },
+      "then": {
+        "properties": {
+          "publication": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "format_version": {
+            "const": 1
+          }
+        },
+        "required": [
+          "format_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "const": "generic_assetpack_directory"
+          },
+          "publication": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/publication"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "format_version": {
+            "const": 2
+          }
+        },
+        "required": [
+          "format_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "const": "game_runtime_bundle_directory"
+          },
+          "publication": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/runtimePublication"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "format_version": {
+            "const": 3
+          }
+        },
+        "required": [
+          "format_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "const": "game_materialization_bundle_directory"
+          },
+          "publication": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/materializationPublication"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "format_version": {
+            "const": 4
+          }
+        },
+        "required": [
+          "format_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "const": "standalone_game_directory"
+          },
+          "publication": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/standalonePublication"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "format_version": {
+            "const": 5
+          }
+        },
+        "required": [
+          "format_version"
+        ]
+      },
+      "then": {
+        "properties": {
+          "kind": {
+            "const": "game_package_file"
+          },
+          "publication": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/gamePackagePublication"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "publication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash",
+        "inventory_hash"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.assetpack"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "inventory_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "runtimePublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash",
+        "tree_hash"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.game_runtime_bundle"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "tree_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "materializationPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash",
+        "tree_hash"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.game_materialization_bundle"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "tree_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "standalonePublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash",
+        "tree_hash"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.standalone_game"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "tree_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "gamePackagePublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash",
+        "archive_sha256",
+        "size_bytes"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.game_package"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "archive_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 276824064
+        }
+      }
+    }
+  }
+}

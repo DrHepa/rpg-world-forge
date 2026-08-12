@@ -384,7 +384,13 @@ def _venv_python(environment: Path) -> Path:
     return environment / relative
 
 
-def _verify_clean_install(artifact: Path, environment: Path, empty_cwd: Path) -> None:
+def _verify_clean_install(
+    artifact: Path,
+    environment: Path,
+    empty_cwd: Path,
+    *,
+    forbidden_source_roots: tuple[Path, ...] = (),
+) -> None:
     venv.EnvBuilder(with_pip=True).create(environment)
     python = _venv_python(environment)
     if artifact.name.endswith(".tar.gz"):
@@ -394,7 +400,7 @@ def _verify_clean_install(artifact: Path, environment: Path, empty_cwd: Path) ->
         )
         install_options = ["--no-build-isolation", "--no-deps"]
     else:
-        install_options = ["--no-deps"]
+        install_options = ["--no-index", "--no-deps"]
     _run(
         [python.as_posix(), "-m", "pip", "install", *install_options, str(artifact)],
         cwd=empty_cwd,
@@ -409,7 +415,16 @@ def _verify_clean_install(artifact: Path, environment: Path, empty_cwd: Path) ->
                 "from pathlib import Path; import sys, worldforge; "
                 "module=Path(worldforge.__file__).resolve(); "
                 "prefix=Path(sys.prefix).resolve(); "
-                "assert module.is_relative_to(prefix), (module, prefix); print(module)"
+                f"forbidden=tuple(Path(value).resolve() for value in "
+                f"{tuple(str(path.resolve()) for path in forbidden_source_roots)!r}); "
+                "assert module.is_relative_to(prefix), (module, prefix); "
+                "assert not any(module.is_relative_to(root) for root in forbidden), "
+                "(module, forbidden); "
+                "search=tuple(Path(value).resolve() for value in sys.path if value); "
+                "assert not any("
+                "path.is_relative_to(root) for path in search for root in forbidden"
+                "), "
+                "(search, forbidden); print(module)"
             ),
         ],
         cwd=empty_cwd,

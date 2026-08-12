@@ -1,0 +1,742 @@
+{
+  "$id": "https://world-forge.local/schemas/generic-asset-target.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "asset_subject": {
+      "$ref": "#/$defs/assetSubjectIdentity"
+    },
+    "bindings": {
+      "items": {
+        "$ref": "#/$defs/binding"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "type": "array"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "world-forge.asset_target"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "gamepack": {
+      "$ref": "#/$defs/gamepackIdentity"
+    },
+    "review": {
+      "$ref": "#/$defs/review"
+    },
+    "target_id": {
+      "$ref": "#/$defs/id"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "target_id",
+    "asset_subject",
+    "gamepack",
+    "review",
+    "bindings",
+    "content_hash"
+  ],
+  "title": "World Forge reviewed asset target v1",
+  "type": "object",
+  "$defs": {
+    "assetSubjectIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_subject"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "binding": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$ref": "#/$defs/physicalChoice"
+        }
+      ],
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/id"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "$ref": "#/$defs/id"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/output"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "type": "array"
+        },
+        "referencing_subjects": {
+          "items": {
+            "$ref": "#/$defs/referencingSubject"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array"
+        },
+        "representation": {
+          "enum": [
+            "text",
+            "2d",
+            "2_5d",
+            "3d",
+            "audio"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "roles": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "selected_format": {
+          "enum": [
+            "asset:font",
+            "asset:glb",
+            "asset:glsl",
+            "asset:json",
+            "asset:png",
+            "asset:wav"
+          ]
+        },
+        "sharing": {
+          "$ref": "#/$defs/sharing"
+        },
+        "usage_contexts": {
+          "items": {
+            "$ref": "#/$defs/runtimeString"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "binding_id",
+        "required",
+        "roles",
+        "usage_contexts",
+        "referencing_subjects",
+        "asset_id",
+        "selected_format",
+        "kind",
+        "representation",
+        "outputs",
+        "sharing"
+      ],
+      "type": "object"
+    },
+    "evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "gamepackIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.gamepack"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "media_type": {
+          "enum": [
+            "application/json",
+            "audio/wav",
+            "font/otf",
+            "font/ttf",
+            "image/png",
+            "model/gltf-binary",
+            "text/x-glsl"
+          ]
+        },
+        "role": {
+          "enum": [
+            "animation",
+            "audio",
+            "clipset",
+            "collision",
+            "font",
+            "fragment_shader",
+            "localized_text",
+            "model",
+            "skeleton",
+            "texture",
+            "vertex_shader"
+          ]
+        }
+      },
+      "required": [
+        "role",
+        "media_type"
+      ],
+      "type": "object"
+    },
+    "physicalChoice": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/textureChoice"
+        },
+        {
+          "$ref": "#/$defs/sheetChoice"
+        },
+        {
+          "$ref": "#/$defs/fontChoice"
+        },
+        {
+          "$ref": "#/$defs/audioChoice"
+        },
+        {
+          "$ref": "#/$defs/shaderChoice"
+        },
+        {
+          "$ref": "#/$defs/localizationChoice"
+        },
+        {
+          "$ref": "#/$defs/animationChoice"
+        },
+        {
+          "$ref": "#/$defs/collisionChoice"
+        },
+        {
+          "$ref": "#/$defs/rigChoice"
+        },
+        {
+          "$ref": "#/$defs/characterChoice"
+        },
+        {
+          "$ref": "#/$defs/modelChoice"
+        }
+      ]
+    },
+    "textureChoice": {
+      "properties": {
+        "kind": {
+          "enum": [
+            "ui",
+            "portrait",
+            "sprite",
+            "vfx"
+          ]
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "image/png",
+              "role": "texture"
+            }
+          ]
+        },
+        "representation": {
+          "enum": [
+            "2d",
+            "2_5d"
+          ]
+        },
+        "selected_format": {
+          "const": "asset:png"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "sheetChoice": {
+      "properties": {
+        "kind": {
+          "enum": [
+            "spritesheet",
+            "tileset"
+          ]
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "application/json",
+              "role": "clipset"
+            },
+            {
+              "media_type": "image/png",
+              "role": "texture"
+            }
+          ]
+        },
+        "representation": {
+          "enum": [
+            "2d",
+            "2_5d"
+          ]
+        },
+        "selected_format": {
+          "const": "asset:png"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "fontChoice": {
+      "properties": {
+        "kind": {
+          "const": "font"
+        },
+        "outputs": {
+          "enum": [
+            [
+              {
+                "media_type": "font/ttf",
+                "role": "font"
+              }
+            ],
+            [
+              {
+                "media_type": "font/otf",
+                "role": "font"
+              }
+            ]
+          ]
+        },
+        "representation": {
+          "enum": [
+            "2d",
+            "2_5d"
+          ]
+        },
+        "selected_format": {
+          "const": "asset:font"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "audioChoice": {
+      "properties": {
+        "kind": {
+          "enum": [
+            "sfx",
+            "music"
+          ]
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "audio/wav",
+              "role": "audio"
+            }
+          ]
+        },
+        "representation": {
+          "const": "audio"
+        },
+        "selected_format": {
+          "const": "asset:wav"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "shaderChoice": {
+      "properties": {
+        "kind": {
+          "const": "shader"
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "text/x-glsl",
+              "role": "fragment_shader"
+            },
+            {
+              "media_type": "text/x-glsl",
+              "role": "vertex_shader"
+            }
+          ]
+        },
+        "representation": {
+          "enum": [
+            "2d",
+            "2_5d",
+            "3d"
+          ]
+        },
+        "selected_format": {
+          "const": "asset:glsl"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "localizationChoice": {
+      "properties": {
+        "kind": {
+          "const": "localization"
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "application/json",
+              "role": "localized_text"
+            }
+          ]
+        },
+        "representation": {
+          "const": "text"
+        },
+        "selected_format": {
+          "const": "asset:json"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "animationChoice": {
+      "properties": {
+        "kind": {
+          "const": "animation_3d"
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "model/gltf-binary",
+              "role": "animation"
+            }
+          ]
+        },
+        "representation": {
+          "const": "3d"
+        },
+        "selected_format": {
+          "const": "asset:glb"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "collisionChoice": {
+      "properties": {
+        "kind": {
+          "const": "collision_3d"
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "model/gltf-binary",
+              "role": "collision"
+            }
+          ]
+        },
+        "representation": {
+          "const": "3d"
+        },
+        "selected_format": {
+          "const": "asset:glb"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "rigChoice": {
+      "properties": {
+        "kind": {
+          "const": "rig"
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "model/gltf-binary",
+              "role": "skeleton"
+            }
+          ]
+        },
+        "representation": {
+          "const": "3d"
+        },
+        "selected_format": {
+          "const": "asset:glb"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "characterChoice": {
+      "properties": {
+        "kind": {
+          "const": "character_3d"
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "model/gltf-binary",
+              "role": "model"
+            },
+            {
+              "media_type": "model/gltf-binary",
+              "role": "skeleton"
+            }
+          ]
+        },
+        "representation": {
+          "const": "3d"
+        },
+        "selected_format": {
+          "const": "asset:glb"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "modelChoice": {
+      "properties": {
+        "kind": {
+          "enum": [
+            "environment_3d",
+            "model_3d",
+            "material_set",
+            "vfx_3d"
+          ]
+        },
+        "outputs": {
+          "const": [
+            {
+              "media_type": "model/gltf-binary",
+              "role": "model"
+            }
+          ]
+        },
+        "representation": {
+          "const": "3d"
+        },
+        "selected_format": {
+          "const": "asset:glb"
+        }
+      },
+      "required": [
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "referencingSubject": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object"
+    },
+    "review": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "rationale": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "reviewer_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "reviewer_id",
+        "rationale",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "runtimeString": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?!\\s*(?:[A-Za-z][A-Za-z0-9+.-]*://|[Ff][Ii][Ll][Ee]:[\\\\/]|[A-Za-z]:[\\\\/]|[\\\\/]{2}|/|@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:@[^\\s/\\\\]+)?\\s*$|(?:[Pp][Rr][Oo][Vv][Ii][Dd][Ee][Rr](?:_[Ii][Dd])?|[Mm][Oo][Dd][Ee][Ll](?:_[Ii][Dd])?|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Pp][Rr][Oo][Mm][Pp][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Ee][Nn][Dd][Pp][Oo][Ii][Nn][Tt])\\s*(?:=|:\\s*|\\s+[Ii][Ss]\\s+)|\\.{1,2}(?:[\\\\/]|\\s*$)))(?![\\s\\S]*[\\\\/]\\.{1,2}(?:[\\\\/]|\\s*$))(?!\\s*[^/\\\\\\r\\n]+(?:[\\\\/][^/\\\\\\r\\n]+)+\\.[A-Za-z0-9][A-Za-z0-9._-]*\\s*$)[\\s\\S]*$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "sharing": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "group_id": {
+              "type": "null"
+            },
+            "policy": {
+              "const": "exclusive"
+            }
+          },
+          "required": [
+            "policy",
+            "group_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "group_id": {
+              "$ref": "#/$defs/id"
+            },
+            "policy": {
+              "const": "shared_exact"
+            }
+          },
+          "required": [
+            "policy",
+            "group_id"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  }
+}

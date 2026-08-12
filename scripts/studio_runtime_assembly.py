@@ -80,6 +80,37 @@ RUNTIME_SOURCES_SHA256 = "99419da1ccc87cb8ea6c279e7e8e6bbc1d6b4d08eb6a67ae6ac7bf
 FORGE_VERSION = "0.7.0"
 SERVICE_MODULE = "worldforge.studio"
 MCP_MODULE = "worldforge.studio.mcp_server"
+GAMEPACK_RUNTIME_MODULES = (
+    "__init__.py",
+    "contracts.py",
+    "distribution.py",
+    "distribution_names.py",
+    "file_stat.py",
+    "game_package.py",
+    "headless.py",
+    "persistence.py",
+    "persistence_generation.py",
+    "persistence_io.py",
+    "runtime_io.py",
+    "semantics_v1.py",
+    "session.py",
+)
+GAMEPACK_RAYLIB_2D_MODULES = (
+    "__init__.py",
+    "app.py",
+    "audit.py",
+    "backend.py",
+    "descriptor_policy.py",
+    "executable_shape.py",
+    "fixed_step.py",
+    "input.py",
+    "narrative_text.py",
+    "native_smoke.py",
+    "puzzle.py",
+    "registry.py",
+    "resources.py",
+    "types.py",
+)
 PROTOCOL_RELATIVE = PurePosixPath("protocol/codex-app-server-0.144.6/manifest.json")
 PACKAGE_MANIFEST_NAME = "runtime-package-manifest.json"
 LAUNCH_MANIFEST_NAME = "runtime-manifest.json"
@@ -1888,10 +1919,20 @@ def _collect_source_files(
             f"{site_packages}/worldforge",
             frozenset({".py", ".tmpl"}),
         ),
-        (root / "schemas", f"{prefix}/share/rpg-world-forge/schemas", frozenset({".json"})),
+        (
+            root / "src/gamepack_runtime",
+            f"{site_packages}/gamepack_runtime",
+            frozenset({".py"}),
+        ),
+        (
+            root / "src/gamepack_raylib_2d",
+            f"{site_packages}/gamepack_raylib_2d",
+            frozenset({".py"}),
+        ),
+        (root / "schemas", f"{prefix}/share/world-forge/schemas", frozenset({".json"})),
         (
             root / "contracts",
-            f"{prefix}/share/rpg-world-forge/contracts",
+            f"{prefix}/share/world-forge/contracts",
             frozenset({".json", ".md"}),
         ),
         (
@@ -1916,10 +1957,30 @@ def _collect_source_files(
             budget,
             source_guard,
         )
+    canonical_share_prefix = f"{prefix}/share/world-forge/"
+    legacy_copies: list[_PayloadFile] = []
+    for item in result:
+        if not item.path.startswith(canonical_share_prefix):
+            continue
+        legacy_path = (
+            f"{prefix}/share/rpg-world-forge/{item.path.removeprefix(canonical_share_prefix)}"
+        )
+        budget.add_known_file(legacy_path, len(item.payload))
+        legacy_copies.append(_PayloadFile(legacy_path, item.payload, item.mode))
+    result.extend(legacy_copies)
     source_guard.require_bindings()
     if not any(item.path.endswith("/isoworld/__init__.py") for item in result):
         _fail("forge_material_missing", "forge_source_root")
     if not any(item.path.endswith("/worldforge/studio/__main__.py") for item in result):
+        _fail("forge_material_missing", "forge_source_root")
+    paths = {item.path for item in result}
+    if not {
+        f"{site_packages}/gamepack_runtime/{module}" for module in GAMEPACK_RUNTIME_MODULES
+    }.issubset(paths):
+        _fail("forge_material_missing", "forge_source_root")
+    if not {
+        f"{site_packages}/gamepack_raylib_2d/{module}" for module in GAMEPACK_RAYLIB_2D_MODULES
+    }.issubset(paths):
         _fail("forge_material_missing", "forge_source_root")
     if not any(item.path == PROTOCOL_RELATIVE.as_posix() for item in result):
         _fail("forge_material_missing", "forge_source_root")
@@ -2176,7 +2237,7 @@ def _collect_windows_source_files(
         ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
     ):
         output_path = _portable_path(
-            f"{prefix}/share/rpg-world-forge/{destination_name}",
+            f"{prefix}/share/world-forge/{destination_name}",
             "forge_source_root",
         )
         budget.preflight_path(output_path)
@@ -2451,7 +2512,7 @@ def _collect_posix_source_files(
         ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
     ):
         output_path = _portable_path(
-            f"{prefix}/share/rpg-world-forge/{destination_name}",
+            f"{prefix}/share/world-forge/{destination_name}",
             "forge_source_root",
         )
         budget.preflight_path(output_path)

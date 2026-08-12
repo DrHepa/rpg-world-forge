@@ -1,0 +1,1355 @@
+{
+  "analysis_requirements": {
+    "analyzer_id": "worldforge.unsupported_profile",
+    "analyzer_version": 1,
+    "content_hash": "70f8d5bda649774eb4bcb543f9db7a430c7a74998577896bd9cdb9dd18844382",
+    "limits": {
+      "candidate_evaluations": 262144,
+      "depth": 512,
+      "parameter_combinations_per_action": 4096,
+      "state_bytes": 65536,
+      "states": 16384,
+      "total_state_bytes": 67108864,
+      "total_witness_steps": 4096,
+      "witness_traces": 128
+    },
+    "profile": "unsupported",
+    "reason_code": "analysis_profile_unsupported"
+  },
+  "asset_requirements": [
+    {
+      "accepted_formats": [
+        "asset:png"
+      ],
+      "binding_id": "storylet_card_visual",
+      "referencing_subjects": [
+        {
+          "id": "roguelite_run",
+          "kind": "activity"
+        },
+        {
+          "id": "death_recovery",
+          "kind": "mechanic"
+        },
+        {
+          "id": "expedition_advance",
+          "kind": "mechanic"
+        },
+        {
+          "id": "storylet_hazard_endurance",
+          "kind": "mechanic"
+        },
+        {
+          "id": "storylet_hazard_fall",
+          "kind": "mechanic"
+        },
+        {
+          "id": "run_conclusion",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "storylet_entry",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "storylet_resolution",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "storylet_sequence",
+          "kind": "system"
+        }
+      ],
+      "required": true,
+      "roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "narrative_ui",
+        "system_feedback"
+      ],
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "narrative",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "73a63d1dfc360893198abfdb1502f94595f08570aaead157d531f6cf80cfa8ea",
+  "format": "world-forge.gamepack",
+  "format_version": 1,
+  "game": {
+    "default_locale": "en",
+    "id": "modular_roguelite",
+    "title": "Modular Roguelite",
+    "version": "1.0.0"
+  },
+  "localization": {
+    "externalized_text": true,
+    "references": [
+      {
+        "field": "title",
+        "key": "activity.roguelite_run.title",
+        "source_text": "bounded run through modular authored storylets",
+        "subject_id": "roguelite_run",
+        "subject_kind": "activity"
+      },
+      {
+        "field": "title",
+        "key": "activity_module.modular_roguelite_activities.title",
+        "source_text": "Modular Roguelite authored activity",
+        "subject_id": "modular_roguelite_activities",
+        "subject_kind": "activity_module"
+      },
+      {
+        "field": "title",
+        "key": "game.modular_roguelite.title",
+        "source_text": "Modular Roguelite",
+        "subject_id": "modular_roguelite",
+        "subject_kind": "game"
+      },
+      {
+        "field": "title",
+        "key": "narrative_module.modular_roguelite_narrative.title",
+        "source_text": "Authored modular roguelite storylets",
+        "subject_id": "modular_roguelite_narrative",
+        "subject_kind": "narrative_module"
+      },
+      {
+        "field": "title",
+        "key": "narrative_unit.run_conclusion.title",
+        "source_text": "Authored conclusion for the bounded roguelite run",
+        "subject_id": "run_conclusion",
+        "subject_kind": "narrative_unit"
+      },
+      {
+        "field": "title",
+        "key": "narrative_unit.storylet_entry.title",
+        "source_text": "Modular expedition storylet entry",
+        "subject_id": "storylet_entry",
+        "subject_kind": "narrative_unit"
+      },
+      {
+        "field": "title",
+        "key": "narrative_unit.storylet_resolution.title",
+        "source_text": "Modular expedition storylet resolution",
+        "subject_id": "storylet_resolution",
+        "subject_kind": "narrative_unit"
+      },
+      {
+        "field": "title",
+        "key": "system.storylet_sequence.title",
+        "source_text": "complete the reviewed expedition depth",
+        "subject_id": "storylet_sequence",
+        "subject_kind": "system"
+      },
+      {
+        "field": "title",
+        "key": "system_module.modular_roguelite_systems.title",
+        "source_text": "Modular expedition route",
+        "subject_id": "modular_roguelite_systems",
+        "subject_kind": "system_module"
+      },
+      {
+        "field": "title",
+        "key": "world_module.modular_roguelite_space.title",
+        "source_text": "Modular expedition route",
+        "subject_id": "modular_roguelite_space",
+        "subject_kind": "world_module"
+      }
+    ],
+    "source_locale": "en",
+    "supported_locales": [
+      "en"
+    ]
+  },
+  "logic": {
+    "actions": [
+      {
+        "core_verb_id": "venture",
+        "id": "advance_expedition",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "roguelite:run_reset"
+        ],
+        "rule_ids": [
+          "advance_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "roguelite_run"
+          },
+          {
+            "kind": "system",
+            "source_id": "storylet_sequence"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "venture",
+        "id": "endure_storylet_hazard",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "roguelite:run_reset"
+        ],
+        "rule_ids": [
+          "endure_hazard_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "roguelite_run"
+          },
+          {
+            "kind": "system",
+            "source_id": "storylet_sequence"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "venture",
+        "id": "fall_to_storylet_hazard",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "roguelite:run_reset"
+        ],
+        "rule_ids": [
+          "fall_hazard_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "roguelite_run"
+          },
+          {
+            "kind": "system",
+            "source_id": "storylet_sequence"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "recover",
+        "id": "recover_after_death",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "recovery_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "roguelite_run"
+          },
+          {
+            "kind": "system",
+            "source_id": "storylet_sequence"
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "action_id": "advance_expedition",
+        "comparison": "less_than",
+        "id": "advance_depth_available",
+        "left": {
+          "kind": "state",
+          "state_id": "run_depth"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "advance_expedition",
+        "comparison": "equal",
+        "id": "advance_run_active",
+        "left": {
+          "kind": "state",
+          "state_id": "run_active"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": true,
+          "value_type": "boolean"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "less_or_equal",
+        "id": "death_condition",
+        "left": {
+          "kind": "state",
+          "state_id": "run_health"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "endure_storylet_hazard",
+        "comparison": "greater_than",
+        "id": "endure_health_available",
+        "left": {
+          "kind": "state",
+          "state_id": "run_health"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "endure_storylet_hazard",
+        "comparison": "equal",
+        "id": "endure_run_active",
+        "left": {
+          "kind": "state",
+          "state_id": "run_active"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": true,
+          "value_type": "boolean"
+        }
+      },
+      {
+        "action_id": "fall_to_storylet_hazard",
+        "comparison": "equal",
+        "id": "fall_health_critical",
+        "left": {
+          "kind": "state",
+          "state_id": "run_health"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "fall_to_storylet_hazard",
+        "comparison": "equal",
+        "id": "fall_run_active",
+        "left": {
+          "kind": "state",
+          "state_id": "run_active"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": true,
+          "value_type": "boolean"
+        }
+      },
+      {
+        "action_id": "recover_after_death",
+        "comparison": "less_or_equal",
+        "id": "recovery_health_depleted",
+        "left": {
+          "kind": "state",
+          "state_id": "run_health"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "recover_after_death",
+        "comparison": "equal",
+        "id": "recovery_run_inactive",
+        "left": {
+          "kind": "state",
+          "state_id": "run_active"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": false,
+          "value_type": "boolean"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "equal",
+        "id": "run_at_entry_depth",
+        "left": {
+          "kind": "state",
+          "state_id": "run_depth"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "equal",
+        "id": "run_is_active",
+        "left": {
+          "kind": "state",
+          "state_id": "run_active"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": true,
+          "value_type": "boolean"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "equal",
+        "id": "run_is_inactive",
+        "left": {
+          "kind": "state",
+          "state_id": "run_active"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": false,
+          "value_type": "boolean"
+        }
+      },
+      {
+        "action_id": null,
+        "id": "scenario_ready",
+        "operator": "constant",
+        "value": true
+      },
+      {
+        "action_id": null,
+        "comparison": "greater_or_equal",
+        "id": "storylet_progressed",
+        "left": {
+          "kind": "state",
+          "state_id": "run_depth"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "greater_or_equal",
+        "id": "victory_condition",
+        "left": {
+          "kind": "state",
+          "state_id": "run_depth"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        }
+      }
+    ],
+    "core_verbs": [
+      {
+        "description": "Recover from authored run death and begin a new bounded run.",
+        "id": "recover"
+      },
+      {
+        "description": "Advance the authored roguelite scenario.",
+        "id": "venture"
+      }
+    ],
+    "effects": [
+      {
+        "action_id": "advance_expedition",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "advance_progress",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "run_depth"
+      },
+      {
+        "action_id": "endure_storylet_hazard",
+        "amount": {
+          "kind": "literal",
+          "value": -1,
+          "value_type": "integer"
+        },
+        "id": "consume_run_health",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "run_health"
+      },
+      {
+        "action_id": "fall_to_storylet_hazard",
+        "id": "deactivate_run",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "run_active",
+        "value": {
+          "kind": "literal",
+          "value": false,
+          "value_type": "boolean"
+        }
+      },
+      {
+        "action_id": "fall_to_storylet_hazard",
+        "amount": {
+          "kind": "literal",
+          "value": -1,
+          "value_type": "integer"
+        },
+        "id": "deplete_run_health",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "run_health"
+      },
+      {
+        "action_id": "recover_after_death",
+        "id": "reactivate_run",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "run_active"
+      },
+      {
+        "action_id": "recover_after_death",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_run_death",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "run_deaths"
+      },
+      {
+        "action_id": "recover_after_death",
+        "id": "reset_run_depth",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "run_depth"
+      },
+      {
+        "action_id": "recover_after_death",
+        "id": "restore_run_health",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "run_health"
+      }
+    ],
+    "endings": [
+      {
+        "condition_ids": [
+          "victory_condition"
+        ],
+        "event_ids": [],
+        "id": "scenario_complete",
+        "kind": "success",
+        "presentation_hook_ids": [
+          "ending_feedback"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "id": "hazard_endured"
+      },
+      {
+        "id": "progress_advanced"
+      },
+      {
+        "id": "run_failed"
+      },
+      {
+        "id": "run_recovered"
+      }
+    ],
+    "execution_semantics": {
+      "active_failure_recovery": "intersection",
+      "condition_collections": "and",
+      "condition_snapshot": "pre_transition",
+      "effect_order": "rule_order_then_reference_order",
+      "effect_state_operands": "current_candidate_state",
+      "ending_match": "exactly_one",
+      "event_commit": "after_success_rule_reference_order",
+      "invalid_transition": "reject_without_mutation",
+      "narrative_transition": "source_effects_then_cursor_atomic",
+      "owned_action_rules": "all_required",
+      "semantics_version": 1,
+      "terminal_precedence": "endings_before_failures"
+    },
+    "failures": [
+      {
+        "condition_ids": [
+          "death_condition",
+          "run_is_inactive"
+        ],
+        "id": "run_failed",
+        "recovery_action_ids": [
+          "recover_after_death"
+        ]
+      }
+    ],
+    "goals": [
+      {
+        "condition_ids": [
+          "victory_condition"
+        ],
+        "id": "authored_victory",
+        "success_ending_id": "scenario_complete"
+      }
+    ],
+    "initial_state": {
+      "run_active": true,
+      "run_deaths": 0,
+      "run_depth": 0,
+      "run_health": 2
+    },
+    "mechanics": [
+      {
+        "action_id": "recover_after_death",
+        "asset_binding_ids": [
+          "storylet_card_visual"
+        ],
+        "authoritative_state_ids": [
+          "run_active",
+          "run_deaths",
+          "run_depth",
+          "run_health"
+        ],
+        "condition_ids": [
+          "recovery_health_depleted",
+          "recovery_run_inactive"
+        ],
+        "core_verb_id": "recover",
+        "effect_ids": [
+          "reactivate_run",
+          "record_run_death",
+          "reset_run_depth",
+          "restore_run_health"
+        ],
+        "event_ids": [
+          "run_recovered"
+        ],
+        "id": "death_recovery",
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "recovery_rule"
+        ]
+      },
+      {
+        "action_id": "advance_expedition",
+        "asset_binding_ids": [
+          "storylet_card_visual"
+        ],
+        "authoritative_state_ids": [
+          "run_active",
+          "run_depth"
+        ],
+        "condition_ids": [
+          "advance_depth_available",
+          "advance_run_active"
+        ],
+        "core_verb_id": "venture",
+        "effect_ids": [
+          "advance_progress"
+        ],
+        "event_ids": [
+          "progress_advanced"
+        ],
+        "id": "expedition_advance",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "roguelite:run_reset"
+        ],
+        "rule_ids": [
+          "advance_rule"
+        ]
+      },
+      {
+        "action_id": "endure_storylet_hazard",
+        "asset_binding_ids": [
+          "storylet_card_visual"
+        ],
+        "authoritative_state_ids": [
+          "run_active",
+          "run_health"
+        ],
+        "condition_ids": [
+          "endure_health_available",
+          "endure_run_active"
+        ],
+        "core_verb_id": "venture",
+        "effect_ids": [
+          "consume_run_health"
+        ],
+        "event_ids": [
+          "hazard_endured"
+        ],
+        "id": "storylet_hazard_endurance",
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "roguelite:run_reset"
+        ],
+        "rule_ids": [
+          "endure_hazard_rule"
+        ]
+      },
+      {
+        "action_id": "fall_to_storylet_hazard",
+        "asset_binding_ids": [
+          "storylet_card_visual"
+        ],
+        "authoritative_state_ids": [
+          "run_active",
+          "run_health"
+        ],
+        "condition_ids": [
+          "fall_health_critical",
+          "fall_run_active"
+        ],
+        "core_verb_id": "venture",
+        "effect_ids": [
+          "deactivate_run",
+          "deplete_run_health"
+        ],
+        "event_ids": [
+          "run_failed"
+        ],
+        "id": "storylet_hazard_fall",
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "roguelite:run_reset"
+        ],
+        "rule_ids": [
+          "fall_hazard_rule"
+        ]
+      }
+    ],
+    "narrative_cursor": null,
+    "narrative_transitions": [],
+    "presentation_hooks": [
+      {
+        "asset_binding_ids": [
+          "storylet_card_visual"
+        ],
+        "id": "ending_feedback",
+        "kind": "ending"
+      },
+      {
+        "asset_binding_ids": [
+          "storylet_card_visual"
+        ],
+        "id": "progress_feedback",
+        "kind": "feedback"
+      },
+      {
+        "asset_binding_ids": [
+          "storylet_card_visual"
+        ],
+        "id": "progress_view",
+        "kind": "board"
+      }
+    ],
+    "rules": [
+      {
+        "action_id": "advance_expedition",
+        "condition_ids": [
+          "advance_depth_available",
+          "advance_run_active"
+        ],
+        "effect_ids": [
+          "advance_progress"
+        ],
+        "event_ids": [
+          "progress_advanced"
+        ],
+        "id": "advance_rule",
+        "order": 0
+      },
+      {
+        "action_id": "endure_storylet_hazard",
+        "condition_ids": [
+          "endure_health_available",
+          "endure_run_active"
+        ],
+        "effect_ids": [
+          "consume_run_health"
+        ],
+        "event_ids": [
+          "hazard_endured"
+        ],
+        "id": "endure_hazard_rule",
+        "order": 1
+      },
+      {
+        "action_id": "fall_to_storylet_hazard",
+        "condition_ids": [
+          "fall_health_critical",
+          "fall_run_active"
+        ],
+        "effect_ids": [
+          "deactivate_run",
+          "deplete_run_health"
+        ],
+        "event_ids": [
+          "run_failed"
+        ],
+        "id": "fall_hazard_rule",
+        "order": 2
+      },
+      {
+        "action_id": "recover_after_death",
+        "condition_ids": [
+          "recovery_health_depleted",
+          "recovery_run_inactive"
+        ],
+        "effect_ids": [
+          "reactivate_run",
+          "record_run_death",
+          "reset_run_depth",
+          "restore_run_health"
+        ],
+        "event_ids": [
+          "run_recovered"
+        ],
+        "id": "recovery_rule",
+        "order": 3
+      }
+    ],
+    "source": {
+      "content_hash": "509ef20177804e39b9acbe708f86661d7b437237ded64e5baa672d65595fe864",
+      "format": "world-forge.logic_module",
+      "format_version": 1,
+      "id": "modular_roguelite_logic"
+    },
+    "state_schema": [
+      {
+        "id": "run_active",
+        "initial": true,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "boolean"
+      },
+      {
+        "id": "run_deaths",
+        "initial": 0,
+        "maximum": 99,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      },
+      {
+        "id": "run_depth",
+        "initial": 0,
+        "maximum": 3,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      },
+      {
+        "id": "run_health",
+        "initial": 2,
+        "maximum": 2,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      }
+    ],
+    "title": "Neutral authored roguelite logic"
+  },
+  "mechanic_requirements": [
+    {
+      "action_id": "recover_after_death",
+      "core_verb_id": "recover",
+      "mechanic_id": "death_recovery",
+      "required_feature_ids": [
+        "logic:finite_state"
+      ]
+    },
+    {
+      "action_id": "advance_expedition",
+      "core_verb_id": "venture",
+      "mechanic_id": "expedition_advance",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "roguelite:run_reset"
+      ]
+    },
+    {
+      "action_id": "endure_storylet_hazard",
+      "core_verb_id": "venture",
+      "mechanic_id": "storylet_hazard_endurance",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "roguelite:run_reset"
+      ]
+    },
+    {
+      "action_id": "fall_to_storylet_hazard",
+      "core_verb_id": "venture",
+      "mechanic_id": "storylet_hazard_fall",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "roguelite:run_reset"
+      ]
+    }
+  ],
+  "modules": {
+    "activities": [
+      {
+        "activities": [
+          {
+            "activity_type": "scenario",
+            "asset_binding_ids": [
+              "storylet_card_visual"
+            ],
+            "effect_ids": [
+              "advance_progress",
+              "consume_run_health",
+              "deactivate_run",
+              "deplete_run_health",
+              "reactivate_run",
+              "record_run_death",
+              "reset_run_depth",
+              "restore_run_health"
+            ],
+            "end_condition_ids": [
+              "victory_condition"
+            ],
+            "event_ids": [
+              "hazard_endured",
+              "progress_advanced",
+              "run_failed",
+              "run_recovered"
+            ],
+            "failure_condition_ids": [
+              "death_condition",
+              "run_is_inactive"
+            ],
+            "id": "roguelite_run",
+            "participant_ids": [],
+            "presentation_hook_ids": [
+              "progress_feedback",
+              "progress_view"
+            ],
+            "spatial_context_ids": [],
+            "start_condition_ids": [
+              "scenario_ready"
+            ],
+            "success_condition_ids": [
+              "victory_condition"
+            ],
+            "title": "bounded run through modular authored storylets"
+          }
+        ],
+        "source": {
+          "content_hash": "935704efdad422c4630e5ebcc732c1fa810ac1fe7f2deee238260ea27dc463c7",
+          "format": "world-forge.activity_module",
+          "format_version": 1,
+          "id": "modular_roguelite_activities"
+        },
+        "title": "Modular Roguelite authored activity"
+      }
+    ],
+    "narrative": [
+      {
+        "entry_unit_ids": [
+          "storylet_entry"
+        ],
+        "source": {
+          "content_hash": "b1f606f5b66afe42079079a4ae39d6520df580019ebea3a1ac17820eb4135f15",
+          "format": "world-forge.narrative_module",
+          "format_version": 1,
+          "id": "modular_roguelite_narrative"
+        },
+        "title": "Authored modular roguelite storylets",
+        "units": [
+          {
+            "asset_binding_ids": [
+              "storylet_card_visual"
+            ],
+            "effect_ids": [],
+            "id": "storylet_entry",
+            "next_unit_ids": [
+              "storylet_resolution"
+            ],
+            "prerequisite_ids": [
+              "run_at_entry_depth",
+              "run_is_active"
+            ],
+            "title": "Modular expedition storylet entry",
+            "unit_type": "storylet"
+          },
+          {
+            "asset_binding_ids": [
+              "storylet_card_visual"
+            ],
+            "effect_ids": [],
+            "id": "storylet_resolution",
+            "next_unit_ids": [
+              "run_conclusion"
+            ],
+            "prerequisite_ids": [
+              "run_is_active",
+              "storylet_progressed"
+            ],
+            "title": "Modular expedition storylet resolution",
+            "unit_type": "storylet"
+          },
+          {
+            "asset_binding_ids": [
+              "storylet_card_visual"
+            ],
+            "effect_ids": [],
+            "ending_kind": "success",
+            "id": "run_conclusion",
+            "next_unit_ids": [],
+            "prerequisite_ids": [
+              "victory_condition"
+            ],
+            "title": "Authored conclusion for the bounded roguelite run",
+            "unit_type": "ending"
+          }
+        ]
+      }
+    ],
+    "systems": [
+      {
+        "source": {
+          "content_hash": "51a23ea30282995cbcdab2f18550ebb2fceabbf1a69aadf9aca81f096ea2e7f8",
+          "format": "world-forge.system_module",
+          "format_version": 1,
+          "id": "modular_roguelite_systems"
+        },
+        "systems": [
+          {
+            "asset_binding_ids": [
+              "storylet_card_visual"
+            ],
+            "effect_ids": [
+              "advance_progress",
+              "consume_run_health",
+              "deactivate_run",
+              "deplete_run_health",
+              "reactivate_run",
+              "record_run_death",
+              "reset_run_depth",
+              "restore_run_health"
+            ],
+            "event_ids": [
+              "hazard_endured",
+              "progress_advanced",
+              "run_failed",
+              "run_recovered"
+            ],
+            "id": "storylet_sequence",
+            "precondition_ids": [
+              "advance_depth_available",
+              "advance_run_active",
+              "endure_health_available",
+              "endure_run_active",
+              "fall_health_critical",
+              "fall_run_active",
+              "recovery_health_depleted",
+              "recovery_run_inactive"
+            ],
+            "system_type": "simulation_scenario",
+            "title": "complete the reviewed expedition depth"
+          }
+        ],
+        "title": "Modular expedition route"
+      }
+    ],
+    "world": [
+      {
+        "module_type": "space",
+        "records": [
+          {
+            "id": "modular_roguelite_space",
+            "name": "Modular expedition route",
+            "topology": "symbolic"
+          }
+        ],
+        "source": {
+          "content_hash": "2d3beeec4eef1ed8190105382215077aa9f8f2be3cc63eb5a62646e70b04b3d8",
+          "format": "world-forge.world_module",
+          "format_version": 1,
+          "id": "modular_roguelite_space"
+        },
+        "title": "Modular expedition route"
+      }
+    ]
+  },
+  "presentation": {
+    "accessibility": {
+      "captions": true,
+      "color_independence": true,
+      "high_contrast": true,
+      "keyboard_only": true,
+      "reduced_motion": true,
+      "remapping": true,
+      "screen_reader_structure": true,
+      "text_scaling": true,
+      "timing_alternatives": true
+    },
+    "audio_role": "optional feedback",
+    "camera": "fixed",
+    "input_assumptions": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "localization": {
+      "externalized_text": true,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "mode": "2d",
+    "perspective": "orthographic board",
+    "ui_density": "low",
+    "visual_language": "high-contrast geometric symbols"
+  },
+  "provenance": [
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "935704efdad422c4630e5ebcc732c1fa810ac1fe7f2deee238260ea27dc463c7",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "modular_roguelite_activities"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "63745ee45c0bb39730938ffc13bfb51334eae5bc00b94024097ebad894429391",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "modular_roguelite_profile"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "86d839fb5634bc658c6fd803e5f0ebbe7dd43cad00dad0b3156b0038fe7ae14c",
+        "format": "world-forge.creation_source_manifest",
+        "format_version": 1,
+        "id": "modular_roguelite"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "509ef20177804e39b9acbe708f86661d7b437237ded64e5baa672d65595fe864",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "modular_roguelite_logic"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "b1f606f5b66afe42079079a4ae39d6520df580019ebea3a1ac17820eb4135f15",
+        "format": "world-forge.narrative_module",
+        "format_version": 1,
+        "id": "modular_roguelite_narrative"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "29528ed740130535366b3716a23f8b1ee0b72daadb952f24cb64885be237de43",
+        "format": "world-forge.project",
+        "format_version": 1,
+        "id": "modular_roguelite"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "51a23ea30282995cbcdab2f18550ebb2fceabbf1a69aadf9aca81f096ea2e7f8",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "modular_roguelite_systems"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "2d3beeec4eef1ed8190105382215077aa9f8f2be3cc63eb5a62646e70b04b3d8",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "modular_roguelite_space"
+      }
+    }
+  ],
+  "registered_extensions": [],
+  "runtime_requirements": {
+    "accepted_logic_formats": [
+      {
+        "format": "world-forge.gamepack",
+        "versions": [
+          1
+        ]
+      }
+    ],
+    "asset_formats": [
+      "asset:png"
+    ],
+    "input_capabilities": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "optional_features": [
+      "audio:sfx"
+    ],
+    "packaging_target": "standalone desktop directory",
+    "platform_matrix": [
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:linux",
+        "platform_id": "platform:linux_x86_64",
+        "renderer": "raylib"
+      },
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:windows",
+        "platform_id": "platform:windows_x86_64",
+        "renderer": "raylib"
+      }
+    ],
+    "presentation": {
+      "camera": "fixed",
+      "mode": "2d",
+      "perspective": "orthographic board",
+      "renderer": "raylib"
+    },
+    "replay_expected": true,
+    "requested_adapter": null,
+    "required_features": [
+      "logic:deterministic_actions",
+      "logic:finite_state",
+      "roguelite:run_reset"
+    ],
+    "save_expected": true
+  },
+  "source": {
+    "logic_modules": [
+      {
+        "content_hash": "509ef20177804e39b9acbe708f86661d7b437237ded64e5baa672d65595fe864",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "modular_roguelite_logic"
+      }
+    ],
+    "profile": {
+      "content_hash": "63745ee45c0bb39730938ffc13bfb51334eae5bc00b94024097ebad894429391",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "modular_roguelite_profile"
+    },
+    "project": {
+      "content_hash": "29528ed740130535366b3716a23f8b1ee0b72daadb952f24cb64885be237de43",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "modular_roguelite"
+    },
+    "source_manifest": {
+      "content_hash": "86d839fb5634bc658c6fd803e5f0ebbe7dd43cad00dad0b3156b0038fe7ae14c",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "modular_roguelite"
+    }
+  }
+}

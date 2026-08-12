@@ -6,6 +6,9 @@ M5 starts only from a validated, canon-locked worldpack. Asset production is an
 offline authoring concern: GPT orchestrates decisions and delegates bounded work
 to an executor, but no provider, model, MCP server, credential, prompt, source
 file, or generation workflow is part of the game runtime.
+Authoring validity is not runtime executability: produced, processed, QA-passed,
+or sealed assets do not prove adapter support, execution, packaging, hosted
+evidence, or release readiness.
 
 Implement the routes in this order:
 
@@ -21,6 +24,279 @@ The fourth step is gated on explicit research of the Modly contract, useful
 extensions per operation, extension revisions, model/weight identity, licensing,
 and reproducibility. Do not invoke a local model directly or infer an extension
 from a desired output.
+
+## Additive generic gamepack planning
+
+The M5 pipeline below remains the published legacy worldpack path. Generic game
+projects do not silently reuse its world-only meanings. They use five additive
+`world-forge.*` v1 contracts for the planning boundary:
+
+```text
+verified gamepack subject
+  -> human-reviewed binding target
+  -> human-reviewed visual/audio style
+  -> deterministic inventory
+  -> exact per-asset specifications
+```
+
+`world-forge.asset_subject` records the complete logic-subject tuple.
+`world-forge.asset_target` preserves every compiled binding and makes format,
+kind, representation, physical outputs, and any compatible sharing explicit.
+`world-forge.asset_style` records presentation, readability, accessibility,
+localization, and the closed defined/not-applicable audio decision.
+`world-forge.asset_inventory` is an exact rebuild with no manual additions.
+Each `world-forge.asset_spec` binds one inventory item and fixes portable
+runtime paths, media-specific expectations, acceptance criteria, production
+class, and review requirements. The complete specification set is
+cardinality- and collision-checked against the inventory.
+
+Generic IDs share the portable lowercase 2-to-64-character domain. Default
+subject, target, style, inventory, and specification IDs use fixed prefixes and
+192-bit canonical SHA-256 fragments rather than suffixing caller-controlled
+IDs. Shared-target unions are bounded before inventory allocation, so accepted
+targets cannot overflow inventory lineage arrays; casefold-equivalent usage
+contexts select one deterministic spelling instead of expanding again during
+materialization. Specification paths are checked as NFC/casefold POSIX
+component trees, including file/directory prefix and Windows component aliases.
+Font ranges use the exact uppercase
+`^U\+[0-9A-F]{4,6}-[0-9A-F]{4,6}$` grammar and must be numeric, sorted,
+bounded, unique, and non-overlapping.
+
+The closed generic matrix covers PNG texture and texture/clipset pairs, TTF/OTF
+fonts, PCM16 WAV, paired GLSL stages, schema-validated localization JSON, and
+declared GLB model/animation/collision/skeleton roles. Python, Draft 2020-12
+schemas, AJV, and generated TypeScript reject incomplete or crossed
+kind/representation/role/format combinations. Neither genre labels nor
+filenames select a matrix entry.
+
+Generated TypeScript types describe raw structural shapes; they do not claim
+that TypeScript alone enforces arbitrary JSON Schema
+`additionalProperties: false` keys on pre-bound objects. Studio code admits a
+generic asset document to the branded validated domain only by cloning first,
+strictly validating that detached own-property value with AJV, and freezing it,
+including the custom portable-path and glyph-range rules.
+
+The additive D2a production lineage continues from each exact specification:
+
+```text
+exact specification
+  -> closed production request
+  -> byte-inspected production receipt
+  -> reviewed candidate selection
+  -> mechanically derived provenance
+  -> runtime-safe license record
+```
+
+These are five independent `world-forge.*` v1 formats. Every document repeats
+the exact gamepack, subject, target, style, inventory, specification, and asset
+identities. Integral loaders rebuild the complete planning chain; document-only
+validators report structural validity and never imply that lineage was
+verified.
+
+The request selects one of four explicit production classes: `human`,
+`procedural_offline`, `external_authoring`, or `generative_authoring`. Each has
+a closed toolchain shape. A generative request records only immutable
+instruction-artifact hashes and typed provider/tool/model/weights/dataset
+identities needed for authoring evidence; it never embeds instruction text,
+credentials, endpoints, or provider transcripts. No class is inferred from
+asset kind, format, fiction, or gameplay genre. Offline procedural requests
+with either `fixed` or `recorded` seed policy carry a concrete integer seed;
+`forbidden` is the only policy that carries `null`.
+
+A completed receipt must fulfill the exact specification roles with no missing
+or extra candidates. Each input and candidate is read through the retained
+standalone-file boundary; SHA-256, size, detected media/container, and bounded
+media metadata are derived from those captured bytes. GLB inspection consumes
+that retained byte sequence directly, creates no named temporary, and enforces
+the exact nodes, meshes, primitives, materials, joints, animations, and
+triangles budgets. Role/media pairs are structurally discriminated throughout
+receipt, selection, provenance, and license records; GLSL roles also bind their
+exact vertex or fragment stage. Failed receipts contain no outputs and builders
+reject discarded candidate arguments.
+
+Each selected or rejected receipt root has its own explicit
+`world-forge.asset_receipt_lineage` v1 closure. The closure keys must exactly
+cover the cited roots, and each parent set must be that root's complete
+transitive closure. A selected root's parents are never reused implicitly for a
+rejected root. Every parent is a completed receipt for the same closed request
+and is revalidated against the planning identities, toolchain, retained inputs,
+and candidate bytes before entering its closure. Provenance materializes only
+the selected root's transitive receipt/input graph. An input repeated
+byte-for-byte by multiple receipts is one shared source node; crossed metadata
+or hash aliases fail closed.
+
+Component scopes are derived from the production class, actual toolchain, and
+presence of request inputs, so every class binds exactly one `input_license`
+component when inputs exist and none otherwise. Human and procedural records
+cannot invent model, weights, or dataset lineage. License records cover one
+selected output and reproduce those exact component scopes. Custom component
+licenses use the same reviewed allowlist as the top-level basis. Their
+separately hashed public notice rejects authoring-only provider, model, weights,
+seed, instruction, and dataset details as well as concrete bearer, API-key,
+repository-token, cloud-key, authorization-header, and private-key signatures.
+Legitimate narrative uses of words such as “bearer”, “key”, or “privateer”
+remain valid.
+
+The neutral puzzle fixture uses a deterministic high-contrast RGBA PNG. The
+branching-narrative fixture uses the project-authored World Forge Tiny Fixture
+5x7 outline font: printable ASCII has one nonzero glyph ID per code point,
+space has advance without an outline, all other glyphs are nonblank, critical
+lookalike pairs are distinct, and Pillow 12.3.0 pins rendered-mask evidence for
+every fixture string. Its glyph design and generated bytes are dedicated under
+CC0-1.0; the stdlib-only generator code remains MIT. Both assets are produced
+through `procedural_offline`, reviewed, and licensed with exact fixture
+evidence; neither fabricates AI lineage. The bounded integration matrix
+additionally drives PNG plus clipset
+atlas, WAV, TTF, OTF, paired GLSL, schema JSON, GLB, and paired GLB outputs
+through request, receipt, selection, provenance, and per-output licensing. Its
+nine complete media chains are complemented by an eight-case matrix covering
+every production class with and without source inputs, while direct negative
+probes cross every exact media byte budget.
+
+D2b continues this **authoring production** boundary with four additive v1
+formats:
+
+```text
+exact D2a selection/provenance/license closure
+  -> world-forge.asset_processing_recipe
+  -> world-forge.asset_processing_receipt
+  -> world-forge.asset_qa_report
+  -> world-forge.asset_manifest
+```
+
+The recipe uses only `world_forge_generic_asset_processor` v1 operations:
+validated copies for PNG, PCM16 WAV, TTF/OTF, vertex/fragment GLSL, and GLB,
+plus canonicalization for clipset and localization JSON. Canonicalization
+requires modification rights. Steps are UTF-8 role sorted and bind the exact
+selected candidate, retained source hash and size, license identity, output
+role/media, runtime path, processing locator, and media expectations.
+The license identity repeats the candidate and role, so independently resealed
+steps cannot exchange otherwise-valid licenses. Source, runtime, and output
+locators share one portable NFC/casefold path tree; file/directory prefix
+aliases, Windows-reserved components, links, and non-regular files fail closed.
+
+Processing validates and hashes one retained source capture, publishes outputs
+create-only, and verifies the retained published bytes. Completed receipts
+carry exact source/output hashes, sizes, metadata, and closed processor
+identity. Failed receipts contain no completed outputs, exactly one canonical
+failure reason, and a hash-bound recovery record. On partial publication that
+record names the exact recipe and the deterministic prefix of artifacts already
+retained, including their candidate, source, role, media, path, locator, hash,
+size, and inspected metadata. The public processing error carries this validated
+receipt so operators can audit or retry without reconstructing state from prose.
+Integral recovery rereads both sources and retained outputs, recomputes the
+processor result, and rejects tampering. Retry reuses an existing path only when
+its bytes are exactly that deterministic output; foreign or mismatching files
+remain untouched and fail closed. Cleanup never deletes a pathname that may
+have been replaced by another writer. A durability or identity failure remains
+failed even when its published bytes can be recovered; only an explicit
+create-only collision is eligible for immediate byte-identical reuse.
+
+QA independently captures every retained processed output once and derives its
+hash, size, media/container metadata, path portability, license coverage, and
+all media checks from that same bounded buffer. Receipt metadata is lineage, not
+trusted QA evidence. Applicable hash, media, and format checks are mechanically
+`passed` or `failed`; irrelevant format checks are `not_applicable`. A failed
+inspection has null metadata and exact output blockers. Acceptance evidence
+binds each exact criterion index and text hash. Status and the canonical union
+of criterion/output blockers are derived from those checks.
+
+The generic manifest has exact `produced`, `processed`, and `release_ready`
+states and must cover every required inventory asset without unknown assets or
+portable-path collisions. `release_ready` additionally requires passed QA and
+commercial-use plus redistribution permission. It means only eligible input to
+the D3 sealing transition. No D2b document may claim sealing, publication,
+runtime compatibility, or adapter execution.
+
+## D3 sealed generic assetpack
+
+D3 adds one new runtime-only directory format without changing the fourteen
+D1/D2 authoring contracts or either legacy assetpack:
+
+```text
+world-forge.asset_manifest v1 (release_ready)
+  -> world-forge.assetpack v1 directory
+       assetpack.json
+       exact runtime payload paths
+       notices/<notice-sha256>.txt
+```
+
+`assetpack.json` repeats only the complete hashed D2 lineage identities and the
+runtime-safe output bindings. It contains no request instructions, prompts,
+provider/model details, mutable authoring paths, candidate locators, or
+credentials. Each output binds its exact processed byte count, SHA-256,
+role/media pair, byte-derived metadata, runtime constraints, the full license
+identity tuple (format, version, ID, and content hash), and a content-addressed
+UTF-8 public notice capped at 4096 bytes and 4096 Unicode characters. The nested
+file inventory is UTF-8-path sorted and binds every payload and deduplicated
+notice exactly once; its canonical hash contributes to the pack ID and top-level
+content hash.
+
+Sealing publishes a nonexistent destination without replacement. Every stage
+directory and file is created relative to a retained parent/directory handle.
+The internal append-only journal has exactly `intent`, `copying`, and `ready`
+states; recovery can roll a completely retained stage forward, while rollback
+removes only the same owned identity and exact bytes when the platform exposes
+an identity-bound deletion primitive.
+An interrupted transition is repaired only when the retained journal identity,
+unchanged raw complete history, and torn bytes prove the sole next canonical
+frame. The only valid complete histories are `[intent]`,
+`[intent, copying]`, and `[intent, copying, ready]`; every record must retain
+the same operation, source, root, stage, and content identities. Duplicate,
+reordered, skipped, conflicting, or post-ready records remain preserved and
+failed before mutation. Repair truncates through the retained handle and
+durably flushes the journal and parent before appending. A partial tail with no
+applicable next transition remains preserved and failed. An `intent` record
+binds no stage identity, so any entry at its stage path is preserved as
+ambiguous. Windows can roll back an exact identity-bound `copying` stage through
+retained delete handles. Linux has no directory equivalent: an empty or partial
+owned stage is retained with its active journal and returns a precise
+`*_recovery_required` failure before any pathname deletion. It never reports
+that retained evidence as cleaned up.
+
+After successful publication or complete-stage recovery on Linux, the exact
+validated journal is atomically renamed with `RENAME_NOREPLACE` to a
+identity-addressed `.worldforge-retained-journal-<sha256>.json` terminal evidence
+name. The active journal name must be absent before success. Windows retires the
+exact journal through its retained handle. There is deliberately no automatic
+Linux garbage collection for retained terminal journals or recovery stages
+while the same-UID hostile-namespace threat model is active; disposal is an
+explicit operator boundary outside that model. Any reappearance—including a
+file, directory, link/reparse point, or the same retained identity—fails closed.
+Recovery-required exceptions expose pathless retained stage and journal
+locators plus their recorded filesystem identities. A retry after either
+terminal rename revalidates the complete retained tree and complete terminal
+journal before reporting cleanup as committed.
+Same-hash sealing is idempotent without a fourth committed state. Links,
+hardlinks, reparse points, foreign replacements, ambiguous identity, partial
+cleanup, and unsupported publication primitives fail closed on Linux and
+Windows.
+
+Integral verification snapshots the complete bounded root/directory/file state,
+rejects extra or missing entries, reads each regular single-link file through
+the bounded standalone boundary, and derives hash, size, media metadata, and
+constraint checks from that same capture. It rechecks each ancestry and the
+complete tree, including byte-identical identity swaps, before returning
+`status: sealed`. Structural schema validation alone never returns that status.
+Studio uses a separate D3 validator and packaged runtime verifier; D3 is
+deliberately not added to the fourteen-format authoring dispatcher.
+
+```bash
+worldforge seal-generic-assetpack assets/manifest.json \
+  --output /absolute/external/release/game-assets
+worldforge verify-generic-assetpack \
+  /absolute/external/release/game-assets \
+  --expected-hash <assetpack-content-hash>
+worldforge recover-generic-assetpack \
+  /absolute/external/release/game-assets
+worldforge rollback-generic-assetpack \
+  /absolute/external/release/game-assets
+```
+
+The output directory must remain outside the Forge repository. `sealed` means
+only that D3 bytes and lineage are integral; runtime-adapter compatibility,
+bundle composition, standalone-game import, execution, packaging, and release
+remain independent later gates.
 
 ## Target-scoped state
 
@@ -130,9 +406,11 @@ worldforge verify-assetpack assets/release/assetpack.json \
   --worldpack build/world.worldpack.json
 ```
 
-Then bind the exact artifact SHA-256 and content hash into the manifest using an
-optimistic lock on the current production-manifest hash. Only this operation
-changes the phase to `release`; validate that sealed state afterward:
+Then bind the exact artifact SHA-256 and content hash into the manifest using a
+cooperative optimistic-hash precondition on the current production manifest.
+This serializes World Forge writers; it is not an adversarial filesystem CAS.
+Only this operation changes the phase to `release`; validate that sealed state
+afterward:
 
 ```bash
 worldforge finalize-asset-release assets/manifest.json \

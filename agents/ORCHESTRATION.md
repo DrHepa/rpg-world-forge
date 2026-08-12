@@ -1,71 +1,101 @@
 # GPT orchestration protocol
 
-## Principal-agent responsibilities
+## Lead responsibility
 
-The lead GPT owns the complete result. It must:
+GPT remains the lead. Specialists supply bounded analysis or production
+evidence; they never self-approve, change the creation profile, promote canon,
+or claim execution. The lead must:
 
-- Maintain the distinction between proposal, approved canon and compiled data.
-- Preserve user constraints and cite the decision or source behind canon.
-- Detect when a new decision invalidates dependent history, dialogue or assets.
-- Keep the timeline, knowledge boundaries and causal graph coherent.
-- Ensure narrative features have implementable state, conditions and effects.
-- Stop at phase gates, run validators and write a phase report.
-- Produce the final implementation handoff without runtime AI dependencies.
+- preserve user constraints, non-goals, decisions, provenance, and licenses;
+- route work from the reviewed creation profile rather than a genre label;
+- keep gameplay, world, narrative, fiction, presentation, production, and
+  runtime target independent;
+- require typed source modules and registered validators for required
+  extensions;
+- prevent absent facets from acquiring filler lore, actors, quests, or assets;
+- complete P00-P14 sequentially with phase-report v3 evidence;
+- invalidate downstream reports when a bound input hash changes;
+- keep runtime AI, provider credentials, prompts, and mutable authoring paths
+  out of compiled/runtime artifacts.
+
+**Authoring validity is not runtime executability.** A valid project can remain
+uncompiled, asset-incomplete, adapter-absent, platform-untested, packaging-
+unverified, and release-blocked.
 
 ## Session start
 
-At the beginning of every session:
+1. Read the repository `AGENTS.md` and this control plane.
+2. Load `project.json`, `profile.json`, the typed source manifest, and
+   `.worldforge/status.json` through their validators.
+3. Confirm project kind and independently review every profile facet.
+4. Read unresolved decisions/tasks, active claims, and the current immutable
+   phase report dependencies.
+5. State the bounded deliverable, expected evidence, and explicit non-goals.
 
-1. Read `AGENTS.md`.
-2. Read `.worldforge/project.json` and `.worldforge/status.json`.
-3. Read unresolved entries in `.worldforge/DECISIONS.md` and `.worldforge/TASKS.md`.
-4. Inspect active task claims.
-5. Read the current phase report template and only the canonical sources needed
-   for the task.
-6. State the intended deliverable and validation before editing.
+For a retained legacy world repository, use its legacy project/status paths and
+legacy validators instead. Ordinary load never migrates a legacy project.
 
-## Canon states
+## Authoring states
 
-- `proposal`: exploration; can contradict other proposals.
-- `candidate`: selected direction awaiting gate review.
-- `canon`: accepted and dependency-tracked.
+- `proposal`: exploratory and allowed to contradict other proposals;
+- `candidate`: selected direction awaiting exact gate review;
+- `canon`: accepted, identity-bound, and dependency tracked;
 - `deprecated`: retained for history but forbidden in new content.
 
-Agents never silently overwrite canon. A change records reason, affected IDs,
-superseded decision and required migrations.
+Never silently overwrite canon. Record the reason, affected identities,
+superseded decision, invalidated phases/artifacts, and required migration.
 
-## Delegation
+## Conditional routing
 
-The lead creates one claim per bounded task. A claim specifies:
+- `world.presence: none` prohibits geography, history, societies, actors, and
+  world modules that exist only to fill a template.
+- `narrative.requirement: none` prohibits invented arcs, quests, dialogue,
+  protagonist state, and narrative modules.
+- P03 uses `world_absent`, P04 `chronology_absent`, P05
+  `group_structures_absent`, P06 `actors_absent`, and P08
+  `narrative_absent`; each is accepted only when phase-report v3 recomputes its
+  exact profile/module absence rule.
+- P11 and P12 may be `not_applicable` only through
+  `assets_not_applicable`; P13 only through `runtime_not_applicable`.
+- Core interaction, typed content, validation/content lock, and handoff cannot
+  be skipped by preference.
 
-- agent/role;
-- objective and non-goals;
-- exact owned paths;
-- canonical inputs and knowledge boundary;
-- expected output and validation;
-- dependencies and blocking questions.
+## Delegation and claims
 
-Two active claims must not own the same canonical path. Research and QA agents
-may read broadly but write only their report path. The lead integrates results
-after checking contradictions and licenses.
+Delegate one bounded perspective or operation at a time. Record role, objective,
+non-goals, owned paths, immutable inputs, expected output, validation, and
+blockers. Claims must not overlap by path or semantic ownership. The lead
+integrates results only after contradiction, provenance, license, and hash
+checks.
 
-Run `worldforge validate-claims .` before launching delegated work and before
-integration. Prefix overlap also counts as a conflict: a claim on `source/canon`
-conflicts with one on `source/canon/facts.json`.
+World, experience, content-structure, narrative, accessibility, asset, runtime-
+compatibility, and continuity specialists are conditional GPT perspectives,
+not autonomous employees or model identities. GPT may perform them
+sequentially. Provider tools,
+Blender, Modly, and local models are authoring executors only; they are never
+the lead and never enter runtime.
 
-## Context discipline
+The lead proposes assignments, milestones, canon changes, and risk decisions;
+the user approves them. A specialist perspective cannot approve its own output,
+promote canon, change scope, or bypass a release gate. Stable role/worker
+identity, when recorded for audit, is separate from the model that performed
+the bounded work.
 
-Do not feed every document into every task. Use IDs and dependency lists to load
-only relevant canon. For a character dialogue, include that character's facts,
-relationships, current arc stage, location, timeline point and forbidden
-knowledge. This reduces accidental omniscience and tonal drift.
+## Phase and release boundaries
 
-## Completion
+Capture the current status hash before changing an upstream creation or artifact
+identity. After that change, use `worldforge reconcile-creation` with that hash
+and the complete current artifact registry before `phase-status`,
+`reopen-phase`, or `complete-phase`. The canonical transition appends
+invalidation/history and fails a stale operator's CAS; never edit status,
+reports, histories, or hashes manually.
 
-A phase is complete only when its report lists existing deliverables, passed
-checks, resolved blockers and reviewer. Use `worldforge complete-phase`; do not
-edit `status.json` to bypass a failed gate.
+P13 records compatibility and missing capability reasons.
+`partially_supported` blocks `implementation_ready`; it does not block the
+required reviewed P14 `authoring_ready` handoff. P14 may produce either status
+only from the validated readiness object. `implementation_ready` still does not
+replace hosted release evidence required by a declared platform matrix.
 
-If an accepted change invalidates earlier canon, use `worldforge reopen-phase`
-with a reason and approver. This reopens the selected phase and invalidates all
-dependent phase completions, worldpack hashes and asset manifests as needed.
+Generic Studio editing and its fixed compile/asset/preview/runtime/
+materialization/package controls are locally implemented and tested. Do not
+promote that local result to hosted, packaged-shell, native, or release proof.

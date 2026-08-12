@@ -1,0 +1,250 @@
+{
+  "actions": [
+    {
+      "core_verb_id": "compete",
+      "id": "play_season_match",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "career_season"
+        },
+        {
+          "kind": "system",
+          "source_id": "season_standings"
+        }
+      ]
+    },
+    {
+      "core_verb_id": "restart",
+      "id": "restart_scenario",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "career_season"
+        }
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "action_id": null,
+      "id": "scenario_ready",
+      "operator": "constant",
+      "value": true
+    },
+    {
+      "action_id": null,
+      "comparison": "greater_or_equal",
+      "id": "victory_condition",
+      "left": {
+        "kind": "state",
+        "state_id": "season_points"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 3,
+        "value_type": "integer"
+      }
+    }
+  ],
+  "content_hash": "49d7803ab4c3ce918e9c0bc5231cf0e8ff25b6f92db8659d4dbaa00b8422fe38",
+  "effects": [
+    {
+      "action_id": "play_season_match",
+      "amount": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      },
+      "id": "advance_progress",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "season_points"
+    },
+    {
+      "action_id": "restart_scenario",
+      "id": "reset_progress",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "season_points"
+    }
+  ],
+  "endings": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [],
+      "id": "scenario_complete",
+      "kind": "success",
+      "presentation_hook_ids": [
+        "ending_feedback"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "progress_advanced"
+    },
+    {
+      "id": "scenario_restarted"
+    }
+  ],
+  "extensions": [],
+  "failures": [],
+  "format": "world-forge.logic_module",
+  "format_version": 1,
+  "goals": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "id": "authored_victory",
+      "success_ending_id": "scenario_complete"
+    }
+  ],
+  "mechanics": [
+    {
+      "action_id": "play_season_match",
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "season_points"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "career_match",
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ]
+    },
+    {
+      "action_id": "restart_scenario",
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "season_points"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "restart",
+      "effect_ids": [
+        "reset_progress"
+      ],
+      "event_ids": [
+        "scenario_restarted"
+      ],
+      "id": "restart_mechanic",
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ]
+    }
+  ],
+  "module_id": "sports_career_logic",
+  "presentation_hooks": [
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "id": "ending_feedback",
+      "kind": "ending"
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "id": "progress_feedback",
+      "kind": "feedback"
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "id": "progress_view",
+      "kind": "board"
+    }
+  ],
+  "project_id": "sports_career",
+  "rules": [
+    {
+      "action_id": "play_season_match",
+      "condition_ids": [],
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "advance_rule",
+      "order": 0
+    },
+    {
+      "action_id": "restart_scenario",
+      "condition_ids": [],
+      "effect_ids": [
+        "reset_progress"
+      ],
+      "event_ids": [
+        "scenario_restarted"
+      ],
+      "id": "restart_rule",
+      "order": 1
+    }
+  ],
+  "state_variables": [
+    {
+      "id": "season_points",
+      "initial": 0,
+      "maximum": 3,
+      "minimum": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "integer"
+    }
+  ],
+  "title": "Neutral authored sports logic"
+}

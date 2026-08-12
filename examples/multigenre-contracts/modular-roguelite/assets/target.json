@@ -1,0 +1,118 @@
+{
+  "asset_subject": {
+    "content_hash": "fa8e5bb545f893541c940a1a7ad6fa5b4db38d98152d7e6f1412e5d102f2365c",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_c21508f8920df2f295b5f8d07748717f77de005a25205cc8"
+  },
+  "bindings": [
+    {
+      "asset_id": "storylet_cards",
+      "binding_id": "storylet_card_visual",
+      "kind": "ui",
+      "outputs": [
+        {
+          "media_type": "image/png",
+          "role": "texture"
+        }
+      ],
+      "referencing_subjects": [
+        {
+          "id": "roguelite_run",
+          "kind": "activity"
+        },
+        {
+          "id": "death_recovery",
+          "kind": "mechanic"
+        },
+        {
+          "id": "expedition_advance",
+          "kind": "mechanic"
+        },
+        {
+          "id": "storylet_hazard_endurance",
+          "kind": "mechanic"
+        },
+        {
+          "id": "storylet_hazard_fall",
+          "kind": "mechanic"
+        },
+        {
+          "id": "run_conclusion",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "storylet_entry",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "storylet_resolution",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "storylet_sequence",
+          "kind": "system"
+        }
+      ],
+      "representation": "2d",
+      "required": true,
+      "roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "narrative_ui",
+        "system_feedback"
+      ],
+      "selected_format": "asset:png",
+      "sharing": {
+        "group_id": null,
+        "policy": "exclusive"
+      },
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "narrative",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "b0018b09f273f566c4d91cce6fbc766f889d2e70d4dc9b0113f7a3fb89d8a7da",
+  "format": "world-forge.asset_target",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "73a63d1dfc360893198abfdb1502f94595f08570aaead157d531f6cf80cfa8ea",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "modular_roguelite"
+  },
+  "review": {
+    "evidence": [
+      {
+        "content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "evidence_id": "binding_review"
+      }
+    ],
+    "rationale": "The binding plan was reviewed against every compiled requirement.",
+    "reviewer_id": "asset_director"
+  },
+  "target_id": "asset_target_1166b560821f52ddd413f521037e3abe62f0365ca1fa7cb8"
+}

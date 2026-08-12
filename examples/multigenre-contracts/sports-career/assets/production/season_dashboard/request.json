@@ -1,0 +1,88 @@
+{
+  "asset": {
+    "asset_id": "season_dashboard",
+    "content_hash": "77c5f58115c7888e0cc11575cbdad0c22bdf8523317b8a4a7be5e65dc720e517"
+  },
+  "asset_subject": {
+    "content_hash": "0dd2f03aa2b3c4582d616d22507704445ddcf2c58691003c02f00a109b57d48d",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_9259c4cbd29829b3b6f9a90f269567bd757f86f0239d3292"
+  },
+  "content_hash": "dc4893f3e33474480fc588a2b4542fc86caee285885e2e98f418a69d9d381311",
+  "expected_outputs": [
+    {
+      "expectations": {
+        "color_type": "rgba8",
+        "height": 256,
+        "kind": "png",
+        "max_bytes": 262144,
+        "width": 256
+      },
+      "media_type": "image/png",
+      "role": "texture",
+      "runtime_path": "assets/ui/season-dashboard.png"
+    }
+  ],
+  "format": "world-forge.asset_production_request",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "sports_career"
+  },
+  "input_artifacts": [],
+  "inventory": {
+    "content_hash": "0a9fde3f496d850756e029acf56aa0a875109f7f831a921474d43e8f63115a6c",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_53dd128ca6758a57c68caf9beea84a9f1aea18a1e4a6577d"
+  },
+  "operation": {
+    "operation_id": "generate_png",
+    "version": 2
+  },
+  "production_class": "procedural_offline",
+  "reproducibility": {
+    "mode": "deterministic",
+    "seed_policy": "fixed"
+  },
+  "request_id": "season_dashboard_production",
+  "review_requirements": {
+    "evidence_required": true,
+    "human_review_required": true,
+    "qa_profile": "season_progress_readability"
+  },
+  "rights_requirements": {
+    "commercial_use_review_required": true,
+    "evidence_required": true,
+    "human_review_required": true,
+    "redistribution_review_required": true
+  },
+  "specification": {
+    "content_hash": "7fc8bfa376b0970404591c18e6a8aae17019d6977a94090d62e308b4788497f4",
+    "format": "world-forge.asset_spec",
+    "format_version": 1,
+    "id": "asset_spec_15d864c0c10fb7ad1ee124cf26c75f496e62d8592b024c50"
+  },
+  "style": {
+    "content_hash": "6a33cb6231d5071d8c3d56e9f336738655d1e53fa56f066246f7f656b2faca64",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_6827ba36b8acb65b58aa6905c784297b839593fa9e5abf14"
+  },
+  "target": {
+    "content_hash": "afece1ac52756f93bc2ce0ecf34406b860a6400f77f9355a9a12bdf1e598d2d2",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_53adc0b6b9cbfff5a698a8d997726483c1b7f53760922ebe"
+  },
+  "toolchain_requirements": {
+    "operation_id": "generate_png",
+    "production_class": "procedural_offline",
+    "seed": 189416871,
+    "tool_id": "world_forge_fixture_generator",
+    "tool_version": "1.1.0"
+  }
+}

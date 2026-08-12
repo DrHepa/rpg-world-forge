@@ -1,0 +1,13 @@
+{
+  "content_hash": "09742eff54989a4cba753af413b320dbfabad30f874be38c6cd646f952f6b4c7",
+  "format": "world-forge.asset_subject",
+  "format_version": 1,
+  "subject": {
+    "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "abstract_puzzle",
+    "kind": "gamepack"
+  },
+  "subject_id": "asset_subject_eaa36e78dc8661deddec17555aa8c2bb8d15e22e70d14656"
+}

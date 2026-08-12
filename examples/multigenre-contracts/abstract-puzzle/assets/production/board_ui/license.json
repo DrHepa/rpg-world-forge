@@ -1,0 +1,110 @@
+{
+  "asset": {
+    "asset_id": "board_ui",
+    "content_hash": "c60401da521cff7fa3d6e08ac3c309f1a71d4b6b73b5e9c09d1985e90768ffe9"
+  },
+  "asset_subject": {
+    "content_hash": "09742eff54989a4cba753af413b320dbfabad30f874be38c6cd646f952f6b4c7",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_eaa36e78dc8661deddec17555aa8c2bb8d15e22e70d14656"
+  },
+  "candidate": {
+    "candidate_artifact_id": "board_ui_candidate",
+    "media_type": "image/png",
+    "role": "texture",
+    "sha256": "69801bb77d5a0ddd63b59700fb567ad003bceb23e303488167d2da14ecd56d8b"
+  },
+  "component_licenses": [
+    {
+      "component_id": "world_forge_fixture_generator",
+      "evidence_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+      "identifier": "MIT",
+      "scope": "generator_tool"
+    }
+  ],
+  "content_hash": "2bc857cca2a376da2e55273bc188e8620d5e34a9711d724b8574ff22e4eddafe",
+  "copyright": {
+    "holder": "World Forge contributors",
+    "year": null,
+    "year_policy": "not_applicable"
+  },
+  "evidence_hashes": [
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  "format": "world-forge.asset_license_record",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "abstract_puzzle"
+  },
+  "inventory": {
+    "content_hash": "ef6496fd27a91fe4aa19c57390b09accd0a748eff1c6bdbc280b2dfc0302335c",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_db1e30fe4a098bf505b52989066137a1f34f4123b5ece765"
+  },
+  "license_basis": {
+    "identifier": "CC0-1.0",
+    "kind": "spdx"
+  },
+  "license_record_id": "board_ui_license",
+  "obligations": {
+    "attribution_required": false,
+    "notice_required": true,
+    "source_offer_required": false
+  },
+  "permissions": {
+    "commercial_use": true,
+    "modification": true,
+    "redistribution": true
+  },
+  "provenance": {
+    "content_hash": "4b48f9cc1341d5da110f3d4045db416d93685ea0752fa798512847ffc02cec5d",
+    "format": "world-forge.asset_provenance_record",
+    "format_version": 1,
+    "id": "board_ui_provenance"
+  },
+  "receipt": {
+    "content_hash": "e485f5d380e8fda4d15a5aeb2f198b3bb55b7133704e0991a528cce1e2aa450f",
+    "format": "world-forge.asset_production_receipt",
+    "format_version": 1,
+    "id": "board_ui_receipt"
+  },
+  "request": {
+    "content_hash": "00ae4bce2f6e68aefad25d05e1320f2ab4403849bf8bc15c2724426f0d5547d2",
+    "format": "world-forge.asset_production_request",
+    "format_version": 1,
+    "id": "board_ui_production"
+  },
+  "runtime_notice": {
+    "sha256": "e136d1dd589d4b24e66adbf15287a9412d4845395b5845f1a07b1642594fdd4f",
+    "text": "Puzzle board fixture is dedicated to the public domain under CC0-1.0."
+  },
+  "selection": {
+    "content_hash": "a3751275ae5261293f93be875bc20be6f8f70c45cf0cb395f036431f09aea0d8",
+    "format": "world-forge.asset_selection",
+    "format_version": 1,
+    "id": "board_ui_selection"
+  },
+  "specification": {
+    "content_hash": "046c7d15b317c290f2c3487a8e50853bc7fc961e1d815273acc086a06af1473a",
+    "format": "world-forge.asset_spec",
+    "format_version": 1,
+    "id": "asset_spec_327fa7c7303d4f06a0f86589cc971d3d4c3ed8d53ff5f8b2"
+  },
+  "style": {
+    "content_hash": "8c6bc7d3654b7679921de0b9db2524abefbd5f83ca0f7f6ec45f306272fba563",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_1ed627dcb9cc101212f8c5b69dd218524a29610aaa8188cc"
+  },
+  "target": {
+    "content_hash": "609fa138f16bc4bb402624a7fa3082b5b377e112f7f98633f2d9c0f3971a9d33",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_226e1b8d904d61fc8c631fef1a188b32300712752f903f02"
+  }
+}

@@ -1,0 +1,250 @@
+{
+  "actions": [
+    {
+      "core_verb_id": "venture",
+      "id": "advance_expedition",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "roguelite_run"
+        },
+        {
+          "kind": "system",
+          "source_id": "storylet_sequence"
+        }
+      ]
+    },
+    {
+      "core_verb_id": "restart",
+      "id": "restart_scenario",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "roguelite_run"
+        }
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "action_id": null,
+      "id": "scenario_ready",
+      "operator": "constant",
+      "value": true
+    },
+    {
+      "action_id": null,
+      "comparison": "greater_or_equal",
+      "id": "victory_condition",
+      "left": {
+        "kind": "state",
+        "state_id": "expedition_depth"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 3,
+        "value_type": "integer"
+      }
+    }
+  ],
+  "content_hash": "fa78d165ab89a6c24249c9a824cf12244919116b8e8d55ab242545eb7291dabd",
+  "effects": [
+    {
+      "action_id": "advance_expedition",
+      "amount": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      },
+      "id": "advance_progress",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "expedition_depth"
+    },
+    {
+      "action_id": "restart_scenario",
+      "id": "reset_progress",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "expedition_depth"
+    }
+  ],
+  "endings": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [],
+      "id": "scenario_complete",
+      "kind": "success",
+      "presentation_hook_ids": [
+        "ending_feedback"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "progress_advanced"
+    },
+    {
+      "id": "scenario_restarted"
+    }
+  ],
+  "extensions": [],
+  "failures": [],
+  "format": "world-forge.logic_module",
+  "format_version": 1,
+  "goals": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "id": "authored_victory",
+      "success_ending_id": "scenario_complete"
+    }
+  ],
+  "mechanics": [
+    {
+      "action_id": "advance_expedition",
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "expedition_depth"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "venture",
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "expedition_advance",
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ]
+    },
+    {
+      "action_id": "restart_scenario",
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "authoritative_state_ids": [
+        "expedition_depth"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "restart",
+      "effect_ids": [
+        "reset_progress"
+      ],
+      "event_ids": [
+        "scenario_restarted"
+      ],
+      "id": "restart_mechanic",
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ]
+    }
+  ],
+  "module_id": "modular_roguelite_logic",
+  "presentation_hooks": [
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "id": "ending_feedback",
+      "kind": "ending"
+    },
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "id": "progress_feedback",
+      "kind": "feedback"
+    },
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "id": "progress_view",
+      "kind": "board"
+    }
+  ],
+  "project_id": "modular_roguelite",
+  "rules": [
+    {
+      "action_id": "advance_expedition",
+      "condition_ids": [],
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "advance_rule",
+      "order": 0
+    },
+    {
+      "action_id": "restart_scenario",
+      "condition_ids": [],
+      "effect_ids": [
+        "reset_progress"
+      ],
+      "event_ids": [
+        "scenario_restarted"
+      ],
+      "id": "restart_rule",
+      "order": 1
+    }
+  ],
+  "state_variables": [
+    {
+      "id": "expedition_depth",
+      "initial": 0,
+      "maximum": 3,
+      "minimum": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "integer"
+    }
+  ],
+  "title": "Neutral authored roguelite logic"
+}

@@ -1,0 +1,88 @@
+{
+  "asset": {
+    "asset_id": "strategy_map",
+    "content_hash": "ee4f0d83b5892f028c0c74864461371d55dfdb2518a7f5a3e028bf916dc8ab0f"
+  },
+  "asset_subject": {
+    "content_hash": "73c5b9d507b9bc7195ee0338c2dc24e02ac86b7f0b88a90268a416f8df1f140f",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_63de7f8ed1f82770532a386145ae4bf72c6072b7ac99c75f"
+  },
+  "content_hash": "38bc5b6bdd2dace54a656f96cad51e4bd495e86aaa19a4f619d31fa1ea9b39dc",
+  "expected_outputs": [
+    {
+      "expectations": {
+        "color_type": "rgba8",
+        "height": 256,
+        "kind": "png",
+        "max_bytes": 262144,
+        "width": 256
+      },
+      "media_type": "image/png",
+      "role": "texture",
+      "runtime_path": "assets/ui/strategy-map.png"
+    }
+  ],
+  "format": "world-forge.asset_production_request",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "7a1f8b4f8436a73a4df5653987061d7f965abc9248f45367c928a87e1110bf63",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "faction_strategy"
+  },
+  "input_artifacts": [],
+  "inventory": {
+    "content_hash": "38dba6a00fffb453accf984e9e35834bad2cafe3e7e11282eb3f1d4f38a90cef",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_dd557db361dba157b50ec70c660863a777e4b007a8d9093a"
+  },
+  "operation": {
+    "operation_id": "generate_png",
+    "version": 2
+  },
+  "production_class": "procedural_offline",
+  "reproducibility": {
+    "mode": "deterministic",
+    "seed_policy": "fixed"
+  },
+  "request_id": "strategy_map_production",
+  "review_requirements": {
+    "evidence_required": true,
+    "human_review_required": true,
+    "qa_profile": "strategy_state_readability"
+  },
+  "rights_requirements": {
+    "commercial_use_review_required": true,
+    "evidence_required": true,
+    "human_review_required": true,
+    "redistribution_review_required": true
+  },
+  "specification": {
+    "content_hash": "6afee41a39b490fe995b6ef71939e4b22ab62f63edc386f9c4a6eb133f2341f5",
+    "format": "world-forge.asset_spec",
+    "format_version": 1,
+    "id": "asset_spec_c3d9c6e79094abcb205476df750f3b75961768935a6d979a"
+  },
+  "style": {
+    "content_hash": "cdd10039ff520a0378bf3bdf40a19c17520a40ec0ba3b5b762d524f54506bc60",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_4ab16d8130ea06f4d6eda95f97394043fb4d14a57ccf1952"
+  },
+  "target": {
+    "content_hash": "58ff1eaa50d19f63b7fe635198616666349c030a912e353b6ba4ce7f5cea091d",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_5252c318d5a54f650e5bae2d4f8c693297a9a07a2fc8399f"
+  },
+  "toolchain_requirements": {
+    "operation_id": "generate_png",
+    "production_class": "procedural_offline",
+    "seed": 2769289702,
+    "tool_id": "world_forge_fixture_generator",
+    "tool_version": "1.1.0"
+  }
+}

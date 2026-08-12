@@ -5,6 +5,8 @@ import uuid
 from typing import Any
 
 from worldforge.studio.contracts import (
+    EXTERNAL_JOB_OPERATIONS,
+    EXTERNAL_JOB_VERSION,
     JOB_STATES,
     MANAGED_JOB_OPERATIONS,
     MANAGED_JOB_VERSION,
@@ -17,6 +19,12 @@ from worldforge.studio.errors import (
     invalid_request,
     invalid_state,
     not_found,
+)
+from worldforge.studio.external_grants import ExternalGrantManager
+from worldforge.studio.external_jobs import (
+    ExternalJobExecutionError,
+    execute_external_operation,
+    rollback_external_operation,
 )
 from worldforge.studio.storage import StudioStore, decode_object, encode_json, utc_now
 from worldforge.studio.workspaces import WorkspaceManager
@@ -55,10 +63,11 @@ class JobManager:
         params = validated
         workspace_id = params["workspace_id"]
         WorkspaceManager(self.store).get(workspace_id)
+        external = params["operation"] in EXTERNAL_JOB_OPERATIONS
         timestamp = utc_now()
         record = {
             "format": "rpg-world-forge.studio_job",
-            "format_version": MANAGED_JOB_VERSION,
+            "format_version": EXTERNAL_JOB_VERSION if external else MANAGED_JOB_VERSION,
             "job_id": params.get("job_id") or uuid.uuid4().hex,
             "workspace_id": workspace_id,
             "operation": params["operation"],
@@ -74,30 +83,48 @@ class JobManager:
         except StudioContractError as exc:
             raise invalid_request(str(exc)) from exc
         try:
-            with self.store.connection:
-                self.store.connection.execute(
-                    "INSERT INTO jobs (job_id, workspace_id, state, record_json) "
-                    "VALUES (?, ?, ?, ?)",
-                    (
-                        record["job_id"],
-                        record["workspace_id"],
-                        record["state"],
-                        encode_json(record),
-                    ),
-                )
-                self.store.record_event(
+            self.store.connection.execute("BEGIN IMMEDIATE")
+            if external:
+                ExternalGrantManager(self.store).reserve_for_job(
+                    job_id=record["job_id"],
                     workspace_id=workspace_id,
-                    topic="job.created",
-                    entity_type="job",
-                    entity_id=record["job_id"],
-                    payload={"operation": record["operation"], "state": "queued"},
-                    created_at=timestamp,
+                    operation=record["operation"],
+                    job_input=record["input"],
                 )
+            self.store.connection.execute(
+                "INSERT INTO jobs (job_id, workspace_id, state, record_json) VALUES (?, ?, ?, ?)",
+                (
+                    record["job_id"],
+                    record["workspace_id"],
+                    record["state"],
+                    encode_json(record),
+                ),
+            )
+            self.store.record_event(
+                workspace_id=workspace_id,
+                topic="job.created",
+                entity_type="job",
+                entity_id=record["job_id"],
+                payload={"operation": record["operation"], "state": "queued"},
+                created_at=timestamp,
+            )
+            self.store.connection.commit()
         except sqlite3.IntegrityError as exc:
+            if self.store.connection.in_transaction:
+                self.store.connection.rollback()
             raise invalid_request(f"Job {record['job_id']} already exists") from exc
+        except Exception:
+            if self.store.connection.in_transaction:
+                self.store.connection.rollback()
+            raise
         return record
 
-    def get(self, job_id: object) -> dict[str, Any]:
+    def get(
+        self,
+        job_id: object,
+        *,
+        format_versions: frozenset[int] | None = None,
+    ) -> dict[str, Any]:
         if not isinstance(job_id, str):
             raise invalid_request("job_id must be a string")
         row = self.store.connection.execute(
@@ -105,11 +132,9 @@ class JobManager:
         ).fetchone()
         if row is None:
             raise not_found(f"Job {job_id} was not found")
-        record = decode_object(row["record_json"], context="job")
-        try:
-            return validate_studio_job(record)
-        except StudioContractError as exc:
-            raise StudioError("internal_error", "Stored job is invalid") from exc
+        record = self._validated_row(row)
+        self._require_format_version(record, format_versions)
+        return record
 
     def list(
         self,
@@ -117,6 +142,7 @@ class JobManager:
         workspace_id: object = None,
         state: object = None,
         limit: object = 100,
+        format_versions: frozenset[int] | None = None,
     ) -> list[dict[str, Any]]:
         if workspace_id is not None:
             WorkspaceManager(self.store).get(workspace_id)
@@ -134,12 +160,26 @@ class JobManager:
             values.append(state)
         where = "" if not clauses else " WHERE " + " AND ".join(clauses)
         rows = self.store.connection.execute(
-            f"SELECT record_json FROM jobs{where} ORDER BY job_id LIMIT ?",  # noqa: S608
-            (*values, limit),
-        ).fetchall()
-        return [self._validated_row(row) for row in rows]
+            f"SELECT record_json FROM jobs{where} ORDER BY job_id",  # noqa: S608
+            values,
+        )
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            record = self._validated_row(row)
+            if format_versions is not None and record["format_version"] not in format_versions:
+                continue
+            result.append(record)
+            if len(result) == limit:
+                break
+        return result
 
-    def transition(self, job_id: object, params: object) -> dict[str, Any]:
+    def transition(
+        self,
+        job_id: object,
+        params: object,
+        *,
+        format_versions: frozenset[int] | None = None,
+    ) -> dict[str, Any]:
         if not isinstance(params, dict):
             raise invalid_request("job.transition params must be an object")
         allowed = {"state", "result", "error"}
@@ -148,7 +188,7 @@ class JobManager:
         if unknown or missing:
             fields = unknown or missing
             raise invalid_request(f"job.transition has invalid fields: {', '.join(sorted(fields))}")
-        record = self.get(job_id)
+        record = self.get(job_id, format_versions=format_versions)
         next_state = params["state"]
         if (
             not isinstance(next_state, str)
@@ -199,7 +239,12 @@ class JobManager:
             )
         return updated
 
-    def cancel(self, job_id: object) -> dict[str, Any]:
+    def cancel(
+        self,
+        job_id: object,
+        *,
+        format_versions: frozenset[int] | None = None,
+    ) -> dict[str, Any]:
         if not isinstance(job_id, str):
             raise invalid_request("job_id must be a string")
         try:
@@ -210,10 +255,13 @@ class JobManager:
             if row is None:
                 raise not_found(f"Job {job_id} was not found")
             record = self._validated_row(row)
+            self._require_format_version(record, format_versions)
             current = record["state"]
             if current in {"succeeded", "failed", "canceled"}:
                 self.store.connection.commit()
                 return record
+            if record["format_version"] == EXTERNAL_JOB_VERSION and current == "orphaned":
+                raise invalid_state("Orphaned external jobs require explicit recovery")
             timestamp = utc_now()
             already_requested = self.store.connection.execute(
                 "SELECT 1 FROM events WHERE entity_type = 'job' AND entity_id = ? "
@@ -247,6 +295,8 @@ class JobManager:
             )
             if cursor.rowcount != 1:
                 raise StudioError("conflict", "Job state changed concurrently")
+            if record["format_version"] == EXTERNAL_JOB_VERSION:
+                ExternalGrantManager(self.store).release_target_for_job(job_id)
             self.store.record_event(
                 workspace_id=record["workspace_id"],
                 topic="job.transitioned",
@@ -396,6 +446,15 @@ class JobManager:
             if record["state"] != "running":
                 raise invalid_state("Only a running job may be completed by the executor")
             timestamp = utc_now()
+            if (
+                record["format_version"] == EXTERNAL_JOB_VERSION
+                and state == "orphaned"
+                and error is None
+            ):
+                error = {
+                    "code": "recovery_required",
+                    "message": "External job requires explicit retained-evidence recovery",
+                }
             updated = {
                 **record,
                 "state": state,
@@ -410,6 +469,15 @@ class JobManager:
             )
             if cursor.rowcount != 1:
                 raise StudioError("conflict", "Job state changed concurrently")
+            if record["format_version"] == EXTERNAL_JOB_VERSION:
+                grants = ExternalGrantManager(self.store)
+                if state == "succeeded":
+                    grants.consume_source_for_job(record)
+                    grants.set_target_state_for_job(job_id, "consumed")
+                elif state == "orphaned":
+                    grants.set_target_state_for_job(job_id, "recovery_required")
+                else:
+                    grants.release_target_for_job(job_id)
             payload: dict[str, Any] = {"previous_state": "running", "state": state}
             if reason is not None:
                 payload["reason"] = reason
@@ -429,11 +497,153 @@ class JobManager:
                 self.store.connection.rollback()
             raise
 
+    def recover(self, job_id: object, action: object) -> dict[str, Any]:
+        if not isinstance(job_id, str):
+            raise invalid_request("job_id must be a string")
+        if action not in {"resume", "rollback"}:
+            raise invalid_request("job recovery action must be resume or rollback")
+        try:
+            self.store.connection.execute("BEGIN IMMEDIATE")
+            row = self.store.connection.execute(
+                "SELECT record_json FROM jobs WHERE job_id = ?",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                raise not_found(f"Job {job_id} was not found")
+            record = self._validated_row(row)
+            if record["format_version"] != EXTERNAL_JOB_VERSION:
+                raise invalid_state("Only an external v3 job supports recovery")
+            if record["state"] != "orphaned":
+                raise invalid_state("Only an orphaned external job supports recovery")
+            grants = ExternalGrantManager(self.store)
+            binding = grants.binding_for_job(record)
+            if action == "resume":
+                hash_field = {
+                    "game.materialize": "expected_materialization_hash",
+                    "game.package": "expected_game_hash",
+                    "game.package.extract": "expected_package_hash",
+                }[record["operation"]]
+                result = execute_external_operation(
+                    operation=record["operation"],
+                    source=binding["source_path"],
+                    target=binding["target_path"],
+                    expected_hash=record["input"][hash_field],
+                    target_grant_id=record["input"]["target_grant_id"],
+                    expected_source_identity=binding["source_identity"],
+                    expected_parent_identity=binding["parent_identity"],
+                )
+                state = "succeeded"
+                grants.consume_source_for_job(record)
+                grants.set_target_state_for_job(job_id, "consumed")
+            else:
+                rollback_external_operation(
+                    operation=record["operation"],
+                    target=binding["target_path"],
+                    expected_parent_identity=binding["parent_identity"],
+                )
+                result = None
+                state = "canceled"
+                grants.release_target_for_job(job_id)
+            timestamp = utc_now()
+            updated = {
+                **record,
+                "state": state,
+                "result": result,
+                "error": None,
+                "updated_at": timestamp,
+            }
+            validate_studio_job(updated)
+            cursor = self.store.connection.execute(
+                "UPDATE jobs SET state = ?, record_json = ? "
+                "WHERE job_id = ? AND state = 'orphaned'",
+                (state, encode_json(updated), job_id),
+            )
+            if cursor.rowcount != 1:
+                raise StudioError("conflict", "Job state changed concurrently")
+            self.store.record_event(
+                workspace_id=record["workspace_id"],
+                topic="job.recovered",
+                entity_type="job",
+                entity_id=job_id,
+                payload={"action": action, "state": state},
+                created_at=timestamp,
+            )
+            self.store.connection.commit()
+            return updated
+        except ExternalJobExecutionError as exc:
+            if self.store.connection.in_transaction:
+                self.store.connection.rollback()
+            code = "recovery_failed"
+            if exc.code in {"recovery_ambiguous", "source_changed", "target_changed"}:
+                code = "recovery_ambiguous"
+            raise StudioError(
+                code,
+                "External job recovery could not prove safe ownership",
+                details={
+                    "reason_code": exc.code,
+                    "recovery_evidence": exc.recovery_evidence,
+                },
+            ) from None
+        except Exception:
+            if self.store.connection.in_transaction:
+                self.store.connection.rollback()
+            raise
+
+    def resolve_forced_cancel(self, job_id: str) -> dict[str, Any]:
+        record = self.get(job_id)
+        if record["format_version"] != EXTERNAL_JOB_VERSION:
+            return self.finish(job_id, "canceled")
+        if record["state"] != "running":
+            raise invalid_state("Forced cancellation requires a running external job")
+        grants = ExternalGrantManager(self.store)
+        try:
+            binding = grants.binding_for_job(record)
+            hash_field = {
+                "game.materialize": "expected_materialization_hash",
+                "game.package": "expected_game_hash",
+                "game.package.extract": "expected_package_hash",
+            }[record["operation"]]
+            if binding["target_path"].exists() or binding["target_path"].is_symlink():
+                result = execute_external_operation(
+                    operation=record["operation"],
+                    source=binding["source_path"],
+                    target=binding["target_path"],
+                    expected_hash=record["input"][hash_field],
+                    target_grant_id=record["input"]["target_grant_id"],
+                    expected_source_identity=binding["source_identity"],
+                    expected_parent_identity=binding["parent_identity"],
+                )
+                return self.finish(job_id, "succeeded", result=result)
+            rollback_external_operation(
+                operation=record["operation"],
+                target=binding["target_path"],
+                expected_parent_identity=binding["parent_identity"],
+            )
+            return self.finish(job_id, "canceled")
+        except ExternalJobExecutionError as exc:
+            error: dict[str, Any] = {
+                "code": "recovery_required",
+                "message": exc.message,
+            }
+            if exc.recovery_evidence:
+                error["recovery_evidence"] = exc.recovery_evidence
+            return self.finish(
+                job_id,
+                "orphaned",
+                error=error,
+                reason="cancel_recovery_required",
+            )
+        except StudioError:
+            return self.finish(job_id, "orphaned", reason="cancel_recovery_required")
+
     @staticmethod
     def _is_managed(record: dict[str, Any]) -> bool:
         return (
             record["format_version"] == MANAGED_JOB_VERSION
             and record["operation"] in MANAGED_JOB_OPERATIONS
+        ) or (
+            record["format_version"] == EXTERNAL_JOB_VERSION
+            and record["operation"] in EXTERNAL_JOB_OPERATIONS
         )
 
     @staticmethod
@@ -443,3 +653,11 @@ class JobManager:
             return validate_studio_job(record)
         except StudioContractError as exc:
             raise StudioError("internal_error", "Stored job is invalid") from exc
+
+    @staticmethod
+    def _require_format_version(
+        record: dict[str, Any],
+        format_versions: frozenset[int] | None,
+    ) -> None:
+        if format_versions is not None and record["format_version"] not in format_versions:
+            raise not_found(f"Job {record['job_id']} was not found")

@@ -1,0 +1,38 @@
+{
+  "authority": {
+    "artifact_snapshot_hash": "a4d5c048a5376078e1151205911f1766ea6bb50533febcdb0ae484186d41e04f",
+    "producer_job_id": "fixture-sports-career-release",
+    "producer_operation": "asset.release.authorize",
+    "producer_output_position": 0,
+    "root_generation": 1,
+    "source_revision": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+    "workflow_status_hash": null,
+    "workspace_id": "fixture-sports-career"
+  },
+  "blockers": [],
+  "candidate_assetpack": {
+    "content_hash": "a1618f0b0faefb5c96151e026d51abd2b81ae447c5d1a391e60aea1b7a366bd0",
+    "format": "world-forge.assetpack",
+    "format_version": 1,
+    "id": "assetpack_3c8833d0c403cf8bfa611c40ee2f5d09c38e3e0fa8369984"
+  },
+  "candidate_manifest": {
+    "content_hash": "0ee6efe1385f349c74dded8dcae7640660874659501b2d46a58fb3d7023c56bb",
+    "format": "world-forge.asset_manifest",
+    "format_version": 1,
+    "id": "sports_career_asset_manifest"
+  },
+  "content_hash": "5c971dcb0041a1aabe1cd5bfcdc2a56a6fc4d7b482bd32dd22222245a689bf15",
+  "format": "world-forge.asset_release_authority",
+  "format_version": 1,
+  "qa_reviews": [
+    {
+      "content_hash": "6ab91692a64f4a289a628d5aace3777641d7027297b6711378cda27a70b017d7",
+      "format": "world-forge.asset_qa_review_receipt",
+      "format_version": 1,
+      "id": "sports_career_texture_qa_review"
+    }
+  ],
+  "release_authority_id": "sports_career_asset_release",
+  "status": "authorized"
+}

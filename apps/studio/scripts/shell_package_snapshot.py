@@ -1197,9 +1197,7 @@ def _serve(argv: list[str]) -> None:
             "windows_snapshot_setup_failed",
             sharing_conflict_code="windows_snapshot_setup_sharing_conflict",
         )
-        executable = (
-            "rpg-world-forge-studio" if target == "linux-x64" else "RPG World Forge Studio.exe"
-        )
+        executable = "world-forge-studio" if target == "linux-x64" else "World Forge Studio.exe"
         package = _run_windows_snapshot_phase(
             lambda: _WindowsPinnedTree(
                 package_root,

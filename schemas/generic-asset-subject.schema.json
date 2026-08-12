@@ -1,0 +1,106 @@
+{
+  "$id": "https://world-forge.local/schemas/generic-asset-subject.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "world-forge.asset_subject"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "subject": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "format": {
+              "const": "world-forge.gamepack"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "kind": {
+              "const": "gamepack"
+            }
+          },
+          "required": [
+            "kind",
+            "format",
+            "format_version",
+            "id",
+            "content_hash"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "format": {
+              "const": "isoworld.worldpack"
+            },
+            "format_version": {
+              "enum": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ]
+            },
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "kind": {
+              "const": "legacy_worldpack"
+            }
+          },
+          "required": [
+            "kind",
+            "format",
+            "format_version",
+            "id",
+            "content_hash"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "subject_id": {
+      "$ref": "#/$defs/id"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "subject_id",
+    "subject",
+    "content_hash"
+  ],
+  "title": "World Forge asset subject v1",
+  "type": "object",
+  "$defs": {
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

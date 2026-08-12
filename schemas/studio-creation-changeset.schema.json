@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-forge.local/schemas/studio-creation-changeset.schema.json",
+  "title": "World Forge Studio creation changeset v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "changeset_id",
+    "workspace_id",
+    "status",
+    "expected_root_generation",
+    "expected_source_revision",
+    "proposed_source_revision",
+    "expected_workflow_status_hash",
+    "review_sha256",
+    "operations",
+    "created_at",
+    "updated_at",
+    "record_hash"
+  ],
+  "properties": {
+    "format": { "const": "world-forge.studio_creation_changeset" },
+    "format_version": { "const": 1 },
+    "changeset_id": { "$ref": "#/$defs/entityId" },
+    "workspace_id": { "$ref": "#/$defs/workspaceId" },
+    "status": {
+      "enum": [
+        "staged",
+        "approved",
+        "applying",
+        "applied",
+        "rejected",
+        "recovery_required"
+      ]
+    },
+    "expected_root_generation": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "expected_source_revision": { "$ref": "#/$defs/sha256" },
+    "proposed_source_revision": { "$ref": "#/$defs/sha256" },
+    "expected_workflow_status_hash": {
+      "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+    },
+    "review_sha256": { "$ref": "#/$defs/sha256" },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/operation" }
+    },
+    "created_at": { "$ref": "#/$defs/timestamp" },
+    "updated_at": { "$ref": "#/$defs/timestamp" },
+    "record_hash": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "nullableSha256": {
+      "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+    },
+    "nullableSize": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16777216
+        },
+        { "type": "null" }
+      ]
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "path",
+        "expected_base_file_sha256",
+        "expected_base_size",
+        "proposed_file_sha256",
+        "proposed_size"
+      ],
+      "properties": {
+        "operation": { "enum": ["create", "replace", "delete"] },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+        },
+        "expected_base_file_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "expected_base_size": { "$ref": "#/$defs/nullableSize" },
+        "proposed_file_sha256": { "$ref": "#/$defs/nullableSha256" },
+        "proposed_size": { "$ref": "#/$defs/nullableSize" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "operation": { "const": "create" },
+            "expected_base_file_sha256": { "type": "null" },
+            "expected_base_size": { "type": "null" },
+            "proposed_file_sha256": { "$ref": "#/$defs/sha256" },
+            "proposed_size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "replace" },
+            "expected_base_file_sha256": { "$ref": "#/$defs/sha256" },
+            "expected_base_size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            },
+            "proposed_file_sha256": { "$ref": "#/$defs/sha256" },
+            "proposed_size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            }
+          }
+        },
+        {
+          "properties": {
+            "operation": { "const": "delete" },
+            "expected_base_file_sha256": { "$ref": "#/$defs/sha256" },
+            "expected_base_size": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16777216
+            },
+            "proposed_file_sha256": { "type": "null" },
+            "proposed_size": { "type": "null" }
+          }
+        }
+      ]
+    }
+  }
+}

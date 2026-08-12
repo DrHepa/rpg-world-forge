@@ -5,6 +5,11 @@ description: Compile, package, and verify one immutable runtime bundle from an a
 
 # Forge a world release
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 Operate with explicit `FORGE_ROOT`, external `WORLD_ROOT`, and new `BUNDLE_ROOT`.
 No game path is in scope.
 

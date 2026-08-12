@@ -1,0 +1,20 @@
+{
+  "content_hash": "b60db0f019e913449be44952ff35d7247a2c1fd356d7f0bcef25b0f02b37a088",
+  "extensions": [],
+  "facts": [
+    {
+      "id": "neutral_canon",
+      "sources": [
+        "reviewed neutral fixture"
+      ],
+      "statement": "The library fixture intentionally defines one neutral reusable fact.",
+      "status": "canon"
+    }
+  ],
+  "format": "world-forge.world_module",
+  "format_version": 1,
+  "module_id": "neutral_canon",
+  "module_type": "canon",
+  "project_id": "neutral_universe",
+  "title": "Neutral canon"
+}

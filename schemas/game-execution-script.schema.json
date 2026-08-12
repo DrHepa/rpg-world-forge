@@ -1,0 +1,400 @@
+{
+  "$defs": {
+    "classification": {
+      "additionalProperties": false,
+      "properties": {
+        "ending_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 64,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "ending_kind": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            }
+          ]
+        },
+        "failure_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "goal_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "recovery_action_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "terminal": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "goal_ids",
+        "ending_ids",
+        "ending_kind",
+        "failure_ids",
+        "recovery_action_ids",
+        "terminal"
+      ],
+      "type": "object"
+    },
+    "host": {
+      "additionalProperties": false,
+      "properties": {
+        "architecture": {
+          "const": "architecture:x86_64"
+        },
+        "backend": {
+          "const": "backend:raylib"
+        },
+        "platform_family": {
+          "enum": [
+            "platform:linux",
+            "platform:windows"
+          ]
+        },
+        "platform_id": {
+          "enum": [
+            "platform:linux_x86_64",
+            "platform:windows_x86_64"
+          ]
+        },
+        "renderer": {
+          "const": "raylib"
+        }
+      },
+      "required": [
+        "platform_id",
+        "platform_family",
+        "architecture",
+        "backend",
+        "renderer"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 2,
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "parameters": {
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          {
+            "maxLength": 4096,
+            "type": "string"
+          },
+          {
+            "items": {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            "maxItems": 256,
+            "minItems": 0,
+            "type": "array"
+          }
+        ]
+      },
+      "maxProperties": 256,
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "token": {
+      "maxLength": 128,
+      "minLength": 3,
+      "pattern": "^[a-z][a-z0-9_-]*:[a-z][a-z0-9_.-]*$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/game-execution-script.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bindings": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "additionalProperties": false,
+          "properties": {
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "format": {
+              "const": "world-forge.runtime_adapter"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "id": {
+              "maxLength": 128,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          "required": [
+            "format",
+            "format_version",
+            "id",
+            "content_hash"
+          ],
+          "type": "object"
+        },
+        "gamepack": {
+          "additionalProperties": false,
+          "properties": {
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "format": {
+              "const": "world-forge.gamepack"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "id": {
+              "maxLength": 128,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          "required": [
+            "format",
+            "format_version",
+            "id",
+            "content_hash"
+          ],
+          "type": "object"
+        },
+        "runtime_bundle": {
+          "additionalProperties": false,
+          "properties": {
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "format": {
+              "const": "world-forge.game_runtime_bundle"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "id": {
+              "maxLength": 128,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          "required": [
+            "format",
+            "format_version",
+            "id",
+            "content_hash"
+          ],
+          "type": "object"
+        },
+        "runtime_composition": {
+          "additionalProperties": false,
+          "properties": {
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "format": {
+              "const": "world-forge.game_runtime_composition"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "id": {
+              "maxLength": 128,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          "required": [
+            "format",
+            "format_version",
+            "id",
+            "content_hash"
+          ],
+          "type": "object"
+        },
+        "runtime_snapshot": {
+          "additionalProperties": false,
+          "properties": {
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "format": {
+              "const": "world-forge.game_runtime_snapshot"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "id": {
+              "maxLength": 128,
+              "minLength": 2,
+              "type": "string"
+            }
+          },
+          "required": [
+            "format",
+            "format_version",
+            "id",
+            "content_hash"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "gamepack",
+        "runtime_composition",
+        "runtime_bundle",
+        "adapter",
+        "runtime_snapshot"
+      ],
+      "type": "object"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "world-forge.game_execution_script"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "scenarios": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "action_id": {
+                  "$ref": "#/$defs/id"
+                },
+                "parameters": {
+                  "$ref": "#/$defs/parameters"
+                }
+              },
+              "required": [
+                "action_id",
+                "parameters"
+              ],
+              "type": "object"
+            },
+            "maxItems": 128,
+            "minItems": 0,
+            "type": "array"
+          },
+          "expected_classification": {
+            "$ref": "#/$defs/classification"
+          },
+          "expected_final_state_hash": {
+            "$ref": "#/$defs/sha256"
+          },
+          "expected_initial_state_hash": {
+            "$ref": "#/$defs/sha256"
+          },
+          "scenario_id": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "required": [
+          "scenario_id",
+          "actions",
+          "expected_initial_state_hash",
+          "expected_final_state_hash",
+          "expected_classification"
+        ],
+        "type": "object"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array"
+    },
+    "script_id": {
+      "pattern": "^game_execution_script_[0-9a-f]{40}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "script_id",
+    "bindings",
+    "scenarios",
+    "content_hash"
+  ],
+  "title": "World Forge deterministic game execution script v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-generic-headless-coherent": "game_execution_script"
+}

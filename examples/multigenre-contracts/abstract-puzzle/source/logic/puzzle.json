@@ -1,0 +1,399 @@
+{
+  "actions": [
+    {
+      "core_verb_id": "restart",
+      "id": "restart_board",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "board_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "symbol_board"
+        }
+      ]
+    },
+    {
+      "core_verb_id": "swap",
+      "id": "swap_tiles",
+      "parameters": [
+        {
+          "id": "first_index",
+          "maximum": 2,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "id": "second_index",
+          "maximum": 2,
+          "minimum": 0,
+          "type": "integer"
+        }
+      ],
+      "presentation_hook_ids": [
+        "board_feedback",
+        "board_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "swap_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "symbol_board"
+        },
+        {
+          "kind": "system",
+          "source_id": "adjacent_swap"
+        }
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "action_id": "swap_tiles",
+      "distance": 1,
+      "id": "adjacent_tile",
+      "left": {
+        "action_id": "swap_tiles",
+        "kind": "parameter",
+        "parameter_id": "first_index"
+      },
+      "operator": "integer_distance",
+      "right": {
+        "action_id": "swap_tiles",
+        "kind": "parameter",
+        "parameter_id": "second_index"
+      }
+    },
+    {
+      "action_id": null,
+      "id": "board_ready",
+      "operator": "constant",
+      "value": true
+    },
+    {
+      "action_id": null,
+      "comparison": "equal",
+      "id": "board_solved",
+      "left": {
+        "kind": "state",
+        "state_id": "board"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "state",
+        "state_id": "target"
+      }
+    },
+    {
+      "action_id": "swap_tiles",
+      "array_state_id": "board",
+      "id": "first_index_valid",
+      "index": {
+        "action_id": "swap_tiles",
+        "kind": "parameter",
+        "parameter_id": "first_index"
+      },
+      "operator": "index_valid"
+    },
+    {
+      "action_id": null,
+      "comparison": "greater_or_equal",
+      "id": "move_limit_reached",
+      "left": {
+        "kind": "state",
+        "state_id": "move_count"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 8,
+        "value_type": "integer"
+      }
+    },
+    {
+      "action_id": "swap_tiles",
+      "array_state_id": "board",
+      "id": "second_index_valid",
+      "index": {
+        "action_id": "swap_tiles",
+        "kind": "parameter",
+        "parameter_id": "second_index"
+      },
+      "operator": "index_valid"
+    }
+  ],
+  "content_hash": "ccd925b19b39385d3209e4ee9bb5d687d382a3df3cf59918b8e05ddcf6010332",
+  "effects": [
+    {
+      "action_id": "swap_tiles",
+      "amount": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      },
+      "id": "increment_moves",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "move_count"
+    },
+    {
+      "action_id": "restart_board",
+      "id": "reset_board",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "board"
+    },
+    {
+      "action_id": "restart_board",
+      "id": "reset_move_count",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "move_count"
+    },
+    {
+      "action_id": "swap_tiles",
+      "array_state_id": "board",
+      "first_index": {
+        "action_id": "swap_tiles",
+        "kind": "parameter",
+        "parameter_id": "first_index"
+      },
+      "id": "swap_tiles",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "swap_array_items",
+      "second_index": {
+        "action_id": "swap_tiles",
+        "kind": "parameter",
+        "parameter_id": "second_index"
+      }
+    }
+  ],
+  "endings": [
+    {
+      "condition_ids": [
+        "board_solved"
+      ],
+      "event_ids": [],
+      "id": "puzzle_complete",
+      "kind": "success",
+      "presentation_hook_ids": [
+        "ending_feedback"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "restart_requested"
+    },
+    {
+      "id": "tile_swapped"
+    }
+  ],
+  "extensions": [],
+  "failures": [
+    {
+      "condition_ids": [
+        "move_limit_reached"
+      ],
+      "id": "move_limit",
+      "recovery_action_ids": [
+        "restart_board"
+      ]
+    }
+  ],
+  "format": "world-forge.logic_module",
+  "format_version": 1,
+  "goals": [
+    {
+      "condition_ids": [
+        "board_solved"
+      ],
+      "id": "solved",
+      "success_ending_id": "puzzle_complete"
+    }
+  ],
+  "mechanics": [
+    {
+      "action_id": "restart_board",
+      "asset_binding_ids": [
+        "board_texture"
+      ],
+      "authoritative_state_ids": [
+        "board",
+        "move_count"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "restart",
+      "effect_ids": [
+        "reset_board",
+        "reset_move_count"
+      ],
+      "event_ids": [
+        "restart_requested"
+      ],
+      "id": "restart_mechanic",
+      "presentation_hook_ids": [
+        "board_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ]
+    },
+    {
+      "action_id": "swap_tiles",
+      "asset_binding_ids": [
+        "board_texture"
+      ],
+      "authoritative_state_ids": [
+        "board",
+        "move_count"
+      ],
+      "condition_ids": [
+        "adjacent_tile",
+        "first_index_valid",
+        "second_index_valid"
+      ],
+      "core_verb_id": "swap",
+      "effect_ids": [
+        "increment_moves",
+        "swap_tiles"
+      ],
+      "event_ids": [
+        "tile_swapped"
+      ],
+      "id": "swap_mechanic",
+      "presentation_hook_ids": [
+        "board_feedback",
+        "board_view"
+      ],
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "swap_rule"
+      ]
+    }
+  ],
+  "module_id": "puzzle_logic",
+  "presentation_hooks": [
+    {
+      "asset_binding_ids": [
+        "board_texture"
+      ],
+      "id": "board_feedback",
+      "kind": "feedback"
+    },
+    {
+      "asset_binding_ids": [
+        "board_texture"
+      ],
+      "id": "board_view",
+      "kind": "board"
+    },
+    {
+      "asset_binding_ids": [
+        "board_texture"
+      ],
+      "id": "ending_feedback",
+      "kind": "ending"
+    }
+  ],
+  "project_id": "abstract_puzzle",
+  "rules": [
+    {
+      "action_id": "restart_board",
+      "condition_ids": [],
+      "effect_ids": [
+        "reset_board",
+        "reset_move_count"
+      ],
+      "event_ids": [
+        "restart_requested"
+      ],
+      "id": "restart_rule",
+      "order": 0
+    },
+    {
+      "action_id": "swap_tiles",
+      "condition_ids": [
+        "adjacent_tile",
+        "first_index_valid",
+        "second_index_valid"
+      ],
+      "effect_ids": [
+        "increment_moves",
+        "swap_tiles"
+      ],
+      "event_ids": [
+        "tile_swapped"
+      ],
+      "id": "swap_rule",
+      "order": 1
+    }
+  ],
+  "state_variables": [
+    {
+      "allowed_values": [
+        "A",
+        "B",
+        "C"
+      ],
+      "id": "board",
+      "initial": [
+        "B",
+        "A",
+        "C"
+      ],
+      "max_items": 3,
+      "min_items": 3,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "string_array"
+    },
+    {
+      "id": "move_count",
+      "initial": 0,
+      "maximum": 8,
+      "minimum": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "integer"
+    },
+    {
+      "allowed_values": [
+        "A",
+        "B",
+        "C"
+      ],
+      "id": "target",
+      "initial": [
+        "A",
+        "B",
+        "C"
+      ],
+      "max_items": 3,
+      "min_items": 3,
+      "mutability": "constant",
+      "persistence": "saved",
+      "type": "string_array"
+    }
+  ],
+  "title": "Neutral finite symbol-board logic"
+}

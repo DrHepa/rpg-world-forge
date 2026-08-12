@@ -1,0 +1,25 @@
+{
+  "content_hash": "64a869bf5de72926c1cabceaf263d8460351e8e0f499e9290fe4eef3f7ccd373",
+  "default_locale": "en",
+  "extensions": [],
+  "format": "world-forge.project",
+  "format_version": 1,
+  "profile": {
+    "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "systemic_simulation_profile",
+    "path": "profile.json"
+  },
+  "project_id": "systemic_simulation",
+  "project_kind": "game",
+  "project_version": "1.0.0",
+  "source_manifest": {
+    "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "systemic_simulation",
+    "path": "source/manifest.json"
+  },
+  "title": "Systemic Simulation"
+}

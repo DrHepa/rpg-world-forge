@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rpg-world-forge.local/schemas/world-project.schema.json",
-  "title": "RPG World Forge world-authoring project",
+  "title": "World Forge retained world-authoring project",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -19,7 +19,7 @@
   ],
   "properties": {
     "format": {"const": "rpg-world-forge.project"},
-    "format_version": {"const": 2},
+    "format_version": {"enum": [2, 3]},
     "project_kind": {"const": "world"},
     "world_id": {"$ref": "#/$defs/id"},
     "title": {"type": "string", "minLength": 1},
@@ -46,7 +46,7 @@
         "runtime_inference": {"const": false}
       }
     },
-    "tool_repository": {"const": "rpg-world-forge"},
+    "tool_repository": {"enum": ["rpg-world-forge", "world-forge"]},
     "derived_from": {
       "type": "object",
       "additionalProperties": false,
@@ -63,6 +63,22 @@
       }
     }
   },
+  "oneOf": [
+    {
+      "properties": {
+        "format_version": {"const": 2},
+        "tool_repository": {"const": "rpg-world-forge"}
+      },
+      "required": ["format_version", "tool_repository"]
+    },
+    {
+      "properties": {
+        "format_version": {"const": 3},
+        "tool_repository": {"const": "world-forge"}
+      },
+      "required": ["format_version", "tool_repository"]
+    }
+  ],
   "$defs": {
     "id": {
       "type": "string",

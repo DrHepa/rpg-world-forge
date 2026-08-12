@@ -5,6 +5,11 @@ description: Read-only verification of a standalone pyray/raylib game through bo
 
 # Verify a pyray game
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Run only G30 read-only verification and route findings to their owning phase.

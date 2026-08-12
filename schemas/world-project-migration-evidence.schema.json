@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-forge.local/schemas/world-project-migration-evidence.schema.json",
+  "title": "World Forge world-project migration evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "operation_id",
+    "from_format_version",
+    "to_format_version",
+    "source_sha256",
+    "target_sha256",
+    "target_identity",
+    "status"
+  ],
+  "properties": {
+    "format": {"const": "world-forge.world_project_migration_evidence"},
+    "format_version": {"const": 1},
+    "operation_id": {"$ref": "#/$defs/sha256"},
+    "from_format_version": {"const": 2},
+    "to_format_version": {"const": 3},
+    "source_sha256": {"$ref": "#/$defs/sha256"},
+    "target_sha256": {"$ref": "#/$defs/sha256"},
+    "target_identity": {"$ref": "#/$defs/identity"},
+    "status": {"const": "verified"}
+  },
+  "$defs": {
+    "identity": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["device", "inode"],
+          "properties": {
+            "device": {"type": "integer", "minimum": 0},
+            "inode": {"type": "integer", "minimum": 0}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["volume_serial", "file_id"],
+          "properties": {
+            "volume_serial": {"type": "string", "pattern": "^[0-9a-f]{16}$"},
+            "file_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"}
+          }
+        }
+      ]
+    },
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

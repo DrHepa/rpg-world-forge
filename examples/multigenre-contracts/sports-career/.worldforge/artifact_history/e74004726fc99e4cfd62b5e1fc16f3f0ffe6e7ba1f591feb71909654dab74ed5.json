@@ -1,0 +1,25 @@
+{
+  "content_hash": "e74004726fc99e4cfd62b5e1fc16f3f0ffe6e7ba1f591feb71909654dab74ed5",
+  "default_locale": "en",
+  "extensions": [],
+  "format": "world-forge.project",
+  "format_version": 1,
+  "profile": {
+    "content_hash": "598dd49eea0b0f76f9057d1a17d171b4c34809a204de6b957ff07944bd506bb9",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "sports_career_profile",
+    "path": "profile.json"
+  },
+  "project_id": "sports_career",
+  "project_kind": "game",
+  "project_version": "1.0.0",
+  "source_manifest": {
+    "content_hash": "b4bf00efddfa9793c5e3b88824eaeda9bc568570969b1e81fc6d8aaa5cf4d492",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "sports_career",
+    "path": "source/manifest.json"
+  },
+  "title": "Sports Career"
+}

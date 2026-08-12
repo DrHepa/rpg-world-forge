@@ -11,7 +11,7 @@ import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from pathlib import Path, PurePath
+from pathlib import Path, PurePath, PurePosixPath
 
 import isoworld.content.file_stat as file_stat_module
 from isoworld.content.file_stat import (
@@ -24,10 +24,19 @@ from isoworld.content.file_stat import (
 from isoworld.content.publication_journal import (
     PublicationJournalError,
     journal_frame,
-    recover_last_complete_payload,
+    recover_validated_journal_history,
+    recover_validated_journal_prefix,
 )
+from worldforge.asset_io import (
+    AssetContractError,
+    PinnedOutputParent,
+    open_verified_output_parent,
+)
+from worldforge.file_stat import windows_handle_file_stat
 
 DirectoryIdentity = tuple[int, int]
+RetainedStageHook = Callable[[str, str | None], None]
+RetainedDirectoryVerifier = Callable[[Path, int | None], None]
 
 
 class DirectoryPublishError(OSError):
@@ -36,6 +45,415 @@ class DirectoryPublishError(OSError):
 
 class DirectoryPublishIndeterminateError(DirectoryPublishError):
     """Raised when a native publication mutated names but durability is unproven."""
+
+
+class DirectoryPublishRecoveryRequiredError(DirectoryPublishError):
+    """Raised when exact owned evidence is retained instead of pathname-deleted."""
+
+
+def _retained_stage_state(info: FileStat) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        info.st_dev,
+        info.st_ino,
+        info.st_mode,
+        info.st_nlink,
+        info.st_size,
+        info.st_mtime_ns,
+        info.st_ctime_ns,
+    )
+
+
+class RetainedStageWriter:
+    """Write one exclusive directory tree through retained directory/file anchors."""
+
+    def __init__(
+        self,
+        stage: Path,
+        parent: PinnedOutputParent,
+        *,
+        root_native: int,
+        root_identity: DirectoryIdentity,
+        require_guard: Callable[[], None],
+        hook: RetainedStageHook | None,
+    ) -> None:
+        self.stage = stage
+        self.parent = parent
+        self.identity = root_identity
+        self._require_guard = require_guard
+        self._hook_callback = hook
+        self._directory_identities: dict[str, DirectoryIdentity] = {
+            "": root_identity,
+        }
+        self._posix_directories: dict[str, int] = {}
+        self._windows_directories: dict[str, int] = {}
+        if parent.parent_fd is not None:
+            self._posix_directories[""] = root_native
+        else:
+            self._windows_directories[""] = root_native
+        self._posix_files: dict[
+            str,
+            tuple[int, tuple[int, int, int, int, int, int, int]],
+        ] = {}
+        self._windows_files: dict[
+            str,
+            tuple[int, tuple[int, int, int, int, int, int, int]],
+        ] = {}
+        self._closed = False
+
+    def _hook(self, event: str, relative: str | None = None) -> None:
+        if self._hook_callback is not None:
+            self._hook_callback(event, relative)
+
+    def _directory_path(self, relative: str) -> Path:
+        return self.stage if not relative else self.stage / PurePosixPath(relative)
+
+    def _directory_native(self, relative: str) -> int:
+        if self.parent.parent_fd is not None:
+            return self._posix_directories[relative]
+        return self._windows_directories[relative]
+
+    def require_binding(self) -> None:
+        self._require_guard()
+        self.parent.assert_current()
+        for relative, expected_identity in self._directory_identities.items():
+            native = self._directory_native(relative)
+            opened = (
+                descriptor_file_stat(native)
+                if self.parent.parent_fd is not None
+                else windows_handle_file_stat(native)
+            )
+            named = path_file_stat(self._directory_path(relative))
+            if (
+                is_link_or_reparse(opened)
+                or is_link_or_reparse(named)
+                or not stat.S_ISDIR(opened.st_mode)
+                or not stat.S_ISDIR(named.st_mode)
+                or file_identity(opened) != expected_identity
+                or file_identity(named) != expected_identity
+            ):
+                raise DirectoryPublishError(
+                    f"Retained stage directory changed: {self._directory_path(relative)}"
+                )
+        file_records = (
+            self._posix_files if self.parent.parent_fd is not None else self._windows_files
+        )
+        for relative, (native, expected_state) in file_records.items():
+            opened = (
+                descriptor_file_stat(native)
+                if self.parent.parent_fd is not None
+                else windows_handle_file_stat(native)
+            )
+            named = path_file_stat(self.stage / PurePosixPath(relative))
+            if (
+                is_link_or_reparse(opened)
+                or is_link_or_reparse(named)
+                or not stat.S_ISREG(opened.st_mode)
+                or not stat.S_ISREG(named.st_mode)
+                or opened.st_nlink != 1
+                or named.st_nlink != 1
+                or _retained_stage_state(opened) != expected_state
+                or _retained_stage_state(named) != expected_state
+            ):
+                raise DirectoryPublishError(f"Retained staged file changed: {relative}")
+
+    def _ensure_parent(self, relative: PurePosixPath) -> str:
+        current = ""
+        for part in relative.parts[:-1]:
+            child = part if not current else f"{current}/{part}"
+            if child in self._directory_identities:
+                current = child
+                continue
+            self.require_binding()
+            parent_native = self._directory_native(current)
+            if self.parent.parent_fd is not None:
+                os.mkdir(part, mode=0o700, dir_fd=parent_native)
+                native = os.open(
+                    part,
+                    os.O_RDONLY
+                    | getattr(os, "O_CLOEXEC", 0)
+                    | getattr(os, "O_DIRECTORY", 0)
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=parent_native,
+                )
+                os.fchmod(native, 0o700)
+                opened = descriptor_file_stat(native)
+                self._posix_directories[child] = native
+            else:
+                api = self.parent.windows_api
+                if api is None:
+                    raise DirectoryPublishError("Windows retained stage API is unavailable")
+                native = api.create_directory(parent_native, part)
+                opened = windows_handle_file_stat(native)
+                self._windows_directories[child] = native
+            if is_link_or_reparse(opened) or not stat.S_ISDIR(opened.st_mode):
+                raise DirectoryPublishError(f"New retained stage directory is unsafe: {child}")
+            self._directory_identities[child] = file_identity(opened)
+            self._hook("after_stage_directory_created", child)
+            self.require_binding()
+            current = child
+        return current
+
+    def write_file(self, relative: str, payload: bytes) -> None:
+        if type(relative) is not str or type(payload) is not bytes:
+            raise DirectoryPublishError("Retained stage files require exact string paths and bytes")
+        relative_path = PurePosixPath(relative)
+        if (
+            not relative
+            or relative_path.is_absolute()
+            or ".." in relative_path.parts
+            or "." in relative_path.parts
+        ):
+            raise DirectoryPublishError(f"Unsafe retained stage path: {relative!r}")
+        parent_relative = self._ensure_parent(relative_path)
+        self.require_binding()
+        self._hook("before_stage_file_write", relative)
+        self.require_binding()
+        parent_native = self._directory_native(parent_relative)
+        native: int | None = None
+        descriptor: int | None = None
+        try:
+            if self.parent.parent_fd is not None:
+                native = os.open(
+                    relative_path.name,
+                    os.O_WRONLY
+                    | os.O_CREAT
+                    | os.O_EXCL
+                    | getattr(os, "O_CLOEXEC", 0)
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                    dir_fd=parent_native,
+                )
+                descriptor = native
+            else:
+                api = self.parent.windows_api
+                if api is None:
+                    raise DirectoryPublishError("Windows retained stage API is unavailable")
+                native = api.create_file(parent_native, relative_path.name)
+                descriptor = api.duplicate_to_descriptor(native, writable=True)
+            opened = descriptor_file_stat(descriptor)
+            if (
+                is_link_or_reparse(opened)
+                or not stat.S_ISREG(opened.st_mode)
+                or opened.st_nlink != 1
+                or opened.st_size != 0
+            ):
+                raise DirectoryPublishError(f"New retained stage file is unsafe: {relative}")
+            view = memoryview(payload)
+            while view:
+                written = os.write(descriptor, view)
+                if written <= 0:
+                    raise OSError("short retained stage write")
+                view = view[written:]
+            os.fsync(descriptor)
+            sealed = descriptor_file_stat(descriptor)
+            if (
+                not stat.S_ISREG(sealed.st_mode)
+                or sealed.st_nlink != 1
+                or sealed.st_size != len(payload)
+            ):
+                raise DirectoryPublishError(
+                    f"Retained stage file changed while writing: {relative}"
+                )
+            state = _retained_stage_state(sealed)
+            if self.parent.parent_fd is not None:
+                assert native is not None
+                self._posix_files[relative] = (native, state)
+                descriptor = None
+            else:
+                assert native is not None
+                self._windows_files[relative] = (native, state)
+                native = None
+            self._hook("after_stage_file_write", relative)
+            self.require_binding()
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+            if native is not None and self.parent.parent_fd is None:
+                api = self.parent.windows_api
+                if api is not None:
+                    api.close(native)
+
+    def fsync(self) -> None:
+        self.require_binding()
+        if self.parent.parent_fd is not None:
+            for relative in sorted(
+                self._posix_directories,
+                key=lambda item: (
+                    -len(PurePosixPath(item).parts),
+                    item.encode("utf-8"),
+                ),
+            ):
+                os.fsync(self._posix_directories[relative])
+            os.fsync(self.parent.parent_fd)
+        else:
+            api = self.parent.windows_api
+            if api is None:
+                raise DirectoryPublishError("Windows retained stage API is unavailable")
+            for relative in sorted(
+                self._windows_directories,
+                key=lambda item: (
+                    -len(PurePosixPath(item).parts),
+                    item.encode("utf-8"),
+                ),
+            ):
+                api.flush_handle(
+                    self._windows_directories[relative],
+                    context=f"retained stage directory {relative or '.'}",
+                )
+            fsync_directory(self.stage.parent, context="retained stage parent")
+        self.require_binding()
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        errors: list[BaseException] = []
+        if self.parent.parent_fd is not None:
+            descriptors = [native for native, _state in self._posix_files.values()] + [
+                self._posix_directories[relative]
+                for relative in sorted(
+                    self._posix_directories,
+                    key=lambda item: len(PurePosixPath(item).parts),
+                    reverse=True,
+                )
+            ]
+            for descriptor in descriptors:
+                try:
+                    os.close(descriptor)
+                except OSError as exc:
+                    errors.append(exc)
+        else:
+            api = self.parent.windows_api
+            if api is not None:
+                handles = [native for native, _state in self._windows_files.values()] + [
+                    self._windows_directories[relative]
+                    for relative in sorted(
+                        self._windows_directories,
+                        key=lambda item: len(PurePosixPath(item).parts),
+                        reverse=True,
+                    )
+                ]
+                for handle in handles:
+                    try:
+                        api.close(handle)
+                    except AssetContractError as exc:
+                        errors.append(exc)
+        self._closed = True
+        if errors:
+            raise DirectoryPublishError(f"Could not release retained stage handles: {errors[0]}")
+
+
+@contextmanager
+def create_retained_stage(
+    stage: Path,
+    *,
+    expected_parent_identity: DirectoryIdentity | None = None,
+    require_guard: Callable[[], None] = lambda: None,
+    hook: RetainedStageHook | None = None,
+) -> Iterator[RetainedStageWriter]:
+    """Create and retain an exclusive stage root until all staged files are durable."""
+
+    writer: RetainedStageWriter | None = None
+    orphan_native: int | None = None
+    orphan_close: Callable[[int], None] | None = None
+    try:
+        with open_verified_output_parent(stage.parent) as parent:
+            if (
+                expected_parent_identity is not None
+                and parent.identities[-1] != expected_parent_identity
+            ):
+                raise DirectoryPublishError(
+                    "Retained stage parent differs from the expected identity"
+                )
+            require_guard()
+            parent.assert_current()
+            if parent.parent_fd is not None:
+                os.mkdir(stage.name, mode=0o700, dir_fd=parent.parent_fd)
+                root_native = os.open(
+                    stage.name,
+                    os.O_RDONLY
+                    | getattr(os, "O_CLOEXEC", 0)
+                    | getattr(os, "O_DIRECTORY", 0)
+                    | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=parent.parent_fd,
+                )
+                orphan_native = root_native
+                os.fchmod(root_native, 0o700)
+                opened = descriptor_file_stat(root_native)
+            else:
+                api = parent.windows_api
+                parent_handle = parent.windows_parent_handle
+                if api is None or parent_handle is None:
+                    raise DirectoryPublishError("Windows retained stage API is unavailable")
+                root_native = api.create_directory(parent_handle, stage.name)
+                orphan_native = root_native
+                orphan_close = api.close
+                opened = windows_handle_file_stat(root_native)
+            root_identity = file_identity(opened)
+            named = path_file_stat(stage)
+            if (
+                is_link_or_reparse(opened)
+                or is_link_or_reparse(named)
+                or not stat.S_ISDIR(opened.st_mode)
+                or not stat.S_ISDIR(named.st_mode)
+                or file_identity(named) != root_identity
+            ):
+                raise DirectoryPublishError("New retained stage root has an unsafe identity")
+            writer = RetainedStageWriter(
+                stage,
+                parent,
+                root_native=root_native,
+                root_identity=root_identity,
+                require_guard=require_guard,
+                hook=hook,
+            )
+            orphan_native = None
+            writer._hook("after_stage_created")  # noqa: SLF001
+            writer.require_binding()
+            try:
+                yield writer
+                writer.require_binding()
+            finally:
+                primary = sys.exception()
+                try:
+                    writer.close()
+                except DirectoryPublishError as cleanup_error:
+                    if primary is not None:
+                        primary.add_note(str(cleanup_error))
+                    else:
+                        raise
+                writer = None
+    except (AssetContractError, OSError) as exc:
+        raise DirectoryPublishError(f"Could not create retained stage: {exc}") from exc
+    finally:
+        if writer is not None:
+            writer.close()
+        if orphan_native is not None:
+            primary = sys.exception()
+            try:
+                if orphan_close is None:
+                    os.close(orphan_native)
+                else:
+                    orphan_close(orphan_native)
+            except (AssetContractError, OSError) as cleanup_error:
+                if primary is not None:
+                    primary.add_note(str(cleanup_error))
+                else:
+                    raise DirectoryPublishError(
+                        f"Could not release retained stage root: {cleanup_error}"
+                    ) from cleanup_error
+
+
+def _indeterminate_cause(
+    error: BaseException,
+) -> DirectoryPublishIndeterminateError | None:
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, DirectoryPublishIndeterminateError):
+            return current
+        current = current.__cause__
+    return None
 
 
 def _read_descriptor_bytes(descriptor: int, *, limit: int) -> bytes:
@@ -60,7 +478,36 @@ def _last_complete_journal_payload(
     max_record_bytes: int,
 ) -> bytes:
     try:
-        return recover_last_complete_payload(
+        recovered, _prefix_size, _partial_tail = recover_validated_journal_prefix(
+            payload,
+            max_record_bytes=max_record_bytes,
+        )
+        return recovered
+    except PublicationJournalError as exc:
+        raise DirectoryPublishError(str(exc)) from exc
+
+
+def _validated_journal_prefix(
+    payload: bytes,
+    *,
+    max_record_bytes: int,
+) -> tuple[bytes, int, bool]:
+    try:
+        return recover_validated_journal_prefix(
+            payload,
+            max_record_bytes=max_record_bytes,
+        )
+    except PublicationJournalError as exc:
+        raise DirectoryPublishError(str(exc)) from exc
+
+
+def _validated_journal_history(
+    payload: bytes,
+    *,
+    max_record_bytes: int,
+) -> tuple[tuple[bytes, ...], int, bool]:
+    try:
+        return recover_validated_journal_history(
             payload,
             max_record_bytes=max_record_bytes,
         )
@@ -88,9 +535,43 @@ def _require_journal_binding(
     path: Path,
     descriptor: int,
     expected_identity: DirectoryIdentity,
+    *,
+    retained_parent: PinnedOutputParent | None = None,
 ) -> None:
     retained = descriptor_file_stat(descriptor)
-    named = path_file_stat(path)
+    named_handle: int | None = None
+    try:
+        if retained_parent is None:
+            named = path_file_stat(path)
+        else:
+            _require_journal_retained_parent(path, retained_parent)
+            if retained_parent.parent_fd is not None:
+                named = os.stat(
+                    path.name,
+                    dir_fd=retained_parent.parent_fd,
+                    follow_symlinks=False,
+                )
+            else:
+                api = retained_parent.windows_api
+                parent_handle = retained_parent.windows_parent_handle
+                if api is None or parent_handle is None:
+                    raise DirectoryPublishError(
+                        "Append-only journal retained Windows parent is unavailable"
+                    )
+                named_handle = api.open_existing_file_strict(
+                    parent_handle,
+                    path.name,
+                    share_delete=True,
+                )
+                named = api.strict_entry_info(
+                    named_handle,
+                    context=f"retained append-only journal {path.name}",
+                )
+    finally:
+        if named_handle is not None and retained_parent is not None:
+            api = retained_parent.windows_api
+            if api is not None:
+                api.close(named_handle)
     if (
         is_link_or_reparse(retained)
         or is_link_or_reparse(named)
@@ -104,12 +585,126 @@ def _require_journal_binding(
         raise DirectoryPublishError("Append-only journal path binding changed")
 
 
-def read_append_only_journal(
+def _require_journal_retained_parent(
+    path: Path,
+    parent: PinnedOutputParent,
+) -> None:
+    if Path(os.path.abspath(path.parent)) != parent.path:
+        raise DirectoryPublishError("Append-only journal retained parent does not match its path")
+    try:
+        parent.assert_current()
+    except AssetContractError as exc:
+        raise DirectoryPublishError("Append-only journal retained parent changed") from exc
+
+
+def _open_retained_journal(
+    path: Path,
+    flags: int,
+    *,
+    retained_parent: PinnedOutputParent | None,
+    writable: bool,
+    create: bool = False,
+    delete: bool = False,
+) -> tuple[int, int | None]:
+    if retained_parent is None:
+        return os.open(path, flags, 0o600), None
+    _require_journal_retained_parent(path, retained_parent)
+    if retained_parent.parent_fd is not None:
+        descriptor = os.open(
+            path.name,
+            flags,
+            0o600,
+            dir_fd=retained_parent.parent_fd,
+        )
+        return descriptor, None
+    api = retained_parent.windows_api
+    parent_handle = retained_parent.windows_parent_handle
+    if api is None or parent_handle is None:
+        raise DirectoryPublishError("Append-only journal retained Windows parent is unavailable")
+    native = (
+        api.create_file(parent_handle, path.name)
+        if create
+        else api.open_existing_file_strict(
+            parent_handle,
+            path.name,
+            delete=delete,
+            write=writable,
+        )
+    )
+    try:
+        return api.duplicate_to_descriptor(native, writable=writable), native
+    except BaseException:
+        api.close(native)
+        raise
+
+
+def _close_retained_journal(
+    descriptor: int | None,
+    native: int | None,
+    retained_parent: PinnedOutputParent | None,
+    *,
+    context: str,
+) -> None:
+    errors: list[BaseException] = []
+    if descriptor is not None:
+        try:
+            _close_descriptor(descriptor, context=context)
+        except DirectoryPublishError as exc:
+            errors.append(exc)
+    if native is not None and retained_parent is not None:
+        api = retained_parent.windows_api
+        if api is not None:
+            try:
+                api.close(native)
+            except AssetContractError as exc:
+                errors.append(exc)
+    if errors:
+        error = errors[0]
+        if isinstance(error, DirectoryPublishError):
+            raise error
+        raise DirectoryPublishError(f"{context}: {error}") from error
+
+
+def _flush_retained_journal_parent(
+    path: Path,
+    parent: PinnedOutputParent,
+    *,
+    context: str,
+) -> None:
+    _require_journal_retained_parent(path, parent)
+    try:
+        parent.flush_durable(context=context)
+    except (AssetContractError, OSError) as exc:
+        raise DirectoryPublishError(f"Could not durably flush {context}: {exc}") from exc
+    _require_journal_retained_parent(path, parent)
+
+
+def _require_retained_parent_binding(path: Path, descriptor: int) -> None:
+    """Bind a lexical parent (including /proc/self/fd) to a retained directory."""
+
+    try:
+        retained = descriptor_file_stat(descriptor)
+        named = os.stat(path, follow_symlinks=True)
+    except OSError as exc:
+        raise DirectoryPublishError(
+            f"Could not validate retained append-only journal parent {path}: {exc}"
+        ) from exc
+    if (
+        not stat.S_ISDIR(retained.st_mode)
+        or not stat.S_ISDIR(named.st_mode)
+        or file_identity(retained) != file_identity(named)
+    ):
+        raise DirectoryPublishError("Append-only journal retained parent binding changed")
+
+
+def read_append_only_journal_state(
     path: Path,
     *,
     max_record_bytes: int,
     max_file_bytes: int,
-) -> tuple[bytes, DirectoryIdentity] | None:
+) -> tuple[bytes, DirectoryIdentity, bool] | None:
+    """Read the last complete record and classify an exact plausible torn tail."""
+
     flags = (
         os.O_RDONLY
         | getattr(os, "O_BINARY", 0)
@@ -128,13 +723,11 @@ def read_append_only_journal(
         _require_journal_binding(path, descriptor, identity)
         file_payload = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
         _require_journal_binding(path, descriptor, identity)
-        return (
-            _last_complete_journal_payload(
-                file_payload,
-                max_record_bytes=max_record_bytes,
-            ),
-            identity,
+        recovered, _complete_prefix_size, partial_tail = _validated_journal_prefix(
+            file_payload,
+            max_record_bytes=max_record_bytes,
         )
+        return recovered, identity, partial_tail
     except DirectoryPublishError:
         raise
     except OSError as exc:
@@ -144,11 +737,160 @@ def read_append_only_journal(
             _close_descriptors(((descriptor, "append-only journal descriptor cleanup"),))
 
 
+def read_append_only_journal(
+    path: Path,
+    *,
+    max_record_bytes: int,
+    max_file_bytes: int,
+) -> tuple[bytes, DirectoryIdentity] | None:
+    loaded = read_append_only_journal_state(
+        path,
+        max_record_bytes=max_record_bytes,
+        max_file_bytes=max_file_bytes,
+    )
+    if loaded is None:
+        return None
+    return loaded[0], loaded[1]
+
+
+def read_append_only_journal_history_state(
+    path: Path,
+    *,
+    max_record_bytes: int,
+    max_file_bytes: int,
+    retained_parent: PinnedOutputParent | None = None,
+) -> tuple[tuple[bytes, ...], DirectoryIdentity, bool] | None:
+    """Read and bind every complete append-only record plus a torn-tail flag."""
+
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOINHERIT", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor: int | None = None
+    native: int | None = None
+    try:
+        try:
+            descriptor, native = _open_retained_journal(
+                path,
+                flags,
+                retained_parent=retained_parent,
+                writable=False,
+            )
+        except FileNotFoundError:
+            return None
+        retained = descriptor_file_stat(descriptor)
+        identity = file_identity(retained)
+        _require_journal_binding(
+            path,
+            descriptor,
+            identity,
+            retained_parent=retained_parent,
+        )
+        file_payload = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
+        _require_journal_binding(
+            path,
+            descriptor,
+            identity,
+            retained_parent=retained_parent,
+        )
+        records, _complete_prefix_size, partial_tail = _validated_journal_history(
+            file_payload,
+            max_record_bytes=max_record_bytes,
+        )
+        return records, identity, partial_tail
+    except DirectoryPublishError:
+        raise
+    except (AssetContractError, OSError) as exc:
+        raise DirectoryPublishError(f"Could not read append-only journal {path}: {exc}") from exc
+    finally:
+        if descriptor is not None or native is not None:
+            _close_retained_journal(
+                descriptor,
+                native,
+                retained_parent,
+                context="append-only journal descriptor cleanup",
+            )
+
+
+def truncate_append_only_journal_partial_tail(
+    path: Path,
+    *,
+    expected_identity: DirectoryIdentity,
+    expected_payload: bytes,
+    expected_history: tuple[bytes, ...],
+    max_record_bytes: int,
+    max_file_bytes: int,
+) -> DirectoryIdentity:
+    """Durably discard only a torn append after an exact complete journal prefix."""
+
+    flags = (
+        os.O_RDWR
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOINHERIT", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, flags)
+        _require_journal_binding(path, descriptor, expected_identity)
+        before = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
+        records, complete_prefix_size, partial_tail = _validated_journal_history(
+            before,
+            max_record_bytes=max_record_bytes,
+        )
+        expected_prefix = _journal_history_prefix(expected_history)
+        if (
+            not partial_tail
+            or records != expected_history
+            or records[-1] != expected_payload
+            or expected_history[-1] != expected_payload
+            or before[:complete_prefix_size] != expected_prefix
+            or complete_prefix_size != len(expected_prefix)
+        ):
+            raise DirectoryPublishError("Append-only journal torn tail changed before repair")
+        _require_journal_binding(path, descriptor, expected_identity)
+        os.ftruncate(descriptor, complete_prefix_size)
+        os.fsync(descriptor)
+        fsync_directory(path.parent, context="append-only journal tail repair parent")
+        _require_journal_binding(path, descriptor, expected_identity)
+        repaired = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
+        repaired_records, repaired_size, repaired_partial = _validated_journal_history(
+            repaired,
+            max_record_bytes=max_record_bytes,
+        )
+        if (
+            repaired != expected_prefix
+            or repaired_records != expected_history
+            or repaired_size != len(repaired)
+            or repaired_partial
+        ):
+            raise DirectoryPublishError("Append-only journal prefix changed during tail repair")
+        return expected_identity
+    except DirectoryPublishError:
+        raise
+    except OSError as exc:
+        raise DirectoryPublishError(f"Could not repair append-only journal {path}: {exc}") from exc
+    finally:
+        if descriptor is not None:
+            _close_descriptors(((descriptor, "append-only journal tail repair cleanup"),))
+
+
+def _journal_history_prefix(records: tuple[bytes, ...]) -> bytes:
+    if not records:
+        raise DirectoryPublishError("Append-only journal history is empty")
+    return records[0] + b"".join(_journal_frame(record) for record in records[1:])
+
+
 def create_append_only_journal(
     path: Path,
     payload: bytes,
     *,
     max_record_bytes: int,
+    retained_parent: PinnedOutputParent | None = None,
 ) -> DirectoryIdentity:
     if not payload or len(payload) > max_record_bytes:
         raise DirectoryPublishError("Append-only journal record exceeds its byte limit")
@@ -162,8 +904,15 @@ def create_append_only_journal(
         | getattr(os, "O_NOFOLLOW", 0)
     )
     descriptor: int | None = None
+    native: int | None = None
     try:
-        descriptor = os.open(path, flags, 0o600)
+        descriptor, native = _open_retained_journal(
+            path,
+            flags,
+            retained_parent=retained_parent,
+            writable=True,
+            create=True,
+        )
         retained = descriptor_file_stat(descriptor)
         identity = file_identity(retained)
         if (
@@ -175,17 +924,33 @@ def create_append_only_journal(
             raise DirectoryPublishError("New append-only journal is unsafe")
         _write_descriptor_bytes(descriptor, payload)
         os.fsync(descriptor)
-        _require_journal_binding(path, descriptor, identity)
+        _require_journal_binding(
+            path,
+            descriptor,
+            identity,
+            retained_parent=retained_parent,
+        )
         if _read_descriptor_bytes(descriptor, limit=max_record_bytes) != payload:
             raise DirectoryPublishError("New append-only journal bytes changed")
+        if retained_parent is not None:
+            _flush_retained_journal_parent(
+                path,
+                retained_parent,
+                context="append-only journal parent",
+            )
         return identity
     except (DirectoryPublishError, FileExistsError):
         raise
-    except OSError as exc:
+    except (AssetContractError, OSError) as exc:
         raise DirectoryPublishError(f"Could not create append-only journal {path}: {exc}") from exc
     finally:
-        if descriptor is not None:
-            _close_descriptors(((descriptor, "new append-only journal descriptor cleanup"),))
+        if descriptor is not None or native is not None:
+            _close_retained_journal(
+                descriptor,
+                native,
+                retained_parent,
+                context="new append-only journal descriptor cleanup",
+            )
 
 
 def append_append_only_journal(
@@ -193,9 +958,13 @@ def append_append_only_journal(
     *,
     expected_identity: DirectoryIdentity,
     expected_payload: bytes,
+    expected_history: tuple[bytes, ...] | None = None,
     updated_payload: bytes,
     max_record_bytes: int,
     max_file_bytes: int,
+    repair_partial_tail: bool = False,
+    retained_parent_fd: int | None = None,
+    retained_parent: PinnedOutputParent | None = None,
 ) -> DirectoryIdentity:
     if not updated_payload or len(updated_payload) > max_record_bytes:
         raise DirectoryPublishError("Append-only journal record exceeds its byte limit")
@@ -208,42 +977,682 @@ def append_append_only_journal(
         | getattr(os, "O_NOFOLLOW", 0)
     )
     descriptor: int | None = None
+    native: int | None = None
     try:
-        descriptor = os.open(path, flags)
-        _require_journal_binding(path, descriptor, expected_identity)
+        descriptor, native = _open_retained_journal(
+            path,
+            flags,
+            retained_parent=retained_parent,
+            writable=True,
+        )
+        _require_journal_binding(
+            path,
+            descriptor,
+            expected_identity,
+            retained_parent=retained_parent,
+        )
         before = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
-        if _last_complete_journal_payload(
+        records, complete_prefix_size, partial_tail = _validated_journal_history(
             before,
             max_record_bytes=max_record_bytes,
-        ) != expected_payload or not (
+        )
+        recovered = records[-1]
+        if recovered != expected_payload:
+            raise DirectoryPublishError("Append-only journal changed before transition")
+        expected_complete_prefix: bytes | None = None
+        if expected_history is not None:
+            expected_complete_prefix = _journal_history_prefix(expected_history)
+            if (
+                records != expected_history
+                or expected_history[-1] != expected_payload
+                or complete_prefix_size != len(expected_complete_prefix)
+                or before[:complete_prefix_size] != expected_complete_prefix
+            ):
+                raise DirectoryPublishError(
+                    "Append-only journal complete history changed before transition"
+                )
+        frame = _journal_frame(updated_payload)
+        if partial_tail:
+            if not repair_partial_tail:
+                raise DirectoryPublishError("Append-only journal changed before transition")
+            complete_prefix = before[:complete_prefix_size]
+            partial_frame = before[complete_prefix_size:]
+            if not frame.startswith(partial_frame):
+                raise DirectoryPublishError(
+                    "Append-only journal partial tail does not match the expected transition"
+                )
+            _require_journal_binding(
+                path,
+                descriptor,
+                expected_identity,
+                retained_parent=retained_parent,
+            )
+            os.ftruncate(descriptor, complete_prefix_size)
+            os.fsync(descriptor)
+            _require_journal_binding(
+                path,
+                descriptor,
+                expected_identity,
+                retained_parent=retained_parent,
+            )
+            if retained_parent is not None:
+                _flush_retained_journal_parent(
+                    path,
+                    retained_parent,
+                    context="append-only journal repair parent",
+                )
+            elif retained_parent_fd is None:
+                fsync_directory(path.parent, context="append-only journal repair parent")
+            else:
+                _require_retained_parent_binding(path.parent, retained_parent_fd)
+                os.fsync(retained_parent_fd)
+                _require_retained_parent_binding(path.parent, retained_parent_fd)
+            _require_journal_binding(
+                path,
+                descriptor,
+                expected_identity,
+                retained_parent=retained_parent,
+            )
+            repaired = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
+            if repaired != complete_prefix:
+                raise DirectoryPublishError("Append-only journal prefix changed during tail repair")
+            repaired_records, repaired_size, repaired_partial = _validated_journal_history(
+                repaired,
+                max_record_bytes=max_record_bytes,
+            )
+            if (
+                repaired_records[-1] != expected_payload
+                or repaired_size != len(complete_prefix)
+                or repaired_partial
+                or (
+                    expected_history is not None
+                    and (
+                        repaired_records != expected_history or expected_complete_prefix != repaired
+                    )
+                )
+            ):
+                raise DirectoryPublishError("Append-only journal prefix changed during tail repair")
+            _require_journal_binding(
+                path,
+                descriptor,
+                expected_identity,
+                retained_parent=retained_parent,
+            )
+            before = repaired
+        elif expected_history is None and not (
             before == expected_payload or before.endswith(_journal_frame(expected_payload))
         ):
             raise DirectoryPublishError("Append-only journal changed before transition")
-        _require_journal_binding(path, descriptor, expected_identity)
-        frame = _journal_frame(updated_payload)
+        _require_journal_binding(
+            path,
+            descriptor,
+            expected_identity,
+            retained_parent=retained_parent,
+        )
         if len(before) + len(frame) > max_file_bytes:
             raise DirectoryPublishError("Append-only journal exceeds its byte limit")
         os.lseek(descriptor, 0, os.SEEK_END)
         _write_descriptor_bytes(descriptor, frame)
         os.fsync(descriptor)
-        _require_journal_binding(path, descriptor, expected_identity)
+        _require_journal_binding(
+            path,
+            descriptor,
+            expected_identity,
+            retained_parent=retained_parent,
+        )
         after = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
-        if (
-            _last_complete_journal_payload(
+        if expected_history is None:
+            if (
+                _last_complete_journal_payload(
+                    after,
+                    max_record_bytes=max_record_bytes,
+                )
+                != updated_payload
+            ):
+                raise DirectoryPublishError("Append-only journal transition is incomplete")
+        else:
+            after_records, after_size, after_partial = _validated_journal_history(
                 after,
                 max_record_bytes=max_record_bytes,
             )
-            != updated_payload
-        ):
-            raise DirectoryPublishError("Append-only journal transition is incomplete")
+            expected_after = expected_history + (updated_payload,)
+            expected_after_bytes = _journal_history_prefix(expected_after)
+            if (
+                after_records != expected_after
+                or after_partial
+                or after_size != len(expected_after_bytes)
+                or after != expected_after_bytes
+            ):
+                raise DirectoryPublishError("Append-only journal transition is incomplete")
         return expected_identity
     except DirectoryPublishError:
         raise
-    except OSError as exc:
+    except (AssetContractError, OSError) as exc:
         raise DirectoryPublishError(f"Could not append journal transition {path}: {exc}") from exc
     finally:
-        if descriptor is not None:
-            _close_descriptors(((descriptor, "append-only journal transition cleanup"),))
+        if descriptor is not None or native is not None:
+            _close_retained_journal(
+                descriptor,
+                native,
+                retained_parent,
+                context="append-only journal transition cleanup",
+            )
+
+
+def _linux_rename_name_noreplace(
+    parent_descriptor: int,
+    source_name: str,
+    destination_name: str,
+) -> None:
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        renameat2 = libc.renameat2
+    except (AttributeError, OSError) as exc:
+        raise DirectoryPublishError("Linux RENAME_NOREPLACE is unavailable") from exc
+    renameat2.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    renameat2.restype = ctypes.c_int
+    ctypes.set_errno(0)
+    if (
+        renameat2(
+            parent_descriptor,
+            os.fsencode(source_name),
+            parent_descriptor,
+            os.fsencode(destination_name),
+            1,
+        )
+        == 0
+    ):
+        return
+    error = ctypes.get_errno()
+    if error == errno.EEXIST:
+        raise FileExistsError(error, "destination already exists", destination_name)
+    if error in {
+        errno.ENOSYS,
+        errno.EINVAL,
+        getattr(errno, "ENOTSUP", errno.EINVAL),
+        getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+    }:
+        raise DirectoryPublishError("Linux RENAME_NOREPLACE is unavailable")
+    raise DirectoryPublishError(
+        error,
+        f"Could not claim retained Linux entry: {os.strerror(error)}",
+        source_name,
+    )
+
+
+def retained_journal_evidence_path(
+    path: Path,
+    expected_identity: DirectoryIdentity,
+) -> Path:
+    """Return the deterministic terminal locator for one retained journal."""
+
+    digest = hashlib.sha256(
+        os.fsencode(path.name)
+        + b"\0"
+        + str(expected_identity[0]).encode("ascii")
+        + b"\0"
+        + str(expected_identity[1]).encode("ascii")
+    ).hexdigest()
+    return path.parent / f".worldforge-retained-journal-{digest}.json"
+
+
+def retained_recovery_evidence(
+    *,
+    stage_path: Path | None = None,
+    stage_identity: DirectoryIdentity | None = None,
+    journal_path: Path | None = None,
+    journal_identity: DirectoryIdentity | None = None,
+) -> dict[str, object]:
+    """Describe retained private entries without exposing absolute host paths."""
+
+    evidence: dict[str, object] = {}
+    if stage_path is not None:
+        evidence["stage"] = {
+            "locator": stage_path.name,
+            "identity": (
+                None if stage_identity is None else [stage_identity[0], stage_identity[1]]
+            ),
+            "retention": "active",
+        }
+    if journal_path is not None:
+        evidence["journal"] = {
+            "locator": journal_path.name,
+            "identity": (
+                None if journal_identity is None else [journal_identity[0], journal_identity[1]]
+            ),
+            "retention": "active",
+        }
+    return evidence
+
+
+def _linux_archive_retained_journal(
+    parent_descriptor: int,
+    name: str,
+    descriptor: int,
+    expected_identity: DirectoryIdentity,
+    payload: bytes,
+) -> str:
+    """Retire one exact Linux journal without pathname-based deletion."""
+
+    def archive_state(info: FileStat) -> tuple[int, int, int, int, int, int]:
+        return (
+            info.st_dev,
+            info.st_ino,
+            info.st_mode,
+            info.st_nlink,
+            info.st_size,
+            info.st_mtime_ns,
+        )
+
+    claim_name = retained_journal_evidence_path(
+        Path(name),
+        expected_identity,
+    ).name
+    retained_before = descriptor_file_stat(descriptor)
+    if (
+        is_link_or_reparse(retained_before)
+        or not stat.S_ISREG(retained_before.st_mode)
+        or retained_before.st_nlink != 1
+        or file_identity(retained_before) != expected_identity
+    ):
+        raise DirectoryPublishError("Retained Linux journal identity changed before archival")
+    _linux_rename_name_noreplace(
+        parent_descriptor,
+        name,
+        claim_name,
+    )
+    archived = True
+    try:
+        retained = descriptor_file_stat(descriptor)
+        named = os.stat(
+            claim_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            is_link_or_reparse(retained)
+            or is_link_or_reparse(named)
+            or not stat.S_ISREG(retained.st_mode)
+            or not stat.S_ISREG(named.st_mode)
+            or retained.st_nlink != 1
+            or named.st_nlink != 1
+            or file_identity(retained) != expected_identity
+            or file_identity(named) != expected_identity
+            or archive_state(retained) != archive_state(named)
+            or archive_state(retained) != archive_state(retained_before)
+            or _read_descriptor_bytes(descriptor, limit=max(len(payload), 1)) != payload
+        ):
+            raise DirectoryPublishError("Archived Linux journal identity changed")
+        try:
+            os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise DirectoryPublishError("Active Linux journal name reappeared during archival")
+        os.fsync(parent_descriptor)
+        retained_after = descriptor_file_stat(descriptor)
+        named_after = os.stat(
+            claim_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
+        if (
+            archive_state(retained_after) != archive_state(retained_before)
+            or archive_state(named_after) != archive_state(retained_before)
+            or _read_descriptor_bytes(descriptor, limit=max(len(payload), 1)) != payload
+        ):
+            raise DirectoryPublishError("Archived Linux journal changed after durability flush")
+        try:
+            os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            raise DirectoryPublishError("Active Linux journal name reappeared after archival")
+        return claim_name
+    except BaseException:
+        if archived:
+            try:
+                archived_info = os.stat(
+                    claim_name,
+                    dir_fd=parent_descriptor,
+                    follow_symlinks=False,
+                )
+                try:
+                    os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+                except FileNotFoundError:
+                    pass
+                else:
+                    raise DirectoryPublishIndeterminateError(
+                        "Active Linux journal name reappeared during archival rollback"
+                    )
+                if (
+                    is_link_or_reparse(archived_info)
+                    or not stat.S_ISREG(archived_info.st_mode)
+                    or file_identity(archived_info) != expected_identity
+                    or archive_state(archived_info) != archive_state(retained_before)
+                ):
+                    raise DirectoryPublishIndeterminateError(
+                        "Archived Linux journal changed before rollback"
+                    )
+                _linux_rename_name_noreplace(
+                    parent_descriptor,
+                    claim_name,
+                    name,
+                )
+                archived = False
+                os.fsync(parent_descriptor)
+                restored = os.stat(
+                    name,
+                    dir_fd=parent_descriptor,
+                    follow_symlinks=False,
+                )
+                if archive_state(restored) != archive_state(retained_before):
+                    raise DirectoryPublishIndeterminateError(
+                        "Restored Linux journal identity changed"
+                    )
+            except BaseException as rollback_error:
+                raise DirectoryPublishIndeterminateError(
+                    "Retained Linux journal archival could not be restored"
+                ) from rollback_error
+        raise
+
+
+def remove_append_only_journal(
+    path: Path,
+    *,
+    expected_identity: DirectoryIdentity,
+    expected_payload: bytes,
+    expected_history: tuple[bytes, ...] | None = None,
+    max_record_bytes: int,
+    max_file_bytes: int,
+    retained_parent_fd: int | None = None,
+    retained_parent: PinnedOutputParent | None = None,
+) -> Path | None:
+    """Retire one exact journal without deleting an unverified pathname object."""
+
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_BINARY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOINHERIT", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    descriptor: int | None = None
+    native: int | None = None
+    namespace_mutated = False
+    try:
+        descriptor, native = _open_retained_journal(
+            path,
+            flags,
+            retained_parent=retained_parent,
+            writable=False,
+            delete=os.name == "nt",
+        )
+        _require_journal_binding(
+            path,
+            descriptor,
+            expected_identity,
+            retained_parent=retained_parent,
+        )
+        payload = _read_descriptor_bytes(descriptor, limit=max_file_bytes)
+        records, complete_prefix_size, partial_tail = _validated_journal_history(
+            payload,
+            max_record_bytes=max_record_bytes,
+        )
+        expected_prefix = (
+            None if expected_history is None else _journal_history_prefix(expected_history)
+        )
+        if (
+            records[-1] != expected_payload
+            or partial_tail
+            or complete_prefix_size != len(payload)
+            or (
+                expected_history is not None
+                and (
+                    records != expected_history
+                    or expected_history[-1] != expected_payload
+                    or expected_prefix != payload
+                )
+            )
+        ):
+            raise DirectoryPublishError("Append-only journal changed before removal")
+        _require_journal_binding(
+            path,
+            descriptor,
+            expected_identity,
+            retained_parent=retained_parent,
+        )
+        if sys.platform.startswith("linux") and os.name == "posix":
+            parent_descriptor = (
+                retained_parent.parent_fd
+                if retained_parent is not None
+                else (
+                    os.open(path.parent, _POSIX_DIRECTORY_FLAGS)
+                    if retained_parent_fd is None
+                    else retained_parent_fd
+                )
+            )
+            if parent_descriptor is None:
+                raise DirectoryPublishError(
+                    "Append-only journal retained POSIX parent is unavailable"
+                )
+            try:
+                parent_identity = file_identity(descriptor_file_stat(parent_descriptor))
+                if retained_parent is not None:
+                    _require_journal_retained_parent(path, retained_parent)
+                elif retained_parent_fd is None:
+                    if (
+                        directory_identity(path.parent, context="append-only journal parent")
+                        != parent_identity
+                    ):
+                        raise DirectoryPublishError("Append-only journal parent identity changed")
+                else:
+                    _require_retained_parent_binding(path.parent, parent_descriptor)
+                archived_name = _linux_archive_retained_journal(
+                    parent_descriptor,
+                    path.name,
+                    descriptor,
+                    expected_identity,
+                    payload,
+                )
+                namespace_mutated = True
+                if retained_parent is not None:
+                    _require_journal_retained_parent(path, retained_parent)
+                elif retained_parent_fd is None:
+                    if (
+                        directory_identity(path.parent, context="append-only journal parent")
+                        != parent_identity
+                    ):
+                        raise DirectoryPublishIndeterminateError(
+                            "Append-only journal parent identity changed after removal"
+                        )
+                else:
+                    _require_retained_parent_binding(path.parent, parent_descriptor)
+            finally:
+                if retained_parent is None and retained_parent_fd is None:
+                    _close_descriptor(
+                        parent_descriptor,
+                        context="append-only journal parent cleanup",
+                    )
+            return path.parent / archived_name
+        if os.name == "nt":
+            if retained_parent is not None:
+                api = retained_parent.windows_api
+                if api is None or native is None:
+                    raise DirectoryPublishError(
+                        "Append-only journal retained Windows deletion is unavailable"
+                    )
+                _close_descriptor(
+                    descriptor,
+                    context="append-only journal retained descriptor handoff",
+                )
+                descriptor = None
+                api.mark_delete_on_close(native)
+                namespace_mutated = True
+                api.close(native)
+                native = None
+                _flush_retained_journal_parent(
+                    path,
+                    retained_parent,
+                    context="append-only journal parent",
+                )
+                return None
+            _close_descriptor(
+                descriptor,
+                context="append-only journal retained descriptor handoff",
+            )
+            descriptor = None
+            handle = _windows_open_delete_handle(
+                path,
+                expected_identity,
+                directory=False,
+            )
+            try:
+                _windows_mark_handle_for_deletion(handle, path)
+                namespace_mutated = True
+            finally:
+                _windows_close_cleanup_handle(handle)
+            fsync_directory(path.parent, context="append-only journal parent")
+            return None
+        raise DirectoryPublishError(
+            "Identity-bound journal removal is supported only on Linux and Windows"
+        )
+    except DirectoryPublishIndeterminateError:
+        raise
+    except BaseException as exc:
+        if namespace_mutated:
+            raise DirectoryPublishIndeterminateError(
+                "Append-only journal removal durability is indeterminate"
+            ) from exc
+        if isinstance(exc, (DirectoryPublishError, FileNotFoundError)):
+            raise
+        raise DirectoryPublishError(f"Could not retire append-only journal {path}: {exc}") from exc
+    finally:
+        if descriptor is not None or native is not None:
+            _close_retained_journal(
+                descriptor,
+                native,
+                retained_parent,
+                context="append-only journal removal cleanup",
+            )
+
+
+def require_pinned_names_absent(
+    parent: PinnedOutputParent,
+    names: tuple[str, ...],
+    *,
+    context: str,
+) -> None:
+    """Fail indeterminately if any original name exists under a retained parent."""
+
+    try:
+        parent.assert_current()
+        for name in names:
+            if not name or name in {".", ".."} or "/" in name or "\\" in name or "\x00" in name:
+                raise DirectoryPublishIndeterminateError(f"{context} original name is invalid")
+            if parent.parent_fd is not None:
+                try:
+                    os.stat(
+                        name,
+                        dir_fd=parent.parent_fd,
+                        follow_symlinks=False,
+                    )
+                except FileNotFoundError:
+                    continue
+                except OSError as exc:
+                    raise DirectoryPublishIndeterminateError(
+                        f"{context} original name absence is indeterminate: {name!r}"
+                    ) from exc
+                raise DirectoryPublishIndeterminateError(
+                    f"{context} original name reappeared: {name!r}"
+                )
+            api = parent.windows_api
+            parent_handle = parent.windows_parent_handle
+            if api is None or parent_handle is None:
+                raise DirectoryPublishIndeterminateError(
+                    f"{context} retained Windows parent is unavailable"
+                )
+            handle: int | None = None
+            try:
+                handle = api.open_existing_entry(parent_handle, name)
+            except FileNotFoundError:
+                continue
+            except AssetContractError as exc:
+                raise DirectoryPublishIndeterminateError(
+                    f"{context} original Windows name absence is indeterminate: {name!r}"
+                ) from exc
+            else:
+                raise DirectoryPublishIndeterminateError(
+                    f"{context} original Windows name reappeared: {name!r}"
+                )
+            finally:
+                if handle is not None:
+                    try:
+                        api.close(handle)
+                    except AssetContractError as exc:
+                        raise DirectoryPublishIndeterminateError(
+                            f"{context} Windows reappearance handle cleanup failed"
+                        ) from exc
+        parent.assert_current()
+    except DirectoryPublishIndeterminateError:
+        raise
+    except (AssetContractError, OSError) as exc:
+        raise DirectoryPublishIndeterminateError(
+            f"{context} retained parent verification is indeterminate"
+        ) from exc
+
+
+def remove_d3_append_only_journal(
+    path: Path,
+    *,
+    expected_identity: DirectoryIdentity,
+    expected_history: tuple[bytes, ...],
+    max_record_bytes: int,
+    max_file_bytes: int,
+    retained_parent: PinnedOutputParent | None = None,
+) -> Path | None:
+    """Retire a D3 journal and prove its anchored original name stayed absent."""
+
+    expected_payload = expected_history[-1] if expected_history else b""
+
+    def remove_and_check(parent: PinnedOutputParent) -> Path | None:
+        if Path(os.path.abspath(path.parent)) != parent.path:
+            raise DirectoryPublishError("D3 journal retained parent does not match its path")
+        parent.assert_current()
+        retained_evidence = remove_append_only_journal(
+            path,
+            expected_identity=expected_identity,
+            expected_payload=expected_payload,
+            expected_history=expected_history,
+            max_record_bytes=max_record_bytes,
+            max_file_bytes=max_file_bytes,
+            retained_parent=parent,
+        )
+        require_pinned_names_absent(
+            parent,
+            (path.name,),
+            context="D3 journal cleanup",
+        )
+        return retained_evidence
+
+    if retained_parent is not None:
+        return remove_and_check(retained_parent)
+    try:
+        with open_verified_output_parent(path.parent, create=False) as parent:
+            return remove_and_check(parent)
+    except DirectoryPublishIndeterminateError:
+        raise
+    except AssetContractError as exc:
+        indeterminate = _indeterminate_cause(exc)
+        if indeterminate is not None:
+            raise indeterminate from exc
+        raise DirectoryPublishError(str(exc)) from exc
 
 
 _AT_REMOVEDIR = 0x200
@@ -1986,6 +3395,7 @@ def publish_directory_noreplace(
     destination: Path,
     *,
     expected_source_identity: DirectoryIdentity,
+    expected_parent_identity: DirectoryIdentity | None = None,
 ) -> Iterator[DirectoryIdentity]:
     """Publish and retain one directory through immediate caller verification."""
 
@@ -1996,6 +3406,13 @@ def publish_directory_noreplace(
         try:
             with open_expected_directory(source, source_identity) as retained:
                 parent_identity = retained.parent_identity
+                if (
+                    expected_parent_identity is not None
+                    and parent_identity != expected_parent_identity
+                ):
+                    raise DirectoryPublishError(
+                        "Publication parent differs from the expected identity"
+                    )
                 published_identity = _linux_rename_retained_noreplace(
                     retained,
                     destination,
@@ -2029,6 +3446,8 @@ def publish_directory_noreplace(
         if source.parent != destination.parent:
             raise DirectoryPublishError("Windows directory publication must stay within one parent")
         parent_identity = directory_identity(source.parent, context="publication parent")
+        if expected_parent_identity is not None and parent_identity != expected_parent_identity:
+            raise DirectoryPublishError("Publication parent differs from the expected identity")
         if destination.exists() or destination.is_symlink():
             raise FileExistsError(errno.EEXIST, "destination already exists", destination)
         with _windows_rename_noreplace(
@@ -2143,107 +3562,18 @@ def _posix_preflight_directory_deletion(
     raise DirectoryPublishError("Claimed empty directory is no longer empty")
 
 
-def _posix_remove_directory_contents(descriptor: int) -> None:
-    try:
-        with os.scandir(descriptor) as entries:
-            names = sorted(entry.name for entry in entries)
-    except OSError as exc:
-        raise DirectoryPublishError(f"Could not enumerate claimed directory: {exc}") from exc
-
-    directory_flags = (
-        os.O_RDONLY
-        | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_DIRECTORY", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
-    )
-    file_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    for name in names:
-        try:
-            before = os.stat(
-                name,
-                dir_fd=descriptor,
-                follow_symlinks=False,
-            )
-        except OSError as exc:
-            raise DirectoryPublishError(
-                f"Could not inspect claimed directory entry {name!r}: {exc}"
-            ) from exc
-        if stat.S_ISLNK(before.st_mode):
-            raise DirectoryPublishError(f"Claimed directory entry became a symbolic link: {name!r}")
-        if stat.S_ISDIR(before.st_mode):
-            try:
-                child_descriptor = os.open(
-                    name,
-                    directory_flags,
-                    dir_fd=descriptor,
-                )
-            except OSError as exc:
-                raise DirectoryPublishError(
-                    f"Could not open claimed child directory {name!r}: {exc}"
-                ) from exc
-            try:
-                opened = descriptor_file_stat(child_descriptor)
-                _require_expected_directory(
-                    opened,
-                    file_identity(before),
-                    context=f"claimed child directory {name!r}",
-                )
-                _posix_remove_directory_contents(child_descriptor)
-                _posix_unlink_descriptor(child_descriptor, directory=True)
-            except DirectoryPublishError:
-                raise
-            except OSError as exc:
-                raise DirectoryPublishError(
-                    f"Could not remove claimed child directory {name!r}: {exc}"
-                ) from exc
-            finally:
-                _close_descriptor(
-                    child_descriptor,
-                    context="claimed child directory descriptor cleanup",
-                )
-            continue
-        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
-            raise DirectoryPublishError(
-                f"Claimed directory entry is not an owned regular file: {name!r}"
-            )
-        try:
-            file_descriptor = os.open(
-                name,
-                file_flags,
-                dir_fd=descriptor,
-            )
-        except OSError as exc:
-            raise DirectoryPublishError(f"Could not open claimed file {name!r}: {exc}") from exc
-        try:
-            opened = descriptor_file_stat(file_descriptor)
-            if (
-                is_link_or_reparse(opened)
-                or not stat.S_ISREG(opened.st_mode)
-                or opened.st_nlink != 1
-                or file_identity(opened) != file_identity(before)
-            ):
-                raise DirectoryPublishError(f"Claimed regular file identity changed: {name!r}")
-            _posix_unlink_descriptor(file_descriptor, directory=False)
-        except DirectoryPublishError:
-            raise
-        except OSError as exc:
-            raise DirectoryPublishError(
-                f"Could not remove claimed regular file {name!r}: {exc}"
-            ) from exc
-        finally:
-            _close_descriptor(
-                file_descriptor,
-                context="claimed regular file descriptor cleanup",
-            )
-
-
-def _posix_remove_claimed_directory(
+def _posix_remove_retained_directory(
     parent: Path,
     claim_name: str,
     expected_identity: DirectoryIdentity,
     *,
     recursive: bool,
+    verify: Callable[[Path], None] | None = None,
+    verify_retained: RetainedDirectoryVerifier | None = None,
+    retained_parent_fd: int | None = None,
 ) -> None:
+    """Fail closed because Linux cannot unlink an exact open directory identity."""
+
     required_dir_fd = (os.open, os.stat)
     if (
         not sys.platform.startswith("linux")
@@ -2259,7 +3589,9 @@ def _posix_remove_claimed_directory(
         | getattr(os, "O_NOFOLLOW", 0)
     )
     try:
-        parent_descriptor = os.open(parent, flags)
+        parent_descriptor = (
+            os.open(parent, flags) if retained_parent_fd is None else os.dup(retained_parent_fd)
+        )
     except OSError as exc:
         raise DirectoryPublishError(
             f"Could not open claimed directory parent {parent}: {exc}"
@@ -2275,22 +3607,33 @@ def _posix_remove_claimed_directory(
             dir_fd=parent_descriptor,
         )
         opened = descriptor_file_stat(claim_descriptor)
+        named = os.stat(
+            claim_name,
+            dir_fd=parent_descriptor,
+            follow_symlinks=False,
+        )
         _require_expected_directory(
             opened,
             expected_identity,
             context="claimed directory",
         )
-        if _posix_preflight_directory_deletion(
-            claim_descriptor,
-            recursive=recursive,
-        ):
-            return
-        _posix_unlink_descriptor(claim_descriptor, directory=True)
+        _require_expected_directory(
+            named,
+            expected_identity,
+            context="named claimed directory",
+        )
+        if file_identity(opened) != file_identity(named):
+            raise DirectoryPublishError("Claimed directory binding changed")
+        _ = recursive, verify, verify_retained
+        raise DirectoryPublishRecoveryRequiredError(
+            "Exact identity-bound POSIX directory deletion is unavailable; "
+            "the retained owned tree was not mutated"
+        )
     except DirectoryPublishError:
         raise
     except OSError as exc:
         raise DirectoryPublishError(
-            f"Could not remove claimed directory {parent / claim_name}: {exc}"
+            f"Could not retain claimed directory {parent / claim_name}: {exc}"
         ) from exc
     finally:
         descriptors = (
@@ -2437,12 +3780,506 @@ def _windows_remove_claimed_file(path: Path, expected_identity: DirectoryIdentit
                 raise
 
 
+@dataclass(slots=True)
+class _RetainedWindowsTreeEntry:
+    path: Path
+    handle: int
+    identity: DirectoryIdentity
+    directory: bool
+    depth: int
+    state: tuple[int, int, int, int, int, int, int]
+
+
+def _register_retained_windows_entry(
+    retained: list[_RetainedWindowsTreeEntry],
+    entry: _RetainedWindowsTreeEntry,
+) -> None:
+    retained.append(entry)
+
+
+def _retain_windows_directory_tree(
+    root: Path,
+    root_handle: int,
+) -> list[_RetainedWindowsTreeEntry]:
+    retained: list[_RetainedWindowsTreeEntry] = []
+    pending: list[tuple[Path, int, int]] = [(root, root_handle, 0)]
+    try:
+        while pending:
+            directory_path, directory_handle, depth = pending.pop()
+            directory_state = file_stat_module._windows_handle_stat(  # noqa: SLF001
+                directory_handle
+            )
+            if is_link_or_reparse(directory_state) or not stat.S_ISDIR(directory_state.st_mode):
+                raise DirectoryPublishError("Retained Windows cleanup directory changed")
+            try:
+                children = sorted(directory_path.iterdir(), key=lambda item: item.name)
+            except OSError as exc:
+                raise DirectoryPublishError(
+                    f"Could not enumerate retained Windows cleanup tree: {exc}"
+                ) from exc
+            for child in children:
+                before = path_file_stat(child)
+                if is_link_or_reparse(before):
+                    raise DirectoryPublishError(
+                        f"Retained Windows cleanup tree contains a reparse point: {child}"
+                    )
+                directory = stat.S_ISDIR(before.st_mode)
+                if not directory and (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1):
+                    raise DirectoryPublishError(
+                        "Retained Windows cleanup tree contains a special or "
+                        f"hard-linked file: {child}"
+                    )
+                identity = file_identity(before)
+                handle = _windows_open_delete_handle(
+                    child,
+                    identity,
+                    directory=directory,
+                )
+                entry: _RetainedWindowsTreeEntry | None = None
+                try:
+                    opened = file_stat_module._windows_handle_stat(handle)  # noqa: SLF001
+                    if _stable_source_state(opened) != _stable_source_state(before):
+                        raise DirectoryPublishError(
+                            f"Retained Windows cleanup entry changed while opening: {child}"
+                        )
+                    entry = _RetainedWindowsTreeEntry(
+                        path=child,
+                        handle=handle,
+                        identity=identity,
+                        directory=directory,
+                        depth=depth + 1,
+                        state=_stable_source_state(opened),
+                    )
+                    _register_retained_windows_entry(retained, entry)
+                except BaseException:
+                    if entry is not None and any(item is entry for item in retained):
+                        raise
+                    primary = sys.exception()
+                    try:
+                        _windows_close_cleanup_handle(handle)
+                    except DirectoryPublishError as cleanup_error:
+                        if primary is not None:
+                            primary.add_note(str(cleanup_error))
+                        else:
+                            raise
+                    raise
+                if len(retained) > 20_000:
+                    raise DirectoryPublishError(
+                        "Retained Windows cleanup tree exceeds its safe node limit"
+                    )
+                if directory:
+                    pending.append((child, handle, depth + 1))
+        return retained
+    except BaseException:
+        errors: list[DirectoryPublishError] = []
+        for entry in reversed(retained):
+            try:
+                _windows_close_cleanup_handle(entry.handle)
+            except DirectoryPublishError as exc:
+                errors.append(exc)
+        if errors and sys.exception() is not None:
+            sys.exception().add_note(str(errors[0]))
+        raise
+
+
+def _require_retained_windows_tree(
+    root: Path,
+    root_handle: int,
+    retained: list[_RetainedWindowsTreeEntry],
+) -> None:
+    root_state = file_stat_module._windows_handle_stat(root_handle)  # noqa: SLF001
+    visible_root = path_file_stat(root)
+    if (
+        is_link_or_reparse(root_state)
+        or is_link_or_reparse(visible_root)
+        or not stat.S_ISDIR(root_state.st_mode)
+        or not stat.S_ISDIR(visible_root.st_mode)
+        or file_identity(root_state) != file_identity(visible_root)
+    ):
+        raise DirectoryPublishError("Retained Windows cleanup root changed")
+    expected_paths = {entry.path for entry in retained}
+    current_paths: set[Path] = set()
+    pending = [root]
+    while pending:
+        directory = pending.pop()
+        for child in directory.iterdir():
+            current_paths.add(child)
+            info = path_file_stat(child)
+            if stat.S_ISDIR(info.st_mode) and not is_link_or_reparse(info):
+                pending.append(child)
+    if current_paths != expected_paths:
+        raise DirectoryPublishError(
+            "Retained Windows cleanup tree namespace changed before deletion"
+        )
+    for entry in retained:
+        opened = file_stat_module._windows_handle_stat(entry.handle)  # noqa: SLF001
+        named = path_file_stat(entry.path)
+        if (
+            _stable_source_state(opened) != entry.state
+            or _stable_source_state(named) != entry.state
+        ):
+            raise DirectoryPublishError(
+                f"Retained Windows cleanup entry changed before deletion: {entry.path}"
+            )
+
+
+def _close_retained_windows_entries(
+    retained: list[_RetainedWindowsTreeEntry],
+) -> None:
+    errors: list[DirectoryPublishError] = []
+    for entry in reversed(retained):
+        if entry.handle == 0:
+            continue
+        try:
+            _windows_close_cleanup_handle(entry.handle)
+            entry.handle = 0
+        except DirectoryPublishError as exc:
+            errors.append(exc)
+    if errors:
+        raise errors[0]
+
+
+def _windows_remove_retained_directory(
+    path: Path,
+    expected_identity: DirectoryIdentity,
+    *,
+    recursive: bool,
+    verify: Callable[[Path], None] | None = None,
+    verify_retained: RetainedDirectoryVerifier | None = None,
+    retained_parent: PinnedOutputParent | None = None,
+) -> None:
+    if retained_parent is None:
+        handle = _windows_open_delete_handle(
+            path,
+            expected_identity,
+            directory=True,
+        )
+    else:
+        api = retained_parent.windows_api
+        parent_handle = retained_parent.windows_parent_handle
+        if api is None or parent_handle is None:
+            raise DirectoryPublishError("Retained Windows cleanup parent is unavailable")
+        try:
+            handle = api.open_existing_directory_strict(
+                parent_handle,
+                path.name,
+                delete=True,
+            )
+            opened = api.strict_directory_info(
+                handle,
+                context=f"retained cleanup directory {path.name}",
+            )
+            if file_identity(opened) != expected_identity:
+                raise DirectoryPublishError("Windows cleanup target identity changed")
+        except BaseException:
+            if "handle" in locals():
+                try:
+                    api.close(handle)
+                except AssetContractError as cleanup_error:
+                    if sys.exception() is not None:
+                        sys.exception().add_note(str(cleanup_error))
+            raise
+    retained: list[_RetainedWindowsTreeEntry] = []
+    namespace_mutated = False
+    try:
+        retained = _retain_windows_directory_tree(path, handle)
+        if retained and not recursive:
+            raise DirectoryPublishError("Claimed empty Windows directory is no longer empty")
+        if verify_retained is not None:
+            verify_retained(path, None)
+        elif verify is not None:
+            verify(path)
+        _require_retained_windows_tree(path, handle, retained)
+        for entry in sorted(
+            retained,
+            key=lambda item: (
+                item.directory,
+                -item.depth,
+                str(item.path),
+            ),
+        ):
+            _windows_mark_handle_for_deletion(entry.handle, entry.path)
+            _windows_close_cleanup_handle(entry.handle)
+            entry.handle = 0
+            namespace_mutated = True
+        _require_expected_directory(
+            file_stat_module._windows_handle_stat(handle),  # noqa: SLF001
+            expected_identity,
+            context="guarded Windows cleanup directory",
+        )
+        _windows_mark_handle_for_deletion(handle, path)
+    except DirectoryPublishIndeterminateError:
+        raise
+    except DirectoryPublishError as exc:
+        if namespace_mutated:
+            raise DirectoryPublishIndeterminateError(
+                "Retained Windows directory cleanup stopped after deleting an exact owned subset"
+            ) from exc
+        raise
+    except OSError as exc:
+        if namespace_mutated:
+            raise DirectoryPublishIndeterminateError(
+                "Retained Windows directory cleanup durability is indeterminate"
+            ) from exc
+        raise DirectoryPublishError(
+            f"Could not remove retained Windows directory {path}: {exc}"
+        ) from exc
+    finally:
+        primary = sys.exception()
+        try:
+            _close_retained_windows_entries(retained)
+        except DirectoryPublishError as cleanup_error:
+            if primary is not None:
+                primary.add_note(str(cleanup_error))
+            else:
+                primary = cleanup_error
+        try:
+            _windows_close_cleanup_handle(handle)
+        except DirectoryPublishError as cleanup_error:
+            if primary is not None:
+                primary.add_note(str(cleanup_error))
+            else:
+                raise
+        if primary is not None and sys.exception() is None:
+            raise primary
+
+
+def _remove_retained_directory(
+    parent: Path,
+    claim_name: str,
+    expected_identity: DirectoryIdentity,
+    *,
+    recursive: bool,
+    verify: Callable[[Path], None] | None = None,
+    verify_retained: RetainedDirectoryVerifier | None = None,
+    retained_parent: PinnedOutputParent | None = None,
+) -> None:
+    if sys.platform.startswith("linux") and os.name == "posix":
+        _posix_remove_retained_directory(
+            parent,
+            claim_name,
+            expected_identity,
+            recursive=recursive,
+            verify=verify,
+            verify_retained=verify_retained,
+            retained_parent_fd=(None if retained_parent is None else retained_parent.parent_fd),
+        )
+        return
+    if os.name == "nt":
+        _windows_remove_retained_directory(
+            parent / claim_name,
+            expected_identity,
+            recursive=recursive,
+            verify=verify,
+            verify_retained=verify_retained,
+            retained_parent=retained_parent,
+        )
+        return
+    raise DirectoryPublishError(
+        "Identity-bound directory removal is supported only on Linux and Windows"
+    )
+
+
+def quarantine_and_remove_verified_directory(
+    path: Path,
+    expected_identity: DirectoryIdentity,
+    *,
+    verify: Callable[[Path], None] | None = None,
+    verify_retained: RetainedDirectoryVerifier | None = None,
+    retained_parent: PinnedOutputParent | None = None,
+) -> None:
+    """Remove only a verified owned directory through an identity-bound primitive."""
+
+    if (verify is None) == (verify_retained is None):
+        raise DirectoryPublishError("Exactly one retained directory verifier is required")
+
+    if directory_identity(path, context="rollback directory") != expected_identity:
+        raise DirectoryPublishError("Rollback directory identity no longer matches its journal")
+
+    def remove_and_check(parent: PinnedOutputParent) -> None:
+        if Path(os.path.abspath(path.parent)) != parent.path:
+            raise DirectoryPublishError("D3 retained parent does not match its stage path")
+        parent.assert_current()
+        _remove_retained_directory(
+            path.parent,
+            path.name,
+            expected_identity,
+            recursive=True,
+            verify=verify,
+            verify_retained=verify_retained,
+            retained_parent=parent,
+        )
+        require_pinned_names_absent(
+            parent,
+            (path.name,),
+            context="D3 verified stage cleanup",
+        )
+
+    if retained_parent is not None:
+        remove_and_check(retained_parent)
+        return
+    try:
+        with open_verified_output_parent(path.parent, create=False) as parent:
+            remove_and_check(parent)
+    except DirectoryPublishIndeterminateError:
+        raise
+    except AssetContractError as exc:
+        raise DirectoryPublishIndeterminateError(
+            "D3 verified stage cleanup parent outcome is indeterminate"
+        ) from exc
+
+
+def remove_verified_empty_directory(
+    path: Path,
+    expected_identity: DirectoryIdentity,
+    *,
+    retained_parent: PinnedOutputParent | None = None,
+) -> None:
+    """Claim and remove an empty owned directory without deleting a replacement."""
+
+    try:
+        info = path_file_stat(path)
+    except FileNotFoundError as exc:
+        raise DirectoryPublishError(
+            "Created directory disappeared before identity-bound removal"
+        ) from exc
+    except OSError as exc:
+        raise DirectoryPublishError(f"Could not inspect created directory {path}: {exc}") from exc
+    if is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
+        raise DirectoryPublishError("Created directory is no longer a real directory")
+    if file_identity(info) != expected_identity:
+        raise DirectoryPublishError("Created directory identity no longer matches its journal")
+    try:
+        next(path.iterdir())
+    except StopIteration:
+        pass
+    except FileNotFoundError as exc:
+        raise DirectoryPublishError(
+            "Created directory disappeared during empty-directory verification"
+        ) from exc
+    except OSError as exc:
+        raise DirectoryPublishError(
+            f"Could not inspect created directory contents {path}: {exc}"
+        ) from exc
+    else:
+        raise DirectoryPublishError("Created directory is no longer empty")
+
+    def remove_and_check(parent: PinnedOutputParent) -> None:
+        if Path(os.path.abspath(path.parent)) != parent.path:
+            raise DirectoryPublishError("D3 retained parent does not match its stage path")
+        parent.assert_current()
+        _remove_retained_directory(
+            path.parent,
+            path.name,
+            expected_identity,
+            recursive=False,
+            retained_parent=parent,
+        )
+        require_pinned_names_absent(
+            parent,
+            (path.name,),
+            context="D3 empty stage cleanup",
+        )
+
+    if retained_parent is not None:
+        remove_and_check(retained_parent)
+        return
+    try:
+        with open_verified_output_parent(path.parent, create=False) as parent:
+            remove_and_check(parent)
+    except DirectoryPublishIndeterminateError:
+        raise
+    except AssetContractError as exc:
+        raise DirectoryPublishIndeterminateError(
+            "D3 empty stage cleanup parent outcome is indeterminate"
+        ) from exc
+
+
+def _posix_remove_claimed_directory(
+    parent: Path,
+    claim_name: str,
+    expected_identity: DirectoryIdentity,
+    *,
+    recursive: bool,
+) -> None:
+    """Preserve the legacy fail-closed descriptor-unlink cleanup contract."""
+
+    required_dir_fd = (os.open, os.stat)
+    if (
+        not sys.platform.startswith("linux")
+        or os.name != "posix"
+        or any(operation not in os.supports_dir_fd for operation in required_dir_fd)
+        or os.scandir not in os.supports_fd
+    ):
+        raise DirectoryPublishError("Identity-bound POSIX directory removal is unavailable")
+    flags = (
+        os.O_RDONLY
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        parent_descriptor = os.open(parent, flags)
+    except OSError as exc:
+        raise DirectoryPublishError(
+            f"Could not open claimed directory parent {parent}: {exc}"
+        ) from exc
+    claim_descriptor: int | None = None
+    try:
+        parent_info = descriptor_file_stat(parent_descriptor)
+        if is_link_or_reparse(parent_info) or not stat.S_ISDIR(parent_info.st_mode):
+            raise DirectoryPublishError("Claimed directory parent is not a real directory")
+        claim_descriptor = os.open(
+            claim_name,
+            flags,
+            dir_fd=parent_descriptor,
+        )
+        opened = descriptor_file_stat(claim_descriptor)
+        _require_expected_directory(
+            opened,
+            expected_identity,
+            context="claimed directory",
+        )
+        if _posix_preflight_directory_deletion(
+            claim_descriptor,
+            recursive=recursive,
+        ):
+            return
+        _posix_unlink_descriptor(claim_descriptor, directory=True)
+    except DirectoryPublishError:
+        raise
+    except OSError as exc:
+        raise DirectoryPublishError(
+            f"Could not remove claimed directory {parent / claim_name}: {exc}"
+        ) from exc
+    finally:
+        descriptors = (
+            (
+                (claim_descriptor, "claimed directory descriptor cleanup"),
+                (
+                    parent_descriptor,
+                    "claimed directory parent descriptor cleanup",
+                ),
+            )
+            if claim_descriptor is not None
+            else (
+                (
+                    parent_descriptor,
+                    "claimed directory parent descriptor cleanup",
+                ),
+            )
+        )
+        _close_descriptors(descriptors)
+
+
 def _windows_remove_claimed_directory(
     path: Path,
     expected_identity: DirectoryIdentity,
     *,
     recursive: bool,
 ) -> None:
+    """Preserve the legacy empty-only Windows cleanup contract."""
+
     handle = _windows_open_delete_handle(
         path,
         expected_identity,
@@ -2512,7 +4349,7 @@ def quarantine_and_remove_owned_directory(
     *,
     verify: Callable[[Path], None],
 ) -> None:
-    """Remove only a verified owned directory through an identity-bound primitive."""
+    """Use the unchanged legacy cleanup boundary for existing bundle formats."""
 
     if directory_identity(path, context="rollback directory") != expected_identity:
         raise DirectoryPublishError("Rollback directory identity no longer matches its journal")
@@ -2538,7 +4375,7 @@ def quarantine_and_remove_owned_directory(
 
 
 def remove_owned_empty_directory(path: Path, expected_identity: DirectoryIdentity) -> None:
-    """Claim and remove an empty owned directory without deleting a replacement."""
+    """Use the unchanged legacy empty-directory cleanup boundary."""
 
     try:
         info = path_file_stat(path)

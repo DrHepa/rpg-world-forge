@@ -11,6 +11,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from isoworld.content.portability import is_portable_path_component
+from isoworld.runtime_io import RuntimeIOError, decode_json_object
+from worldforge.asset_io import AssetContractError, BoundFileBytes, read_bound_bytes
+from worldforge.project import SourceProjectError, source_manifest_documents
 from worldforge.repository_boundary import assert_new_repository_target
 from worldforge.scaffold import ScaffoldError
 from worldforge.validation import BCP47_PATTERN, ID_PATTERN
@@ -24,8 +27,13 @@ from worldforge.workflow import (
 from worldforge.world_lock import exclusive_world_lifecycle
 
 PROJECT_FORMAT = "rpg-world-forge.project"
-PROJECT_VERSION = 2
+PROJECT_COMPATIBILITY_VERSION = 2
+PROJECT_VERSION = 3
 PROJECT_KIND = "world"
+PROJECT_REPOSITORIES = {
+    PROJECT_COMPATIBILITY_VERSION: "rpg-world-forge",
+    PROJECT_VERSION: "world-forge",
+}
 STABLE_SEMVER_PATTERN = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
@@ -75,6 +83,19 @@ _ASSET_GENERATION_KEYS = {
 }
 _DERIVED_FROM_KEYS = {"world_content_hash", "world_id", "world_version"}
 _GENERATION_ROUTES = {"modly", "openai"}
+_WORLD_ALLOWED_KEYS = {
+    "capabilities",
+    "default_locale",
+    "id",
+    "language",
+    "runtime_requirements",
+    "simulation",
+    "start_map_id",
+    "supported_locales",
+    "title",
+    "ui",
+    "version",
+}
 
 
 @dataclass(frozen=True, order=True, slots=True)
@@ -130,6 +151,7 @@ class _ProjectFiles:
     project: dict[str, Any]
     world: dict[str, Any]
     status: dict[str, Any]
+    controls: dict[Path, BoundFileBytes]
 
 
 def parse_stable_semver(value: object) -> StableSemVer:
@@ -147,19 +169,27 @@ def _object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, An
 
 def _read_object(path: Path, *, error_type: type[ValueError]) -> dict[str, Any]:
     try:
-        if path.is_symlink() or not path.is_file():
-            raise OSError("not a regular file")
-        if path.stat().st_size > _MAX_CONTROL_BYTES:
-            raise OSError(f"exceeds {_MAX_CONTROL_BYTES} bytes")
-        value = json.loads(
-            path.read_text(encoding="utf-8"),
-            object_pairs_hook=_object_without_duplicate_keys,
+        captured = read_bound_bytes(path, limit=_MAX_CONTROL_BYTES)
+        value = decode_json_object(
+            captured.payload,
+            source=path,
         )
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    except (AssetContractError, RuntimeIOError) as exc:
         raise error_type(f"Could not read {path}: {exc}") from exc
-    if not isinstance(value, dict):
-        raise error_type(f"{path} must contain an object")
     return value
+
+
+def _read_bound_object(
+    path: Path,
+    *,
+    error_type: type[ValueError],
+) -> tuple[BoundFileBytes, dict[str, Any]]:
+    try:
+        captured = read_bound_bytes(path, limit=_MAX_CONTROL_BYTES)
+        value = decode_json_object(captured.payload, source=path)
+    except (AssetContractError, RuntimeIOError) as exc:
+        raise error_type(f"Could not read {path}: {exc}") from exc
+    return captured, value
 
 
 def _encoded_json(value: object) -> bytes:
@@ -217,7 +247,7 @@ def _exclusive_lifecycle_lock(project_root: str | Path):
     return exclusive_world_lifecycle(project_root, error_type=WorkflowError)
 
 
-def _validate_v2_project_control(project: dict[str, Any]) -> None:
+def _validate_project_control(project: dict[str, Any], format_version: int) -> None:
     keys = set(project)
     missing = sorted(_PROJECT_REQUIRED_KEYS - keys)
     extra = sorted(keys - _PROJECT_ALLOWED_KEYS)
@@ -231,8 +261,14 @@ def _validate_v2_project_control(project: dict[str, Any]) -> None:
         raise WorkflowError("World-project approval_mode must be a non-empty string")
     if project.get("runtime_ai") is not False:
         raise WorkflowError("World-project runtime_ai must be false")
-    if project.get("tool_repository") != "rpg-world-forge":
-        raise WorkflowError("World-project tool_repository must be rpg-world-forge")
+    expected_repository = PROJECT_REPOSITORIES.get(format_version)
+    if expected_repository is None:
+        raise WorkflowError("Unsupported world-project format version")
+    if project.get("tool_repository") != expected_repository:
+        raise WorkflowError(
+            "World-project tool_repository must be "
+            f"{expected_repository} for format version {format_version}"
+        )
     if "language" in project:
         language = project["language"]
         if not isinstance(language, str) or BCP47_PATTERN.fullmatch(language) is None:
@@ -310,6 +346,15 @@ def _require_regular_source_file(
 
 
 def _validate_source_manifest(source_root: Path, manifest: dict[str, Any]) -> None:
+    try:
+        _world, closed_collections = source_manifest_documents(manifest)
+    except SourceProjectError as exc:
+        raise WorkflowError(str(exc)) from exc
+    missing_collections = {"actors", "maps", "tile_types"} - set(closed_collections)
+    if missing_collections:
+        raise WorkflowError(
+            "Source manifest collections are missing: " + ", ".join(sorted(missing_collections))
+        )
     manifest_version = manifest.get("format_version")
     if (
         manifest.get("format") != "isoworld.source_manifest"
@@ -380,13 +425,17 @@ def inspect_world_project_snapshot(
             raise error_type("Legacy world project requires explicit upgrade")
         if raw_kind not in {None, PROJECT_KIND}:
             raise error_type("Legacy project_kind must be world when present")
-    elif raw_version != PROJECT_VERSION or raw_kind != PROJECT_KIND:
-        raise error_type("Only world-project format version 2 is supported")
+    elif raw_version not in PROJECT_REPOSITORIES or raw_kind != PROJECT_KIND:
+        raise error_type("Only world-project format versions 2 and 3 are supported")
     else:
         try:
-            _validate_v2_project_control(project)
+            _validate_project_control(project, raw_version)
         except WorkflowError as exc:
             raise error_type(str(exc)) from exc
+
+    extra_world_keys = sorted(set(world) - _WORLD_ALLOWED_KEYS)
+    if extra_world_keys:
+        raise error_type("World source control has unknown fields: " + ", ".join(extra_world_keys))
 
     world_id = project.get("world_id")
     if (
@@ -454,24 +503,29 @@ def _inspect_files(
     error_type: type[ValueError],
     _status: dict[str, Any] | None = None,
 ) -> _ProjectFiles:
-    root_input = Path(project_root)
-    if root_input.is_symlink():
-        raise error_type("The world project root cannot be a symbolic link")
-    root = root_input.resolve()
-    if not root.is_dir():
-        raise error_type(f"The world project does not exist: {root}")
-    project = _read_object(root / ".worldforge/project.json", error_type=error_type)
-    manifest = _read_object(root / "source/manifest.json", error_type=error_type)
+    root = Path(os.path.abspath(Path(project_root)))
+    control_paths = (
+        Path(".worldforge/project.json"),
+        Path(".worldforge/status.json"),
+        Path("source/manifest.json"),
+        Path("source/world.json"),
+    )
+    controls: dict[Path, BoundFileBytes] = {}
+    values: dict[Path, dict[str, Any]] = {}
+    for relative in control_paths:
+        captured, value = _read_bound_object(root / relative, error_type=error_type)
+        controls[relative] = captured
+        values[relative] = value
+    project = values[Path(".worldforge/project.json")]
+    manifest = values[Path("source/manifest.json")]
     try:
         _validate_source_manifest(root / "source", manifest)
     except WorkflowError as exc:
         raise error_type(str(exc)) from exc
-    world = _read_object(root / "source/world.json", error_type=error_type)
-    status = (
-        _read_object(root / ".worldforge/status.json", error_type=error_type)
-        if _status is None
-        else _status
-    )
+    world = values[Path("source/world.json")]
+    status = values[Path(".worldforge/status.json")]
+    if _status is not None and status != _status:
+        raise error_type("Workflow status changed during lifecycle validation")
 
     inspection = inspect_world_project_snapshot(
         root,
@@ -481,14 +535,20 @@ def _inspect_files(
         allow_legacy=allow_legacy,
         error_type=error_type,
     )
-    return _ProjectFiles(inspection, project, world, status)
+    after = {
+        relative: _read_bound_object(root / relative, error_type=error_type)[0]
+        for relative in control_paths
+    }
+    if controls != after:
+        raise error_type("World-project controls changed during lifecycle validation")
+    return _ProjectFiles(inspection, project, world, status, controls)
 
 
 def _load_canonical_status_unlocked(
     project_root: str | Path,
     status: dict[str, Any],
 ) -> dict[str, Any]:
-    """Bind a pre-read status to canonical v2 project controls; caller owns the lock."""
+    """Bind a pre-read status to canonical v2/v3 project controls; caller owns the lock."""
 
     return _inspect_files(
         project_root,
@@ -499,14 +559,13 @@ def _load_canonical_status_unlocked(
 
 
 def inspect_world_project(project_root: str | Path) -> WorldProjectInspection:
-    """Inspect a canonical v2 world-authoring repository without importing content."""
+    """Inspect a canonical v2/v3 world-authoring repository without importing content."""
 
-    with _exclusive_lifecycle_lock(project_root) as locked_root:
-        return _inspect_files(
-            locked_root,
-            allow_legacy=False,
-            error_type=WorkflowError,
-        ).inspection
+    return _inspect_files(
+        project_root,
+        allow_legacy=False,
+        error_type=WorkflowError,
+    ).inspection
 
 
 def _copy_regular_file(source: Path, destination: Path) -> None:
@@ -586,7 +645,7 @@ def _copy_asset_inputs(source_root: Path, target_root: Path) -> bool:
 def _write_world_authoring_docs(root: Path, title: str) -> None:
     (root / "README.md").write_text(
         f"# {title}\n\n"
-        "This is an independent world-authoring repository created with RPG World Forge. "
+        "This is an independent world-authoring repository created with World Forge. "
         "It owns reviewed canon, structured source, workflow evidence, and asset-production "
         "inputs. It is not a game repository and contains no game runtime.\n\n"
         "A separate game repository may consume only an immutable, validated runtime bundle; "
@@ -626,7 +685,7 @@ def clone_world_project(
     title: str,
     version: str = "0.1.0",
 ) -> Path:
-    """Create a new v2 world-authoring repository derived from another v2 world."""
+    """Create a new v3 world-authoring repository derived from a v2/v3 world."""
 
     try:
         with _exclusive_lifecycle_lock(source_root) as locked_source:
@@ -704,6 +763,7 @@ def _clone_world_project_locked(
                 "format": PROJECT_FORMAT,
                 "format_version": PROJECT_VERSION,
                 "project_kind": PROJECT_KIND,
+                "tool_repository": PROJECT_REPOSITORIES[PROJECT_VERSION],
                 "world_id": world_id,
                 "title": title.strip(),
                 "world_version": target_version,
@@ -820,17 +880,18 @@ def upgrade_legacy_world_project(
             error_type=WorkflowError,
         )
         if not files.inspection.legacy:
-            raise WorkflowError("The world project is already format version 2")
+            raise WorkflowError("The world project is already format version 2 or 3")
 
         project = dict(files.project)
         project.update(
             {
-                "format_version": PROJECT_VERSION,
+                "format_version": PROJECT_COMPATIBILITY_VERSION,
                 "project_kind": PROJECT_KIND,
+                "tool_repository": PROJECT_REPOSITORIES[PROJECT_COMPATIBILITY_VERSION],
                 "world_version": normalized,
             }
         )
-        _validate_v2_project_control(project)
+        _validate_project_control(project, PROJECT_COMPATIBILITY_VERSION)
         world = dict(files.world)
         world["version"] = normalized
         status = _invalidated_status(files.status, normalized)
@@ -923,3 +984,20 @@ def bump_world_version(
             }
         )
         return new_version
+
+
+def migrate_world_project(
+    project_root: str | Path,
+    *,
+    expected_source_hash: str,
+    mode: str,
+) -> dict[str, object]:
+    """Dry-run or apply the explicit v2 to v3 repository-identity migration."""
+
+    from worldforge.world_project_migration import migrate_world_project as migrate
+
+    return migrate(
+        project_root,
+        expected_source_hash=expected_source_hash,
+        mode=mode,
+    )

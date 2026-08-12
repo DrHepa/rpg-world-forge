@@ -1,0 +1,57 @@
+{
+  "artifacts": [
+    {
+      "content_hash": "2f6fded3fdf5034706f5eaadd9ca8e9ca3c889adce0754c3ae44512ba73f00e7",
+      "format": "world-forge.game_analysis",
+      "format_version": 1,
+      "id": "analysis_cadf114a3e2ed9a7"
+    },
+    {
+      "content_hash": "cadf114a3e2ed9a74d8664137c2a09888e5383468fbb98e9ded7bd79acbca506",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "action_framing"
+    }
+  ],
+  "content_hash": "d5514a6031422ae0e56b8eeac849db22b99a0828ed733476aa405d71a5305ddb",
+  "format": "world-forge.creation_handoff",
+  "format_version": 1,
+  "handoff_id": "handoff_491baff04898ce5dd3fd495d",
+  "handoff_status": "authoring_ready",
+  "profile": {
+    "content_hash": "de17d92a8781a925ee26586d07c7f14f72a80b8153e517aaf3ebde67a97349b3",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "action_framing_profile"
+  },
+  "project": {
+    "content_hash": "b6ab5caff4927c6cbe7bdb9d7a867463e542aae407443cc10c25d362fba9f568",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "action_framing"
+  },
+  "readiness": {
+    "content_hash": "70365ae25422784143f62fff422fb52476651d258ae34d0da4e205b6dd2caf1a",
+    "format": "world-forge.creation_readiness",
+    "format_version": 1,
+    "id": "readiness_9192fb65a7cc05000801300e"
+  },
+  "release_blockers": [
+    "assets_not_sealed",
+    "native_evidence_missing",
+    "packaging_evidence_missing",
+    "runtime_adapter_not_requested"
+  ],
+  "source_manifest": {
+    "content_hash": "942f0078f72362503e7ac65c4622e8660e81ba47e15173a304c5b7d6848fec38",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "action_framing"
+  },
+  "workflow_status": {
+    "content_hash": "de8a821885b4b27b8a80795f7eba5d77ee0b2d91bff2c18728988fa7e930c712",
+    "format": "world-forge.creation_workflow_status",
+    "format_version": 1,
+    "id": "action_framing_workflow"
+  }
+}

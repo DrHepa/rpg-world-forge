@@ -1,0 +1,53 @@
+{
+  "content_hash": "ddba42621a9e6477aa37e63183660d08d9b67acc83eda686879c507e0ce7f869",
+  "extensions": [],
+  "format": "world-forge.creation_source_manifest",
+  "format_version": 1,
+  "modules": {
+    "activity_modules": [
+      {
+        "content_hash": "dabd9b44d9cb2b0482d8cfd1c2be3668b4192e38541fa6ac73efd3217343a1b3",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "action_framing_activities",
+        "path": "activities/action_framing.json"
+      }
+    ],
+    "logic_modules": [
+      {
+        "content_hash": "7295f2700c70a23d3982683704b74f9b956c22722efc46810c233025efc16239",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "action_framing_logic",
+        "path": "logic/action_framing.json"
+      }
+    ],
+    "narrative_modules": [],
+    "system_modules": [
+      {
+        "content_hash": "a5954536490b649db2e82d1ef594e3055f90ac829b9876e91f3c64c67a0e3f62",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "action_framing_systems",
+        "path": "systems/action_framing.json"
+      }
+    ],
+    "world_modules": [
+      {
+        "content_hash": "31632bcf802e1e602ae5b35e0ee059286a54fd23514ad4dcdefb3a9f55dfb088",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "action_framing_space",
+        "path": "world/action_framing.json"
+      }
+    ]
+  },
+  "profile": {
+    "content_hash": "044edde63f1f9aaaf053628df66ff985a7e796fb413cc16b9847c6275342b0c6",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "action_framing_profile",
+    "path": "profile.json"
+  },
+  "project_id": "action_framing"
+}

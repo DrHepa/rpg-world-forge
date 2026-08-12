@@ -1,0 +1,529 @@
+{
+  "$defs": {
+    "adapterIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_version": {
+          "$ref": "#/$defs/semver"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.runtime_adapter"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "pattern": "^runtime/snapshot-tree/descriptors/[a-z][a-z0-9_]{1,63}@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.json$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "id",
+        "adapter_version",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "assetpackIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.assetpack"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "const": "assetpack/assetpack.json"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "binding": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/id"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "bundle_path": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/path"
+            },
+            {
+              "pattern": "^assetpack/",
+              "type": "string"
+            }
+          ]
+        },
+        "media_type": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/id"
+        },
+        "runtime_path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "maximum": 4194304,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "binding_id",
+        "asset_id",
+        "role",
+        "media_type",
+        "runtime_path",
+        "bundle_path",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "compositionIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.game_runtime_composition"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "const": "contracts/runtime-composition.json"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "maximum": 4194304,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "gamepackIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.gamepack"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "const": "contracts/gamepack.json"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?![./])(?!.*/(?:\\.{1,2})(?:/|$))(?!(?:.*[/])?(?:aux|con|nul|prn|com[1-9]|lpt[1-9])(?:[./]|$))[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*(?:/[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*)*$",
+      "type": "string"
+    },
+    "registryIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.runtime_adapter_registry"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "const": "contracts/runtime-adapter-registry.json"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "semver": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "snapshotIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.game_runtime_snapshot"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "const": "contracts/runtime-snapshot.json"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "supportIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.runtime_support_report"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "const": "status/runtime-support-report.json"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/game-runtime-bundle.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assetpack": {
+      "additionalProperties": false,
+      "properties": {
+        "inventory_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "manifest": {
+          "$ref": "#/$defs/assetpackIdentity"
+        },
+        "root": {
+          "const": "assetpack"
+        },
+        "root_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "root",
+        "manifest",
+        "root_hash",
+        "inventory_hash"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "items": {
+        "$ref": "#/$defs/binding"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "binding_id"
+        ],
+        "uniqueBy": [
+          [
+            "binding_id"
+          ]
+        ]
+      }
+    },
+    "bundle_id": {
+      "pattern": "^game_runtime_bundle_[0-9a-f]{48}$",
+      "type": "string"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "contracts": {
+      "additionalProperties": false,
+      "properties": {
+        "gamepack": {
+          "$ref": "#/$defs/gamepackIdentity"
+        },
+        "runtime_adapter": {
+          "$ref": "#/$defs/adapterIdentity"
+        },
+        "runtime_adapter_registry": {
+          "$ref": "#/$defs/registryIdentity"
+        },
+        "runtime_composition": {
+          "$ref": "#/$defs/compositionIdentity"
+        },
+        "runtime_snapshot": {
+          "$ref": "#/$defs/snapshotIdentity"
+        },
+        "runtime_support_report": {
+          "$ref": "#/$defs/supportIdentity"
+        }
+      },
+      "required": [
+        "gamepack",
+        "runtime_snapshot",
+        "runtime_adapter",
+        "runtime_adapter_registry",
+        "runtime_composition",
+        "runtime_support_report"
+      ],
+      "type": "object"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/file"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true,
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "path"
+        ],
+        "uniqueBy": [
+          [
+            "path"
+          ]
+        ]
+      }
+    },
+    "format": {
+      "const": "world-forge.game_runtime_bundle"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "legal": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_notices": {
+          "items": {
+            "$ref": "#/$defs/file"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true,
+          "x-world-forge-canonical-object-array": {
+            "orderBy": [
+              "path"
+            ],
+            "uniqueBy": [
+              [
+                "path"
+              ]
+            ]
+          }
+        },
+        "bundle_license": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/file"
+            },
+            {
+              "properties": {
+                "path": {
+                  "const": "licenses/world-forge-mit.txt"
+                },
+                "sha256": {
+                  "const": "2e55c53ff294650e049d844f2544fec947c3516440aeffca4b2334cf94b13eeb"
+                },
+                "size_bytes": {
+                  "const": 1063
+                }
+              },
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "required": [
+        "bundle_license",
+        "asset_notices"
+      ],
+      "type": "object"
+    },
+    "runtime_snapshot_tree": {
+      "additionalProperties": false,
+      "properties": {
+        "file_count": {
+          "maximum": 256,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "root": {
+          "const": "runtime/snapshot-tree"
+        },
+        "runtime_api": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "const": "gamepack_runtime"
+            },
+            "version": {
+              "const": "1.0.0"
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ],
+          "type": "object"
+        },
+        "total_bytes": {
+          "maximum": 33554432,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "tree_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "root",
+        "runtime_api",
+        "tree_hash",
+        "file_count",
+        "total_bytes"
+      ],
+      "type": "object"
+    },
+    "state": {
+      "const": "pre_execution"
+    },
+    "tree_hash": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "bundle_id",
+    "state",
+    "contracts",
+    "assetpack",
+    "runtime_snapshot_tree",
+    "bindings",
+    "legal",
+    "files",
+    "tree_hash",
+    "content_hash"
+  ],
+  "title": "World Forge pre-execution game runtime bundle v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-game-runtime-bundle-coherent": true
+}

@@ -1,0 +1,25 @@
+{
+  "content_hash": "c7057ae7b5f9a996a650a76a4088088b8c1c4e018e10e730465f43c6bbb13c16",
+  "default_locale": "en",
+  "extensions": [],
+  "format": "world-forge.project",
+  "format_version": 1,
+  "profile": {
+    "content_hash": "044edde63f1f9aaaf053628df66ff985a7e796fb413cc16b9847c6275342b0c6",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "action_framing_profile",
+    "path": "profile.json"
+  },
+  "project_id": "action_framing",
+  "project_kind": "game",
+  "project_version": "1.0.0",
+  "source_manifest": {
+    "content_hash": "ddba42621a9e6477aa37e63183660d08d9b67acc83eda686879c507e0ce7f869",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "action_framing",
+    "path": "source/manifest.json"
+  },
+  "title": "Action Framing"
+}

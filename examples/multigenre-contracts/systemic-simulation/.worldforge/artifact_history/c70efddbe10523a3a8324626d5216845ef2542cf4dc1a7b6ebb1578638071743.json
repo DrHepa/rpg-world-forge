@@ -1,0 +1,45 @@
+{
+  "activities": [
+    {
+      "activity_type": "scenario",
+      "asset_binding_ids": [],
+      "effect_ids": [
+        "increment_moves",
+        "reset_board",
+        "reset_move_count",
+        "swap_tiles"
+      ],
+      "end_condition_ids": [
+        "board_solved"
+      ],
+      "event_ids": [
+        "restart_requested",
+        "tile_swapped"
+      ],
+      "failure_condition_ids": [],
+      "id": "symbol_board",
+      "participant_ids": [],
+      "presentation_hook_ids": [
+        "board_feedback",
+        "board_view"
+      ],
+      "provenance": "authored neutral systemic-simulation fixture",
+      "spatial_context_ids": [],
+      "start_condition_ids": [
+        "board_ready"
+      ],
+      "success_condition_ids": [
+        "board_solved"
+      ],
+      "title": "Bounded system scenario",
+      "validation_profile": "bounded_exhaustive"
+    }
+  ],
+  "content_hash": "c70efddbe10523a3a8324626d5216845ef2542cf4dc1a7b6ebb1578638071743",
+  "extensions": [],
+  "format": "world-forge.activity_module",
+  "format_version": 1,
+  "module_id": "simulation_activities",
+  "project_id": "systemic_simulation",
+  "title": "Systemic simulation activities"
+}

@@ -1,0 +1,127 @@
+{
+  "adapter": {
+    "adapter_id": null,
+    "adapter_version": null,
+    "status": "absent"
+  },
+  "content_hash": "1bfb0093f116b1632aa09de8cfb46eade501f1d74037cae5af8d787511c3a533",
+  "features": [
+    {
+      "extension": null,
+      "feature_id": "action:realtime_combat",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "extension": null,
+      "feature_id": "logic:deterministic_actions",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "extension": null,
+      "feature_id": "logic:finite_state",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    }
+  ],
+  "format": "world-forge.mechanic_capability_ledger",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "cadf114a3e2ed9a74d8664137c2a09888e5383468fbb98e9ded7bd79acbca506",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "action_framing"
+  },
+  "ledger_id": "action_framing_authoring_capabilities",
+  "mechanics": [
+    {
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "authoritative_state_ids": [
+        "mission_progress",
+        "mission_time_remaining"
+      ],
+      "condition_ids": [
+        "mission_time_available"
+      ],
+      "core_verb_id": "engage",
+      "effect_ids": [
+        "advance_progress",
+        "consume_mission_time"
+      ],
+      "extension": null,
+      "mechanic_id": "objective_engagement",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "advance_rule"
+      ],
+      "runtime_action_id": "engage_objective",
+      "save_replay": {
+        "event_ids": [
+          "progress_advanced"
+        ],
+        "state_ids": [
+          "mission_progress",
+          "mission_time_remaining"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "authoritative_state_ids": [
+        "mission_progress",
+        "mission_time_remaining"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "restart",
+      "effect_ids": [
+        "reset_mission_time",
+        "reset_progress"
+      ],
+      "extension": null,
+      "mechanic_id": "restart_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "restart_rule"
+      ],
+      "runtime_action_id": "restart_scenario",
+      "save_replay": {
+        "event_ids": [
+          "scenario_restarted"
+        ],
+        "state_ids": [
+          "mission_progress",
+          "mission_time_remaining"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    }
+  ]
+}

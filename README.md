@@ -1,24 +1,61 @@
-# RPG World Forge
+# World Forge
 
 [![CI](https://github.com/DrHepa/rpg-world-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/DrHepa/rpg-world-forge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-lilac.svg)](LICENSE)
 
-A toolkit for producing world-agnostic RPG content and a tested 2D/2.5D
-isometric reference runtime in Python with `pyray`/raylib. The authoring
-contracts also cover engine-neutral 3D asset handoff. Runtime data is
-deterministic and works without an LLM, an AI API, or an Internet connection.
+A deterministic authoring-to-execution toolkit for typed multi-genre creation
+projects, immutable generic gamepacks, reviewed/sealed assets, bounded runtime
+adapters, and standalone games. The existing RPG worldpack and tested
+2D/2.5D `isoworld` pyray/raylib runtime remain a backward-compatible reference
+specialization. Runtime data works without an LLM, AI API, or Internet
+connection; runtime AI is forbidden.
 
-This repository contains **the Forge**, not a particular world or game. A world
-authoring repository owns canon, characters, editable content, asset production,
-and release evidence. A separate game repository owns executable code, UX,
-imported immutable bundles, platform CI, and releases. No game-specific lore is
-hardcoded here.
+This repository contains **the Forge**, not a particular world or game. A
+generic creation repository may describe a game, universe library, or asset
+library without forcing lore, actors, narrative, or an RPG structure. Retained
+world-authoring repositories keep their published legacy workflow. A separate
+game repository owns executable code, UX, imported immutable artifacts,
+platform CI, and releases. No game-specific lore is hardcoded here.
 
-AI can assist **outside the game** while designing lore, actors, cultures,
-quests, dialogue, arcs, scenes, maps, schedules, abilities, motivations, and
-knowledge boundaries. Its output is never accepted directly: a human or the
-authorized lead agent reviews it, `worldforge` validates it, and the build step
-compiles it into a static worldpack consumed by the runtime.
+AI can assist **outside the game** with experience design, mechanics, typed
+content, worldbuilding or narrative when applicable, presentation, and assets.
+Its output is never accepted directly: GPT orchestrates, a human or authorized
+lead reviews, `worldforge` validates, and deterministic compilation/sealing
+creates runtime artifacts. Prompts, providers, models, credentials, and mutable
+authoring source never enter a distributed game.
+
+## Architecture lanes
+
+### Generic creation lane
+
+`world-forge.project` v1 and its composable profile lead through typed modules,
+phase-report v3 P00-P14, `world-forge.gamepack` v1, generic D1-D3 assets,
+capability-based runtime resolution, readiness/handoff, and bounded standalone
+materialization. `worldforge new-creation` defaults to the backward-compatible
+neutral `universe_library`, and can explicitly create an `asset_library` or a
+`game`. A game requires independent gameplay, world, narrative, presentation,
+and runtime-support facets; no runtime adapter is inferred from gameplay or
+fiction, so the initial scaffold is authoring input rather than executable or
+release evidence. If a bound upstream identity changes,
+`worldforge reconcile-creation` uses the previously captured workflow
+status hash as a CAS and appends canonical invalidation/history before any
+status, reopen, or completion transition.
+
+### Legacy RPG lane
+
+Published `rpg-world-forge.*` project/source/asset contracts,
+`isoworld.worldpack` v1-v5, saves, replays, bundles, and the bounded
+`isoworld_raylib_2_5d` adapter remain readable and behaviorally separate. They
+are not renamed or widened into a generic union.
+The visible identity is World Forge, while Python imports and the CLI remain
+`worldforge`; the repository remote is not renamed, and app-ID migration remains
+future-gated behind explicit hosted, backup, divergence, retry, rollback, and
+native Windows evidence.
+
+Authoring validity is not runtime executability. See the central
+[`docs/MULTI_GENRE_ARCHITECTURE.md`](docs/MULTI_GENRE_ARCHITECTURE.md) design
+and exact [`docs/SUPPORT_MATRIX.md`](docs/SUPPORT_MATRIX.md) evidence levels
+before interpreting a support claim.
 
 ## Current systemic slice (M5 complete)
 
@@ -63,8 +100,9 @@ packs.
   verifier, native smoke, benchmark, deterministic package, and desktop CI.
 - Canonical `game_data/shared.lock.json` for game-owned common presentation
   assets, including byte/media validation and a hash-bound notices contract.
-- Thirty-seven Forge-only skills: one bounded world, asset-production, or game
-  implementation phase per skill, with no all-in-one game-building skill.
+- Forty-six Forge-only skills: nine bounded generic creation/gamepack/asset/
+  runtime/handoff workflows plus retained one-operation legacy world, M5, and
+  pyray specializations, with no all-in-one game-building skill.
 - Enforced immutable seams: game extensions live under `src/game`; vendored
   runtime snapshots and imported bundles change only through dedicated Forge
   operations.
@@ -119,24 +157,110 @@ hash-locked releases.
 **PARTIAL — local implementation evidence only. Self-contained Studio release
 remains blocked; hosted and native evidence is pending until the final push.**
 
+The canonical generic release-lineage command is
+`python -m scripts.verify_multigenre_release --native off --report <external>`.
+On a supported v1 headless host (Linux x86_64 or Windows x86_64 with CPython
+3.11/3.12), it exercises both executable multi-genre fixtures through
+deterministic compile, real PNG/TTF processing and QA, sealing,
+runtime/materialization, standalone verification, headless save/replay, package
+reproducibility, and extraction. `off` truthfully records native execution as
+untested. ARM64 hosts can run lower-level logic/unit checks, but cannot mint v1
+headless/release evidence or publish a passed deterministic release report. The
+mandatory hosted
+workflow uses `--native required` on Ubuntu 24.04 and Windows Server 2022 with
+Python 3.11 and 3.12, then aggregates all four reports. This hosted result is
+**PENDING** until that exact revision runs green; workflow definition is not
+evidence. The authoritative machine-readable status is
+`docs/evidence/multigenre-release-status.json`.
+
+The executable end-to-end fixtures are `abstract-puzzle` and
+`branching-narrative`; hosted native evidence for the exact reviewed revision
+is still pending. Four additional cases—`action-framing`, `faction-strategy`,
+`modular-roguelite`, and `sports-career`—prove authoring breadth only. Each has
+an exact authored gamepack and 16-file real asset production/QA lineage, but its
+ledger remains `authoring_only` / `adapter_not_evaluated`; adapter execution,
+packaging, and release are unproved and blocked. Across all six asset-bearing
+cases the D2 fixture census is 96 files. A `release_ready` manifest is not a
+sealed assetpack or a released game. The separate `systemic-simulation` case
+has assets `not_applicable` while runtime is requested, so runtime remains
+blocked rather than receiving placeholder assets.
+
 - Forge Studio provides interactive World/lore, Assets, and Game cockpits over
   one durable local service. Source proposals remain exact reviewed changesets;
   neither Codex nor a provider can approve or apply them.
+- Generic Studio editing and fixed controls for compile, asset process/seal,
+  PNG/WAV preview, runtime compose/bundle, materialization bundle/standalone,
+  package, extraction, and headless evidence publication are implemented and
+  locally tested. Protocol v5 keeps exactly 18 transport methods; job/worker
+  reaches v12, output grants reach persisted v6, and previews remain published
+  v1 plus QA-candidate v2. Historical v3 create rejects `asset_content_mode`;
+  v5 create accepts `asset_content_mode` so asset content mode and runtime
+  support intent are orthogonal. The v5 handshake exposes only the four activated
+  authority capabilities: `asset_authority_reviews`,
+  `asset_release_authority`, `runtime_headless_authority`, and
+  `creation_preview_pre_release`. This is not hosted, packaged-shell, native,
+  or release evidence.
 - Machine-readable capability, presentation, adapter, composition, and
   compatibility contracts support 2D, 2.5D, 3D, and mixed world-plane plans.
   Static adapter resolution and immutable composed bundles never turn contract
   data into an executable locator.
+- Generic gamepack assets now traverse reviewed planning and production into
+  closed deterministic processing, retained-byte QA, and a
+  `world-forge.asset_manifest` v1 state of `produced`, `processed`, or
+  `release_ready`. The single `validate-generic-asset-contract` command and
+  Studio validator dispatch all fourteen authoring formats. D3 then seals only
+  an exact `release_ready` lineage into a separate `world-forge.assetpack` v1
+  runtime directory. Its integral verifier binds the canonical manifest,
+  processed payloads, public notices, exact byte/media constraints, and nested
+  inventory to one immutable hash. A sealed pack is still not runtime
+  compatibility, adapter execution, bundle composition, or release evidence.
+- Generic puzzle and branching-narrative bundles can now be exercised through
+  canonical `world-forge.game_execution_script` v1 scenarios. The
+  Forge-independent headless kernel proves deterministic transitions plus
+  save/restore/replay continuity, then publishes an external immutable
+  `world-forge.headless_evidence_set` v1. This remains non-native evidence:
+  `native_execution` is false, Studio inspection delegates semantics to its
+  packaged Python runtime, and release stays blocked.
+- The exact same runtime bundles can now be opened by bounded
+  `gamepack_raylib_2d_puzzle@1.1.0` and
+  `gamepack_raylib_2d_text@1.1.0` implementations. A fixed 60 Hz controller,
+  semantic keyboard/pointer input, exact sealed PNG/TTF loading, and a
+  deterministic recording backend prove local render behavior without
+  importing the Forge. The narrative adapter renders only compiled authored
+  English text with the sealed font; the puzzle adapter adds shape, number, and
+  text feedback rather than relying on color alone.
 - Generated standalone games can install and independently verify composed
   releases, then run representation-neutral headless, save, replay, package,
   extraction, and extracted-package workflows without `worldforge`.
-- Native presentation is still limited to the exact legacy Linux x86_64 2.5D
-  adapter. The pyray GLB proof deliberately lacks collision and remains
+- Native-verified presentation is still limited to the exact legacy Linux
+  x86_64 2.5D adapter. The new bounded 2D adapters isolate their lazy `pyray`
+  import behind the backend and fail closed on undeclared hosts, but fake
+  backend tests are not native evidence. The pyray GLB proof deliberately lacks
+  collision and remains
   incompatible with every current 3D/mixed profile; it is not a playable 3D
   runtime or representative performance evidence.
 - Exact Studio runtime provenance, secure acquisition, deterministic synthetic
   assembly, and shell-package verification are implemented. Verified
   `shell_only` packages exclude Python and Codex, retain all seven open
   legal/provenance blockers, and state `release_ready=false`.
+
+### Deterministic standalone package boundary
+
+`world-forge.game_package` v1 is the immutable transport for one already
+materialized generic standalone game. `package-game` publishes a canonical
+ZIP_STORED archive without replacement, and `verify-game-package` checks the
+archive metadata, manifest, complete byte inventory, standalone lock, and
+lineage before any extraction write. `extract-game-package` then publishes an
+exact verified tree through an identity-bound Linux/Windows journal.
+`recover-game-package-extraction` resumes only the recorded immutable tree;
+`rollback-game-package-extraction` removes only a proven unpublished stage.
+Ambiguous ownership or changed hashes fail closed and preserve evidence.
+
+The Forge transaction never executes game-local `scripts/verify_game.py`.
+That script is a separate post-extraction check run from a disposable game
+context without Forge mutation authority. Package integrity, extraction,
+headless execution, and replay evidence are independent: the resulting game
+still reports `release: blocked` while hosted native evidence is absent.
 
 The full evidence, exclusions, and remaining gates are recorded in
 [AUDIT_M6_2026-07-24.md](docs/AUDIT_M6_2026-07-24.md). Self-contained artifact
@@ -249,8 +373,11 @@ operations, and supervises both the Python service and an optional exact Codex
 0.144.6 app-server without a shell or `PATH` fallback. Codex is bound to one
 registered workspace and can only stage or inspect changesets through the
 three-tool Forge MCP boundary; approval and apply remain human-controlled.
-Development requires explicit `RWF_STUDIO_DEV_PYTHON` and
-`RWF_STUDIO_DEV_CODEX` executables. Native packaged runtimes and the broader
+Development requires explicit `WORLD_FORGE_STUDIO_DEV_PYTHON` and
+`WORLD_FORGE_STUDIO_DEV_CODEX` executables. Deprecated `RWF_STUDIO_*` aliases
+remain accepted only when their values do not conflict with canonical names;
+unequal dual values fail closed.
+Native packaged runtimes and the broader
 visual authoring tools remain separate release slices. The current package
 workflow builds and statically verifies only an external `shell_only` tree with
 Python and Codex absent. The self-contained path is fail-closed by the checked-in
@@ -349,6 +476,34 @@ worldforge bump-world-version ../my-world \
   --reason "Add a reviewed campaign" --approved-by lead-agent
 ```
 
+New world projects use the retained `rpg-world-forge.project` discriminator at
+format version 3 with `tool_repository="world-forge"`. Existing version 2
+projects remain readable without mutation. Migrate one explicitly by hashing
+the exact current `.worldforge/project.json` bytes, reviewing a side-effect-free
+dry run, and then applying the same compare-and-swap source hash:
+
+```bash
+worldforge migrate-world-project ../legacy-world \
+  --expected-source-hash <sha256-of-exact-project-json-bytes> --mode dry-run
+worldforge migrate-world-project ../legacy-world \
+  --expected-source-hash <same-sha256> --mode apply
+```
+
+A clean dry-run also reports `apply_supported` and an exact
+`apply_capability_reason` without creating a lock or migration artifact. If a
+durable migration record is already present, dry-run validates its immutable
+backup and journal boundary and reports recovery required instead of claiming
+fresh-apply readiness. Linux uses an identity-checked `RENAME_EXCHANGE`
+transaction. Windows apply is bounded to build 20348 or newer and a
+capability-proven local NTFS volume: retained 128-bit file identities and
+no-delete ancestry handles seal the source, a durable hard link retains its
+original identity, and `FileRenameInfoEx` publishes the target with
+commit-forward recovery. Windows never simulates rollback after an ambiguous
+rename; unsupported or indeterminate states fail closed and preserve evidence.
+
+Legacy format version 1 remains a separate explicit `upgrade-world` to version
+2 operation. Ordinary loads never upgrade or migrate a project.
+
 After the canon is complete:
 
 ```bash
@@ -443,6 +598,86 @@ worldforge import-bundle ../releases/my_world-1.0.0 ../my-game \
   --expected-hash <bundle-sha256>
 worldforge audit-game ../my-game
 ```
+
+Generic gamepacks use the separate, additive pre-execution bundle contract:
+
+```bash
+worldforge build-game-runtime-bundle \
+  ../project/artifacts/game.gamepack.json \
+  ../project/assets/inventory.json \
+  ../project/assets/release/assetpack \
+  --snapshot ../runtime/snapshot.json \
+  --registry ../runtime/registry.json \
+  --composition ../project/runtime/composition.json \
+  --support-report ../project/runtime/support-report.json \
+  --output ../releases/game-runtime-bundle
+
+worldforge verify-game-runtime-bundle \
+  ../releases/game-runtime-bundle \
+  --expected-hash <bundle-content-hash>
+
+worldforge inspect-runtime-implementation \
+  ../project/runtime/runtime-implementation.json
+
+worldforge inspect-runtime-platform-lock \
+  ../runtime/platform-locks/<lock-id>.json
+
+worldforge build-game-materialization-bundle \
+  ../releases/game-runtime-bundle \
+  ../project/runtime/runtime-implementation.json \
+  --platform-lock ../runtime/platform-locks/<linux-cp311-lock-id>.json \
+  --platform-lock ../runtime/platform-locks/<linux-cp312-lock-id>.json \
+  --platform-lock ../runtime/platform-locks/<windows-cp311-lock-id>.json \
+  --platform-lock ../runtime/platform-locks/<windows-cp312-lock-id>.json \
+  --output ../releases/game-materialization-bundle
+
+worldforge verify-game-materialization-bundle \
+  ../releases/game-materialization-bundle \
+  --expected-hash <materialization-bundle-content-hash>
+
+worldforge verify-game-save \
+  ../user-data/saves/<game-id>/<bundle-id>/slot.json \
+  --bundle ../releases/game-runtime-bundle
+
+worldforge verify-game-replay \
+  ../user-data/replays/<game-id>/<bundle-id>/run.json \
+  --bundle ../releases/game-runtime-bundle
+
+worldforge verify-persistence-generation \
+  ../user-data/saves/<game-id>/<bundle-id>/slot.slot/v1/generations/<sequence>-<hash>.json \
+  --bundle ../releases/game-runtime-bundle
+```
+
+Bundle success proves exact transfer integrity only. Additive
+`world-forge.game_save` v1 and `world-forge.game_replay` v1 documents bind the
+exact gamepack, runtime composition, runtime bundle, neutral runtime API, and
+execution-semantics hash. Saves contain only the declared saved-state
+projection; restore reconstructs transient state from the immutable initial
+state. Replays contain accepted actions only and verify every pre-state,
+post-state, event, trace, final-state, and classification hash.
+`world-forge.persistence_generation` v1 stores either unchanged payload in an
+append-only, content-addressed DAG. Logical slot writes stage outside the
+authoritative generation inventory, publish with native no-replace semantics,
+fsync the retained directory, and never replace history. Concurrent sibling
+tips fail closed until an explicit all-tip resolution; rollback appends a
+previously verified payload. Legacy `<slot>.json` files remain read-only
+compatible and require explicit hash-anchored migration before appending.
+
+Studio validates their structure in JavaScript but routes semantic verification
+to packaged Python; it does not implement gameplay semantics. The bundle and
+checked-in support reports still deliberately report `pre_execution`,
+`release: blocked`, and `supported: false`. Standalone-game materialization and
+deterministic packaging are implemented, but neither is native execution or
+hosted platform evidence.
+
+The additive materialization envelope closes implementation identity only. It
+binds the unchanged runtime bundle to exact code-owned package projections,
+semantic entry points, and the four audited `raylib==6.0.1.0` CPython
+3.11/3.12 Linux/Windows x86-64 wheels. A policy-only envelope reports
+`contract_only` and `materialization_ready=false`; the ready state reports
+`materialization_ready: true`, embeds the exact launcher/verifier inventory, and
+may create an external standalone game repository. Neither state installs a
+wheel or provides native-platform evidence.
 
 The game is a normal standalone project. It contains no agent files or
 authoring control plane and verifies/runs without `worldforge` installed.
@@ -541,6 +776,19 @@ implementation evidence is recorded separately in
 [AUDIT_M6_2026-07-24.md](docs/AUDIT_M6_2026-07-24.md); it does not revise M5 or
 claim self-contained Studio or complete 3D runtime readiness. The GPT and
 multi-agent protocol is documented in [agents/README.md](agents/README.md).
+
+The generic taxonomy and complete data flow are centralized in
+[MULTI_GENRE_ARCHITECTURE.md](docs/MULTI_GENRE_ARCHITECTURE.md); current
+contract/local/native/hosted truth is in
+[SUPPORT_MATRIX.md](docs/SUPPORT_MATRIX.md). The additive compiler/runtime
+seams are recorded in
+[ADR-0023](docs/decisions/0023-authoring-contracts-and-runtime-adapters.md) and
+[ADR-0024](docs/decisions/0024-gamepack-and-worldpack-are-additive.md).
+Identity migration is recorded in
+[ADR-0025](docs/decisions/0025-world-forge-identity-migration.md), with the
+[world-project v2-to-v3 guide](docs/MIGRATING_WORLD_PROJECT_V2_TO_V3.md),
+[legacy-identity allowlist policy](docs/LEGACY_IDENTITY_ALLOWLIST.md), and
+[cutover/rollback runbook](docs/operations/IDENTITY_CUTOVER_AND_ROLLBACK.md).
 
 ## Public project
 

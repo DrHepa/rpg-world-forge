@@ -5,6 +5,11 @@ description: Establish deterministic action, replay, state-digest, fixture, and 
 
 # Establish the gameplay test harness
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Build only G04 deterministic test infrastructure. Do not implement gameplay,

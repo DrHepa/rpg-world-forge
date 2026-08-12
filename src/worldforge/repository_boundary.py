@@ -3,6 +3,8 @@ from __future__ import annotations
 import stat
 from pathlib import Path
 
+from worldforge.asset_io import AssetContractError, read_json_object
+
 FORGE_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -21,6 +23,29 @@ def repository_kind(path: str | Path) -> str | None:
         return "forge"
     if (candidate / ".worldforge/project.json").is_file():
         return "world"
+    creation_marker = candidate / "project.json"
+    if creation_marker.is_file() and not creation_marker.is_symlink():
+        try:
+            creation_project = read_json_object(creation_marker)
+        except AssetContractError:
+            creation_project = {}
+        if (
+            creation_project.get("format") == "world-forge.project"
+            and creation_project.get("format_version") == 1
+            and not isinstance(creation_project.get("format_version"), bool)
+        ):
+            return "creation"
+    game_runtime_bundle_marker = candidate / "game-runtime-bundle.json"
+    if game_runtime_bundle_marker.is_file() and not game_runtime_bundle_marker.is_symlink():
+        return "game_runtime_bundle"
+    generic_game_markers = (
+        candidate / "game-manifest.json",
+        candidate / "game.lock.json",
+        candidate / "game_data/runtime-bundle/game-runtime-bundle.json",
+        candidate / "src/game",
+    )
+    if all(marker.exists() and not marker.is_symlink() for marker in generic_game_markers):
+        return "generic_game"
     game_markers = (
         candidate / "runtime.lock.json",
         candidate / "platform.lock.json",
@@ -60,7 +85,17 @@ def assert_new_repository_target(
         )
     for ancestor in (target_input.parent, *target_input.parent.parents):
         kind = repository_kind(ancestor)
-        if kind in {"world", "game", "bundle", "composed_bundle", "forge", "unsafe"}:
+        if kind in {
+            "creation",
+            "world",
+            "game",
+            "generic_game",
+            "bundle",
+            "composed_bundle",
+            "game_runtime_bundle",
+            "forge",
+            "unsafe",
+        }:
             raise RepositoryBoundaryError(
                 f"The {repository_type} repository cannot be nested inside a {kind} repository"
             )
@@ -78,7 +113,17 @@ def require_standalone_bundle_root(path: str | Path) -> Path:
         raise RepositoryBoundaryError("The source is not a recognizable runtime bundle")
     for ancestor in root.parents:
         kind = repository_kind(ancestor)
-        if kind in {"world", "game", "bundle", "composed_bundle", "forge", "unsafe"}:
+        if kind in {
+            "creation",
+            "world",
+            "game",
+            "generic_game",
+            "bundle",
+            "composed_bundle",
+            "game_runtime_bundle",
+            "forge",
+            "unsafe",
+        }:
             raise RepositoryBoundaryError(
                 f"The runtime bundle cannot be nested inside a {kind} repository"
             )
@@ -97,8 +142,10 @@ def require_standalone_composed_bundle_root(path: str | Path) -> Path:
     for ancestor in root.parents:
         kind = repository_kind(ancestor)
         if kind in {
+            "creation",
             "world",
             "game",
+            "generic_game",
             "bundle",
             "composed_bundle",
             "forge",
@@ -106,6 +153,36 @@ def require_standalone_composed_bundle_root(path: str | Path) -> Path:
         }:
             raise RepositoryBoundaryError(
                 f"The composed runtime bundle cannot be nested inside a {kind} repository"
+            )
+    return root
+
+
+def require_standalone_game_runtime_bundle_root(path: str | Path) -> Path:
+    """Return an external generic runtime-bundle root with no repository ancestor."""
+
+    root_input = Path(path)
+    if root_input.is_symlink():
+        raise RepositoryBoundaryError("The generic runtime bundle root cannot be a symbolic link")
+    root = root_input.resolve()
+    if repository_kind(root) != "game_runtime_bundle":
+        raise RepositoryBoundaryError(
+            "The source is not a recognizable generic game runtime bundle"
+        )
+    for ancestor in root.parents:
+        kind = repository_kind(ancestor)
+        if kind in {
+            "creation",
+            "world",
+            "game",
+            "generic_game",
+            "bundle",
+            "composed_bundle",
+            "game_runtime_bundle",
+            "forge",
+            "unsafe",
+        }:
+            raise RepositoryBoundaryError(
+                f"The generic runtime bundle cannot be nested inside a {kind} repository"
             )
     return root
 
@@ -121,7 +198,17 @@ def require_standalone_game_root(path: str | Path) -> Path:
         raise RepositoryBoundaryError("The target is not a recognizable standalone game repository")
     for ancestor in root.parents:
         kind = repository_kind(ancestor)
-        if kind in {"world", "game", "bundle", "composed_bundle", "forge", "unsafe"}:
+        if kind in {
+            "creation",
+            "world",
+            "game",
+            "generic_game",
+            "bundle",
+            "composed_bundle",
+            "game_runtime_bundle",
+            "forge",
+            "unsafe",
+        }:
             raise RepositoryBoundaryError(
                 f"The game repository cannot be nested inside a {kind} repository"
             )

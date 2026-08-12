@@ -15,6 +15,7 @@ import {
   ShellPackageError,
   writeShellPackageManifest,
 } from "./shell-package-verifier.mjs";
+import { resolveStudioEnvironment } from "./studio-environment.mjs";
 
 const SCRIPT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 export const STUDIO_ROOT = path.resolve(SCRIPT_ROOT, "..");
@@ -194,13 +195,14 @@ async function reserveLinuxOutput(outputPath, repositoryRoot) {
   }
 }
 
-function windowsPythonExecutable(explicit) {
+function windowsPythonExecutable(explicit, environment = process.env) {
+  const studioEnvironment = resolveStudioEnvironment(environment);
   const executable =
     explicit ??
-    process.env.RWF_STUDIO_BUILD_PYTHON ??
-    process.env.PYTHON ??
-    (process.env.pythonLocation
-      ? path.join(process.env.pythonLocation, "python.exe")
+    studioEnvironment.BUILD_PYTHON ??
+    environment.PYTHON ??
+    (environment.pythonLocation
+      ? path.join(environment.pythonLocation, "python.exe")
       : undefined);
   return requireAbsoluteTool(executable);
 }
@@ -445,6 +447,7 @@ export async function runShellPackage({
   argv,
   builderCli = path.join(STUDIO_ROOT, "node_modules/electron-builder/cli.js"),
   delay = defaultDelay,
+  environment = process.env,
   manifestWriter = writeShellPackageManifest,
   npmCli = process.env.npm_execpath,
   pythonExecutable,
@@ -452,6 +455,7 @@ export async function runShellPackage({
   reservationFactory = reservePackageOutput,
   runner = defaultRunner,
 } = {}) {
+  const studioEnvironment = resolveStudioEnvironment(environment);
   const { outputPath, targetId } = parsePackageShellArguments(argv ?? []);
   const canonicalOutput = await validatePackageOutput(outputPath, {
     repositoryRoot,
@@ -461,7 +465,7 @@ export async function runShellPackage({
   const packageTool = requireAbsoluteTool(builderCli);
   const common = {
     cwd: STUDIO_ROOT,
-    env: process.env,
+    env: environment,
   };
   if (
     (await runner(nodeExecutable, [buildTool, "run", "build"], common)) !== 0
@@ -479,13 +483,14 @@ export async function runShellPackage({
   let reservation;
   for (let attempt = 1; attempt <= MAX_BUILDER_ATTEMPTS; attempt += 1) {
     reservation = await reservationFactory(activeOutput, {
-      pythonExecutable,
+      pythonExecutable: pythonExecutable ?? studioEnvironment.BUILD_PYTHON,
       repositoryRoot,
     });
     let builderResult;
     try {
       const packageEnvironment = {
-        ...process.env,
+        ...environment,
+        WORLD_FORGE_STUDIO_PACKAGE_OUTPUT: reservation.boundPath,
         RWF_STUDIO_PACKAGE_OUTPUT: reservation.boundPath,
       };
       builderResult = await runner(

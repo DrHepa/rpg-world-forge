@@ -487,12 +487,17 @@ class M5RenderPackReleaseTests(unittest.TestCase):
             self.assertEqual(runtime_before, runtime_file.read_bytes())
 
             production = json.loads(fixture["manifest"].read_text(encoding="utf-8"))
-            released = finalize_asset_release(
-                fixture["manifest"],
-                output,
-                WORLDPACK,
-                expected_manifest_hash=production["content_hash"],
-            )
+            with patch.object(
+                asset_manifest_module,
+                "write_json_atomic",
+                side_effect=AssertionError("release validation must not publish a candidate"),
+            ):
+                released = finalize_asset_release(
+                    fixture["manifest"],
+                    output,
+                    WORLDPACK,
+                    expected_manifest_hash=production["content_hash"],
+                )
 
             self.assertEqual("release", released["phase"])
             self.assertEqual("release/renderpack.json", released["deliverable"]["file"])
@@ -510,7 +515,7 @@ class M5RenderPackReleaseTests(unittest.TestCase):
             self.assertEqual("neutral_portrait", loaded.assets[0].id)
             self.assertEqual("portrait:neutral", loaded.bindings[0].slot)
 
-    def test_finalize_cas_preserves_manifest_changed_during_validation(self) -> None:
+    def test_finalize_cooperative_hash_preserves_change_before_lock(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = _fixture(Path(directory))
             manifest = fixture["manifest"]
@@ -520,7 +525,7 @@ class M5RenderPackReleaseTests(unittest.TestCase):
             concurrent = json.loads(json.dumps(initial))
             concurrent["generation_policy"]["enabled_routes"] = ["local", "openai"]
             concurrent = bind_content_hash(concurrent)
-            original_write = asset_manifest_module.write_json_atomic
+            original_write = asset_manifest_module.write_json_cooperative_replace
 
             def change_manifest_before_publish(
                 path: str | Path,
@@ -534,7 +539,7 @@ class M5RenderPackReleaseTests(unittest.TestCase):
             with (
                 patch.object(
                     asset_manifest_module,
-                    "write_json_atomic",
+                    "write_json_cooperative_replace",
                     side_effect=change_manifest_before_publish,
                 ),
                 self.assertRaisesRegex(AssetContractError, "Content changed before publishing"),

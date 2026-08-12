@@ -1,0 +1,38 @@
+{
+  "authority": {
+    "artifact_snapshot_hash": "7c7680104c67e474591c93593f1c1cae4e8d4d52112d951c913309e93df3d820",
+    "producer_job_id": "fixture-faction-strategy-release",
+    "producer_operation": "asset.release.authorize",
+    "producer_output_position": 0,
+    "root_generation": 1,
+    "source_revision": "7a1f8b4f8436a73a4df5653987061d7f965abc9248f45367c928a87e1110bf63",
+    "workflow_status_hash": null,
+    "workspace_id": "fixture-faction-strategy"
+  },
+  "blockers": [],
+  "candidate_assetpack": {
+    "content_hash": "a94c9a5666315486bc6513ec93dd7683498f99482ebf0784f81ac2d8a321151f",
+    "format": "world-forge.assetpack",
+    "format_version": 1,
+    "id": "assetpack_69d8b0ae8da0717f0ea327d3c35e97d43d84f0bce24ae25a"
+  },
+  "candidate_manifest": {
+    "content_hash": "9b86ba609059b48a67cb744c92c89c8d3555b005e0dcb4e2d9d11ffb8af2d9dc",
+    "format": "world-forge.asset_manifest",
+    "format_version": 1,
+    "id": "faction_strategy_asset_manifest"
+  },
+  "content_hash": "7fa41a5929594563b97b6e75fe4e292b90aaad5310f7b41be12d61c11f9cb8bd",
+  "format": "world-forge.asset_release_authority",
+  "format_version": 1,
+  "qa_reviews": [
+    {
+      "content_hash": "63afd75727ceaadff28792aedab22f09317538e3cf6407e2d8cb90bfb46e6932",
+      "format": "world-forge.asset_qa_review_receipt",
+      "format_version": 1,
+      "id": "faction_strategy_texture_qa_review"
+    }
+  ],
+  "release_authority_id": "faction_strategy_asset_release",
+  "status": "authorized"
+}

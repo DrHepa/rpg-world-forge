@@ -1,0 +1,80 @@
+{
+  "adapter": {
+    "content_hash": "75d8480ada2c1f773f3c0e1d7f1427773b370beb212fb6a91aaad2875ed290e1",
+    "format": "world-forge.runtime_adapter",
+    "format_version": 1,
+    "id": "gamepack_raylib_2d_puzzle"
+  },
+  "asset_inventory": {
+    "content_hash": "ef6496fd27a91fe4aa19c57390b09accd0a748eff1c6bdbc280b2dfc0302335c",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_db1e30fe4a098bf505b52989066137a1f34f4123b5ece765"
+  },
+  "asset_release_authority": {
+    "content_hash": "d6afebd9c5f1fee8013f91094b840e573b5b462126262e6581434ac54e29496f",
+    "format": "world-forge.asset_release_authority",
+    "format_version": 1,
+    "id": "abstract_puzzle_asset_release"
+  },
+  "assetpack": {
+    "content_hash": "1c8a5f50623bbae836288d606b9dc71ba3718902d56e02eb7b962ba711ec6e03",
+    "format": "world-forge.assetpack",
+    "format_version": 1,
+    "id": "assetpack_6a1a4e9e7b8eb1745aca3c02b8c60dde0b976e2e67dfc627",
+    "inventory_hash": "e054c0a48d97fa02fa06683641ab8c6b341c9bf981a92ec48936d4a9ac69cf59",
+    "root_hash": "bbb3178c2df9929ceeb4b400cdff86e2264dc8d8cf05b3ec77569fdfe0ee2890"
+  },
+  "authority_id": "runtime_authority_f906450fbcd7bc5412ea504c86181991689ab4d4",
+  "composition": {
+    "content_hash": "c1dfd0f58d00b245fcd68aee83f25c0bb7a0dfc4b38a5f3abddbe3c35b015451",
+    "format": "world-forge.game_runtime_composition",
+    "format_version": 1,
+    "id": "runtime_composition_a0b24f677435859d28937c9e97cf6af44c2d2b2b"
+  },
+  "content_hash": "87da0e52b16b6493a12bac30b8e690e20bda1a4af479d7d86ea96e0118abbbd4",
+  "format": "world-forge.runtime_support_authority",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "abstract_puzzle"
+  },
+  "headless_evidence": [],
+  "native_status": "unavailable",
+  "package_evidence": null,
+  "reason_codes": [
+    "adapter_not_verified",
+    "headless_evidence_missing",
+    "native_evidence_missing",
+    "packaging_evidence_missing",
+    "runtime_support_authority_native_unavailable",
+    "save_replay_evidence_missing"
+  ],
+  "registry": {
+    "content_hash": "b8f22310fe80765ae1750404214ee159dda10b8f99b2e567ed8725929c474aba",
+    "format": "world-forge.runtime_adapter_registry",
+    "format_version": 1,
+    "id": "runtime_registry_ec71747b963dd32c3cecda799592ff0ee6087061"
+  },
+  "release_status": "blocked",
+  "runtime_evidence": [],
+  "runtime_snapshot": {
+    "content_hash": "b1c94cac79ced1107f87174fcb367eec6ae832f089bb43e24d21dc618568b4bf",
+    "format": "world-forge.game_runtime_snapshot",
+    "format_version": 1,
+    "id": "runtime_snapshot_002ec4f5a0da3b1f306eec02e163f28a72d628a0"
+  },
+  "runtime_support_report": {
+    "compatibility_status": "partially_supported",
+    "content_hash": "e142fe776b7b0064ce520b56452683790474308132641e2781f3a7cf09baba66",
+    "format": "world-forge.runtime_support_report",
+    "format_version": 1,
+    "id": "runtime_support_42e094baecff19dc4cd1ee84ba81a064866b1f55",
+    "packaging_status": "unverified",
+    "release_status": "blocked",
+    "supported": false
+  },
+  "supported": false
+}

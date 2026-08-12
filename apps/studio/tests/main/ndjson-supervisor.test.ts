@@ -7,19 +7,20 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { resolveStudioEnvironmentValue } from "../../scripts/studio-environment.mjs";
 import {
-  NdjsonSupervisor,
-  planProcessTreeTermination,
-  StudioProtocolError,
-  StudioOverloadError,
-  StudioRequestCancelledError,
-  StudioRequestTimeoutError,
-  StudioTransportError,
+    NdjsonSupervisor,
+    planProcessTreeTermination,
+    StudioProtocolError,
+    StudioOverloadError,
+    StudioRequestCancelledError,
+    StudioRequestTimeoutError,
+    StudioTransportError,
 } from "../../src/main/ndjson-supervisor";
 
 const fixture = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../fixtures/fake_forge_service.py",
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../fixtures/fake_forge_service.py",
 );
 const python = findTestPython();
 
@@ -27,472 +28,695 @@ const supervisors: NdjsonSupervisor[] = [];
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(supervisors.splice(0).map(async (supervisor) => supervisor.stop()));
-  await Promise.all(
-    temporaryRoots.splice(0).map(async (root) => rm(root, { recursive: true, force: true })),
-  );
+    await Promise.all(
+        supervisors.splice(0).map(async (supervisor) => supervisor.stop()),
+    );
+    await Promise.all(
+        temporaryRoots
+            .splice(0)
+            .map(async (root) => rm(root, { recursive: true, force: true })),
+    );
 });
 
 function create(
-  mode: string,
-  options: ConstructorParameters<typeof NdjsonSupervisor>[1] = {},
-  fixtureArgs: readonly string[] = [],
+    mode: string,
+    options: ConstructorParameters<typeof NdjsonSupervisor>[1] = {},
+    fixtureArgs: readonly string[] = [],
 ) {
-  const supervisor = new NdjsonSupervisor(
-    {
-      executable: python,
-      args: [fixture, mode, ...fixtureArgs],
-      cwd: path.dirname(fixture),
-      env: { LANG: "C.UTF-8" },
-    },
-    options,
-  );
-  supervisors.push(supervisor);
-  return supervisor;
+    const supervisor = new NdjsonSupervisor(
+        {
+            executable: python,
+            args: [fixture, mode, ...fixtureArgs],
+            cwd: path.dirname(fixture),
+            env: { LANG: "C.UTF-8" },
+        },
+        options,
+    );
+    supervisors.push(supervisor);
+    return supervisor;
 }
 
 function findTestPython(): string {
-  const configured = process.env.RWF_STUDIO_TEST_PYTHON;
-  if (configured && path.isAbsolute(configured) && existsSync(configured)) {
-    return configured;
-  }
-  if (process.platform !== "win32") {
-    for (const candidate of ["/usr/bin/python3", "/usr/local/bin/python3"]) {
-      if (existsSync(candidate)) {
-        return candidate;
-      }
+    const configured = resolveStudioEnvironmentValue(
+        process.env,
+        "TEST_PYTHON",
+    );
+    if (configured && path.isAbsolute(configured) && existsSync(configured)) {
+        return configured;
     }
-  }
-  const command = process.platform === "win32" ? "where.exe" : "command";
-  const args = process.platform === "win32" ? ["python.exe"] : ["-v", "python3"];
-  const discovered = execFileSync(command, args, { encoding: "utf8" }).split(/\r?\n/u)[0]?.trim();
-  if (!discovered || !path.isAbsolute(discovered)) {
-    throw new Error("A Python interpreter is required for the fake Forge service tests");
-  }
-  return discovered;
+    if (process.platform !== "win32") {
+        for (const candidate of [
+            "/usr/bin/python3",
+            "/usr/local/bin/python3",
+        ]) {
+            if (existsSync(candidate)) {
+                return candidate;
+            }
+        }
+    }
+    const command = process.platform === "win32" ? "where.exe" : "command";
+    const args =
+        process.platform === "win32" ? ["python.exe"] : ["-v", "python3"];
+    const discovered = execFileSync(command, args, { encoding: "utf8" })
+        .split(/\r?\n/u)[0]
+        ?.trim();
+    if (!discovered || !path.isAbsolute(discovered)) {
+        throw new Error(
+            "A Python interpreter is required for the fake Forge service tests",
+        );
+    }
+    return discovered;
 }
 
 describe("NdjsonSupervisor", () => {
-  it("correlates a response split across stdout chunks", async () => {
-    const supervisor = create("split");
-    await supervisor.start();
+    it("correlates a response split across stdout chunks", async () => {
+        const supervisor = create("split");
+        await supervisor.start();
 
-    const response = await supervisor.request("split-1", "service.initialize", {}, 2_000);
+        const response = await supervisor.request(
+            "split-1",
+            "service.initialize",
+            {},
+            2_000,
+        );
 
-    expect(response.kind).toBe("response");
-    expect(response.request_id).toBe("split-1");
-  });
-
-  it("forwards valid service event envelopes", async () => {
-    const supervisor = create("event");
-    const events: string[] = [];
-    supervisor.subscribe((event) => {
-      if (event.type === "event") {
-        events.push(String(event.envelope.event.type));
-      }
-    });
-    await supervisor.start();
-
-    await supervisor.request("event-1", "service.initialize", {}, 2_000);
-
-    expect(events).toEqual(["fixture.ready"]);
-  });
-
-  it("fails closed on malformed service output", async () => {
-    const supervisor = create("malformed");
-    await supervisor.start();
-
-    await expect(
-      supervisor.request("malformed-1", "service.initialize", {}, 2_000),
-    ).rejects.toBeInstanceOf(StudioProtocolError);
-  });
-
-  it("fails closed when a valid response names a different pending method", async () => {
-    const supervisor = create("mismatched-method");
-    await supervisor.start();
-
-    await expect(
-      supervisor.request("mismatch-1", "service.initialize", {}, 2_000),
-    ).rejects.toThrow(/expected service\.initialize/u);
-    await expect.poll(() => supervisor.state).toBe("crashed");
-  });
-
-  it("fails closed on oversized service output", async () => {
-    const supervisor = create("oversized", { maxLineBytes: 128 });
-    await supervisor.start();
-
-    await expect(
-      supervisor.request("oversized-1", "service.initialize", {}, 2_000),
-    ).rejects.toBeInstanceOf(StudioProtocolError);
-  });
-
-  it("times out a request and safely ignores its late reply", async () => {
-    const supervisor = create("delayed");
-    await supervisor.start();
-
-    await expect(
-      supervisor.request("timeout-1", "service.initialize", {}, 100),
-    ).rejects.toBeInstanceOf(StudioRequestTimeoutError);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(supervisor.state).toBe("running");
-  });
-
-  it("cancels a pending request without exposing a wire-level fake cancellation", async () => {
-    const supervisor = create("delayed");
-    await supervisor.start();
-    const pending = supervisor.request("cancel-1", "service.initialize", {}, 2_000);
-
-    expect(supervisor.cancelRequest("cancel-1")).toBe(true);
-    expect(supervisor.cancelRequest("cancel-1")).toBe(false);
-    await expect(pending).rejects.toBeInstanceOf(StudioRequestCancelledError);
-  });
-
-  it("rejects pending work when the child crashes", async () => {
-    const supervisor = create("crash");
-    await supervisor.start();
-
-    await expect(
-      supervisor.request("crash-1", "service.initialize", {}, 2_000),
-    ).rejects.toBeInstanceOf(StudioTransportError);
-    await expect.poll(() => supervisor.state).toBe("crashed");
-  });
-
-  it("bounds retained stderr", async () => {
-    const supervisor = create("stderr", { maxStderrBytes: 64 });
-    await supervisor.start();
-
-    await supervisor.request("stderr-1", "service.initialize", {}, 2_000);
-
-    expect(Buffer.byteLength(supervisor.stderrTail)).toBeLessThanOrEqual(64);
-    expect(supervisor.stderrTail).toBe("e".repeat(64));
-  });
-
-  it("rejects deterministic pending-request overload", async () => {
-    const supervisor = create("delayed", { maxPendingRequests: 1 });
-    await supervisor.start();
-    const first = supervisor.request("pending-1", "service.initialize", {}, 2_000);
-
-    await expect(
-      supervisor.request("pending-2", "service.initialize", {}, 2_000),
-    ).rejects.toBeInstanceOf(StudioOverloadError);
-    expect(supervisor.diagnostics.pendingRequests).toBe(1);
-    expect(supervisor.cancelRequest("pending-1")).toBe(true);
-    await expect(first).rejects.toBeInstanceOf(StudioRequestCancelledError);
-  });
-
-  it("bounds total queued and outstanding request bytes", async () => {
-    const supervisor = create("delayed", { maxOutstandingRequestBytes: 1_024 });
-    await supervisor.start();
-    const params = { blob: "x".repeat(600) };
-    const first = supervisor.request("bytes-1", "service.initialize", params, 2_000);
-
-    await expect(
-      supervisor.request("bytes-2", "service.initialize", params, 2_000),
-    ).rejects.toBeInstanceOf(StudioOverloadError);
-    expect(supervisor.diagnostics.outstandingRequestBytes).toBeGreaterThan(600);
-    expect(supervisor.cancelRequest("bytes-1")).toBe(true);
-    await expect(first).rejects.toBeInstanceOf(StudioRequestCancelledError);
-    expect(supervisor.diagnostics.outstandingRequestBytes).toBe(0);
-  });
-
-  it("serializes large writes and waits for stdin backpressure to drain", async () => {
-    const supervisor = create("backpressure", {
-      maxPendingRequests: 4,
-      maxOutstandingRequestBytes: 2 * 1024 * 1024,
-    });
-    await supervisor.start();
-    const params = { blob: "x".repeat(300_000) };
-
-    const replies = await Promise.all([
-      supervisor.request("pressure-1", "service.initialize", params, 3_000),
-      supervisor.request("pressure-2", "service.initialize", params, 3_000),
-      supervisor.request("pressure-3", "service.initialize", params, 3_000),
-    ]);
-
-    expect(replies.map((reply) => reply.request_id)).toEqual([
-      "pressure-1",
-      "pressure-2",
-      "pressure-3",
-    ]);
-    expect(supervisor.diagnostics.backpressureWaits).toBeGreaterThan(0);
-    expect(supervisor.diagnostics.pendingRequests).toBe(0);
-    expect(supervisor.diagnostics.outstandingRequestBytes).toBe(0);
-  });
-
-  it("removes never-written churn and fails an abandoned permanently backpressured write", async () => {
-    const supervisor = create("stalled", {
-      maxPendingRequests: 4,
-      maxOutstandingRequestBytes: 2 * 1024 * 1024,
-      maxIgnoredRequestIds: 4,
-    });
-    await supervisor.start();
-    const active = supervisor.request(
-      "stalled-active",
-      "service.initialize",
-      { blob: "x".repeat(300_000) },
-      3_000,
-    );
-    await expect.poll(() => supervisor.diagnostics.backpressureWaits).toBeGreaterThan(0);
-
-    for (let index = 0; index < 6; index += 1) {
-      const requestId = `queued-${String(index)}`;
-      const queued = supervisor.request(requestId, "service.initialize", {}, 100);
-      if (index % 2 === 0) {
-        expect(supervisor.cancelRequest(requestId)).toBe(true);
-        await expect(queued).rejects.toBeInstanceOf(StudioRequestCancelledError);
-      } else {
-        await expect(queued).rejects.toBeInstanceOf(StudioRequestTimeoutError);
-      }
-      expect(supervisor.diagnostics).toMatchObject({
-        pendingRequests: 1,
-        queuedWrites: 1,
-        ignoredReplyIds: 0,
-      });
-      expect(supervisor.diagnostics.outstandingRequestBytes).toBeLessThan(400_000);
-    }
-
-    expect(supervisor.cancelRequest("stalled-active")).toBe(true);
-    await expect(active).rejects.toBeInstanceOf(StudioRequestCancelledError);
-    expect(supervisor.diagnostics.ignoredReplyIds).toBeLessThanOrEqual(1);
-    await expect.poll(() => supervisor.pid).toBeNull();
-    expect(supervisor.state).toBe("crashed");
-    expect(supervisor.diagnostics).toMatchObject({
-      pendingRequests: 0,
-      outstandingRequestBytes: 0,
-      queuedWrites: 0,
-      ignoredReplyIds: 0,
-    });
-  });
-
-  it("recycles the transport instead of evicting sent-request reply tombstones", async () => {
-    const supervisor = create("silent", { maxIgnoredRequestIds: 2 });
-    await supervisor.start();
-
-    for (let index = 0; index < 3; index += 1) {
-      const requestId = `ignored-${String(index)}`;
-      const pending = supervisor.request(requestId, "service.initialize", {}, 2_000);
-      await expect.poll(() => supervisor.diagnostics.queuedWrites).toBe(0);
-      expect(supervisor.cancelRequest(requestId)).toBe(true);
-      await expect(pending).rejects.toBeInstanceOf(StudioRequestCancelledError);
-      expect(supervisor.diagnostics.ignoredReplyIds).toBeLessThanOrEqual(2);
-    }
-
-    expect(supervisor.state).toBe("crashed");
-    await expect.poll(() => supervisor.pid).toBeNull();
-    expect(supervisor.diagnostics.ignoredReplyIds).toBe(0);
-  });
-
-  it("clears failed spawn state so the same supervisor can restart", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "rwf-spawn-recovery-"));
-    temporaryRoots.push(root);
-    const missingCwd = path.join(root, "appears-later");
-    const supervisor = new NdjsonSupervisor({
-      executable: python,
-      args: [fixture, "normal"],
-      cwd: missingCwd,
-      env: { LANG: "C.UTF-8" },
-    });
-    supervisors.push(supervisor);
-
-    await expect(supervisor.start()).rejects.toThrow();
-    expect(supervisor.state).toBe("crashed");
-    expect(supervisor.pid).toBeNull();
-
-    await mkdir(missingCwd);
-    await supervisor.start();
-    const response = await supervisor.request(
-      "recovered-1",
-      "service.initialize",
-      {},
-      2_000,
-    );
-    expect(response.request_id).toBe("recovered-1");
-  });
-
-  it("drains stdin through EOF before reporting a clean stop", async () => {
-    const supervisor = create("eof");
-    const states: string[] = [];
-    supervisor.subscribe((event) => {
-      if (event.type === "state") {
-        states.push(event.state);
-      }
-    });
-    await supervisor.start();
-
-    const stop = supervisor.stop();
-
-    expect(supervisor.state).toBe("stopping");
-    await stop;
-    expect(supervisor.state).toBe("stopped");
-    expect(supervisor.pid).toBeNull();
-    expect(supervisor.stderrTail).toContain("fixture.eof");
-    expect(states).toEqual(["starting", "running", "stopping", "stopped"]);
-  });
-
-  it("shares one stop promise and rejects pending work exactly once", async () => {
-    const supervisor = create("delayed");
-    await supervisor.start();
-    let rejectionCount = 0;
-    const pending = supervisor
-      .request("drain-1", "service.initialize", {}, 2_000)
-      .catch((error: unknown) => {
-        rejectionCount += 1;
-        throw error;
-      });
-
-    const firstStop = supervisor.stop();
-    const secondStop = supervisor.stop();
-
-    expect(secondStop).toBe(firstStop);
-    await expect(pending).rejects.toBeInstanceOf(StudioTransportError);
-    await firstStop;
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(rejectionCount).toBe(1);
-    expect(supervisor.state).toBe("stopped");
-    expect(supervisor.stderrTail).toContain("fixture.eof");
-  });
-
-  it("shares the stop promise with reentrant state subscribers", async () => {
-    const supervisor = create("eof");
-    await supervisor.start();
-    let entered = false;
-    let reentrantStop: Promise<void> | null = null;
-    supervisor.subscribe((event) => {
-      if (event.type === "state" && event.state === "stopping" && !entered) {
-        entered = true;
-        reentrantStop = supervisor.stop();
-      }
+        expect(response.kind).toBe("response");
+        expect(response.request_id).toBe("split-1");
     });
 
-    const firstStop = supervisor.stop();
+    it("emits and correlates protocol v2 only when explicitly requested", async () => {
+        const supervisor = create("normal");
+        await supervisor.start();
 
-    expect(reentrantStop).toBe(firstStop);
-    await firstStop;
-  });
+        const response = await supervisor.request(
+            "protocol-v2",
+            "service.initialize",
+            {},
+            2_000,
+            2,
+        );
 
-  it("bounds EOF, terminate, and force-kill escalation for a stuck child", async () => {
-    const supervisor = create("hang-after-eof", {
-      gracefulStopTimeoutMs: 300,
-      terminateStopTimeoutMs: 300,
-      killStopTimeoutMs: 300,
+        expect(response.kind).toBe("response");
+        expect(response.protocol_version).toBe(2);
+        expect(response.request_id).toBe("protocol-v2");
     });
-    await supervisor.start();
-    const startedAt = Date.now();
 
-    await supervisor.stop();
+    it("emits and correlates the isolated creation protocol v3 only when explicitly requested", async () => {
+        const supervisor = create("normal");
+        await supervisor.start();
 
-    expect(Date.now() - startedAt).toBeLessThan(4_000);
-    expect(supervisor.stderrTail).toContain("fixture.eof");
-    expect(supervisor.pid).toBeNull();
-    expect(supervisor.state).toBe("stopped");
-  });
+        const response = await supervisor.request(
+            "protocol-v3",
+            "service.initialize",
+            {},
+            2_000,
+            3,
+        );
 
-  it("stops safely during spawn and can restart after a clean drain", async () => {
-    const supervisor = create("eof");
-    const starting = supervisor.start();
-    const rejectedStart = expect(starting).rejects.toBeInstanceOf(StudioTransportError);
-
-    await supervisor.stop();
-    await rejectedStart;
-    expect(supervisor.state).toBe("stopped");
-
-    await supervisor.start();
-    const reply = await supervisor.request(
-      "restart-after-stop",
-      "service.initialize",
-      {},
-      2_000,
-    );
-    expect(reply.request_id).toBe("restart-after-stop");
-    await supervisor.stop();
-    expect(supervisor.state).toBe("stopped");
-  });
-
-  it.each([
-    ["descendant-after-eof", "terminate"],
-    ["descendant-ignore-term-after-eof", "kill"],
-  ])(
-    "retains tree ownership after root exit until inherited stdio closes in %s",
-    async (mode, expectedPosixStage) => {
-      const root = await mkdtemp(path.join(os.tmpdir(), "rwf-tree-release-"));
-      temporaryRoots.push(root);
-      const releasePath = path.join(root, "release");
-      const supervisor = create(mode, {
-        gracefulStopTimeoutMs: 2_000,
-        terminateStopTimeoutMs: 200,
-        killStopTimeoutMs: 300,
-      }, [releasePath]);
-      await supervisor.start();
-      const rootPid = supervisor.pid;
-      expect(rootPid).toBeGreaterThan(0);
-      const startedAt = Date.now();
-      const stopping = supervisor.stop();
-      const outcome = stopping.then(
-        () => ({ ok: true as const }),
-        (error: unknown) => ({ ok: false as const, error }),
-      );
-      try {
-        await expect
-          .poll(() => supervisor.diagnostics.rootExited, { timeout: 1_500 })
-          .toBe(true);
-        await expect
-          .poll(
-            () => supervisor.stderrTail.includes("fixture.descendant-ready"),
-            { timeout: 1_500 },
-          )
-          .toBe(true);
-        expect(Date.now() - startedAt).toBeLessThan(1_750);
-
-        const result = await outcome;
-        expect(Date.now() - startedAt).toBeLessThan(3_000);
-        if (process.platform === "win32") {
-          expect(result.ok).toBe(false);
-          if (!result.ok) {
-            expect(result.error).toBeInstanceOf(StudioTransportError);
-          }
-          expect(supervisor.state).toBe("crashed");
-          expect(supervisor.pid).toBe(rootPid);
-          expect(supervisor.diagnostics.terminationStage).toBe("kill");
-        } else {
-          expect(result.ok).toBe(true);
-          expect(supervisor.state).toBe("stopped");
-          expect(supervisor.pid).toBeNull();
-          expect(supervisor.diagnostics.terminationStage).toBe(
-            expectedPosixStage,
-          );
+        expect(response.kind).toBe("response");
+        expect(response.protocol_version).toBe(3);
+        expect(response.request_id).toBe("protocol-v3");
+        if (response.kind === "response") {
+            expect(response.result.service).toBe("world-forge.studio");
         }
-        expect(supervisor.stderrTail).toContain("fixture.root-exited");
-        expect(supervisor.stderrTail).toContain("fixture.descendant-ready");
-      } finally {
-        await writeFile(releasePath, "release", "utf8");
-        await expect.poll(() => supervisor.pid, { timeout: 3_000 }).toBeNull();
-      }
-    },
-  );
+    });
 
-  it("plans root-exited process trees without risking PID reuse", () => {
-    expect(planProcessTreeTermination("linux", true)).toBe("posix-process-group");
-    expect(planProcessTreeTermination("win32", false)).toBe("windows-taskkill");
-    expect(planProcessTreeTermination("win32", true)).toBe("fail-closed");
-  });
+    it("emits and correlates the creation evidence and durable job protocol v4", async () => {
+        const supervisor = create("normal");
+        await supervisor.start();
 
-  it("rejects relative executables instead of consulting PATH", () => {
-    expect(
-      () =>
-        new NdjsonSupervisor({
-          executable: "python",
-          args: [],
-          env: {},
-        }),
-    ).toThrow(/absolute path/u);
-  });
+        const response = await supervisor.request(
+            "protocol-v4",
+            "service.initialize",
+            {},
+            2_000,
+            4,
+        );
 
-  it("rejects shutdown deadlines outside the bounded policy", () => {
-    expect(
-      () =>
-        create("normal", {
-          gracefulStopTimeoutMs: 60_001,
-        }),
-    ).toThrow(/gracefulStopTimeoutMs must be an integer from 1 to 60000/u);
-  });
+        expect(response.kind).toBe("response");
+        expect(response.protocol_version).toBe(4);
+        expect(response.request_id).toBe("protocol-v4");
+        if (response.kind === "response") {
+            expect(response.result.capabilities).toEqual({
+                creation_evidence_projection: true,
+                creation_jobs: true,
+                creation_output_grants: true,
+                creation_runtime_compose: true,
+                creation_runtime_bundle: true,
+                creation_materialization_bundle: true,
+                creation_asset_previews: true,
+                game_packaging: true,
+                game_package_extraction: true,
+                asset_previews: false,
+                materialization_execution: true,
+            });
+        }
+    });
+
+    it("emits and correlates the main-owned authority protocol v5 only when explicitly requested", async () => {
+        const supervisor = create("normal");
+        await supervisor.start();
+
+        const response = await supervisor.request(
+            "protocol-v5",
+            "service.initialize",
+            {},
+            2_000,
+            5,
+        );
+
+        expect(response.kind).toBe("response");
+        expect(response.protocol_version).toBe(5);
+        expect(response.request_id).toBe("protocol-v5");
+        if (response.kind === "response") {
+            expect(response.result.capabilities).toMatchObject({
+                asset_authority_reviews: true,
+                asset_release_authority: true,
+                runtime_headless_authority: true,
+                creation_preview_pre_release: true,
+            });
+        }
+    });
+
+    it("fails closed when a reply changes the pending protocol version", async () => {
+        const supervisor = create("mismatched-version");
+        await supervisor.start();
+
+        await expect(
+            supervisor.request(
+                "protocol-mismatch",
+                "service.initialize",
+                {},
+                2_000,
+                2,
+            ),
+        ).rejects.toThrow(/protocol version 1; expected 2/u);
+        await expect.poll(() => supervisor.state).toBe("crashed");
+    });
+
+    it("forwards valid service event envelopes", async () => {
+        const supervisor = create("event");
+        const events: string[] = [];
+        supervisor.subscribe((event) => {
+            if (event.type === "event") {
+                events.push(String(event.envelope.event.type));
+            }
+        });
+        await supervisor.start();
+
+        await supervisor.request("event-1", "service.initialize", {}, 2_000);
+
+        expect(events).toEqual(["fixture.ready"]);
+    });
+
+    it("fails closed on malformed service output", async () => {
+        const supervisor = create("malformed");
+        await supervisor.start();
+
+        await expect(
+            supervisor.request("malformed-1", "service.initialize", {}, 2_000),
+        ).rejects.toBeInstanceOf(StudioProtocolError);
+    });
+
+    it("fails closed when a valid response names a different pending method", async () => {
+        const supervisor = create("mismatched-method");
+        await supervisor.start();
+
+        await expect(
+            supervisor.request("mismatch-1", "service.initialize", {}, 2_000),
+        ).rejects.toThrow(/expected service\.initialize/u);
+        await expect.poll(() => supervisor.state).toBe("crashed");
+    });
+
+    it("fails closed on oversized service output", async () => {
+        const supervisor = create("oversized", { maxLineBytes: 128 });
+        await supervisor.start();
+
+        await expect(
+            supervisor.request("oversized-1", "service.initialize", {}, 2_000),
+        ).rejects.toBeInstanceOf(StudioProtocolError);
+    });
+
+    it("times out a request and safely ignores its late reply", async () => {
+        const supervisor = create("delayed");
+        await supervisor.start();
+
+        await expect(
+            supervisor.request("timeout-1", "service.initialize", {}, 100),
+        ).rejects.toBeInstanceOf(StudioRequestTimeoutError);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        expect(supervisor.state).toBe("running");
+    });
+
+    it("cancels a pending request without exposing a wire-level fake cancellation", async () => {
+        const supervisor = create("delayed");
+        await supervisor.start();
+        const pending = supervisor.request(
+            "cancel-1",
+            "service.initialize",
+            {},
+            2_000,
+        );
+
+        expect(supervisor.cancelRequest("cancel-1")).toBe(true);
+        expect(supervisor.cancelRequest("cancel-1")).toBe(false);
+        await expect(pending).rejects.toBeInstanceOf(
+            StudioRequestCancelledError,
+        );
+    });
+
+    it("rejects pending work when the child crashes", async () => {
+        const supervisor = create("crash");
+        await supervisor.start();
+
+        await expect(
+            supervisor.request("crash-1", "service.initialize", {}, 2_000),
+        ).rejects.toBeInstanceOf(StudioTransportError);
+        await expect.poll(() => supervisor.state).toBe("crashed");
+    });
+
+    it("bounds retained stderr", async () => {
+        const supervisor = create("stderr", { maxStderrBytes: 64 });
+        await supervisor.start();
+
+        await supervisor.request("stderr-1", "service.initialize", {}, 2_000);
+
+        expect(Buffer.byteLength(supervisor.stderrTail)).toBeLessThanOrEqual(
+            64,
+        );
+        expect(supervisor.stderrTail).toBe("e".repeat(64));
+    });
+
+    it("rejects deterministic pending-request overload", async () => {
+        const supervisor = create("delayed", { maxPendingRequests: 1 });
+        await supervisor.start();
+        const first = supervisor.request(
+            "pending-1",
+            "service.initialize",
+            {},
+            2_000,
+        );
+
+        await expect(
+            supervisor.request("pending-2", "service.initialize", {}, 2_000),
+        ).rejects.toBeInstanceOf(StudioOverloadError);
+        expect(supervisor.diagnostics.pendingRequests).toBe(1);
+        expect(supervisor.cancelRequest("pending-1")).toBe(true);
+        await expect(first).rejects.toBeInstanceOf(StudioRequestCancelledError);
+    });
+
+    it("bounds total queued and outstanding request bytes", async () => {
+        const supervisor = create("delayed", {
+            maxOutstandingRequestBytes: 1_024,
+        });
+        await supervisor.start();
+        const params = { blob: "x".repeat(600) };
+        const first = supervisor.request(
+            "bytes-1",
+            "service.initialize",
+            params,
+            2_000,
+        );
+
+        await expect(
+            supervisor.request("bytes-2", "service.initialize", params, 2_000),
+        ).rejects.toBeInstanceOf(StudioOverloadError);
+        expect(supervisor.diagnostics.outstandingRequestBytes).toBeGreaterThan(
+            600,
+        );
+        expect(supervisor.cancelRequest("bytes-1")).toBe(true);
+        await expect(first).rejects.toBeInstanceOf(StudioRequestCancelledError);
+        expect(supervisor.diagnostics.outstandingRequestBytes).toBe(0);
+    });
+
+    it("serializes large writes and waits for stdin backpressure to drain", async () => {
+        const supervisor = create("backpressure", {
+            maxPendingRequests: 4,
+            maxOutstandingRequestBytes: 2 * 1024 * 1024,
+        });
+        await supervisor.start();
+        const params = { blob: "x".repeat(300_000) };
+
+        const replies = await Promise.all([
+            supervisor.request(
+                "pressure-1",
+                "service.initialize",
+                params,
+                3_000,
+            ),
+            supervisor.request(
+                "pressure-2",
+                "service.initialize",
+                params,
+                3_000,
+            ),
+            supervisor.request(
+                "pressure-3",
+                "service.initialize",
+                params,
+                3_000,
+            ),
+        ]);
+
+        expect(replies.map((reply) => reply.request_id)).toEqual([
+            "pressure-1",
+            "pressure-2",
+            "pressure-3",
+        ]);
+        expect(supervisor.diagnostics.backpressureWaits).toBeGreaterThan(0);
+        expect(supervisor.diagnostics.pendingRequests).toBe(0);
+        expect(supervisor.diagnostics.outstandingRequestBytes).toBe(0);
+    });
+
+    it("removes never-written churn and fails an abandoned permanently backpressured write", async () => {
+        const supervisor = create("stalled", {
+            maxPendingRequests: 4,
+            maxOutstandingRequestBytes: 2 * 1024 * 1024,
+            maxIgnoredRequestIds: 4,
+        });
+        await supervisor.start();
+        const active = supervisor.request(
+            "stalled-active",
+            "service.initialize",
+            { blob: "x".repeat(300_000) },
+            3_000,
+        );
+        await expect
+            .poll(() => supervisor.diagnostics.backpressureWaits)
+            .toBeGreaterThan(0);
+
+        for (let index = 0; index < 6; index += 1) {
+            const requestId = `queued-${String(index)}`;
+            const queued = supervisor.request(
+                requestId,
+                "service.initialize",
+                {},
+                100,
+            );
+            if (index % 2 === 0) {
+                expect(supervisor.cancelRequest(requestId)).toBe(true);
+                await expect(queued).rejects.toBeInstanceOf(
+                    StudioRequestCancelledError,
+                );
+            } else {
+                await expect(queued).rejects.toBeInstanceOf(
+                    StudioRequestTimeoutError,
+                );
+            }
+            expect(supervisor.diagnostics).toMatchObject({
+                pendingRequests: 1,
+                queuedWrites: 1,
+                ignoredReplyIds: 0,
+            });
+            expect(supervisor.diagnostics.outstandingRequestBytes).toBeLessThan(
+                400_000,
+            );
+        }
+
+        expect(supervisor.cancelRequest("stalled-active")).toBe(true);
+        await expect(active).rejects.toBeInstanceOf(
+            StudioRequestCancelledError,
+        );
+        expect(supervisor.diagnostics.ignoredReplyIds).toBeLessThanOrEqual(1);
+        await expect.poll(() => supervisor.pid).toBeNull();
+        expect(supervisor.state).toBe("crashed");
+        expect(supervisor.diagnostics).toMatchObject({
+            pendingRequests: 0,
+            outstandingRequestBytes: 0,
+            queuedWrites: 0,
+            ignoredReplyIds: 0,
+        });
+    });
+
+    it("recycles the transport instead of evicting sent-request reply tombstones", async () => {
+        const supervisor = create("silent", { maxIgnoredRequestIds: 2 });
+        await supervisor.start();
+
+        for (let index = 0; index < 3; index += 1) {
+            const requestId = `ignored-${String(index)}`;
+            const pending = supervisor.request(
+                requestId,
+                "service.initialize",
+                {},
+                2_000,
+            );
+            await expect
+                .poll(() => supervisor.diagnostics.queuedWrites)
+                .toBe(0);
+            expect(supervisor.cancelRequest(requestId)).toBe(true);
+            await expect(pending).rejects.toBeInstanceOf(
+                StudioRequestCancelledError,
+            );
+            expect(supervisor.diagnostics.ignoredReplyIds).toBeLessThanOrEqual(
+                2,
+            );
+        }
+
+        expect(supervisor.state).toBe("crashed");
+        await expect.poll(() => supervisor.pid).toBeNull();
+        expect(supervisor.diagnostics.ignoredReplyIds).toBe(0);
+    });
+
+    it("clears failed spawn state so the same supervisor can restart", async () => {
+        const root = await mkdtemp(
+            path.join(os.tmpdir(), "rwf-spawn-recovery-"),
+        );
+        temporaryRoots.push(root);
+        const missingCwd = path.join(root, "appears-later");
+        const supervisor = new NdjsonSupervisor({
+            executable: python,
+            args: [fixture, "normal"],
+            cwd: missingCwd,
+            env: { LANG: "C.UTF-8" },
+        });
+        supervisors.push(supervisor);
+
+        await expect(supervisor.start()).rejects.toThrow();
+        expect(supervisor.state).toBe("crashed");
+        expect(supervisor.pid).toBeNull();
+
+        await mkdir(missingCwd);
+        await supervisor.start();
+        const response = await supervisor.request(
+            "recovered-1",
+            "service.initialize",
+            {},
+            2_000,
+        );
+        expect(response.request_id).toBe("recovered-1");
+    });
+
+    it("drains stdin through EOF before reporting a clean stop", async () => {
+        const supervisor = create("eof");
+        const states: string[] = [];
+        supervisor.subscribe((event) => {
+            if (event.type === "state") {
+                states.push(event.state);
+            }
+        });
+        await supervisor.start();
+
+        const stop = supervisor.stop();
+
+        expect(supervisor.state).toBe("stopping");
+        await stop;
+        expect(supervisor.state).toBe("stopped");
+        expect(supervisor.pid).toBeNull();
+        expect(supervisor.stderrTail).toContain("fixture.eof");
+        expect(states).toEqual(["starting", "running", "stopping", "stopped"]);
+    });
+
+    it("shares one stop promise and rejects pending work exactly once", async () => {
+        const supervisor = create("delayed");
+        await supervisor.start();
+        let rejectionCount = 0;
+        const pending = supervisor
+            .request("drain-1", "service.initialize", {}, 2_000)
+            .catch((error: unknown) => {
+                rejectionCount += 1;
+                throw error;
+            });
+
+        const firstStop = supervisor.stop();
+        const secondStop = supervisor.stop();
+
+        expect(secondStop).toBe(firstStop);
+        await expect(pending).rejects.toBeInstanceOf(StudioTransportError);
+        await firstStop;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        expect(rejectionCount).toBe(1);
+        expect(supervisor.state).toBe("stopped");
+        expect(supervisor.stderrTail).toContain("fixture.eof");
+    });
+
+    it("shares the stop promise with reentrant state subscribers", async () => {
+        const supervisor = create("eof");
+        await supervisor.start();
+        let entered = false;
+        let reentrantStop: Promise<void> | null = null;
+        supervisor.subscribe((event) => {
+            if (
+                event.type === "state" &&
+                event.state === "stopping" &&
+                !entered
+            ) {
+                entered = true;
+                reentrantStop = supervisor.stop();
+            }
+        });
+
+        const firstStop = supervisor.stop();
+
+        expect(reentrantStop).toBe(firstStop);
+        await firstStop;
+    });
+
+    it("bounds EOF, terminate, and force-kill escalation for a stuck child", async () => {
+        const supervisor = create("hang-after-eof", {
+            gracefulStopTimeoutMs: 300,
+            terminateStopTimeoutMs: 300,
+            killStopTimeoutMs: 300,
+        });
+        await supervisor.start();
+        const startedAt = Date.now();
+
+        await supervisor.stop();
+
+        expect(Date.now() - startedAt).toBeLessThan(4_000);
+        expect(supervisor.stderrTail).toContain("fixture.eof");
+        expect(supervisor.pid).toBeNull();
+        expect(supervisor.state).toBe("stopped");
+    });
+
+    it("stops safely during spawn and can restart after a clean drain", async () => {
+        const supervisor = create("eof");
+        const starting = supervisor.start();
+        const rejectedStart =
+            expect(starting).rejects.toBeInstanceOf(StudioTransportError);
+
+        await supervisor.stop();
+        await rejectedStart;
+        expect(supervisor.state).toBe("stopped");
+
+        await supervisor.start();
+        const reply = await supervisor.request(
+            "restart-after-stop",
+            "service.initialize",
+            {},
+            2_000,
+        );
+        expect(reply.request_id).toBe("restart-after-stop");
+        await supervisor.stop();
+        expect(supervisor.state).toBe("stopped");
+    });
+
+    it.each([
+        ["descendant-after-eof", "terminate"],
+        ["descendant-ignore-term-after-eof", "kill"],
+    ])(
+        "retains tree ownership after root exit until inherited stdio closes in %s",
+        async (mode, expectedPosixStage) => {
+            const root = await mkdtemp(
+                path.join(os.tmpdir(), "rwf-tree-release-"),
+            );
+            temporaryRoots.push(root);
+            const releasePath = path.join(root, "release");
+            const supervisor = create(
+                mode,
+                {
+                    gracefulStopTimeoutMs: 2_000,
+                    terminateStopTimeoutMs: 200,
+                    killStopTimeoutMs: 300,
+                },
+                [releasePath],
+            );
+            await supervisor.start();
+            const rootPid = supervisor.pid;
+            expect(rootPid).toBeGreaterThan(0);
+            const startedAt = Date.now();
+            const stopping = supervisor.stop();
+            const outcome = stopping.then(
+                () => ({ ok: true as const }),
+                (error: unknown) => ({ ok: false as const, error }),
+            );
+            try {
+                await expect
+                    .poll(() => supervisor.diagnostics.rootExited, {
+                        timeout: 1_500,
+                    })
+                    .toBe(true);
+                await expect
+                    .poll(
+                        () =>
+                            supervisor.stderrTail.includes(
+                                "fixture.descendant-ready",
+                            ),
+                        { timeout: 1_500 },
+                    )
+                    .toBe(true);
+                expect(Date.now() - startedAt).toBeLessThan(1_750);
+
+                const result = await outcome;
+                expect(Date.now() - startedAt).toBeLessThan(3_000);
+                if (process.platform === "win32") {
+                    expect(result.ok).toBe(false);
+                    if (!result.ok) {
+                        expect(result.error).toBeInstanceOf(
+                            StudioTransportError,
+                        );
+                    }
+                    expect(supervisor.state).toBe("crashed");
+                    expect(supervisor.pid).toBe(rootPid);
+                    expect(supervisor.diagnostics.terminationStage).toBe(
+                        "kill",
+                    );
+                } else {
+                    expect(result.ok).toBe(true);
+                    expect(supervisor.state).toBe("stopped");
+                    expect(supervisor.pid).toBeNull();
+                    expect(supervisor.diagnostics.terminationStage).toBe(
+                        expectedPosixStage,
+                    );
+                }
+                expect(supervisor.stderrTail).toContain("fixture.root-exited");
+                expect(supervisor.stderrTail).toContain(
+                    "fixture.descendant-ready",
+                );
+            } finally {
+                await writeFile(releasePath, "release", "utf8");
+                await expect
+                    .poll(() => supervisor.pid, { timeout: 3_000 })
+                    .toBeNull();
+            }
+        },
+    );
+
+    it("plans root-exited process trees without risking PID reuse", () => {
+        expect(planProcessTreeTermination("linux", true)).toBe(
+            "posix-process-group",
+        );
+        expect(planProcessTreeTermination("win32", false)).toBe(
+            "windows-taskkill",
+        );
+        expect(planProcessTreeTermination("win32", true)).toBe("fail-closed");
+    });
+
+    it("rejects relative executables instead of consulting PATH", () => {
+        expect(
+            () =>
+                new NdjsonSupervisor({
+                    executable: "python",
+                    args: [],
+                    env: {},
+                }),
+        ).toThrow(/absolute path/u);
+    });
+
+    it("rejects shutdown deadlines outside the bounded policy", () => {
+        expect(() =>
+            create("normal", {
+                gracefulStopTimeoutMs: 60_001,
+            }),
+        ).toThrow(/gracefulStopTimeoutMs must be an integer from 1 to 60000/u);
+    });
 });

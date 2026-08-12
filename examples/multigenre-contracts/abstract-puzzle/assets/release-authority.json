@@ -1,0 +1,38 @@
+{
+  "authority": {
+    "artifact_snapshot_hash": "fd0375458b47f18292c386d5d7cfc44e2c58d9a21c73117acd25c5acc7edbf50",
+    "producer_job_id": "fixture-abstract-puzzle-release",
+    "producer_operation": "asset.release.authorize",
+    "producer_output_position": 0,
+    "root_generation": 1,
+    "source_revision": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+    "workflow_status_hash": null,
+    "workspace_id": "fixture-abstract-puzzle"
+  },
+  "blockers": [],
+  "candidate_assetpack": {
+    "content_hash": "1c8a5f50623bbae836288d606b9dc71ba3718902d56e02eb7b962ba711ec6e03",
+    "format": "world-forge.assetpack",
+    "format_version": 1,
+    "id": "assetpack_6a1a4e9e7b8eb1745aca3c02b8c60dde0b976e2e67dfc627"
+  },
+  "candidate_manifest": {
+    "content_hash": "99e78d1b36fe2176fea1f2d60357065b6dc139817bc4fdf7d631d3e8d93c5de5",
+    "format": "world-forge.asset_manifest",
+    "format_version": 1,
+    "id": "abstract_puzzle_asset_manifest"
+  },
+  "content_hash": "d6afebd9c5f1fee8013f91094b840e573b5b462126262e6581434ac54e29496f",
+  "format": "world-forge.asset_release_authority",
+  "format_version": 1,
+  "qa_reviews": [
+    {
+      "content_hash": "53702c6a050375d13686ca4f94952bde7dd86d289e9caefb96bab1191418a93a",
+      "format": "world-forge.asset_qa_review_receipt",
+      "format_version": 1,
+      "id": "abstract_puzzle_texture_qa_review"
+    }
+  ],
+  "release_authority_id": "abstract_puzzle_asset_release",
+  "status": "authorized"
+}

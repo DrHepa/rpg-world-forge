@@ -1,0 +1,3060 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-forge.local/schemas/studio-protocol-v5.schema.json",
+  "title": "World Forge Studio authority protocol v5",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    },
+    {
+      "$ref": "#/$defs/errorEnvelope"
+    }
+  ],
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "publicToken": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableSha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "method": {
+      "enum": [
+        "service.initialize",
+        "creation_workspace.create",
+        "creation_artifact.inspect",
+        "creation_artifact.list",
+        "creation_event.list",
+        "creation_evidence.inspect",
+        "creation_job.cancel",
+        "creation_job.create",
+        "creation_job.get",
+        "creation_job.list",
+        "creation_job.recover",
+        "creation_output_grant.create",
+        "creation_output_grant.get",
+        "creation_output_grant.list",
+        "creation_output_grant.revoke",
+        "creation_preview.close",
+        "creation_preview.open",
+        "creation_preview.read"
+      ]
+    },
+    "emptyParams": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "authorityProperties": {
+      "type": "object",
+      "required": [
+        "workspace_id",
+        "expected_root_generation",
+        "expected_source_revision",
+        "expected_workflow_status_hash",
+        "expected_artifact_snapshot_hash"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "expected_root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expected_source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_workflow_status_hash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "expected_artifact_snapshot_hash": {
+          "$ref": "#/$defs/nullableSha256"
+        }
+      }
+    },
+    "artifactListParams": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/authorityProperties"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "lifecycle",
+            "cursor",
+            "limit"
+          ],
+          "properties": {
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "lifecycle": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "active",
+                    "invalidated",
+                    "historical",
+                    "candidate"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "cursor": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/entityId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            }
+          },
+          "if": {
+            "properties": {
+              "cursor": {
+                "not": {
+                  "type": "null"
+                }
+              }
+            },
+            "required": [
+              "cursor"
+            ]
+          },
+          "then": {
+            "properties": {
+              "expected_artifact_snapshot_hash": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "artifactInspectParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "expected_root_generation",
+        "expected_source_revision",
+        "expected_workflow_status_hash",
+        "expected_artifact_snapshot_hash",
+        "artifact_id"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "expected_root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expected_source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_workflow_status_hash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "expected_artifact_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "artifact_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "evidenceInspectParams": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/authorityProperties"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash"
+          ],
+          "properties": {
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            }
+          }
+        }
+      ]
+    },
+    "jobCreateParams": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "creation.compile"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "document",
+            "dependency_artifact_ids"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "artifact.admit"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "document": {
+              "type": "object"
+            },
+            "dependency_artifact_ids": {
+              "type": "array",
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/entityId"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "license_artifact_ids",
+            "recipe_id",
+            "processing_receipt_id",
+            "qa_report_id",
+            "acceptance_results"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "asset.process"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "license_artifact_ids": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/entityId"
+              }
+            },
+            "recipe_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "processing_receipt_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "qa_report_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "acceptance_results": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "$ref": "#/$defs/assetProcessAcceptanceResult"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "qa_report_artifact_ids",
+            "manifest_id",
+            "target_grant_id",
+            "expected_target_grant_generation"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "asset.release.seal"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "qa_report_artifact_ids": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/entityId"
+              }
+            },
+            "manifest_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "target_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_target_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "gamepack_artifact_id",
+            "asset_inventory_artifact_id",
+            "assetpack_artifact_id",
+            "target_grant_id",
+            "expected_target_grant_generation"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "runtime.compose"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "gamepack_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "asset_inventory_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "assetpack_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "target_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_target_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "gamepack_artifact_id",
+            "asset_inventory_artifact_id",
+            "assetpack_artifact_id",
+            "target_grant_id",
+            "expected_target_grant_generation",
+            "runtime_snapshot_artifact_id",
+            "runtime_adapter_registry_artifact_id",
+            "runtime_composition_artifact_id",
+            "runtime_support_report_artifact_id",
+            "source_grant_id",
+            "expected_source_grant_generation"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "runtime.bundle.build"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "gamepack_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "asset_inventory_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "assetpack_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "target_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_target_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "runtime_snapshot_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "runtime_adapter_registry_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "runtime_composition_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "runtime_support_report_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "source_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_source_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "runtime_bundle_artifact_id",
+            "source_grant_id",
+            "expected_source_grant_generation",
+            "target_grant_id",
+            "expected_target_grant_generation"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "game.materialization.bundle.build"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "runtime_bundle_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "source_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_source_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "target_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_target_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "materialization_bundle_artifact_id",
+            "source_grant_id",
+            "expected_source_grant_generation",
+            "target_grant_id",
+            "expected_target_grant_generation"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "game.materialize"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "source_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_source_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "target_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_target_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "materialization_bundle_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "standalone_game_artifact_id",
+            "source_grant_id",
+            "expected_source_grant_generation",
+            "target_grant_id",
+            "expected_target_grant_generation"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "game.package"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "source_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_source_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "target_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_target_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "standalone_game_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "game_package_artifact_id",
+            "source_grant_id",
+            "expected_source_grant_generation",
+            "target_grant_id",
+            "expected_target_grant_generation"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "operation": {
+              "const": "game.package.extract"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "source_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_source_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "target_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_target_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "game_package_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "qa_report_artifact_id",
+            "output_role",
+            "review_receipt_id",
+            "decisions",
+            "blockers"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "operation": {
+              "const": "asset.qa.review"
+            },
+            "qa_report_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "output_role": {
+              "$ref": "#/$defs/entityId"
+            },
+            "review_receipt_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "decisions": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "enum": [
+                  "approved",
+                  "rejected"
+                ]
+              }
+            },
+            "blockers": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/publicToken"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "review_receipt_artifact_ids",
+            "manifest_id",
+            "assetpack_id",
+            "release_authority_id",
+            "blockers",
+            "target_grant_id",
+            "expected_target_grant_generation"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "operation": {
+              "const": "asset.release.authorize"
+            },
+            "review_receipt_artifact_ids": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/entityId"
+              }
+            },
+            "manifest_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "assetpack_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "release_authority_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "blockers": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/publicToken"
+              }
+            },
+            "target_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_target_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspace_id",
+            "operation",
+            "expected_root_generation",
+            "expected_source_revision",
+            "expected_workflow_status_hash",
+            "expected_artifact_snapshot_hash",
+            "gamepack_artifact_id",
+            "asset_inventory_artifact_id",
+            "assetpack_artifact_id",
+            "asset_release_authority_artifact_id",
+            "runtime_snapshot_artifact_id",
+            "runtime_adapter_registry_artifact_id",
+            "runtime_composition_artifact_id",
+            "runtime_bundle_artifact_id",
+            "source_grant_id",
+            "expected_source_grant_generation",
+            "platform_id",
+            "headless_script_artifact_id",
+            "target_grant_id",
+            "expected_target_grant_generation"
+          ],
+          "properties": {
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "workspace_id": {
+              "$ref": "#/$defs/workspaceId"
+            },
+            "expected_root_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expected_source_revision": {
+              "$ref": "#/$defs/sha256"
+            },
+            "expected_workflow_status_hash": {
+              "$ref": "#/$defs/nullableSha256"
+            },
+            "expected_artifact_snapshot_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "operation": {
+              "const": "runtime.headless.verify"
+            },
+            "gamepack_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "asset_inventory_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "assetpack_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "asset_release_authority_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "runtime_snapshot_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "runtime_adapter_registry_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "runtime_composition_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "runtime_bundle_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "source_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_source_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "platform_id": {
+              "$ref": "#/$defs/runtimeHeadlessPlatformId"
+            },
+            "headless_script_artifact_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "target_grant_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "expected_target_grant_generation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        }
+      ]
+    },
+    "jobGetParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id"
+      ],
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "jobListParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "state",
+        "after_sequence",
+        "limit"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "state": {
+          "oneOf": [
+            {
+              "enum": [
+                "queued",
+                "running",
+                "succeeded",
+                "failed",
+                "canceled",
+                "orphaned"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        }
+      }
+    },
+    "jobCancelParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "expected_generation",
+        "expected_record_hash"
+      ],
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expected_record_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "jobRecoverParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "mode",
+        "expected_generation",
+        "expected_record_hash"
+      ],
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "mode": {
+          "enum": [
+            "resume",
+            "rollback",
+            "cleanup"
+          ]
+        },
+        "expected_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expected_record_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "eventListParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "after_id",
+        "limit"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "after_id": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "protocol_version",
+        "kind",
+        "request_id",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "rpg-world-forge.studio_protocol"
+        },
+        "protocol_version": {
+          "const": 5
+        },
+        "kind": {
+          "const": "request"
+        },
+        "request_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "method": {
+          "$ref": "#/$defs/method"
+        },
+        "params": {}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "method": {
+              "const": "service.initialize"
+            },
+            "params": {
+              "$ref": "#/$defs/emptyParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_workspace.create"
+            },
+            "params": {
+              "$ref": "#/$defs/workspaceCreateParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_output_grant.create"
+            },
+            "params": {
+              "$ref": "#/$defs/outputGrantCreateParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_output_grant.get"
+            },
+            "params": {
+              "$ref": "#/$defs/outputGrantGetParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_output_grant.list"
+            },
+            "params": {
+              "$ref": "#/$defs/outputGrantListParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_output_grant.revoke"
+            },
+            "params": {
+              "$ref": "#/$defs/outputGrantRevokeParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_artifact.list"
+            },
+            "params": {
+              "$ref": "#/$defs/artifactListParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_artifact.inspect"
+            },
+            "params": {
+              "$ref": "#/$defs/artifactInspectParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_evidence.inspect"
+            },
+            "params": {
+              "$ref": "#/$defs/evidenceInspectParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_job.create"
+            },
+            "params": {
+              "$ref": "#/$defs/jobCreateParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_job.get"
+            },
+            "params": {
+              "$ref": "#/$defs/jobGetParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_job.list"
+            },
+            "params": {
+              "$ref": "#/$defs/jobListParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_job.cancel"
+            },
+            "params": {
+              "$ref": "#/$defs/jobCancelParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_job.recover"
+            },
+            "params": {
+              "$ref": "#/$defs/jobRecoverParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_event.list"
+            },
+            "params": {
+              "$ref": "#/$defs/eventListParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_preview.open"
+            },
+            "params": {
+              "$ref": "#/$defs/creationPreviewOpenParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_preview.read"
+            },
+            "params": {
+              "$ref": "#/$defs/creationPreviewReadParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_preview.close"
+            },
+            "params": {
+              "$ref": "#/$defs/creationPreviewCloseParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ]
+        }
+      ]
+    },
+    "initializeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service",
+        "service_version",
+        "protocol",
+        "protocol_version",
+        "methods",
+        "capabilities"
+      ],
+      "properties": {
+        "service": {
+          "const": "world-forge.studio"
+        },
+        "service_version": {
+          "const": 5
+        },
+        "protocol": {
+          "const": "rpg-world-forge.studio_protocol"
+        },
+        "protocol_version": {
+          "const": 5
+        },
+        "methods": {
+          "type": "array",
+          "minItems": 18,
+          "maxItems": 18,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/method"
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "creation_evidence_projection",
+            "creation_jobs",
+            "creation_runtime_compose",
+            "creation_output_grants",
+            "asset_previews",
+            "materialization_execution",
+            "creation_runtime_bundle",
+            "creation_materialization_bundle",
+            "game_packaging",
+            "game_package_extraction",
+            "creation_asset_previews",
+            "asset_authority_reviews",
+            "asset_release_authority",
+            "runtime_headless_authority",
+            "creation_preview_pre_release"
+          ],
+          "properties": {
+            "creation_evidence_projection": {
+              "const": true
+            },
+            "creation_jobs": {
+              "const": true
+            },
+            "asset_previews": {
+              "const": false
+            },
+            "materialization_execution": {
+              "const": true
+            },
+            "creation_output_grants": {
+              "const": true
+            },
+            "creation_runtime_compose": {
+              "const": true
+            },
+            "creation_runtime_bundle": {
+              "const": true
+            },
+            "creation_materialization_bundle": {
+              "const": true
+            },
+            "game_packaging": {
+              "const": true
+            },
+            "game_package_extraction": {
+              "const": true
+            },
+            "creation_asset_previews": {
+              "const": true
+            },
+            "asset_authority_reviews": {
+              "const": true
+            },
+            "asset_release_authority": {
+              "const": true
+            },
+            "runtime_headless_authority": {
+              "const": true
+            },
+            "creation_preview_pre_release": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    "publicAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "root_generation",
+        "source_revision",
+        "workflow_status_hash"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "workflow_status_hash": {
+          "$ref": "#/$defs/nullableSha256"
+        }
+      }
+    },
+    "counts": {
+      "$ref": "studio-creation-evidence.schema.json#/$defs/artifactCounts"
+    },
+    "artifactListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "artifact_snapshot_hash",
+        "artifacts",
+        "next_cursor",
+        "counts"
+      ],
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/publicAuthority"
+        },
+        "artifact_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "artifacts": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "studio-creation-artifact.schema.json"
+          }
+        },
+        "next_cursor": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/entityId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "counts": {
+          "$ref": "#/$defs/counts"
+        }
+      }
+    },
+    "projectionFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 1024
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "maxItems": 128,
+              "items": {
+                "type": "string",
+                "maxLength": 256
+              }
+            }
+          ]
+        }
+      }
+    },
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projection_kind",
+        "title",
+        "status",
+        "facts",
+        "lineage"
+      ],
+      "properties": {
+        "projection_kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "status": {
+          "oneOf": [
+            {
+              "type": "string",
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "facts": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/projectionFact"
+          }
+        },
+        "lineage": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "relation",
+              "artifact_id",
+              "lifecycle"
+            ],
+            "properties": {
+              "relation": {
+                "const": "depends_on"
+              },
+              "artifact_id": {
+                "$ref": "#/$defs/entityId"
+              },
+              "lifecycle": {
+                "enum": [
+                  "active",
+                  "invalidated",
+                  "historical",
+                  "candidate"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "artifactInspectResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "artifact_snapshot_hash",
+        "artifact",
+        "projection"
+      ],
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/publicAuthority"
+        },
+        "artifact_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "artifact": {
+          "$ref": "studio-creation-artifact.schema.json"
+        },
+        "projection": {
+          "$ref": "#/$defs/projection"
+        }
+      }
+    },
+    "evidenceInspectResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "artifact_snapshot_hash",
+        "evidence"
+      ],
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/publicAuthority"
+        },
+        "artifact_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidence": {
+          "$ref": "studio-creation-evidence.schema.json"
+        }
+      }
+    },
+    "jobResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job"
+      ],
+      "properties": {
+        "job": {
+          "$ref": "studio-creation-job-v12.schema.json"
+        }
+      }
+    },
+    "jobListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jobs",
+        "next_sequence"
+      ],
+      "properties": {
+        "jobs": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "studio-creation-job-v12.schema.json"
+          }
+        },
+        "next_sequence": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "creationEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "workspace_id",
+        "topic",
+        "entity_type",
+        "entity_id",
+        "payload",
+        "created_at"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "topic": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+        },
+        "entity_type": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+        },
+        "entity_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "created_at": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "eventListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "events"
+      ],
+      "properties": {
+        "events": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/creationEvent"
+          }
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "protocol_version",
+        "kind",
+        "request_id",
+        "method",
+        "result"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "rpg-world-forge.studio_protocol"
+        },
+        "protocol_version": {
+          "const": 5
+        },
+        "kind": {
+          "const": "response"
+        },
+        "request_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "method": {
+          "$ref": "#/$defs/method"
+        },
+        "result": {}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "method": {
+              "const": "service.initialize"
+            },
+            "result": {
+              "$ref": "#/$defs/initializeResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_workspace.create"
+            },
+            "result": {
+              "$ref": "#/$defs/workspaceResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "creation_output_grant.create",
+                "creation_output_grant.get",
+                "creation_output_grant.revoke"
+              ]
+            },
+            "result": {
+              "$ref": "#/$defs/outputGrantResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_output_grant.list"
+            },
+            "result": {
+              "$ref": "#/$defs/outputGrantListResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_artifact.list"
+            },
+            "result": {
+              "$ref": "#/$defs/artifactListResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_artifact.inspect"
+            },
+            "result": {
+              "$ref": "#/$defs/artifactInspectResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_evidence.inspect"
+            },
+            "result": {
+              "$ref": "#/$defs/evidenceInspectResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "enum": [
+                "creation_job.create",
+                "creation_job.get",
+                "creation_job.cancel",
+                "creation_job.recover"
+              ]
+            },
+            "result": {
+              "$ref": "#/$defs/jobResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_job.list"
+            },
+            "result": {
+              "$ref": "#/$defs/jobListResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_event.list"
+            },
+            "result": {
+              "$ref": "#/$defs/eventListResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_preview.open"
+            },
+            "result": {
+              "$ref": "#/$defs/creationPreviewOpenResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_preview.read"
+            },
+            "result": {
+              "$ref": "#/$defs/creationPreviewReadResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "creation_preview.close"
+            },
+            "result": {
+              "$ref": "#/$defs/creationPreviewCloseResult"
+            }
+          },
+          "required": [
+            "method",
+            "result"
+          ]
+        }
+      ]
+    },
+    "errorEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "protocol_version",
+        "kind",
+        "request_id",
+        "error"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "rpg-world-forge.studio_protocol"
+        },
+        "protocol_version": {
+          "const": 5
+        },
+        "kind": {
+          "const": "error"
+        },
+        "request_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/entityId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "details"
+          ],
+          "properties": {
+            "code": {
+              "enum": [
+                "invalid_request",
+                "not_found",
+                "conflict",
+                "invalid_state",
+                "internal_error",
+                "recovery_ambiguous",
+                "recovery_failed"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "details": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "assetProcessAcceptanceResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "criterion_index",
+        "criterion_sha256",
+        "status",
+        "evidence_hashes"
+      ],
+      "properties": {
+        "criterion_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 63
+        },
+        "criterion_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "status": {
+          "enum": [
+            "failed",
+            "passed"
+          ]
+        },
+        "evidence_hashes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      }
+    },
+    "assetProcessOperationParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "license_artifact_ids",
+        "recipe_id",
+        "processing_receipt_id",
+        "qa_report_id",
+        "acceptance_results"
+      ],
+      "properties": {
+        "license_artifact_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/entityId"
+          }
+        },
+        "recipe_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "processing_receipt_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "qa_report_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "acceptance_results": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/assetProcessAcceptanceResult"
+          }
+        }
+      }
+    },
+    "outputGrantCreateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "kind",
+        "display_name",
+        "path"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "kind": {
+          "enum": [
+            "generic_assetpack_directory",
+            "game_runtime_bundle_directory",
+            "game_materialization_bundle_directory",
+            "standalone_game_directory",
+            "game_package_file",
+            "headless_evidence_directory"
+          ]
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32767
+        }
+      }
+    },
+    "outputGrantGetParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "outputGrantListParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "expected_root_generation",
+        "expected_source_revision",
+        "expected_workflow_status_hash",
+        "expected_artifact_snapshot_hash",
+        "cursor",
+        "limit"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "expected_root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expected_source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_workflow_status_hash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "expected_artifact_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "cursor": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/entityId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        }
+      }
+    },
+    "outputGrantRevokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "expected_generation"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "outputGrantResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant"
+      ],
+      "properties": {
+        "grant": {
+          "$ref": "studio-creation-output-grant-v6.schema.json"
+        }
+      }
+    },
+    "outputGrantListResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "artifact_snapshot_hash",
+        "grants",
+        "next_cursor"
+      ],
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/publicAuthority"
+        },
+        "artifact_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "grants": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "studio-creation-output-grant-v6.schema.json"
+          }
+        },
+        "next_cursor": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/entityId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "creationPreviewOpenParams": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/creationPreviewPublishedOpenParams"
+        },
+        {
+          "$ref": "#/$defs/creationPreviewQaReviewCandidateOpenParams"
+        }
+      ]
+    },
+    "creationPreviewPublishedOpenParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "expected_root_generation",
+        "expected_source_revision",
+        "expected_workflow_status_hash",
+        "expected_artifact_snapshot_hash",
+        "assetpack_artifact_id",
+        "output_grant_id",
+        "expected_output_grant_generation",
+        "asset_id"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "expected_root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expected_source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_workflow_status_hash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "expected_artifact_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "assetpack_artifact_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "output_grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_output_grant_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "asset_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "creationPreviewQaReviewCandidateOpenParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_kind",
+        "workspace_id",
+        "expected_root_generation",
+        "expected_source_revision",
+        "expected_workflow_status_hash",
+        "expected_artifact_snapshot_hash",
+        "qa_report_artifact_id",
+        "asset_id",
+        "output_role"
+      ],
+      "properties": {
+        "source_kind": {
+          "const": "qa_review_candidate"
+        },
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "expected_root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "expected_source_revision": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_workflow_status_hash": {
+          "$ref": "#/$defs/nullableSha256"
+        },
+        "expected_artifact_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "qa_report_artifact_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "asset_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "output_role": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "creationPreviewReadParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle",
+        "sequence"
+      ],
+      "properties": {
+        "handle": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1023
+        }
+      }
+    },
+    "creationPreviewCloseParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle"
+      ],
+      "properties": {
+        "handle": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        }
+      }
+    },
+    "creationPreviewOpenResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "preview"
+      ],
+      "properties": {
+        "preview": {
+          "oneOf": [
+            {
+              "$ref": "studio-creation-preview.schema.json"
+            },
+            {
+              "$ref": "studio-creation-preview-v2.schema.json"
+            }
+          ]
+        }
+      }
+    },
+    "creationPreviewReadResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle",
+        "sequence",
+        "data_base64",
+        "byte_length",
+        "cumulative_bytes",
+        "cumulative_sha256",
+        "eof"
+      ],
+      "properties": {
+        "handle": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1023
+        },
+        "data_base64": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 87384,
+          "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536
+        },
+        "cumulative_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864
+        },
+        "cumulative_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "eof": {
+          "type": "boolean"
+        }
+      },
+      "if": {
+        "properties": {
+          "eof": {
+            "const": false
+          }
+        },
+        "required": [
+          "eof"
+        ]
+      },
+      "then": {
+        "properties": {
+          "byte_length": {
+            "const": 65536
+          }
+        }
+      }
+    },
+    "creationPreviewCloseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "handle",
+        "closed"
+      ],
+      "properties": {
+        "handle": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "closed": {
+          "const": true
+        }
+      }
+    },
+    "runtimeHeadlessPlatformId": {
+      "enum": [
+        "platform:linux_x86_64",
+        "platform:windows_x86_64"
+      ]
+    },
+    "creationScaffoldIdentifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$"
+    },
+    "workspaceCreateGameWithoutNarrativeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "expected_grant_generation",
+        "project_kind",
+        "project_id",
+        "title",
+        "default_locale",
+        "project_version",
+        "gameplay_family",
+        "initial_core_verb",
+        "initial_core_loop",
+        "world_presence",
+        "narrative_requirement",
+        "narrative_authorship",
+        "narrative_topology",
+        "presentation_mode",
+        "runtime_support_intent"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_grant_generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "project_kind": {
+          "const": "game"
+        },
+        "project_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "default_locale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "project_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "gameplay_family": {
+          "enum": [
+            "action",
+            "adventure",
+            "educational",
+            "narrative",
+            "puzzle",
+            "rhythm",
+            "role_playing",
+            "sandbox",
+            "simulation",
+            "sports",
+            "strategy"
+          ]
+        },
+        "initial_core_verb": {
+          "$ref": "#/$defs/creationScaffoldIdentifier"
+        },
+        "initial_core_loop": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        },
+        "world_presence": {
+          "enum": [
+            "none",
+            "abstract",
+            "symbolic",
+            "diegetic"
+          ]
+        },
+        "presentation_mode": {
+          "enum": [
+            "text",
+            "2d",
+            "2_5d",
+            "3d",
+            "mixed",
+            "vr",
+            "ar"
+          ]
+        },
+        "runtime_support_intent": {
+          "enum": [
+            "authoring_only",
+            "compatibility_assessment"
+          ]
+        },
+        "asset_content_mode": {
+          "enum": [
+            "authored",
+            "modular",
+            "deterministic_procedural",
+            "generated_at_authoring_time",
+            "player_generated",
+            "hybrid",
+            "not_applicable"
+          ]
+        },
+        "narrative_requirement": {
+          "const": "none"
+        },
+        "narrative_authorship": {
+          "const": "none"
+        },
+        "narrative_topology": {
+          "const": "none"
+        }
+      }
+    },
+    "workspaceCreateGameWithNarrativeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "expected_grant_generation",
+        "project_kind",
+        "project_id",
+        "title",
+        "default_locale",
+        "project_version",
+        "gameplay_family",
+        "initial_core_verb",
+        "initial_core_loop",
+        "world_presence",
+        "narrative_requirement",
+        "narrative_authorship",
+        "narrative_topology",
+        "presentation_mode",
+        "runtime_support_intent"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_grant_generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "project_kind": {
+          "const": "game"
+        },
+        "project_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "default_locale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "project_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "gameplay_family": {
+          "enum": [
+            "action",
+            "adventure",
+            "educational",
+            "narrative",
+            "puzzle",
+            "rhythm",
+            "role_playing",
+            "sandbox",
+            "simulation",
+            "sports",
+            "strategy"
+          ]
+        },
+        "initial_core_verb": {
+          "$ref": "#/$defs/creationScaffoldIdentifier"
+        },
+        "initial_core_loop": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        },
+        "world_presence": {
+          "enum": [
+            "none",
+            "abstract",
+            "symbolic",
+            "diegetic"
+          ]
+        },
+        "presentation_mode": {
+          "enum": [
+            "text",
+            "2d",
+            "2_5d",
+            "3d",
+            "mixed",
+            "vr",
+            "ar"
+          ]
+        },
+        "runtime_support_intent": {
+          "enum": [
+            "authoring_only",
+            "compatibility_assessment"
+          ]
+        },
+        "asset_content_mode": {
+          "enum": [
+            "authored",
+            "modular",
+            "deterministic_procedural",
+            "generated_at_authoring_time",
+            "player_generated",
+            "hybrid",
+            "not_applicable"
+          ]
+        },
+        "narrative_requirement": {
+          "enum": [
+            "optional",
+            "required"
+          ]
+        },
+        "narrative_authorship": {
+          "enum": [
+            "authored",
+            "emergent",
+            "procedural",
+            "player_authored",
+            "social",
+            "hybrid"
+          ]
+        },
+        "narrative_topology": {
+          "enum": [
+            "linear",
+            "foldback",
+            "branching",
+            "branch_and_bottleneck",
+            "hub_and_spoke",
+            "modular",
+            "storylet",
+            "loop_reset",
+            "episodic",
+            "seasonal",
+            "open_ended"
+          ]
+        }
+      }
+    },
+    "workspaceCreateLibraryParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id",
+        "expected_grant_generation",
+        "project_kind",
+        "project_id",
+        "title",
+        "default_locale",
+        "project_version"
+      ],
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_grant_generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "project_kind": {
+          "enum": [
+            "asset_library",
+            "universe_library"
+          ]
+        },
+        "project_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "default_locale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "project_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    },
+    "workspaceCreateParams": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/workspaceCreateLibraryParams"
+        },
+        {
+          "$ref": "#/$defs/workspaceCreateGameWithoutNarrativeParams"
+        },
+        {
+          "$ref": "#/$defs/workspaceCreateGameWithNarrativeParams"
+        }
+      ]
+    },
+    "workspaceResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace"
+      ],
+      "properties": {
+        "workspace": {
+          "$ref": "studio-creation-workspace.schema.json"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "content_hash": "3f3ed623c2f26208c60762888e8aa544f877bd198664c16e64ccbfd7f41226cf",
+  "extensions": [],
+  "format": "world-forge.creation_source_manifest",
+  "format_version": 1,
+  "modules": {
+    "activity_modules": [],
+    "logic_modules": [
+      {
+        "content_hash": "a877d9b2701b45f761c03554df04a23791b9151e68383d7f03907d7b93aff75e",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "branching_logic",
+        "path": "logic/branching.json"
+      }
+    ],
+    "narrative_modules": [
+      {
+        "content_hash": "29512bafe8701029b4c53b2408346d9133cc4845c86aa05ee80edace950ccdaf",
+        "format": "world-forge.narrative_module",
+        "format_version": 1,
+        "id": "branching_units",
+        "path": "narrative/branching.json"
+      }
+    ],
+    "system_modules": [],
+    "world_modules": []
+  },
+  "profile": {
+    "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "branching_narrative_profile",
+    "path": "profile.json"
+  },
+  "project_id": "branching_narrative"
+}

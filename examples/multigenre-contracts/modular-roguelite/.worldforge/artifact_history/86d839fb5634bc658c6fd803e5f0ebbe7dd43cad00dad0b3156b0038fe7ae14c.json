@@ -1,0 +1,61 @@
+{
+  "content_hash": "86d839fb5634bc658c6fd803e5f0ebbe7dd43cad00dad0b3156b0038fe7ae14c",
+  "extensions": [],
+  "format": "world-forge.creation_source_manifest",
+  "format_version": 1,
+  "modules": {
+    "activity_modules": [
+      {
+        "content_hash": "935704efdad422c4630e5ebcc732c1fa810ac1fe7f2deee238260ea27dc463c7",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "modular_roguelite_activities",
+        "path": "activities/modular_roguelite.json"
+      }
+    ],
+    "logic_modules": [
+      {
+        "content_hash": "509ef20177804e39b9acbe708f86661d7b437237ded64e5baa672d65595fe864",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "modular_roguelite_logic",
+        "path": "logic/modular_roguelite.json"
+      }
+    ],
+    "narrative_modules": [
+      {
+        "content_hash": "b1f606f5b66afe42079079a4ae39d6520df580019ebea3a1ac17820eb4135f15",
+        "format": "world-forge.narrative_module",
+        "format_version": 1,
+        "id": "modular_roguelite_narrative",
+        "path": "narrative/modular_roguelite.json"
+      }
+    ],
+    "system_modules": [
+      {
+        "content_hash": "51a23ea30282995cbcdab2f18550ebb2fceabbf1a69aadf9aca81f096ea2e7f8",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "modular_roguelite_systems",
+        "path": "systems/modular_roguelite.json"
+      }
+    ],
+    "world_modules": [
+      {
+        "content_hash": "2d3beeec4eef1ed8190105382215077aa9f8f2be3cc63eb5a62646e70b04b3d8",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "modular_roguelite_space",
+        "path": "world/modular_roguelite.json"
+      }
+    ]
+  },
+  "profile": {
+    "content_hash": "63745ee45c0bb39730938ffc13bfb51334eae5bc00b94024097ebad894429391",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "modular_roguelite_profile",
+    "path": "profile.json"
+  },
+  "project_id": "modular_roguelite"
+}

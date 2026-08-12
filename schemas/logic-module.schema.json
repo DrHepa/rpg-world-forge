@@ -1,0 +1,1404 @@
+{
+  "$id": "https://world-forge.local/schemas/logic-module.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/action"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array"
+    },
+    "conditions": {
+      "items": {
+        "$ref": "#/$defs/condition"
+      },
+      "maxItems": 512,
+      "minItems": 1,
+      "type": "array"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "effects": {
+      "items": {
+        "$ref": "#/$defs/effect"
+      },
+      "maxItems": 512,
+      "minItems": 1,
+      "type": "array"
+    },
+    "endings": {
+      "items": {
+        "$ref": "#/$defs/ending"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/event"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/extension"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "failures": {
+      "items": {
+        "$ref": "#/$defs/failure"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.logic_module"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "goals": {
+      "items": {
+        "$ref": "#/$defs/goal"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+    },
+    "mechanics": {
+      "items": {
+        "$ref": "#/$defs/mechanic"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array"
+    },
+    "module_id": {
+      "$ref": "#/$defs/id"
+    },
+    "presentation_hooks": {
+      "items": {
+        "$ref": "#/$defs/presentationHook"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array"
+    },
+    "project_id": {
+      "$ref": "#/$defs/id"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/rule"
+      },
+      "maxItems": 512,
+      "minItems": 1,
+      "type": "array"
+    },
+    "state_variables": {
+      "items": {
+        "$ref": "#/$defs/stateVariable"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array"
+    },
+    "title": {
+      "maxLength": 512,
+      "minLength": 1,
+      "$ref": "#/$defs/runtimeString",
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "module_id",
+    "project_id",
+    "title",
+    "state_variables",
+    "actions",
+    "conditions",
+    "effects",
+    "rules",
+    "goals",
+    "failures",
+    "endings",
+    "events",
+    "presentation_hooks",
+    "mechanics",
+    "extensions",
+    "content_hash"
+  ],
+  "title": "World Forge declarative logic module v1",
+  "type": "object",
+  "$defs": {
+    "action": {
+      "additionalProperties": false,
+      "properties": {
+        "core_verb_id": {
+          "$ref": "#/$defs/id"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "parameters": {
+          "items": {
+            "$ref": "#/$defs/parameter"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "presentation_hook_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "required_feature_ids": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "rule_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "source_bindings": {
+          "items": {
+            "$ref": "#/$defs/sourceBinding"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "core_verb_id",
+        "parameters",
+        "source_bindings",
+        "rule_ids",
+        "presentation_hook_ids",
+        "required_feature_ids"
+      ],
+      "type": "object"
+    },
+    "allCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "condition_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "operator": {
+          "const": "all"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operator",
+        "condition_ids"
+      ],
+      "type": "object"
+    },
+    "anyCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "condition_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "operator": {
+          "const": "any"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operator",
+        "condition_ids"
+      ],
+      "type": "object"
+    },
+    "booleanLiteralOperand": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "literal"
+        },
+        "value": {
+          "type": "boolean"
+        },
+        "value_type": {
+          "const": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "value_type",
+        "value"
+      ],
+      "type": "object"
+    },
+    "booleanParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "type": "object"
+    },
+    "booleanState": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "initial": {
+          "type": "boolean"
+        },
+        "mutability": {
+          "enum": [
+            "mutable",
+            "constant"
+          ]
+        },
+        "persistence": {
+          "enum": [
+            "saved",
+            "transient"
+          ]
+        },
+        "type": {
+          "const": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "initial",
+        "mutability",
+        "persistence"
+      ],
+      "type": "object"
+    },
+    "compareCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "comparison": {
+          "enum": [
+            "equal",
+            "not_equal",
+            "less_than",
+            "less_or_equal",
+            "greater_than",
+            "greater_or_equal"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "left": {
+          "$ref": "#/$defs/operand"
+        },
+        "operator": {
+          "const": "compare"
+        },
+        "right": {
+          "$ref": "#/$defs/operand"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operator",
+        "comparison",
+        "left",
+        "right"
+      ],
+      "type": "object"
+    },
+    "condition": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/constantCondition"
+        },
+        {
+          "$ref": "#/$defs/compareCondition"
+        },
+        {
+          "$ref": "#/$defs/allCondition"
+        },
+        {
+          "$ref": "#/$defs/anyCondition"
+        },
+        {
+          "$ref": "#/$defs/notCondition"
+        },
+        {
+          "$ref": "#/$defs/indexValidCondition"
+        },
+        {
+          "$ref": "#/$defs/integerDistanceCondition"
+        }
+      ]
+    },
+    "constantCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "operator": {
+          "const": "constant"
+        },
+        "value": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operator",
+        "value"
+      ],
+      "type": "object"
+    },
+    "effect": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/setEffect"
+        },
+        {
+          "$ref": "#/$defs/swapArrayItemsEffect"
+        },
+        {
+          "$ref": "#/$defs/appendUniqueEffect"
+        },
+        {
+          "$ref": "#/$defs/incrementEffect"
+        },
+        {
+          "$ref": "#/$defs/resetEffect"
+        }
+      ]
+    },
+    "ending": {
+      "additionalProperties": false,
+      "properties": {
+        "condition_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "event_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "success",
+            "failure",
+            "neutral"
+          ]
+        },
+        "presentation_hook_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "condition_ids",
+        "event_ids",
+        "presentation_hook_ids"
+      ],
+      "type": "object"
+    },
+    "event": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "extension": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "$ref": "#/$defs/extensionId"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "required",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "extensionId": {
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$",
+      "type": "string"
+    },
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "condition_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "recovery_action_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        }
+      },
+      "required": [
+        "id",
+        "condition_ids",
+        "recovery_action_ids"
+      ],
+      "type": "object"
+    },
+    "goal": {
+      "additionalProperties": false,
+      "properties": {
+        "condition_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "success_ending_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id",
+        "condition_ids",
+        "success_ending_id"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)(?!wf_internal_)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "idArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "maxItems": 64,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "incrementEffect": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "amount": {
+          "$ref": "#/$defs/operand"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "invalid_transition_policy": {
+          "const": "reject_transition"
+        },
+        "operation": {
+          "const": "increment"
+        },
+        "state_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operation",
+        "state_id",
+        "amount",
+        "invalid_transition_policy"
+      ],
+      "type": "object"
+    },
+    "indexValidCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "array_state_id": {
+          "$ref": "#/$defs/id"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "index": {
+          "$ref": "#/$defs/operand"
+        },
+        "operator": {
+          "const": "index_valid"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operator",
+        "array_state_id",
+        "index"
+      ],
+      "type": "object"
+    },
+    "integerDistanceCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "distance": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "left": {
+          "$ref": "#/$defs/operand"
+        },
+        "operator": {
+          "const": "integer_distance"
+        },
+        "right": {
+          "$ref": "#/$defs/operand"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operator",
+        "left",
+        "right",
+        "distance"
+      ],
+      "type": "object"
+    },
+    "integerLiteralOperand": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "literal"
+        },
+        "value": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "value_type": {
+          "const": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "value_type",
+        "value"
+      ],
+      "type": "object"
+    },
+    "integerParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "maximum": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "minimum": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "type": {
+          "const": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "minimum",
+        "maximum"
+      ],
+      "type": "object"
+    },
+    "integerState": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "initial": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "maximum": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "minimum": {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        "mutability": {
+          "enum": [
+            "mutable",
+            "constant"
+          ]
+        },
+        "persistence": {
+          "enum": [
+            "saved",
+            "transient"
+          ]
+        },
+        "type": {
+          "const": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "initial",
+        "mutability",
+        "persistence",
+        "minimum",
+        "maximum"
+      ],
+      "type": "object"
+    },
+    "literalOperand": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/booleanLiteralOperand"
+        },
+        {
+          "$ref": "#/$defs/integerLiteralOperand"
+        },
+        {
+          "$ref": "#/$defs/stringLiteralOperand"
+        },
+        {
+          "$ref": "#/$defs/stringArrayLiteralOperand"
+        }
+      ]
+    },
+    "mechanic": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "authoritative_state_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "core_verb_id": {
+          "$ref": "#/$defs/id"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "event_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "presentation_hook_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "required_feature_ids": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "rule_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        }
+      },
+      "required": [
+        "id",
+        "core_verb_id",
+        "action_id",
+        "authoritative_state_ids",
+        "condition_ids",
+        "rule_ids",
+        "effect_ids",
+        "event_ids",
+        "presentation_hook_ids",
+        "asset_binding_ids",
+        "required_feature_ids"
+      ],
+      "type": "object"
+    },
+    "narrativeOptionBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "narrative_option"
+        },
+        "option_id": {
+          "$ref": "#/$defs/id"
+        },
+        "source_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "kind",
+        "source_id",
+        "option_id"
+      ],
+      "type": "object"
+    },
+    "nonEmptyIdArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "nonEmptyTokenArray": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "tokenArray": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 64,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "notCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/nullableId"
+        },
+        "condition_id": {
+          "$ref": "#/$defs/id"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "operator": {
+          "const": "not"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operator",
+        "condition_id"
+      ],
+      "type": "object"
+    },
+    "nullableId": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "operand": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/literalOperand"
+        },
+        {
+          "$ref": "#/$defs/stateOperand"
+        },
+        {
+          "$ref": "#/$defs/parameterOperand"
+        }
+      ]
+    },
+    "parameter": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/booleanParameter"
+        },
+        {
+          "$ref": "#/$defs/integerParameter"
+        },
+        {
+          "$ref": "#/$defs/stringParameter"
+        },
+        {
+          "$ref": "#/$defs/stringArrayParameter"
+        }
+      ]
+    },
+    "parameterOperand": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "parameter"
+        },
+        "parameter_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "kind",
+        "action_id",
+        "parameter_id"
+      ],
+      "type": "object"
+    },
+    "plainSourceBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "activity",
+            "system"
+          ]
+        },
+        "source_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "kind",
+        "source_id"
+      ],
+      "type": "object"
+    },
+    "presentationHook": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "board",
+            "text",
+            "feedback",
+            "ending"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "asset_binding_ids"
+      ],
+      "type": "object"
+    },
+    "resetEffect": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "invalid_transition_policy": {
+          "const": "reject_transition"
+        },
+        "operation": {
+          "const": "reset"
+        },
+        "state_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operation",
+        "state_id",
+        "invalid_transition_policy"
+      ],
+      "type": "object"
+    },
+    "rule": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "event_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "order": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "order",
+        "condition_ids",
+        "effect_ids",
+        "event_ids"
+      ],
+      "type": "object"
+    },
+    "setEffect": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "invalid_transition_policy": {
+          "const": "reject_transition"
+        },
+        "operation": {
+          "const": "set"
+        },
+        "state_id": {
+          "$ref": "#/$defs/id"
+        },
+        "value": {
+          "$ref": "#/$defs/operand"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operation",
+        "state_id",
+        "value",
+        "invalid_transition_policy"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "runtimeString": {
+      "pattern": "^(?!\\s*(?:[A-Za-z][A-Za-z0-9+.-]*://|[Ff][Ii][Ll][Ee]:[\\\\/]|[A-Za-z]:[\\\\/]|[\\\\/]{2}|/|@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:@[^\\s/\\\\]+)?\\s*$|(?:[Pp][Rr][Oo][Vv][Ii][Dd][Ee][Rr](?:_[Ii][Dd])?|[Mm][Oo][Dd][Ee][Ll](?:_[Ii][Dd])?|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Pp][Rr][Oo][Mm][Pp][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Ee][Nn][Dd][Pp][Oo][Ii][Nn][Tt])\\s*(?:=|:\\s*|\\s+[Ii][Ss]\\s+)|\\.{1,2}(?:[\\\\/]|\\s*$)))(?![\\s\\S]*[\\\\/]\\.{1,2}(?:[\\\\/]|\\s*$))(?!\\s*[^/\\\\\\r\\n]+(?:[\\\\/][^/\\\\\\r\\n]+)+\\.[A-Za-z0-9][A-Za-z0-9._-]*\\s*$)[\\s\\S]*$",
+      "type": "string"
+    },
+    "sourceBinding": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/plainSourceBinding"
+        },
+        {
+          "$ref": "#/$defs/narrativeOptionBinding"
+        }
+      ]
+    },
+    "stateOperand": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "state"
+        },
+        "state_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "kind",
+        "state_id"
+      ],
+      "type": "object"
+    },
+    "stateVariable": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/booleanState"
+        },
+        {
+          "$ref": "#/$defs/integerState"
+        },
+        {
+          "$ref": "#/$defs/stringState"
+        },
+        {
+          "$ref": "#/$defs/stringArrayState"
+        }
+      ]
+    },
+    "stringArray": {
+      "items": {
+        "maxLength": 256,
+        "minLength": 1,
+        "$ref": "#/$defs/runtimeString",
+        "type": "string"
+      },
+      "maxItems": 256,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "stringArrayLiteralOperand": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "literal"
+        },
+        "value": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "value_type": {
+          "const": "string_array"
+        }
+      },
+      "required": [
+        "kind",
+        "value_type",
+        "value"
+      ],
+      "type": "object"
+    },
+    "stringArrayParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_values": {
+          "$ref": "#/$defs/nonEmptyStringArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "max_items": {
+          "maximum": 256,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_items": {
+          "maximum": 256,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "string_array"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "allowed_values",
+        "min_items",
+        "max_items"
+      ],
+      "type": "object"
+    },
+    "stringArrayState": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "allowed_values": {
+          "$ref": "#/$defs/nonEmptyStringArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "initial": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "max_items": {
+          "maximum": 256,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_items": {
+          "maximum": 256,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mutability": {
+          "enum": [
+            "mutable",
+            "constant"
+          ]
+        },
+        "persistence": {
+          "enum": [
+            "saved",
+            "transient"
+          ]
+        },
+        "type": {
+          "const": "string_array"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "initial",
+        "mutability",
+        "persistence",
+        "allowed_values",
+        "min_items",
+        "max_items"
+      ],
+      "type": "object"
+    },
+    "stringLiteralOperand": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "literal"
+        },
+        "value": {
+          "maxLength": 256,
+          "minLength": 1,
+          "$ref": "#/$defs/runtimeString",
+          "type": "string"
+        },
+        "value_type": {
+          "const": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value_type",
+        "value"
+      ],
+      "type": "object"
+    },
+    "stringParameter": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_values": {
+          "$ref": "#/$defs/nonEmptyStringArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "allowed_values"
+      ],
+      "type": "object"
+    },
+    "stringState": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "allowed_values": {
+          "$ref": "#/$defs/nonEmptyStringArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "initial": {
+          "maxLength": 256,
+          "minLength": 1,
+          "$ref": "#/$defs/runtimeString",
+          "type": "string"
+        },
+        "mutability": {
+          "enum": [
+            "mutable",
+            "constant"
+          ]
+        },
+        "persistence": {
+          "enum": [
+            "saved",
+            "transient"
+          ]
+        },
+        "type": {
+          "const": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "initial",
+        "mutability",
+        "persistence",
+        "allowed_values"
+      ],
+      "type": "object"
+    },
+    "swapArrayItemsEffect": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "array_state_id": {
+          "$ref": "#/$defs/id"
+        },
+        "first_index": {
+          "$ref": "#/$defs/operand"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "invalid_transition_policy": {
+          "const": "reject_transition"
+        },
+        "operation": {
+          "const": "swap_array_items"
+        },
+        "second_index": {
+          "$ref": "#/$defs/operand"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operation",
+        "array_state_id",
+        "first_index",
+        "second_index",
+        "invalid_transition_policy"
+      ],
+      "type": "object"
+    },
+    "appendUniqueEffect": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "array_state_id": {
+          "$ref": "#/$defs/id"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "invalid_transition_policy": {
+          "const": "reject_transition"
+        },
+        "operation": {
+          "const": "append_unique"
+        },
+        "value": {
+          "$ref": "#/$defs/operand"
+        }
+      },
+      "required": [
+        "id",
+        "action_id",
+        "operation",
+        "array_state_id",
+        "value",
+        "invalid_transition_policy"
+      ],
+      "type": "object"
+    },
+    "nonEmptyStringArray": {
+      "items": {
+        "maxLength": 256,
+        "minLength": 1,
+        "$ref": "#/$defs/runtimeString",
+        "type": "string"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "token": {
+      "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_.-]*)?$",
+      "type": "string"
+    }
+  }
+}

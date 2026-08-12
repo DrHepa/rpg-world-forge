@@ -10,7 +10,12 @@ from worldforge.asset_inventory import (
     derive_asset_inventory,
     validate_asset_inventory,
 )
-from worldforge.asset_io import AssetContractError, bind_content_hash, write_json_atomic
+from worldforge.asset_io import (
+    AssetContractError,
+    bind_content_hash,
+    write_json_atomic,
+    write_json_cooperative_replace,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 WORLDPACK = ROOT / "content/compiled/foundation.worldpack.json"
@@ -168,7 +173,7 @@ class M5InventoryTests(unittest.TestCase):
             inventory, output = self._derive(root)
             inventory["requirements"][0]["kind"] = "material_set"
             inventory["requirements"][0]["representation"] = "2d"
-            write_json_atomic(output, bind_content_hash(inventory), overwrite=True)
+            write_json_cooperative_replace(output, bind_content_hash(inventory))
             self.assertTrue(
                 any(
                     "must be 3d for material_set" in issue
@@ -181,7 +186,7 @@ class M5InventoryTests(unittest.TestCase):
             root = Path(directory)
             inventory, output = self._derive(root)
             inventory["requirements"][0]["representation"] = []
-            write_json_atomic(output, bind_content_hash(inventory), overwrite=True)
+            write_json_cooperative_replace(output, bind_content_hash(inventory))
 
             issues = validate_asset_inventory(output)
 

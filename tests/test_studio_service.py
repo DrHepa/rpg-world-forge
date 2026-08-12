@@ -277,6 +277,16 @@ class StudioServiceTests(unittest.TestCase):
             def shutdown(self) -> None:
                 events.append("scheduler.close")
 
+        class CreationScheduler:
+            def __init__(self, _data_dir: object) -> None:
+                events.append("creation_scheduler.open")
+
+            def start(self) -> None:
+                events.append("creation_scheduler.start")
+
+            def shutdown(self) -> None:
+                events.append("creation_scheduler.close")
+
         class Service:
             def __init__(self, _store: object, _scheduler: object) -> None:
                 events.append("service.open")
@@ -288,6 +298,7 @@ class StudioServiceTests(unittest.TestCase):
         with (
             patch("worldforge.studio.service.StudioStore", Store),
             patch("worldforge.studio.service.JobScheduler", Scheduler),
+            patch("worldforge.studio.service.CreationJobScheduler", CreationScheduler),
             patch("worldforge.studio.service.StudioService", Service),
         ):
             exit_code = serve(io.BytesIO(), output, data_dir="unused")
@@ -298,8 +309,11 @@ class StudioServiceTests(unittest.TestCase):
                 "store.open",
                 "scheduler.open",
                 "scheduler.start",
+                "creation_scheduler.open",
+                "creation_scheduler.start",
                 "service.open",
                 "service.close",
+                "creation_scheduler.close",
                 "scheduler.close",
                 "store.close",
             ],
@@ -328,6 +342,17 @@ class StudioServiceTests(unittest.TestCase):
                 events.append("scheduler.close")
                 raise StudioError("internal_error", "scheduler close failed")
 
+        class CreationScheduler:
+            def __init__(self, _data_dir: object) -> None:
+                pass
+
+            def start(self) -> None:
+                pass
+
+            def shutdown(self) -> None:
+                events.append("creation_scheduler.close")
+                raise StudioError("internal_error", "creation scheduler close failed")
+
         class Service:
             def __init__(self, _store: object, _scheduler: object) -> None:
                 pass
@@ -340,12 +365,16 @@ class StudioServiceTests(unittest.TestCase):
         with (
             patch("worldforge.studio.service.StudioStore", Store),
             patch("worldforge.studio.service.JobScheduler", Scheduler),
+            patch("worldforge.studio.service.CreationJobScheduler", CreationScheduler),
             patch("worldforge.studio.service.StudioService", Service),
         ):
             exit_code = serve(io.BytesIO(), output, data_dir="unused")
         response = json.loads(output.getvalue())
         self.assertEqual(1, exit_code)
-        self.assertEqual(["service.close", "scheduler.close", "store.close"], events)
+        self.assertEqual(
+            ["service.close", "creation_scheduler.close", "scheduler.close", "store.close"],
+            events,
+        )
         self.assertEqual("conflict", response["error"]["code"])
         self.assertEqual("service close failed", response["error"]["message"])
         self.assertNotIn("private store detail", json.dumps(response))
@@ -370,6 +399,16 @@ class StudioServiceTests(unittest.TestCase):
             def shutdown(self) -> None:
                 events.append("scheduler.close")
 
+        class CreationScheduler:
+            def __init__(self, _data_dir: object) -> None:
+                events.append("creation_scheduler.open")
+
+            def start(self) -> None:
+                events.append("creation_scheduler.start")
+
+            def shutdown(self) -> None:
+                events.append("creation_scheduler.close")
+
         class Service:
             def __init__(self, _store: object, _scheduler: object) -> None:
                 events.append("service.open")
@@ -379,6 +418,7 @@ class StudioServiceTests(unittest.TestCase):
         with (
             patch("worldforge.studio.service.StudioStore", Store),
             patch("worldforge.studio.service.JobScheduler", Scheduler),
+            patch("worldforge.studio.service.CreationJobScheduler", CreationScheduler),
             patch("worldforge.studio.service.StudioService", Service),
         ):
             exit_code = serve(io.BytesIO(), output, data_dir="unused")
@@ -388,7 +428,10 @@ class StudioServiceTests(unittest.TestCase):
                 "store.open",
                 "scheduler.open",
                 "scheduler.start",
+                "creation_scheduler.open",
+                "creation_scheduler.start",
                 "service.open",
+                "creation_scheduler.close",
                 "scheduler.close",
                 "store.close",
             ],

@@ -1,0 +1,1588 @@
+{
+  "$defs": {
+    "evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "claim": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/id"
+        },
+        "subject": {
+          "$ref": "#/$defs/identity"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "claim",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "format": {
+                "const": "world-forge.game_runtime_bundle"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^game_runtime_bundle_[0-9a-f]{48}$",
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "manifestIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_source_manifest"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "outputEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.phase_output_evidence"
+        },
+        "format_version": {
+          "const": 2
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "phase": {
+          "enum": [
+            "p00_brief",
+            "p01_genre_style",
+            "p02_world_laws",
+            "p03_geography",
+            "p04_timeline",
+            "p05_societies",
+            "p06_characters",
+            "p07_systems",
+            "p08_world_arcs",
+            "p09_narrative_content",
+            "p10_canon_lock",
+            "p11_art_audio",
+            "p12_asset_specs",
+            "p13_asset_production",
+            "p14_handoff"
+          ]
+        },
+        "reviewer": {
+          "$ref": "#/$defs/reviewer"
+        },
+        "role": {
+          "enum": [
+            "asset_plan",
+            "chronology",
+            "content_lock",
+            "experience_classification",
+            "group_structures",
+            "implementation_handoff",
+            "interaction_ontology",
+            "narrative_architecture",
+            "player_actors",
+            "presentation_direction",
+            "project_brief",
+            "runtime_compatibility",
+            "systems_design",
+            "typed_content",
+            "world_topology"
+          ]
+        },
+        "subject": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/identity"
+            },
+            {
+              "properties": {
+                "format": {
+                  "enum": [
+                    "world-forge.activity_module",
+                    "world-forge.asset_inventory",
+                    "world-forge.asset_manifest",
+                    "world-forge.asset_spec",
+                    "world-forge.asset_style",
+                    "world-forge.asset_target",
+                    "world-forge.creation_handoff",
+                    "world-forge.creation_profile",
+                    "world-forge.creation_readiness",
+                    "world-forge.creation_source_manifest",
+                    "world-forge.gamepack",
+                    "world-forge.logic_module",
+                    "world-forge.narrative_module",
+                    "world-forge.project",
+                    "world-forge.runtime_support_report",
+                    "world-forge.system_module",
+                    "world-forge.world_module"
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "phase",
+        "role",
+        "subject",
+        "reviewer",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "profileIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_profile"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "projectIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.project"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "rationale": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/id"
+        },
+        "message": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "reportCommon": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "type": "array"
+        },
+        "extensions": {
+          "items": {
+            "type": "object"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array"
+        },
+        "format": {
+          "const": "world-forge.phase_report"
+        },
+        "format_version": {
+          "const": 3
+        },
+        "invalidation_dependencies": {
+          "items": {
+            "$ref": "#/$defs/identity"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "type": "array"
+        },
+        "output_evidence": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/outputEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "phase": {
+          "enum": [
+            "p00_brief",
+            "p01_genre_style",
+            "p02_world_laws",
+            "p03_geography",
+            "p04_timeline",
+            "p05_societies",
+            "p06_characters",
+            "p07_systems",
+            "p08_world_arcs",
+            "p09_narrative_content",
+            "p10_canon_lock",
+            "p11_art_audio",
+            "p12_asset_specs",
+            "p13_asset_production",
+            "p14_handoff"
+          ]
+        },
+        "profile": {
+          "$ref": "#/$defs/profileIdentity"
+        },
+        "project": {
+          "$ref": "#/$defs/projectIdentity"
+        },
+        "rationale": {
+          "$ref": "#/$defs/rationale"
+        },
+        "reviewer": {
+          "$ref": "#/$defs/reviewer"
+        },
+        "source_manifest": {
+          "$ref": "#/$defs/manifestIdentity"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "not_applicable"
+          ]
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "project",
+        "profile",
+        "source_manifest",
+        "phase",
+        "status",
+        "rationale",
+        "evidence",
+        "output_evidence",
+        "reviewer",
+        "invalidation_dependencies",
+        "extensions",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "reviewer": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id",
+        "role"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/phase-report-v3.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p00_brief"
+                    },
+                    "role": {
+                      "const": "project_brief"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.project"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p00_brief"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p01_genre_style"
+                    },
+                    "role": {
+                      "const": "experience_classification"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.creation_profile"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p01_genre_style"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p02_world_laws"
+                    },
+                    "role": {
+                      "const": "interaction_ontology"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.activity_module",
+                                "world-forge.creation_profile",
+                                "world-forge.logic_module",
+                                "world-forge.system_module"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p02_world_laws"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p03_geography"
+                    },
+                    "role": {
+                      "const": "world_topology"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.creation_profile",
+                                "world-forge.world_module"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p03_geography"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p04_timeline"
+                    },
+                    "role": {
+                      "const": "chronology"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.creation_profile",
+                                "world-forge.system_module",
+                                "world-forge.world_module"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p04_timeline"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p05_societies"
+                    },
+                    "role": {
+                      "const": "group_structures"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.creation_profile",
+                                "world-forge.world_module"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p05_societies"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p06_characters"
+                    },
+                    "role": {
+                      "const": "player_actors"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.activity_module",
+                                "world-forge.creation_profile",
+                                "world-forge.narrative_module",
+                                "world-forge.world_module"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p06_characters"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p07_systems"
+                    },
+                    "role": {
+                      "const": "systems_design"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.activity_module",
+                                "world-forge.creation_profile",
+                                "world-forge.logic_module",
+                                "world-forge.system_module"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p07_systems"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p08_world_arcs"
+                    },
+                    "role": {
+                      "const": "narrative_architecture"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.creation_profile",
+                                "world-forge.narrative_module"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p08_world_arcs"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p09_narrative_content"
+                    },
+                    "role": {
+                      "const": "typed_content"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.activity_module",
+                                "world-forge.creation_source_manifest",
+                                "world-forge.logic_module",
+                                "world-forge.narrative_module",
+                                "world-forge.system_module",
+                                "world-forge.world_module"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p09_narrative_content"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p10_canon_lock"
+                    },
+                    "role": {
+                      "const": "content_lock"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.creation_source_manifest",
+                                "world-forge.gamepack"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p10_canon_lock"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p11_art_audio"
+                    },
+                    "role": {
+                      "const": "presentation_direction"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.asset_style",
+                                "world-forge.asset_target",
+                                "world-forge.creation_profile"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p11_art_audio"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p12_asset_specs"
+                    },
+                    "role": {
+                      "const": "asset_plan"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.asset_inventory",
+                                "world-forge.asset_manifest",
+                                "world-forge.asset_spec"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p12_asset_specs"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p13_asset_production"
+                    },
+                    "role": {
+                      "const": "runtime_compatibility"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.creation_readiness",
+                                "world-forge.runtime_support_report"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p13_asset_production"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/outputEvidence"
+                },
+                {
+                  "properties": {
+                    "phase": {
+                      "const": "p14_handoff"
+                    },
+                    "role": {
+                      "const": "implementation_handoff"
+                    },
+                    "subject": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/identity"
+                        },
+                        {
+                          "properties": {
+                            "format": {
+                              "enum": [
+                                "world-forge.creation_handoff"
+                              ]
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "type": "object"
+                }
+              ]
+            },
+            "phase": {
+              "const": "p14_handoff"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "phase_ready"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "ready"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "type": "null"
+            },
+            "phase": {
+              "const": "p03_geography"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "world_absent"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "not_applicable"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "type": "null"
+            },
+            "phase": {
+              "const": "p04_timeline"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "chronology_absent"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "not_applicable"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "type": "null"
+            },
+            "phase": {
+              "const": "p05_societies"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "group_structures_absent"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "not_applicable"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "type": "null"
+            },
+            "phase": {
+              "const": "p06_characters"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "actors_absent"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "not_applicable"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "type": "null"
+            },
+            "phase": {
+              "const": "p08_world_arcs"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "narrative_absent"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "not_applicable"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "type": "null"
+            },
+            "phase": {
+              "const": "p11_art_audio"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "assets_not_applicable"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "not_applicable"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "type": "null"
+            },
+            "phase": {
+              "const": "p12_asset_specs"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "assets_not_applicable"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "not_applicable"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "$ref": "#/$defs/reportCommon"
+        },
+        {
+          "properties": {
+            "output_evidence": {
+              "type": "null"
+            },
+            "phase": {
+              "const": "p13_asset_production"
+            },
+            "rationale": {
+              "properties": {
+                "code": {
+                  "const": "runtime_not_applicable"
+                }
+              },
+              "type": "object"
+            },
+            "status": {
+              "const": "not_applicable"
+            }
+          },
+          "type": "object"
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "format": {
+      "const": "world-forge.phase_report"
+    },
+    "format_version": {
+      "const": 3
+    }
+  },
+  "title": "World Forge phase report v3",
+  "type": "object"
+}

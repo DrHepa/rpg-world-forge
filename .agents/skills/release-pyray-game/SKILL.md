@@ -5,6 +5,11 @@ description: Package an already verified standalone pyray/raylib game as the det
 
 # Release a pyray game
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Package only the exact G32 verified game into one deterministic portable source

@@ -1,0 +1,45 @@
+{
+  "activities": [
+    {
+      "activity_type": "scenario",
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "effect_ids": [
+        "advance_progress",
+        "reset_progress"
+      ],
+      "end_condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [
+        "progress_advanced",
+        "scenario_restarted"
+      ],
+      "failure_condition_ids": [],
+      "id": "action_mission",
+      "participant_ids": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "provenance": "authored neutral action fixture",
+      "spatial_context_ids": [],
+      "start_condition_ids": [
+        "scenario_ready"
+      ],
+      "success_condition_ids": [
+        "victory_condition"
+      ],
+      "title": "one action mission with framing narrative",
+      "validation_profile": "authoring_only"
+    }
+  ],
+  "content_hash": "dabd9b44d9cb2b0482d8cfd1c2be3668b4192e38541fa6ac73efd3217343a1b3",
+  "extensions": [],
+  "format": "world-forge.activity_module",
+  "format_version": 1,
+  "module_id": "action_framing_activities",
+  "project_id": "action_framing",
+  "title": "Action Framing authored activity"
+}

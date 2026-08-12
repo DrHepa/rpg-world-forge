@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-forge.local/schemas/studio-creation-artifact.schema.json",
+  "title": "World Forge Studio creation artifact evidence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "artifact_id",
+    "subject",
+    "lifecycle",
+    "roles",
+    "producer",
+    "references",
+    "authority",
+    "record_hash"
+  ],
+  "properties": {
+    "format": { "const": "world-forge.studio_creation_artifact" },
+    "format_version": { "const": 1 },
+    "artifact_id": { "$ref": "#/$defs/entityId" },
+    "subject": { "$ref": "#/$defs/artifactIdentity" },
+    "lifecycle": { "enum": ["active", "invalidated", "historical", "candidate"] },
+    "roles": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/operationId" }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "phase_id", "reference_id"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "source_snapshot",
+            "active_phase_report",
+            "invalidated_phase_report",
+            "future_candidate"
+          ]
+        },
+        "phase_id": {
+          "oneOf": [{ "$ref": "#/$defs/operationId" }, { "type": "null" }]
+        },
+        "reference_id": { "$ref": "#/$defs/operationId" }
+      }
+    },
+    "references": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dependency_count", "dependent_count"],
+      "properties": {
+        "dependency_count": { "type": "integer", "minimum": 0, "maximum": 4096 },
+        "dependent_count": { "type": "integer", "minimum": 0, "maximum": 4096 }
+      }
+    },
+    "authority": { "$ref": "#/$defs/authority" },
+    "record_hash": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "operationId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "$ref": "#/$defs/operationId" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/entityId" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "root_generation",
+        "source_revision",
+        "workflow_status_hash"
+      ],
+      "properties": {
+        "workspace_id": { "$ref": "#/$defs/workspaceId" },
+        "root_generation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "source_revision": { "$ref": "#/$defs/sha256" },
+        "workflow_status_hash": {
+          "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }]
+        }
+      }
+    }
+  }
+}

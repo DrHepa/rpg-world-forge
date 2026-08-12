@@ -1,0 +1,3760 @@
+{
+  "entries": [
+    {
+      "category": "migration",
+      "file_sha256": "263dff409c61e90c44e59defa3862d603cfe7047918dcc1fd7a53d54f9a3d003",
+      "justification": "The compatibility bridge retains this old public location until the authorized cutover.",
+      "offsets": [
+        104
+      ],
+      "path": ".github/ISSUE_TEMPLATE/config.yml",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "3e6f174a1b871bb0bea524aed144f01476d6e1871c30e4eb85c3e69f89f7d2a2",
+      "justification": "Restricts the hosted native authority workflow old/new repository bridge to trusted main pushes and the stable GitHub repository ID.",
+      "offsets": [
+        21427,
+        29360
+      ],
+      "path": ".github/workflows/ci.yml",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "a6715173f889209699fd6d41b05bf6198289b7c295bc59803020b88b2019ceb3",
+      "justification": "Source distributions retain the legacy installed public-data path during the compatibility bridge.",
+      "offsets": [
+        226
+      ],
+      "path": "MANIFEST.in",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "b67ab4f97b25ddee619d71473ee657ee83906170e22bec15436034386e895daa",
+      "justification": "The compatibility bridge retains this old public location until the authorized cutover.",
+      "offsets": [
+        48,
+        127,
+        2500,
+        17413,
+        27389
+      ],
+      "path": "README.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "3c4fea7af2d435c036d412a56d7b762131e780560b339cbffe80e7637416db0e",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1030864
+      ],
+      "path": "apps/studio/packaging/runtime-archive-normalization-linux-x64.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "47edfeed1161efda35cfbe7885377a45d0da2e5062913406f04f4df9b06849a1",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        12106
+      ],
+      "path": "apps/studio/packaging/runtime-package-manifest.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "47edfeed1161efda35cfbe7885377a45d0da2e5062913406f04f4df9b06849a1",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        20,
+        10763,
+        11488,
+        13088,
+        16658
+      ],
+      "path": "apps/studio/packaging/runtime-package-manifest.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "99419da1ccc87cb8ea6c279e7e8e6bbc1d6b4d08eb6a67ae6ac7bf66d1182414",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        26,
+        106
+      ],
+      "path": "apps/studio/packaging/runtime-sources.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "1d211a12e4d208e7d7c6aae8f7220b81433ce47368349502f80d29ccfb5389e7",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        160
+      ],
+      "path": "apps/studio/packaging/runtime-sources.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "1d211a12e4d208e7d7c6aae8f7220b81433ce47368349502f80d29ccfb5389e7",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        250,
+        332,
+        14889,
+        14994
+      ],
+      "path": "apps/studio/packaging/runtime-sources.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "84748af096d5985cf68fde9a2705bb721d45ca34a5cc2e35c5243b1690772851",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        6090
+      ],
+      "path": "apps/studio/packaging/shell-package-manifest.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "84748af096d5985cf68fde9a2705bb721d45ca34a5cc2e35c5243b1690772851",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        3484,
+        5627
+      ],
+      "path": "apps/studio/packaging/shell-package-manifest.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "7006e3e431df9f86cac9a3495ba5e2dbbc9bd92dfc6a7c737236b03d5740609e",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        639
+      ],
+      "path": "apps/studio/protocol/codex-app-server-0.144.6/manifest.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "3c6bfd3758d05eafda30346bc08bd324ecc67babd1929ef490ef757ac30d3732",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        241
+      ],
+      "path": "apps/studio/resources/runtime-manifest.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "5bb2a64cffbf54427dc6251757f02efc29a060e9b00cd0a7035b4f883c43d43d",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        3966,
+        4568
+      ],
+      "path": "apps/studio/scripts/codex-protocol.mjs",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "d98889be7689401c2e5447c5dd4c132b37c3955ec29c239d4e7fe3a4f8dc7a02",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1394,
+        1508,
+        30525,
+        31104,
+        34770,
+        50392,
+        55223
+      ],
+      "path": "apps/studio/scripts/shell-package-verifier.mjs",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "79123256b68ccfcab660be66b1e09b12082d40d0b50fd9945ee108add6195ec5",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        30729
+      ],
+      "path": "apps/studio/scripts/shell_package_snapshot.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "370b4804a790e56b7ac63402a4244667e7b009dfd08dbbd9a1b75e7f0178fead",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        227,
+        3363,
+        4495,
+        5531,
+        7552,
+        8837,
+        16404
+      ],
+      "path": "apps/studio/src/generated/studio-protocol-v2.d.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "3726bc1b218f9faef3230091a252a9d706b26e3187dec518fedac7370db8dabf",
+      "justification": "Retains the published Studio protocol or storage discriminator.",
+      "offsets": [
+        285,
+        6742,
+        12131,
+        16392,
+        24595
+      ],
+      "path": "apps/studio/src/generated/studio-protocol-v3.d.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "1901911ecab5952faa750ebfa402f11903b807c60b1d13cfc5369b4d5047053c",
+      "justification": "Retains the published Studio protocol or storage discriminator.",
+      "offsets": [
+        279,
+        8315,
+        18281,
+        68871
+      ],
+      "path": "apps/studio/src/generated/studio-protocol-v4.d.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "f97e6294b4495fd27202b661d4f41907e7a19afbd160d90036bd39b660c92184",
+      "justification": "Retains the published Studio protocol or storage discriminator.",
+      "offsets": [
+        272,
+        11077,
+        27477,
+        89947
+      ],
+      "path": "apps/studio/src/generated/studio-protocol-v5.d.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "79974583002cb407d16b53bcf90cfded0560753eb290c0d0c134fbb0f288ae07",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        153,
+        6979,
+        8135,
+        8494,
+        8773,
+        17134,
+        20335,
+        21672,
+        23738,
+        24098,
+        24438,
+        24768,
+        25117,
+        25466,
+        25809,
+        26154,
+        26497,
+        26829,
+        27156,
+        27486,
+        27820,
+        28159,
+        28495,
+        28820,
+        32967,
+        33556,
+        33905,
+        34240,
+        34561,
+        34894,
+        35246,
+        35598,
+        35944,
+        36292,
+        36634,
+        36965,
+        37300,
+        37629,
+        37957,
+        38290,
+        38629,
+        38965,
+        39298,
+        39620,
+        39974,
+        45334,
+        45702
+      ],
+      "path": "apps/studio/src/generated/studio-protocol.d.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "845bc59398d9f1a9fa22c9802aa80bf37adf4fd8aa3da2b5d50eea7affcda175",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        508448
+      ],
+      "path": "apps/studio/src/generated/world-forge-contracts.d.ts",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "845bc59398d9f1a9fa22c9802aa80bf37adf4fd8aa3da2b5d50eea7affcda175",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        508468,
+        1432585,
+        1437928,
+        1439365
+      ],
+      "path": "apps/studio/src/generated/world-forge-contracts.d.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "815a293a1505ce3e4f3ad4786e518d95ea87c239fd9acee5a6ca92deef26e473",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        12196,
+        13314,
+        13408,
+        14340,
+        16217
+      ],
+      "path": "apps/studio/src/main/forge-service.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "fa90371777eec2cb782a4581aecdef1cc730ba5b259e03716e927a7c27960020",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        211350,
+        211763,
+        216793,
+        217250,
+        307955
+      ],
+      "path": "apps/studio/src/main/ipc.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "8c07f27559088ecba259ede270e1a37a139e6bd676a5575cffdf9f61a9dd81f2",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        9260,
+        25645,
+        29527,
+        33703
+      ],
+      "path": "apps/studio/src/main/ndjson-supervisor.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "3fd1f8214d8d351189dd5cfc305acd6c7763107e51b87cac6b6ceeb479a2e7e7",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        4246,
+        4362,
+        4482
+      ],
+      "path": "apps/studio/src/main/protocol-validator.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "029dee064d4c44f3b4501d453a64c88f9b7bdef5bb7bc00b99cc83c997da0f29",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        393,
+        815,
+        908,
+        1014,
+        1774,
+        2048,
+        52323
+      ],
+      "path": "apps/studio/src/main/runtime-manifest.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "c28fe48960e2d9aec1bd3dc2bada530bc9161b96f71e07889015ecde3b7bbf2a",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        314
+      ],
+      "path": "apps/studio/src/main/studio-identity.ts",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "7136fbcd56aa2b17e4fa5b6c20dda1f1f2b6abb67871b8cb7764855dfbfd6e89",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        78258,
+        82638
+      ],
+      "path": "apps/studio/src/renderer/App.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "46583aa148987ea8b928dae1450828c04b87be4e796e6734dbfc89e9505e7bc1",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        7499
+      ],
+      "path": "apps/studio/src/renderer/asset-binary-preview-state.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "197204211b2c59ba03489cd6dd5f3e9ce9bd092fc9e3cd56d05ed7d1a6aab172",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        12337,
+        13102
+      ],
+      "path": "apps/studio/src/renderer/asset-catalog-state.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "32c9903cefa5a9fc25279efeeab43780d207a5a820a8a74c0b40e49f1a91dc27",
+      "justification": "Retains the published Studio protocol or storage discriminator.",
+      "offsets": [
+        25986
+      ],
+      "path": "apps/studio/src/renderer/creation-preview-state.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "3627eb148e05d4e4ffacafb9b3a7a3734cb410eaebbd4f1325e0d990aa39b7e7",
+      "justification": "Retains the published Studio protocol or storage discriminator.",
+      "offsets": [
+        2972,
+        4589
+      ],
+      "path": "apps/studio/src/renderer/creation-service.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "481c2313066a01450aada9e5037985921aa9f5fbb3787f9b6adf4300b2589ef0",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        6415
+      ],
+      "path": "apps/studio/src/renderer/game-job-view.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "bc6c9f615ffbcad0c08f4806e5301248b5982c4d28503988004283aece3a1d70",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        3266,
+        3366,
+        3693,
+        4374,
+        5342,
+        6434,
+        7002
+      ],
+      "path": "apps/studio/tests/fixtures/fake_forge_service.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "b7c2dee8455a788145844dcf798081deebd9dc812d89f6f3a0df85ee8023b277",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        654
+      ],
+      "path": "apps/studio/tests/main/changeset-contract-types.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "070e302cefe2650fb6d9f9bf9e48ccae16cb04aaa976054169c94a78f32e4223",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        55849,
+        114888,
+        116198,
+        179472,
+        180380,
+        180984,
+        195021,
+        195723,
+        196387,
+        199048,
+        202791,
+        203090,
+        210541,
+        223417,
+        223918,
+        226247,
+        226459,
+        227349,
+        227823,
+        229158,
+        229500,
+        229865
+      ],
+      "path": "apps/studio/tests/main/ipc.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "5b597a791357de774cc503289b855216742b9cb4b30a0ee788b5523257fc7b5c",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        970,
+        1421,
+        1964,
+        3067,
+        3782,
+        5693,
+        9672,
+        9930,
+        12131,
+        15889,
+        18439
+      ],
+      "path": "apps/studio/tests/main/protocol-validator-v5.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "77d7723db62d92ecc7a9b3eab11e61d52d579f5b74efb017518566bfa97dbfea",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        818,
+        1103,
+        1749,
+        2069,
+        3691,
+        9068,
+        9955,
+        12793,
+        15527,
+        28210,
+        31119,
+        38295,
+        39442,
+        40542
+      ],
+      "path": "apps/studio/tests/main/protocol-validator.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "e338b21d3e2e2d83e3f30af1c53bd8e5ebaed4111c92d9e9776d743bb303b748",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        14751,
+        16090,
+        18923,
+        19345,
+        22825,
+        24767
+      ],
+      "path": "apps/studio/tests/main/runtime-manifest.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "4bb677ac5ec123d173fb21a39dc43ca58d0fc65cf0e6a285ecf4e2343fea0e17",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        3023,
+        3983,
+        7891,
+        9165
+      ],
+      "path": "apps/studio/tests/main/runtime-package-manifest-schema.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "b625a5bf1a45d2f1f2e8c40cef9482e8328b56af813b82ec0d58299b95d5b1c5",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        28290,
+        28476
+      ],
+      "path": "apps/studio/tests/main/shell-package-verifier.test.mjs",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "b170145d0563ebd6e2983d200b278a283f64d859df0f5f7bc070981f29935992",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1157,
+        1269,
+        1757
+      ],
+      "path": "apps/studio/tests/main/studio-identity.test.ts",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "e7120bd7e2996f1d024d790add90125790c72b14bd80131ecb85d1b4c5815e1e",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        20476,
+        64225,
+        82856,
+        83239,
+        83615,
+        84430,
+        88935,
+        90882
+      ],
+      "path": "apps/studio/tests/renderer/App.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "ab4c1f3bc4204a154c15a0511601f7037fcd82de0b79b758d3b0fc382ccd4b70",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        3778
+      ],
+      "path": "apps/studio/tests/renderer/AppCreationNavigation.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "b0e725fb2c62ca10d91d486602a179cc6b7cb8064a0b92bb704cad8d3cb2b970",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        22372
+      ],
+      "path": "apps/studio/tests/renderer/AssetBinaryPreview.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "429745b9aa41e72a93813510cafe6392ef3d4a04735677f72516c9ab9be776a6",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        37651,
+        37983
+      ],
+      "path": "apps/studio/tests/renderer/CreationAssetPipeline.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "71f7cdcc0090475d61c3b322a90cb0c6c9b3c882d57d0148b649c8626513f2e8",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        17622
+      ],
+      "path": "apps/studio/tests/renderer/CreationAssetPreview.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "f393497deedf290a280bc13ebd7e218f2a1f7923ae112cf57e12ded7c6d6410c",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        14958
+      ],
+      "path": "apps/studio/tests/renderer/CreationJobActivity.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "6cc341903460ec55d20ddb965aae9ccab384f30b7c7bd429a83b3600576e4aff",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        27784
+      ],
+      "path": "apps/studio/tests/renderer/CreationMaterializationPipeline.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "e18ecfca5e3022517738e0857e53539f8669e72cef5cc4d85e9ed0c4263b87b7",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        8267
+      ],
+      "path": "apps/studio/tests/renderer/CreationModuleWorkbench.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "36ad06c134bc9b2e47917fe0cef3a8240334edfcc37d687723fd04834c4bce30",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        15125
+      ],
+      "path": "apps/studio/tests/renderer/CreationPhaseWorkspace.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "b4d5a766da02df223b4860f653ed35c82fd930ae1655ce88ba3eae9dd9f7c1d9",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        6585,
+        7888
+      ],
+      "path": "apps/studio/tests/renderer/CreationProjectEntry.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9819bca22c6bd152cd1ea6530bdd9aaa462e1dcc329c7d00a862f328430c12a7",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        30986,
+        31360
+      ],
+      "path": "apps/studio/tests/renderer/CreationRuntimePipeline.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "651b75cdb2095960f8a5252248068030f7eb47836d25d992aee4a129a31f102f",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        82755,
+        83134,
+        83505,
+        91719
+      ],
+      "path": "apps/studio/tests/renderer/CreationWorkspace.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "f9f3854c04abe8e9982e84b03441ead7699b3f2d59326f24eed769bd28653186",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        7969
+      ],
+      "path": "apps/studio/tests/renderer/GameCockpit.test.tsx",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "596a438be41a9ee9699939b67e8dee8c5c787fd7152295b059f4e86eb2816d45",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        9902
+      ],
+      "path": "apps/studio/tests/renderer/asset-binary-preview-state.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "bab75ac75d8621d895190b934e7d709bb556ca3a00e6504d2537f592e9134896",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        23747,
+        24366,
+        24874
+      ],
+      "path": "apps/studio/tests/renderer/asset-catalog-state.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "2cbec9f6f645415e8b770c513539b08b0beb5801555749b74fb181de739d040b",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        5620,
+        7319
+      ],
+      "path": "apps/studio/tests/renderer/changeset-review-state.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "2b3af4009f21748e635e7c1b4d5ac4ac4b19f2b1716f9ca34e435ea853510b22",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        30014
+      ],
+      "path": "apps/studio/tests/renderer/creation-asset-pipeline-state.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "8c954d486ba439ac3fc2e23e64c6adadd0010e10b7e074ca6d96b82b56516009",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        21411
+      ],
+      "path": "apps/studio/tests/renderer/creation-execution-state.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "dd3040d8a12c840464b050e41f96ba5a71d12248ec46c01dcf5a209cda7ae407",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        33859
+      ],
+      "path": "apps/studio/tests/renderer/creation-materialization-pipeline-state.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "91a7ca06186b01db2c88537eb435a196c00565b8438bf214ac7d3cbce2662a99",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        11217,
+        11703,
+        12506
+      ],
+      "path": "apps/studio/tests/renderer/creation-output-grant-state.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9388ba7a9e079b5031f297627fd05eeb04807a33c99a7bfb96b5c29da4944096",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        17719
+      ],
+      "path": "apps/studio/tests/renderer/creation-preview-state.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "04d5e0436bdd45d33100df26ad0c9e88a333f0cc8d14c48e2ac794ffa9a712c6",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        30030
+      ],
+      "path": "apps/studio/tests/renderer/creation-runtime-pipeline-state.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9b5446b8162e28582ceccf426c01db3f204eabde639a3bf9054a7c18f1f5d52b",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        345,
+        1392
+      ],
+      "path": "apps/studio/tests/renderer/creation-service.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "f44449403c4552b351a8d954e30efb1eba01f88db680eed210fe965ea1a04313",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        7613
+      ],
+      "path": "apps/studio/tests/renderer/game-job-view.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "625ec2849d18b6bd7e28d7603702ba4640cfd3028b72d9a383457f80a9a1e542",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        410,
+        969,
+        1827
+      ],
+      "path": "apps/studio/tests/renderer/studio-results.test.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "ce129fd9830b565c6c5bf350e9c8c93795485e0e3f5a05e90ddef7bd41dae928",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        3073
+      ],
+      "path": "apps/studio/tests/types/studio-protocol-v3-types.ts",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "163f806ef84ba3cfb4655442297413723949a1f12f8cebc946024c0d787a9867",
+      "justification": "Names the retained published legacy namespace only to route old authoring prompts without relabeling it.",
+      "offsets": [
+        1088
+      ],
+      "path": "authoring/prompts/00_BOUNDARY.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "8b81dc0687abbfc211618160a70d40043b70f5e563e3ba68e27bb82ad8d6d3d9",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        338,
+        530,
+        576
+      ],
+      "path": "authoring/prompts/04_ART_AND_AUDIO_BIBLE.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "433660cd0880df8612631f16146afbb16c800ff697bf14738863fa3c5e6cedfc",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        498,
+        1209
+      ],
+      "path": "authoring/prompts/05_ASSET_SPECIFICATION.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "94e925c21788a986481a48f466111343d6118d39bdb079f654aaed3f84f7955f",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        425
+      ],
+      "path": "authoring/prompts/06_ASSET_QA.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "16223e63dcc4d5571f9520f2dcfe4eb6ee8a9f94078b4f3360ed1c5d884e9e47",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        12785,
+        14431,
+        65728,
+        69485,
+        74200,
+        75826,
+        76631,
+        77462,
+        81209,
+        84526,
+        105480
+      ],
+      "path": "contracts/catalog.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "16223e63dcc4d5571f9520f2dcfe4eb6ee8a9f94078b4f3360ed1c5d884e9e47",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1088,
+        1919,
+        2834,
+        3837,
+        4768,
+        5744,
+        6659,
+        7519,
+        8410,
+        9222,
+        10044,
+        10906,
+        12246,
+        14003,
+        19626,
+        64689,
+        65377,
+        69168,
+        73617,
+        75390,
+        76187,
+        76985,
+        80765,
+        87321,
+        97860,
+        98654,
+        99599,
+        100404,
+        101305,
+        102015,
+        102716,
+        103908,
+        105170,
+        105953,
+        108182,
+        111501
+      ],
+      "path": "contracts/catalog.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "dd3d8f17b901065aba2d9d568f6e74c9c2c0bbbd59208de9e2e9ddc35d5f71ad",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        6882,
+        15348
+      ],
+      "path": "docs/ARCHITECTURE.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "fd7b08de9d5f75e536f355d4cad7df8d685bf85437d53501fba16a6c8dab5a70",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        17115,
+        17154,
+        35584
+      ],
+      "path": "docs/ASSET_PIPELINE.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "4bfffe8723c7e353d7509a2b9a55f97628c4813e4e08338d2021502283b68f66",
+      "justification": "Documents the exact legacy namespace governed by the generated compatibility allowlist.",
+      "offsets": [
+        737
+      ],
+      "path": "docs/LEGACY_IDENTITY_ALLOWLIST.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "8dbb0a8b3e41e902da770ef0dbb5bff1f7960aa0a78e08339ad24d98801ad351",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1851,
+        3434
+      ],
+      "path": "docs/M4_MULTIPLE_WORLD_PRODUCTION.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "fdeb4fc5042d8ee841a01820ad984f4c2304a3efbe69712531f3359938e399a7",
+      "justification": "Names the retained persisted project discriminator whose explicit v2-to-v3 identity migration is documented.",
+      "offsets": [
+        90
+      ],
+      "path": "docs/MIGRATING_WORLD_PROJECT_V2_TO_V3.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "6937afd1ea8418001cf34d00ca1c4355a3aae0138ea94f6254353c146d5cab19",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1031,
+        1058,
+        20838,
+        33000,
+        46423,
+        49509
+      ],
+      "path": "docs/MULTI_GENRE_ARCHITECTURE.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "0cb0aa22517e62aba100725f86b2ca106c397b7656dd3fb5af078b7abd115234",
+      "justification": "Distinguishes retained published legacy project and runtime formats from the additive generic lane.",
+      "offsets": [
+        5360
+      ],
+      "path": "docs/SUPPORT_MATRIX.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "historical_provenance",
+      "file_sha256": "e65b5f9215b0f354f5c66aea535368efaa61ed575e1f875238d4503f3109d0e5",
+      "justification": "Immutable historical decisions retain their original repository identity.",
+      "offsets": [
+        1126,
+        1442
+      ],
+      "path": "docs/decisions/0009-independent-world-and-game-repositories.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "historical_provenance",
+      "file_sha256": "55bc428db6203ca2da147db3e749c8e9e18810a121acfd693cfb338e83c0d382",
+      "justification": "Immutable historical decisions retain their original repository identity.",
+      "offsets": [
+        646
+      ],
+      "path": "docs/decisions/0017-immutable-composed-runtime-bundle.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "3d53658744ca8d62cfa6e4c4f01e281eda69c8e3e70647c8f2551f9b0b628a24",
+      "justification": "Names published legacy discriminators whose canonical output and reader compatibility are retained alongside explicit input and runtime hardening.",
+      "offsets": [
+        710,
+        737
+      ],
+      "path": "docs/decisions/0024-gamepack-and-worldpack-are-additive.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "a858cbfbfd734eed74fe45c2dcbc8d58464e7fc1af5bba2784a3bd65c8b46944",
+      "justification": "Records the accepted rule that published legacy identifiers remain compatibility contracts during product migration.",
+      "offsets": [
+        678
+      ],
+      "path": "docs/decisions/0025-world-forge-identity-migration.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "6c9c40eb3b3ad5b4151bb04f92bb5cf783259edf5e29a99d569b36dbd51b7353",
+      "justification": "Names the old GitHub repository only as the verified source of the explicitly authorized final rename operation.",
+      "offsets": [
+        1193
+      ],
+      "path": "docs/operations/IDENTITY_CUTOVER_AND_ROLLBACK.md",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "5630cba5ac70a64fce9dc40a34cdab311a26845f0943763dc8169b7e9d04da57",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        207
+      ],
+      "path": "examples/m5-neutral/assetpack/bibles/audio.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "ed6ddbecdf0302e652cd9fb80c23f095be7ed44f85b317fa8023bae9dbd6869f",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        273
+      ],
+      "path": "examples/m5-neutral/assetpack/bibles/visual.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "a4002bd4409b061ce3f24c2ebadf76333541b4869da2f6f23e183a33a796b131",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        191
+      ],
+      "path": "examples/m5-neutral/assetpack/inventory/assets.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "926153631ddaef8170be9b593c9186cf08283ec3ddbd15945fb2aeae1e5406d5",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1841
+      ],
+      "path": "examples/m5-neutral/assetpack/licenses/neutral_actor_3d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "5a924fb3722d4cfee35359d6867b27291d95b5056398992fa88f2b786cedc2c8",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        2257
+      ],
+      "path": "examples/m5-neutral/assetpack/manifest.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "ccec2cee8bfb26cd922d3ba89fb8cfd6d0a6484e0c41a73bce09b3ab67c27316",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/assetpack/processed/neutral_actor_3d/processing.receipt.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "8af9a924b25a0cfb92767981d8a888bcea446b2026a0ac1e761570f6f286cc36",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        441
+      ],
+      "path": "examples/m5-neutral/assetpack/qa/neutral_actor_3d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "3e0f663b4dda6f1a960d86ab25ceaf72f639ae775162d79d1c0e2d496e44e9c1",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        205
+      ],
+      "path": "examples/m5-neutral/assetpack/receipts/neutral_actor_3d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9270a75c4430f50861ab905299430e35db935b35d9cc3205e665d6c5f673600b",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/assetpack/recipes/neutral_actor_3d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "8b10cb3b05612c09daaaaa745ece62fd335423108649d3fe174617a291033828",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        267
+      ],
+      "path": "examples/m5-neutral/assetpack/requests/neutral_actor_3d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "0a31a50bad0bcc1bc54e51961e8924bf42c119ebb8967f8d7154c0818cf9a64c",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        398
+      ],
+      "path": "examples/m5-neutral/assetpack/specs/neutral_actor_3d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "026803a9cc2ce8d99141f7d674558e17efe5b27dfac16cdf380da670548707d3",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        290
+      ],
+      "path": "examples/m5-neutral/assetpack/target.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "fbd5290e9eb3b50a5930e4355589900bec9994fb20b2f2687464cf626c822838",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        14137
+      ],
+      "path": "examples/m5-neutral/fixture.lock.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "91d86d4c65ab60cde184d44cba43371b7e4282623f758dcc2f20269d2ac442ff",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        207
+      ],
+      "path": "examples/m5-neutral/renderpack/bibles/audio.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "a8e98b4569c22a3185a0856b9db06b93888c4c2ee1c0d7b7ccf85448c2d394d1",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        273
+      ],
+      "path": "examples/m5-neutral/renderpack/bibles/visual.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "3ff62abec918d2ce71374fe8bdb525f17c29c6669809bdabccaeee41332fe388",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        191
+      ],
+      "path": "examples/m5-neutral/renderpack/inventory/assets.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "8bf1c76ffebc5c9427f41eb192145e3eed119f560700398ffe46aedc7eb4cbc0",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1813
+      ],
+      "path": "examples/m5-neutral/renderpack/licenses/neutral_font.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "3222bd585fa020ebfb16ec4234c7d9fe13b73dfddb8d72c323dba9c331a11976",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1890
+      ],
+      "path": "examples/m5-neutral/renderpack/licenses/neutral_fragment_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "8d9b3a0f9780696bf2277b03872f48ac195e16eed0a1e2ea287c3bc51af7e585",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1806
+      ],
+      "path": "examples/m5-neutral/renderpack/licenses/neutral_sfx.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "1e322147e801bef72ecb564563262bcfd400ea4353a6982db8ed793a6d102ff5",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1820
+      ],
+      "path": "examples/m5-neutral/renderpack/licenses/neutral_sheet.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "f0c1e8485a3e91780445664dc85fac528a3f6ef5565d8ab6e471f3d022ff6454",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1876
+      ],
+      "path": "examples/m5-neutral/renderpack/licenses/neutral_vertex_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9d1f2018ddd75fffc955ffb26770c04eb378370c658989a3782b3b700446b69f",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        9349
+      ],
+      "path": "examples/m5-neutral/renderpack/manifest.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "6d02d5afaa72514bc6c228226356c8aaeda71c4c11609e820fa25a001b851221",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/processed/neutral_font/processing.receipt.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "c73ac0f236a473fb934914b614327086f9a7b7906a65fe8636f7b49936fe88a4",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/processed/neutral_fragment_shader/processing.receipt.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "54a6f1ee40aea2f241993cebcff1f2af642a60e8020fa508edf8c85f485ef1c9",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/processed/neutral_sfx/processing.receipt.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "79ec2e129167ae06f5113d738b5d518422fc6f9bbf4c57f143f01580e6307704",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/processed/neutral_sheet/processing.receipt.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "1d4272e404ee65f08482a68f13696ca94859960bb88c498c3db4ba6defc35ebf",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/processed/neutral_vertex_shader/processing.receipt.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "146901900608145dddc93936c280c8b393b930a6c31cad43156015e52a8a1684",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        433
+      ],
+      "path": "examples/m5-neutral/renderpack/qa/neutral_font.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "f59109882513468d1d8de1ce8478190ac9ee0a54cc0adfee3b65941491b7d86f",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        455
+      ],
+      "path": "examples/m5-neutral/renderpack/qa/neutral_fragment_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "3421e1c8cbff2815ac5d2e8dbd718caf86716ccd3b5056cb44daf10e31ff4a4a",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        431
+      ],
+      "path": "examples/m5-neutral/renderpack/qa/neutral_sfx.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "c61c27965ee5a117624ede1c8edc0a51fc60113a9270ea8e289008bc074122e0",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        435
+      ],
+      "path": "examples/m5-neutral/renderpack/qa/neutral_sheet.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "f4cb78c9a5d4d7fffdce262c369600957406022e6c7dd3169137d1038f52cdce",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        451
+      ],
+      "path": "examples/m5-neutral/renderpack/qa/neutral_vertex_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "a39c82d898f47eeea5708c0cef3b500774595c83ae5b4e7b35170fd599f9f7fa",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        201
+      ],
+      "path": "examples/m5-neutral/renderpack/receipts/neutral_font.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "ed00aa53ccdb55cae7f58cc62ad4d085693c259d5365a1575413a1be2d584a14",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        212
+      ],
+      "path": "examples/m5-neutral/renderpack/receipts/neutral_fragment_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "f9454d9fcaa392e80d56825dd9a00b16ab6138be90da736f922f35f9726f4f9b",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        200
+      ],
+      "path": "examples/m5-neutral/renderpack/receipts/neutral_sfx.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9f8dfbd4be6ff5aad6b1c44fa9d03cfbd912bc9eefebc72fe2b6f847a0e0bd0b",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        202
+      ],
+      "path": "examples/m5-neutral/renderpack/receipts/neutral_sheet_idle.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9016778b7340b2ba3768f0f4d4205bcc2b48fc84958d2b1da9f6e9253db6acf6",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        202
+      ],
+      "path": "examples/m5-neutral/renderpack/receipts/neutral_sheet_walk.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "89e8a9089b6a2b18831731381bb325054659f982baf7a79c365d50602279b2e0",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        210
+      ],
+      "path": "examples/m5-neutral/renderpack/receipts/neutral_vertex_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "98c40e870f35f919c6876a8cc4f3057e6704bc8a5b60a2a2064f0363f4e3d8b7",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/recipes/neutral_font.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "2eb7c5f29e68b12dec09ed2e3ee58fbbaa7d3f3fa6f1f93145994fcf15f5b639",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/recipes/neutral_fragment_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "4a30969b32cf39af80c9ca631df0f2671995512fb231adc01487978a912257c7",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/recipes/neutral_sfx.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "e76ca29193f0df462c7cc49e00243c8d27aa972abffddcafaf32f1b879fbec9b",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/recipes/neutral_sheet_atlas.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "795016970fee04a4e533e70a45b90a109a1b259ecadd45fb278f19b123fbc280",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m5-neutral/renderpack/recipes/neutral_vertex_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "de16819ceca5e6cfad584c6343b0004d35217e0c063a29f25c092fba722eddad",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        253
+      ],
+      "path": "examples/m5-neutral/renderpack/requests/neutral_font.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "869266a66a2c26a164eade963c05e16aa57bcd15121b4ba0a9ffcd5986c0f0b7",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        278
+      ],
+      "path": "examples/m5-neutral/renderpack/requests/neutral_fragment_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "dda3691d4eb85b4c3195d0cce034d70600a5ce3051a86d4626a455c2006d20b3",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        254
+      ],
+      "path": "examples/m5-neutral/renderpack/requests/neutral_sfx.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "159530a2a2cf0b9462a768fdc20f13438a496dc51be9bb7fde19c20035627e71",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        258
+      ],
+      "path": "examples/m5-neutral/renderpack/requests/neutral_sheet_idle.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "31432555cfe006b658daa2d421becba695ffb1bed3ee89a83eee8efecc3fc213",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        258
+      ],
+      "path": "examples/m5-neutral/renderpack/requests/neutral_sheet_walk.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "160d9f715bf3e379471ab2e4abde81bd58a7e181f764707fe0366f28934d041c",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        274
+      ],
+      "path": "examples/m5-neutral/renderpack/requests/neutral_vertex_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "e9f1b55324afb97362426703433eed08f01894670d51bf20e06625c51a861c27",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        388
+      ],
+      "path": "examples/m5-neutral/renderpack/specs/neutral_font.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "6cc832af020d71024bf0e76c5d4a55e1228e70219465f485171af5eebf178447",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        402
+      ],
+      "path": "examples/m5-neutral/renderpack/specs/neutral_fragment_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "be65c7d9ca76ce0a6e7a1f034d249f016ec82d8eb9c0ccd9b645f52f98ff4a3f",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        390
+      ],
+      "path": "examples/m5-neutral/renderpack/specs/neutral_sfx.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "a54d7e530d5051e20e050821adb413538fd79005f02c8151fcaced3e19ce917a",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        469
+      ],
+      "path": "examples/m5-neutral/renderpack/specs/neutral_sheet.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "c055a84bf3d09878766e93792fd6d9a49045c226f56d9b40d8d8c8638e89e973",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        400
+      ],
+      "path": "examples/m5-neutral/renderpack/specs/neutral_vertex_shader.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "245753ea43f53deaa5b4eefae5ea9a5fc41e55ab61ed2106bffdc27c73a39fc1",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        353
+      ],
+      "path": "examples/m5-neutral/renderpack/target.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "0b5ace5e98267b574c9ca4f4657c7b6848f5f8811a6d1e8aefdfa663c0ece829",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1314
+      ],
+      "path": "examples/m6-contracts/adapter.declared.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "289eae808c93fa01c029afd601b08f412e8af868ee96982a0215658e70d52db2",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1300
+      ],
+      "path": "examples/m6-contracts/adapters/isoworld_raylib_2_5d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9e3e21f718cf4af720fde440259df02b446b24a3b797eadf13098190b4af65b1",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        758
+      ],
+      "path": "examples/m6-contracts/adapters/pyray_3d_v1.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "51c5363554f71ba430865cde270ce781cfc7de0ec13d6ed3429af6207d3cdf46",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        4180
+      ],
+      "path": "examples/m6-contracts/capability-catalog.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "c75018e20b5649a533d43e3d6a7f376150c01793743522070d98c53b208bd5d0",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1318
+      ],
+      "path": "examples/m6-contracts/compatibility-report.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "e16fb3c89b8403ef39e03938f999c7ae62e8a32df31e6ab5974fe6f7505b7201",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        367
+      ],
+      "path": "examples/m6-contracts/composition.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "6086adb73dba6b071319e84b10e6ba5026e771e751325d10b8c21f2dc11cf6cf",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m6-contracts/profiles/profile_2_5d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "7a368c9b7e4529fa9628b18ad212d9cb06f98f7f5e3652b8e2e616a23bdb43ff",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m6-contracts/profiles/profile_2_5d_over_3d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "efbff669b6f3d3214f893bc9f760330954407ed305a9049b12a65798445aea65",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m6-contracts/profiles/profile_2d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "c67153e6df3e9f4e067e0976567373b6289de0b2baccca3947f4f9e7f1002e05",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m6-contracts/profiles/profile_2d_over_2_5d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "fc01f94ea6ca075aeb7635323af62d26de9c7756187d2f44e6527a9f5574b045",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m6-contracts/profiles/profile_2d_over_3d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "e29f213af08a22510efa15e1dbd9751ef09d84e04685743234c1759d7fd33fb8",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        101
+      ],
+      "path": "examples/m6-contracts/profiles/profile_3d.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "d9773d76b33c0bc754364dedf9c5e7f610db05688a0ca8d339d0c792643107b1",
+      "justification": "The compatibility bridge retains this old public location until the authorized cutover.",
+      "offsets": [
+        653,
+        710,
+        763,
+        1470,
+        1522
+      ],
+      "path": "pyproject.toml",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "e9b1964d352564adc03e287020491e14fa706965d5a27d2d2780427d6c6ba3f5",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        545
+      ],
+      "path": "schemas/asset-inventory.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "191e4980bd9c19adbe875407edea390aa21c8462039b9b48d32e1056ca2149ea",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        428
+      ],
+      "path": "schemas/asset-license-record.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "24129eed126b287016b816829ef42f5c71ec69447b573756a86734bd98d2d525",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        483,
+        17561
+      ],
+      "path": "schemas/asset-manifest.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "53e18bcc573b0f8ef1c328214b7f1d2db2cf1677a660e3edd356a25660d7e640",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        447
+      ],
+      "path": "schemas/asset-processing-receipt.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "45d050234eeb1a895d16b9edfb4c3104467b749580808cf638bd5cb73204a8d4",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        5358,
+        7615,
+        8745,
+        11225,
+        11824
+      ],
+      "path": "schemas/asset-processing-recipe.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "ea312098593cc88236b169de5f158c0522cdc275276789290417b65243b29574",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        538
+      ],
+      "path": "schemas/asset-production-receipt.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "ddf5da65fae9029d0ff4c93c725708e983c2fb2eb96e21894e3a50f459d4a0ff",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        558
+      ],
+      "path": "schemas/asset-production-request.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "8749d6d6b335892f019e24f8718545dd85cc6fd8073c9e6b94f3c6f3f5e0f3a1",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        430
+      ],
+      "path": "schemas/asset-qa-report.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "fbec1fd0b2d32f6a0b23389ff5b9b83f12a1b14b6d4c4876082e1601a3d3492d",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        672
+      ],
+      "path": "schemas/asset-spec.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "1601fe1720c2e5e61c5d3c0f7057f9b61d2dccf429420cced509f1e818b3d1a5",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        473
+      ],
+      "path": "schemas/asset-target.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "2f7f623c95344bfd45a0ed482ced372de3c2a9803171bae0c6c411cf5698428d",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        484
+      ],
+      "path": "schemas/assetpack.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "8589b7f2591a523fadc6a2238ba9acb1d46c810653f714da21d09ce91b566116",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        516
+      ],
+      "path": "schemas/audio-bible.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "e6787e0d8f2f086e2e7793ab054439cb5b898b2cc3ed08249590f38801aa06a6",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        161
+      ],
+      "path": "schemas/composed-runtime-bundle.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "e6787e0d8f2f086e2e7793ab054439cb5b898b2cc3ed08249590f38801aa06a6",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        543,
+        2979,
+        3390,
+        3865,
+        4447,
+        5553,
+        7164
+      ],
+      "path": "schemas/composed-runtime-bundle.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "fa2a0ac7e32c5c6e30ecaca91e41276308bc769f04f477d0ffc32ced872b647d",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81
+      ],
+      "path": "schemas/composed-runtime-catalog.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "2b7d05940e80a1f7aac9cf2343fd15fdb1793224ecfa1577dc5ac8bbf013a46a",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        75
+      ],
+      "path": "schemas/contract-catalog.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "2b7d05940e80a1f7aac9cf2343fd15fdb1793224ecfa1577dc5ac8bbf013a46a",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        283
+      ],
+      "path": "schemas/contract-catalog.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "3a4c59bc9a9f3c6b63781b78f977b5556cf7e44317efc16d658b0ffd3ec0ff17",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        459
+      ],
+      "path": "schemas/forge-workspace.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "84238e4bcfb6afe48c177ca65803c993ede538d13b792ea63968b9cd261e4337",
+      "justification": "Retains the explicit old/new hosted repository bridge for attestation receipts beside the stable GitHub repository ID.",
+      "offsets": [
+        2195
+      ],
+      "path": "schemas/hosted-native-release-attestation-receipt.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "dea4929fd0573ba10ebf8ee5b25666b353aacae44dc938f2f5dc8b66ec4bc271",
+      "justification": "Binds the allowed old repository name in the hosted native authority bridge beside the future world-forge name and the stable GitHub repository ID.",
+      "offsets": [
+        2361,
+        8119,
+        8473
+      ],
+      "path": "schemas/hosted-native-release-authority.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "a2cc206dffd8370d83420ea8c6504574378234a711963885b2f9dc17f1d77aa4",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1664
+      ],
+      "path": "schemas/legacy-identity-allowlist.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "a2cc206dffd8370d83420ea8c6504574378234a711963885b2f9dc17f1d77aa4",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1683
+      ],
+      "path": "schemas/legacy-identity-allowlist.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "4eb61b8e34d1c8194b4140e950f317f66da2dadf3c9a163ea61e0268ce1a498f",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        504
+      ],
+      "path": "schemas/modly-capability-discovery.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "d9ef556141898e83a20fc08e545f3e487c06308edc4a7f1915ba252ea78d6a35",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        149
+      ],
+      "path": "schemas/narrative-analysis.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "d9ef556141898e83a20fc08e545f3e487c06308edc4a7f1915ba252ea78d6a35",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        368
+      ],
+      "path": "schemas/narrative-analysis.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "5847735dd162c0500f17e3d3bc8f2feab953723f9bdf8fcc0b8fec59e1bc03d1",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        150
+      ],
+      "path": "schemas/phase-report.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "5847735dd162c0500f17e3d3bc8f2feab953723f9bdf8fcc0b8fec59e1bc03d1",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        2786
+      ],
+      "path": "schemas/phase-report.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "81e070e24f477c44c3a9ed25b772f02ddbc227a999061c2f7feb0c4a2434d1c5",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        3532
+      ],
+      "path": "schemas/runtime-adapter.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "81e070e24f477c44c3a9ed25b772f02ddbc227a999061c2f7feb0c4a2434d1c5",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        20,
+        2186
+      ],
+      "path": "schemas/runtime-adapter.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "45a844dece77dfc2a9c37f72de5884cc14064bf6d6b7200b61c04bd0570daa27",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        5346
+      ],
+      "path": "schemas/runtime-capability-catalog.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "45a844dece77dfc2a9c37f72de5884cc14064bf6d6b7200b61c04bd0570daa27",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        20,
+        5135
+      ],
+      "path": "schemas/runtime-capability-catalog.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "9409cf47a4be961048e0756d17f7692d0986304219a1f4311c688fecd9af9e31",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1668
+      ],
+      "path": "schemas/runtime-compatibility-report.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "9409cf47a4be961048e0756d17f7692d0986304219a1f4311c688fecd9af9e31",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        20,
+        688
+      ],
+      "path": "schemas/runtime-compatibility-report.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "1183924c867e219d9d1e4dd4e333f941f426a8d86db9529528943a32e036b7b6",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        3613
+      ],
+      "path": "schemas/runtime-composition.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "1183924c867e219d9d1e4dd4e333f941f426a8d86db9529528943a32e036b7b6",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        20,
+        755,
+        1135
+      ],
+      "path": "schemas/runtime-composition.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "385e170719002add5ae2322194cb3e7bf2c861639336282b45f32edebba86c26",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        4833
+      ],
+      "path": "schemas/runtime-presentation-profile.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "385e170719002add5ae2322194cb3e7bf2c861639336282b45f32edebba86c26",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        20,
+        3727
+      ],
+      "path": "schemas/runtime-presentation-profile.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "ef2bfe6cd8459765aa6a6e00c26d6eb4002eb31234237c77bcc658751de4aff8",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        146
+      ],
+      "path": "schemas/source-manifest.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "ed554b539864bf1892751be51376977b2cdbf85fa003184c70d8265918c26696",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        639,
+        1560,
+        2593
+      ],
+      "path": "schemas/studio-changeset.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "ce73a5bba95b6c59f77753bbc8a11cfde83d524cb44d09cfc85e07338f9e50e4",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        544
+      ],
+      "path": "schemas/studio-external-grant.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "ffd3478a767ecb0b394b6b8fab2085687e2350aceee735b02679239f3692624c",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        490
+      ],
+      "path": "schemas/studio-job-v3.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "2214ec72c0a3bef25043a98885b8ecfd345d391d1d3f2f6a4bc84cf9c3825839",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        282,
+        964,
+        4241,
+        6486
+      ],
+      "path": "schemas/studio-job.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "cfb96c6c17d49136cb1938c6ada5f70e155b2dd179f6690ab2701cb070762ce9",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        375,
+        1662,
+        9460,
+        13326,
+        16917
+      ],
+      "path": "schemas/studio-protocol-v2.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "367abd7a9cb4bede12ff9d968b88b601073c7eaa27d8ac9a307e4c1361d42e2d",
+      "justification": "Retains the published Studio protocol or storage discriminator.",
+      "offsets": [
+        1978,
+        28388,
+        39099,
+        55530,
+        64149
+      ],
+      "path": "schemas/studio-protocol-v3.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "28d3a8fa4c65cc902a9661044bebf6625916672d7252bb8bb32e48ff875d4ea5",
+      "justification": "Retains the published Studio protocol or storage discriminator.",
+      "offsets": [
+        28759,
+        34937,
+        44239,
+        48946
+      ],
+      "path": "schemas/studio-protocol-v4.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "8012ae63195c6159df46f7bcfad74ff2afe43d6d9c59fc60aa5949948f29f751",
+      "justification": "Retains the published Studio protocol or storage discriminator.",
+      "offsets": [
+        36512,
+        43011,
+        52829,
+        57851
+      ],
+      "path": "schemas/studio-protocol-v5.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "8b3ac19494aca6b2cb37906dbfdab2ab7ea85bb5c21937c96fe9622a74c2c060",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        334,
+        864,
+        2523,
+        3991,
+        22499,
+        32050,
+        32576,
+        33129,
+        33657,
+        34201,
+        34748,
+        35289,
+        35831,
+        36373,
+        36907,
+        37435,
+        37966,
+        38498,
+        39036,
+        39572,
+        40102,
+        40643,
+        42099,
+        42620,
+        43158,
+        43682,
+        44212,
+        44758,
+        45307,
+        45850,
+        46394,
+        46936,
+        47468,
+        48001,
+        48531,
+        49059,
+        49592,
+        50128,
+        50662,
+        51194,
+        51720,
+        52429,
+        54349,
+        55254
+      ],
+      "path": "schemas/studio-protocol.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "a5e50ef475a628680ac3b57631c2b24f67547faa345d87f38a1b3c2044c47f36",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        148
+      ],
+      "path": "schemas/task-claim.schema.json",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "a5e50ef475a628680ac3b57631c2b24f67547faa345d87f38a1b3c2044c47f36",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        530
+      ],
+      "path": "schemas/task-claim.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "4107e95acdb4556618d6ee9976a9cdc31679dc5718d9acd5271f2b65add250b4",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        520
+      ],
+      "path": "schemas/visual-bible.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "33bc5fa1156e98d38b6db74d40fb344ec97bad20afa9e47e2350e7933a063865",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        81,
+        524,
+        1750,
+        2340
+      ],
+      "path": "schemas/world-project.schema.json",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "c33450d64fff25d99068add603a4852e27dbca77177b7164b1a34e8c456dec4d",
+      "justification": "Release assembly retains the legacy installed public-data path during the compatibility bridge.",
+      "offsets": [
+        1004,
+        1455,
+        22093,
+        25862
+      ],
+      "path": "scripts/build_release.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "f3dde7948342f874f594d02e6e21033f00e549871ff4485e6e1d2fa14ebe1413",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        11916,
+        12918,
+        13865,
+        14395,
+        15080,
+        16319,
+        17103,
+        18530,
+        19239,
+        21530,
+        33618,
+        35049,
+        38678,
+        40290
+      ],
+      "path": "scripts/generate_m5_neutral.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "efe5f6dcb5458124efaea9835d7634f7ee5ec6d957cd59455f8c9e55b0850870",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1630,
+        1741,
+        1835,
+        2236,
+        2561,
+        69073,
+        229646,
+        230038,
+        230413,
+        230811,
+        231204
+      ],
+      "path": "scripts/studio_runtime_assembly.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "a45a172f568176465b0add9b2b6d7bb9e8bb5d3100011091837486bce2f8bbb4",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1145,
+        1266
+      ],
+      "path": "scripts/studio_runtime_inputs.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "8dd955532b73f2ccf111e16c55185fa60f84287d75fc456d4feb98cdf2c5c0e5",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        702,
+        782,
+        13432,
+        55482
+      ],
+      "path": "scripts/studio_runtime_sources.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "2c6d0b3ba3de75cf8881f9be769192771b5f0228035905b658846289f00881e0",
+      "justification": "Restricts the hosted receipt CLI old/new repository bridge to the trusted GitHub repository context and stable repository ID.",
+      "offsets": [
+        930
+      ],
+      "path": "scripts/verify_hosted_native_release.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "bdf7a86136360bc4fffdd918e98b571cc7b8acab2eab31fb501f5955d1eef324",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        3400
+      ],
+      "path": "scripts/verify_m5_release.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "c8de40feb9b65dffe8da1f8b4ff3ed660cc4b4b3c9343e5ba2bfd851da9520f8",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1097
+      ],
+      "path": "src/isoworld/content/assetpack.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "7f62e6c15eaa994ee16e7640e0740eee333ab26e3fb03299ed48b4b79d6a5161",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1566,
+        3775,
+        6075,
+        6127,
+        6178,
+        6230,
+        6282,
+        6320,
+        6374,
+        16602,
+        16920,
+        18108,
+        20587,
+        25288,
+        30110,
+        30622,
+        31023,
+        31374,
+        31855,
+        32823
+      ],
+      "path": "src/isoworld/content/composed_catalog.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "32cb16250bb3584acca386447362809dff41ad5382b8c10315ddec70124d0bd6",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        6049,
+        9622,
+        13374,
+        14084,
+        38040,
+        42131
+      ],
+      "path": "src/worldforge/asset_contracts.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "a5d1ba961c299a91abaa9b2e05774f838f095c6bb10817c1d02d6179e246db69",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        2717,
+        10427,
+        10613,
+        10795,
+        11660,
+        13140
+      ],
+      "path": "src/worldforge/asset_inventory.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "119a1916bedeb666f8d33cc633b497bac76b30ac4681a0313b959f6dfbf87790",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        3524,
+        5261,
+        11222,
+        12328,
+        20958,
+        40036,
+        52560,
+        54295
+      ],
+      "path": "src/worldforge/asset_manifest_v3.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "b789f8a764cff5955d679f1061f2273dedf56faa61963c672e6e5594fac0d9e8",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        902,
+        961
+      ],
+      "path": "src/worldforge/asset_processing.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "5493adf0a0acddddd5a750fdf6c943868bd23ed93b2ab6891d7141bafd5284d8",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        13087,
+        24708,
+        25850,
+        37520,
+        39597,
+        55354
+      ],
+      "path": "src/worldforge/asset_production.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "f4faa1d90571bfa56f5154e816358e21e49ec07d1ac88e4d50a88596cc1578bc",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1287,
+        14847,
+        16107,
+        38501
+      ],
+      "path": "src/worldforge/assetpack.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "e7909d8139c15b6a33e273a97d32da6caa729aeeb071b64848e8ab4fe48fff6b",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        5617,
+        6385,
+        26270
+      ],
+      "path": "src/worldforge/assets.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "6940ec2a3d258806386c75fa5123b03ef2c22e5dbf44ce1929eb199aa6852d46",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        6481,
+        6523,
+        6566,
+        6614,
+        6666,
+        6717,
+        6769,
+        6821,
+        6864,
+        6902,
+        6942,
+        6981,
+        7027,
+        7068,
+        7108,
+        7143,
+        7181,
+        7219,
+        7262
+      ],
+      "path": "src/worldforge/bundle.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "24a0b1f8977e795da8b3bf596df6dc562ebd3ab0c98c9d15da7cb94f2196d91e",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1745
+      ],
+      "path": "src/worldforge/claims.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "db2bec5e155a8ae35f8a346be381daee6b1517819093e778b9406b3e00d9533d",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        2755,
+        2924,
+        20619
+      ],
+      "path": "src/worldforge/composed_bundle.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "45b2a355e64c6f9979b09ef9691f13430449652becd868de045ba96febdcca69",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        570,
+        797
+      ],
+      "path": "src/worldforge/contract_catalog.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "2dd739cf9180edb27ba9053c614fe22d16b5c4a643736ff0dc4f005b3e5b726b",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        286
+      ],
+      "path": "src/worldforge/creation_route.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "b7ce4433bffb903e5cde90cafc20f785a8f71b1bdc2e74ed5606756d5b537fc4",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1381,
+        1423,
+        1466,
+        1514,
+        1566,
+        1617,
+        1669,
+        1721,
+        1764,
+        1802,
+        1842,
+        1881,
+        1927,
+        1968,
+        2008,
+        2043,
+        2081,
+        2119,
+        2162,
+        2759
+      ],
+      "path": "src/worldforge/game_boundary.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "dd263456c3d46dc4af54cfa4f13febfd6625e73862272c188d66c263247fd97d",
+      "justification": "Binds the allowed old repository name in the hosted native authority bridge beside the future world-forge name and the stable GitHub repository ID.",
+      "offsets": [
+        1435
+      ],
+      "path": "src/worldforge/hosted_native_release_authority.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "3ec92607a1ebfb717da2f99823f3289bdea5dde2fb9bdebeed522a12f7393771",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        13835
+      ],
+      "path": "src/worldforge/narrative_analysis.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "dcabf7fc723ae19d26c68ce4878a1a52e5993967de5781d7e58b40be51404ca6",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1325,
+        1408,
+        1480,
+        1543,
+        1619,
+        10549
+      ],
+      "path": "src/worldforge/runtime_composition.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "d2c7e400f4b84e30bfc6b2c5bbddbfee2769103f0b62aabbc85a898e190b7dd7",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        9919,
+        10751
+      ],
+      "path": "src/worldforge/scaffold.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "82ea7ba9382621c94f95208ff8297edab1d0cbf127b78bb866b119c66342eddf",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1391
+      ],
+      "path": "src/worldforge/studio/changeset_review.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "c8ac13fd3181f1e095ea7c69b3ae9a8b13e195ce74166692a983a78a5c79304d",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1375,
+        31346
+      ],
+      "path": "src/worldforge/studio/changesets.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "26e193dd9c5002a671a2981171822cadbf470b355f203061a411ea69bedb9cfd",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        1667,
+        1720,
+        1768,
+        1821,
+        2473,
+        2811,
+        30563
+      ],
+      "path": "src/worldforge/studio/contracts.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "5a96057d759d3cd82f72399d6465512abcfab67cf3befd5f3b34930d69749d88",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        55
+      ],
+      "path": "src/worldforge/studio/job_protocol.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "db595508d56ef7d27d5998b30355d4e2488f5153af7f82f93ea6876f614331c7",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        2066
+      ],
+      "path": "src/worldforge/studio/jobs.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "759b25f2c7a64489d2844718e093432cb206378e343d071f7f1907893aca35b2",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        994,
+        13131
+      ],
+      "path": "src/worldforge/studio/mcp_server.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "b90090b02e04d925d4f12916d72cf7aae5a83fcf209fff950b7f0445a9516efa",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        17500
+      ],
+      "path": "src/worldforge/studio/service.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "7f7c3c0373e302a7c30757c07b19d4a59160859f85166dc8c00a710f632a5dd3",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        19956
+      ],
+      "path": "src/worldforge/studio/workspaces.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "01fef7859b5c9fcb15d7811f18ccde52d1896ebd9d1d3126bb0aa7c1a3e311e2",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        3335,
+        3373,
+        3407,
+        3449,
+        3486,
+        3522,
+        3553,
+        3587,
+        3621
+      ],
+      "path": "src/worldforge/templates/pyray_game/game_catalog.py.tmpl",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "cda65b4c617a3ed0bf4cc0be8d0a3ebde8f922cc5ede50046537079b5abb64be",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        2559,
+        2597,
+        2631,
+        2673,
+        2710,
+        2746,
+        2777,
+        2811,
+        2845
+      ],
+      "path": "src/worldforge/templates/pyray_game/package_game.py.tmpl",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "c9b191fc88300df96bd69a277d65647646837762ccdcfc37fea8c0a4f17b0868",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        6958,
+        8095,
+        18190,
+        35313,
+        45296
+      ],
+      "path": "src/worldforge/workflow.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "legacy_contract",
+      "file_sha256": "b5d2feed61568cfa187c194a4909d9c65448ce41b235e868d19d071254a7c930",
+      "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
+      "offsets": [
+        903,
+        1066,
+        23768,
+        29510,
+        29947,
+        30946,
+        31184
+      ],
+      "path": "src/worldforge/world_lifecycle.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "migration",
+      "file_sha256": "c1069ebd32e9d0e521bc73f46248aeab4c15bb21ba013f5c656732284c3221af",
+      "justification": "The explicit project migration preserves the published legacy project discriminator while changing only its versioned repository identity.",
+      "offsets": [
+        10937,
+        43287
+      ],
+      "path": "src/worldforge/world_project_migration.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "78145ebf5404e0511ccace12f4129b4055f92cf28bf03ecb780c1ae111705bf5",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        12249,
+        12527,
+        13540,
+        14342,
+        20427
+      ],
+      "path": "tests/test_architecture.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "b2853f8187b089ffa4cea0e0104035a73f42d84525689f740c3d21e2e52e8c5e",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        11924,
+        14735,
+        22310,
+        25393,
+        29003,
+        32614,
+        34087
+      ],
+      "path": "tests/test_content_pipeline.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "d4878250895768515952cff04674eb5c0f5a92c82fa00fca9c6ef93ee2bf06ee",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        7088,
+        8591,
+        21674,
+        23415,
+        23492,
+        23582,
+        23665,
+        23748,
+        25179,
+        26040,
+        26106,
+        33459,
+        33779,
+        35197,
+        36952
+      ],
+      "path": "tests/test_contract_catalog.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "397260499d848294afdc1563d9495d0e52ff0be5e09d0b333a6b752cf5aa1831",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        4826,
+        6584,
+        8353
+      ],
+      "path": "tests/test_creation_scaffold_kinds.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "54ce1b3c83b2f8302f4b68362a3f09b6cf6cbfbb7577f44e2b8fc57cc7bdbb9c",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        12679,
+        80305
+      ],
+      "path": "tests/test_generic_creation_workflow.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "f764a7455dd7d425bbe86610eeb9f2052c3aaf568107d900b9ec4c5a5a7aa839",
+      "justification": "Exercises the allowed old/new hosted repository bridge for native authority.",
+      "offsets": [
+        1538,
+        1588,
+        21337
+      ],
+      "path": "tests/test_hosted_native_release_authority.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "3ab98e65df030c12b32c8de09e2195b022fc551cd0f568bc816f5b1318135345",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        6027,
+        6233,
+        7055,
+        9264,
+        12673,
+        18476,
+        19962,
+        31544
+      ],
+      "path": "tests/test_identity_audit.py",
+      "pattern": "RPG World Forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "3ab98e65df030c12b32c8de09e2195b022fc551cd0f568bc816f5b1318135345",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        5866,
+        6143,
+        6647,
+        7555,
+        8110,
+        8581,
+        9132,
+        11726,
+        12360,
+        13218,
+        13611,
+        13791,
+        14355,
+        14762,
+        14891,
+        15296,
+        15686,
+        15792,
+        16233,
+        16250,
+        16642,
+        17628,
+        18029,
+        18142,
+        18958,
+        19110,
+        20454,
+        21144,
+        23432,
+        25665,
+        27939,
+        29316,
+        29861,
+        30504,
+        31087
+      ],
+      "path": "tests/test_identity_audit.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "0abfc22766671072da22e4423ddf1fcc451372b0d7f06e190409182bb1c4b0d2",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        2532,
+        25283
+      ],
+      "path": "tests/test_m2_5_assets.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "148c44401781dc9410cada2bb174edd50b9a829a568e796e170db4c92d06cf5e",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        47645
+      ],
+      "path": "tests/test_m4_bundle.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "01a760804e08c36993384c9c35e7b1699a6b3c9f77c07d17cfbb4b847d19952c",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        4122,
+        27919,
+        31052,
+        47603
+      ],
+      "path": "tests/test_m4_world_lifecycle.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "5ca4e0217d250683140fcaddf822ac9dc63e7c74735048f238f4c4ce8af10f0f",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        4937,
+        5801,
+        6341,
+        6758,
+        8213,
+        10225,
+        12492,
+        14875,
+        16453,
+        17895,
+        18806,
+        19365
+      ],
+      "path": "tests/test_m5_assetpack_3d.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "60104b8f574ecacca13e6435cdf4ee1ace0d2390dc1c9ee3f13bde653bc8a6fa",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        960,
+        1432
+      ],
+      "path": "tests/test_m5_inventory.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "59fe1567bbbbd35691f96f1a011331dff6284b6d09b4df5bb226cec01007d60e",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1416,
+        1915,
+        3747,
+        4956
+      ],
+      "path": "tests/test_m5_plan.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "269e7a201862ebdf1a7d9b70df0c02961e6d6482a7d374c7d463a4a61969a270",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1993,
+        5297,
+        9463,
+        11822,
+        13612,
+        13690,
+        29158
+      ],
+      "path": "tests/test_m5_production.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9187f5bf54c80909b2f83d017b38f7e780f2a5c368185c1bcf635b47b4bdfbc7",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        3043,
+        5363,
+        28310,
+        56157,
+        56275,
+        57718,
+        58113,
+        60556
+      ],
+      "path": "tests/test_m5_release_builder.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "1a546b77d9eb583c02d5f8d5a02db858f5df0ae69817bb4b123f45c608207c0e",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        2889,
+        3441,
+        4211,
+        4800,
+        6559,
+        7830,
+        8952,
+        9846,
+        10471
+      ],
+      "path": "tests/test_m5_renderpack_release.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "c9e88fe8b2efb61e7692eb681fbc8ac4a7f5aab249a328c3c2346fd5ba07126c",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        55090,
+        56597
+      ],
+      "path": "tests/test_m6_composed_bundle.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "5994e0b3eebc4bd9d103b470ce0b31df06ddfcede01b3afc3e64583bddc65a40",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        15699,
+        16659
+      ],
+      "path": "tests/test_m6_game_consumer.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "a6402d8ab094b1d0197ee1825087cd10c94151eaa0ab59a9cc34616186f45553",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        2873,
+        5264
+      ],
+      "path": "tests/test_m6_pyray_2_5d.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "58ecf95b3237de251686c6555a49d6ff376d5e22bdd2fc580b79d53d8e2e1d79",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        7595,
+        9338
+      ],
+      "path": "tests/test_m6_pyray_3d.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "98acf0ee2461a19cd5caf55ba1811ae675de0d739aa284143a4e96a8881b4aeb",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        19765
+      ],
+      "path": "tests/test_m6_runtime_composition_contracts.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "6e0d1501bc5d34761d7a4431bb4c7941f6fffa88caef2aee63e30e7c52bb08d9",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        31718
+      ],
+      "path": "tests/test_m6_runtime_loading.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "7ea95e0f90d0380aa341c6a3099be5c761791ab2ea4fccb4a182c13f5ae0dbf7",
+      "justification": "Semantic regression tests derive and verify the retained published legacy discriminators.",
+      "offsets": [
+        26736,
+        26779
+      ],
+      "path": "tests/test_multigenre_guidance.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "50257cbcdfa5d0c6ee1289b517228c9d4a4885ee0bd4843798b632a015ce6fc5",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        39493
+      ],
+      "path": "tests/test_multigenre_runtime_contracts.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "2eaca63894b4a2de66ac7e98fd1fdcf05847e6e1b38ea3d86b0e41c2903d3dff",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        30919
+      ],
+      "path": "tests/test_studio_asset_previews.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "ac0cb496ac20090446e1c792c1b31f397927cc554a6c9996dec679e823eb6112",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1945,
+        28254,
+        28580,
+        29615,
+        30335
+      ],
+      "path": "tests/test_studio_assets.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "d37ebb9cfbd0f7e85305d3dfa9d2c436059876dcd18c3a619e720c557b1fdaf9",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1880
+      ],
+      "path": "tests/test_studio_authoring.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "1e60762fc18b4b10eda08541b2097582bd83320d26be051ce87b82c50986f6e3",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        982,
+        1666
+      ],
+      "path": "tests/test_studio_changeset_review.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "8686d1b8f822e59a2939cdff1433158f72cb0b689187b2165092b10982e8238e",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        4036,
+        4838,
+        6104,
+        7937,
+        10877,
+        12532,
+        14457,
+        15142,
+        23567,
+        24926,
+        25426,
+        26509,
+        27051,
+        28554,
+        29300,
+        33153
+      ],
+      "path": "tests/test_studio_contracts.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "465aabafbc2f0f6cf740c1bcfbae7327157d4208fe9d3f7497bb7da4358912c4",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        39540
+      ],
+      "path": "tests/test_studio_creation_asset_jobs_v4.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "273030a4c40e858c6726cd6d2d7e55af1ba9d295b665af724189c0149fe9cac5",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        3636
+      ],
+      "path": "tests/test_studio_creation_asset_release_v11.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "0f654bce47cfbf7d9242bfacd73ac4ee825ca11527297c5e9f125fa20c4057d3",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        7209,
+        8990,
+        9835,
+        10786,
+        11307,
+        14578,
+        15726,
+        16755
+      ],
+      "path": "tests/test_studio_creation_asset_seal_v4.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "c1de942ead9c17150d97800ecababcbe971539df42842daa85d08f156e39d232",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        5893,
+        6682,
+        7265,
+        8098,
+        8679,
+        25923,
+        27019,
+        27438,
+        29210,
+        37625,
+        41135,
+        42173
+      ],
+      "path": "tests/test_studio_creation_evidence_v4.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "90a75d9c77840829da3930801b9b40d0193b2d265331a7607e9f21452000ccbe",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        11205
+      ],
+      "path": "tests/test_studio_creation_game_materialize_v4.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "958d058d12acb4886e0ccdefda0ef73704e857409c7e9869d5f8e58c5856e233",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        7980
+      ],
+      "path": "tests/test_studio_creation_game_package_extract_v4.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "4b44adbc73850df4326cccd52822b08408bd84d7411d4b241a5c4d2d48b28194",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        8272,
+        11883
+      ],
+      "path": "tests/test_studio_creation_game_package_v4.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "c5e7863a24ab0d562d9da7ef88d4968b50199da042402785f6516954895287ea",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        11872,
+        12992,
+        17518,
+        18515,
+        18944,
+        117843,
+        118624,
+        147412,
+        152561,
+        154796,
+        156733,
+        159252,
+        159946,
+        162405,
+        163346
+      ],
+      "path": "tests/test_studio_creation_jobs_v4.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "7f1838655f379831c5a328d3a219e5b4eb5a55c5704aa9ba41c3868da17cba51",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        11815
+      ],
+      "path": "tests/test_studio_creation_materialization_bundle_v4.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "b1465d990d8a5f796ec9943054bc45ce97a47d5d1f1243dcf1528d8117f07ece",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        190
+      ],
+      "path": "tests/test_studio_creation_previews_v5.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "99c618c26ad42b73ed7169e81d5786d7c01375f784389923e239d7856f8c25c9",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        18318
+      ],
+      "path": "tests/test_studio_creation_runtime_headless_v12.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "3b30b8302d1f95c0cad957b0756aa34c040e258aa741353b4543f8a7be369fd8",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        1562,
+        19586
+      ],
+      "path": "tests/test_studio_creation_service_v3.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "11878530429ff06cae807c2602296952b3a66d94c5dbb95fb384743aefb319a6",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        7915,
+        9220,
+        9818,
+        10143,
+        11909,
+        78447,
+        79206,
+        80682,
+        81223,
+        82044,
+        82849
+      ],
+      "path": "tests/test_studio_creation_v3.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "13488146c5c6518c3e4a0a8874926cb2f5aaefdfe109cbd6d608041f0735d15e",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1836,
+        2600,
+        4524,
+        6106,
+        8746,
+        10068,
+        12631,
+        66605,
+        67227,
+        68002,
+        71974
+      ],
+      "path": "tests/test_studio_external_jobs.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "8b5b8813d689124a18785eb138921c94385c3f32957d8355fd0d85c1fb1a6b48",
+      "justification": "Exercises retained Studio protocol and compatibility behavior.",
+      "offsets": [
+        721,
+        20684,
+        21483,
+        21811,
+        25571,
+        31308,
+        35658,
+        40599,
+        41126,
+        44794
+      ],
+      "path": "tests/test_studio_protocol_v5.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "46a3c07803cce7438a2e820d5e4b9395afb6c4612dbf57319dda9070a27c815c",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        35709,
+        41713,
+        45111,
+        57082,
+        89485,
+        151995,
+        156979
+      ],
+      "path": "tests/test_studio_runtime_assembly.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "28fe31881c0a8f520081c9748775a9581722bc99604ad38b8df3b78d7fc210ed",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        4044,
+        24776
+      ],
+      "path": "tests/test_studio_runtime_sources.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "d1b61d030dbd02a10bd20d79acd4d527974aece13a1728169167096ca215a5ad",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1093,
+        2745,
+        5272,
+        16406,
+        17479,
+        18669,
+        22283,
+        24956
+      ],
+      "path": "tests/test_studio_service.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "ec027bc500d1f34ddb43eba0d95ba5b8f1d246d83ac50aeb46dad40fae5e5fa4",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        1948,
+        2764,
+        6181,
+        6997
+      ],
+      "path": "tests/test_studio_storage.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "94335a107d4d1ea1ef0aa28df8a08c9795b1128a4b81f05f76b9d39fc18c9e10",
+      "justification": "Regression evidence preserves legacy identity input and reader behavior.",
+      "offsets": [
+        8414
+      ],
+      "path": "tests/test_studio_workspaces_jobs.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "15160201d98a647e1b2d0758cbdebc9fa58f3b59fdb933db63e84a034a0af139",
+      "justification": "Exercises retained v2 project identity and native Windows migration rejection/commit-forward behavior.",
+      "offsets": [
+        27431,
+        31916,
+        34868
+      ],
+      "path": "tests/test_windows_world_project_migration.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "ad2f95254b754ea7af60d4cd1bce267a68ea77b10fbbae7e2af59d23772b24d3",
+      "justification": "Regression evidence preserves legacy project discriminator, reader, upgrade, and explicit v2-to-v3 migration behavior.",
+      "offsets": [
+        1806,
+        4858,
+        6424,
+        6927,
+        8678,
+        9788,
+        25040
+      ],
+      "path": "tests/test_world_project_migration.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "9f68cef9f9aa4a06031a05b9d106df7a8443cc284b95d9c032fb725f75dcf3a3",
+      "justification": "Exercises the retained legacy project discriminator in the native Windows migration evidence runner.",
+      "offsets": [
+        794
+      ],
+      "path": "tests/windows_native_world_project_migration.py",
+      "pattern": "rpg-world-forge"
+    },
+    {
+      "category": "regression_fixture",
+      "file_sha256": "42823036473d5129bee6a16fc563e243e224a53623f11445ac482af77264dfcb",
+      "justification": "Proves the trusted hosted old/new repository condition in release gate CI.",
+      "offsets": [
+        20436
+      ],
+      "path": "tests/test_multigenre_release_gate.py",
+      "pattern": "rpg-world-forge"
+    }
+  ],
+  "format": "world-forge.legacy_identity_allowlist",
+  "format_version": 1
+}

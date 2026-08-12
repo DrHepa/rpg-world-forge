@@ -1,0 +1,2061 @@
+{
+  "$id": "https://world-forge.local/schemas/gamepack.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "logic": {
+              "properties": {
+                "narrative_cursor": {
+                  "type": "null"
+                },
+                "narrative_transitions": {
+                  "maxItems": 0,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "narrative_cursor",
+                "narrative_transitions"
+              ],
+              "type": "object"
+            },
+            "modules": {
+              "properties": {
+                "narrative": {
+                  "maxItems": 0,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "narrative"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "logic",
+            "modules"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "logic": {
+              "properties": {
+                "narrative_cursor": {
+                  "$ref": "#/$defs/internalCursor"
+                }
+              },
+              "required": [
+                "narrative_cursor"
+              ],
+              "type": "object"
+            },
+            "modules": {
+              "properties": {
+                "narrative": {
+                  "items": {
+                    "$ref": "#/$defs/narrativeProjection"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "narrative"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "logic",
+            "modules"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "logic": {
+              "properties": {
+                "narrative_cursor": {
+                  "type": "null"
+                },
+                "narrative_transitions": {
+                  "maxItems": 0,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "narrative_cursor",
+                "narrative_transitions"
+              ],
+              "type": "object"
+            },
+            "modules": {
+              "properties": {
+                "narrative": {
+                  "items": {
+                    "$ref": "#/$defs/authoredNarrativeProjection"
+                  },
+                  "minItems": 1,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "narrative"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "logic",
+            "modules"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "analysis_requirements": {
+      "$ref": "#/$defs/analysisRequirements"
+    },
+    "asset_requirements": {
+      "items": {
+        "$ref": "#/$defs/assetRequirement"
+      },
+      "maxItems": 1024,
+      "minItems": 0,
+      "type": "array"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "world-forge.gamepack"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "game": {
+      "$ref": "#/$defs/game"
+    },
+    "localization": {
+      "$ref": "#/$defs/localization"
+    },
+    "logic": {
+      "$ref": "#/$defs/logic"
+    },
+    "mechanic_requirements": {
+      "items": {
+        "$ref": "#/$defs/mechanicRequirement"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array"
+    },
+    "modules": {
+      "$ref": "#/$defs/modules"
+    },
+    "presentation": {
+      "$ref": "creation-profile.schema.json#/$defs/presentation"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/provenance"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "type": "array"
+    },
+    "registered_extensions": {
+      "items": {
+        "$ref": "creation-profile.schema.json#/$defs/extension"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "runtime_requirements": {
+      "$ref": "#/$defs/runtimeRequirements"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "game",
+    "source",
+    "modules",
+    "logic",
+    "presentation",
+    "asset_requirements",
+    "runtime_requirements",
+    "analysis_requirements",
+    "localization",
+    "mechanic_requirements",
+    "provenance",
+    "registered_extensions",
+    "content_hash"
+  ],
+  "title": "World Forge deterministic gamepack v1",
+  "type": "object",
+  "$defs": {
+    "analysisLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_evaluations": {
+          "const": 262144
+        },
+        "depth": {
+          "const": 512
+        },
+        "parameter_combinations_per_action": {
+          "const": 4096
+        },
+        "state_bytes": {
+          "const": 65536
+        },
+        "states": {
+          "const": 16384
+        },
+        "total_state_bytes": {
+          "const": 67108864
+        },
+        "total_witness_steps": {
+          "const": 4096
+        },
+        "witness_traces": {
+          "const": 128
+        }
+      },
+      "required": [
+        "candidate_evaluations",
+        "depth",
+        "parameter_combinations_per_action",
+        "state_bytes",
+        "states",
+        "total_state_bytes",
+        "total_witness_steps",
+        "witness_traces"
+      ],
+      "type": "object"
+    },
+    "analysisRequirements": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "abstract_puzzle"
+              }
+            },
+            "required": [
+              "profile"
+            ]
+          },
+          "then": {
+            "properties": {
+              "analyzer_id": {
+                "const": "worldforge.abstract_puzzle_exhaustive"
+              },
+              "reason_code": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "branching_narrative"
+              }
+            },
+            "required": [
+              "profile"
+            ]
+          },
+          "then": {
+            "properties": {
+              "analyzer_id": {
+                "const": "worldforge.branching_narrative_exhaustive"
+              },
+              "reason_code": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "unsupported"
+              }
+            },
+            "required": [
+              "profile"
+            ]
+          },
+          "then": {
+            "properties": {
+              "analyzer_id": {
+                "const": "worldforge.unsupported_profile"
+              },
+              "reason_code": {
+                "const": "analysis_profile_unsupported"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "analyzer_id": {
+          "enum": [
+            "worldforge.abstract_puzzle_exhaustive",
+            "worldforge.branching_narrative_exhaustive",
+            "worldforge.unsupported_profile"
+          ]
+        },
+        "analyzer_version": {
+          "const": 1
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "limits": {
+          "$ref": "#/$defs/analysisLimits"
+        },
+        "profile": {
+          "enum": [
+            "abstract_puzzle",
+            "branching_narrative",
+            "unsupported"
+          ]
+        },
+        "reason_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "analyzer_id",
+        "analyzer_version",
+        "reason_code",
+        "limits",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "activity": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "activity_type": {
+          "enum": [
+            "level",
+            "mission",
+            "quest",
+            "scenario",
+            "match",
+            "race",
+            "puzzle",
+            "encounter",
+            "contract",
+            "expedition",
+            "run",
+            "tutorial",
+            "challenge"
+          ]
+        },
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "end_condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "event_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "failure_condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "participant_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "presentation_hook_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "spatial_context_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "start_condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "success_condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "id",
+        "activity_type",
+        "title",
+        "participant_ids",
+        "spatial_context_ids",
+        "start_condition_ids",
+        "end_condition_ids",
+        "success_condition_ids",
+        "failure_condition_ids",
+        "effect_ids",
+        "event_ids",
+        "presentation_hook_ids",
+        "asset_binding_ids"
+      ],
+      "type": "object"
+    },
+    "activityProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "activities": {
+          "items": {
+            "$ref": "#/$defs/activity"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/identity"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "source",
+        "title",
+        "activities"
+      ],
+      "type": "object"
+    },
+    "assetRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_formats": {
+          "$ref": "#/$defs/nonEmptyTokenArray"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "referencing_subjects": {
+          "items": {
+            "$ref": "#/$defs/assetSubject"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array"
+        },
+        "required": {
+          "const": true
+        },
+        "roles": {
+          "$ref": "#/$defs/nonEmptyTokenArray"
+        },
+        "usage_contexts": {
+          "$ref": "#/$defs/nonEmptyTokenArray"
+        }
+      },
+      "required": [
+        "binding_id",
+        "required",
+        "accepted_formats",
+        "roles",
+        "usage_contexts",
+        "referencing_subjects"
+      ],
+      "type": "object"
+    },
+    "assetSubject": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "activity",
+            "system",
+            "narrative_unit",
+            "presentation_hook",
+            "mechanic"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object"
+    },
+    "executionSemantics": {
+      "additionalProperties": false,
+      "properties": {
+        "active_failure_recovery": {
+          "const": "intersection"
+        },
+        "condition_collections": {
+          "const": "and"
+        },
+        "condition_snapshot": {
+          "const": "pre_transition"
+        },
+        "effect_order": {
+          "const": "rule_order_then_reference_order"
+        },
+        "effect_state_operands": {
+          "const": "current_candidate_state"
+        },
+        "ending_match": {
+          "const": "exactly_one"
+        },
+        "event_commit": {
+          "const": "after_success_rule_reference_order"
+        },
+        "invalid_transition": {
+          "const": "reject_without_mutation"
+        },
+        "narrative_transition": {
+          "const": "source_effects_then_cursor_atomic"
+        },
+        "owned_action_rules": {
+          "const": "all_required"
+        },
+        "semantics_version": {
+          "const": 1
+        },
+        "terminal_precedence": {
+          "const": "endings_before_failures"
+        }
+      },
+      "required": [
+        "semantics_version",
+        "owned_action_rules",
+        "condition_collections",
+        "condition_snapshot",
+        "effect_order",
+        "effect_state_operands",
+        "event_commit",
+        "active_failure_recovery",
+        "terminal_precedence",
+        "ending_match",
+        "narrative_transition",
+        "invalid_transition"
+      ],
+      "type": "object"
+    },
+    "game": {
+      "additionalProperties": false,
+      "properties": {
+        "default_locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "version": {
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "version",
+        "default_locale"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "idArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "maxItems": 256,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "enum": [
+            "world-forge.project",
+            "world-forge.creation_profile",
+            "world-forge.creation_source_manifest",
+            "world-forge.world_module",
+            "world-forge.activity_module",
+            "world-forge.narrative_module",
+            "world-forge.system_module",
+            "world-forge.logic_module",
+            "world-forge.gamepack"
+          ]
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "initialState": {
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          {
+            "$ref": "#/$defs/runtimeString"
+          },
+          {
+            "items": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "maxItems": 256,
+            "type": "array",
+            "uniqueItems": true
+          }
+        ]
+      },
+      "maxProperties": 129,
+      "minProperties": 1,
+      "propertyNames": {
+        "anyOf": [
+          {
+            "$ref": "logic-module.schema.json#/$defs/id"
+          },
+          {
+            "const": "wf_internal_narrative_cursor"
+          }
+        ]
+      },
+      "type": "object"
+    },
+    "locale": {
+      "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
+      "type": "string"
+    },
+    "internalCursor": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": {
+          "const": true
+        },
+        "allowed_values": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "id": {
+          "const": "wf_internal_narrative_cursor"
+        },
+        "initial": {
+          "$ref": "#/$defs/id"
+        },
+        "mutability": {
+          "const": "mutable"
+        },
+        "persistence": {
+          "const": "saved"
+        },
+        "type": {
+          "const": "string"
+        }
+      },
+      "required": [
+        "compiler_owned",
+        "id",
+        "type",
+        "initial",
+        "allowed_values",
+        "mutability",
+        "persistence"
+      ],
+      "type": "object"
+    },
+    "localization": {
+      "additionalProperties": false,
+      "properties": {
+        "externalized_text": {
+          "type": "boolean"
+        },
+        "references": {
+          "items": {
+            "$ref": "#/$defs/localizationReference"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "type": "array"
+        },
+        "source_locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "supported_locales": {
+          "items": {
+            "$ref": "#/$defs/locale"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "source_locale",
+        "supported_locales",
+        "externalized_text",
+        "references"
+      ],
+      "type": "object"
+    },
+    "localizationReference": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/id"
+        },
+        "key": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_text": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "subject_id": {
+          "$ref": "#/$defs/id"
+        },
+        "subject_kind": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "key",
+        "subject_kind",
+        "subject_id",
+        "field",
+        "source_text"
+      ],
+      "type": "object"
+    },
+    "logic": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "narrative_cursor": {
+                "type": "null"
+              }
+            },
+            "required": [
+              "narrative_cursor"
+            ]
+          },
+          "then": {
+            "properties": {
+              "initial_state": {
+                "propertyNames": {
+                  "$ref": "logic-module.schema.json#/$defs/id"
+                },
+                "type": "object"
+              },
+              "narrative_transitions": {
+                "maxItems": 0,
+                "type": "array"
+              },
+              "state_schema": {
+                "items": {
+                  "$ref": "logic-module.schema.json#/$defs/stateVariable"
+                },
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "initial_state": {
+                "properties": {
+                  "wf_internal_narrative_cursor": {
+                    "$ref": "#/$defs/id"
+                  }
+                },
+                "required": [
+                  "wf_internal_narrative_cursor"
+                ],
+                "type": "object"
+              },
+          "state_schema": {
+            "contains": {
+              "$ref": "#/$defs/internalCursor"
+            },
+            "maxContains": 1,
+            "minContains": 1,
+            "type": "array",
+            "x-world-forge-final-compiler-owned": true
+          }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "actions": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/action"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "conditions": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/condition"
+          },
+          "maxItems": 512,
+          "minItems": 1,
+          "type": "array"
+        },
+        "core_verbs": {
+          "items": {
+            "$ref": "creation-profile.schema.json#/$defs/coreVerb"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "effects": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/effect"
+          },
+          "maxItems": 512,
+          "minItems": 1,
+          "type": "array"
+        },
+        "endings": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/ending"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "execution_semantics": {
+          "$ref": "#/$defs/executionSemantics"
+        },
+        "events": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/event"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "type": "array"
+        },
+        "failures": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/failure"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "goals": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/goal"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "initial_state": {
+          "$ref": "#/$defs/initialState"
+        },
+        "mechanics": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/mechanic"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "narrative_cursor": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/internalCursor"
+            }
+          ]
+        },
+        "narrative_transitions": {
+          "items": {
+            "$ref": "#/$defs/narrativeTransition"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "presentation_hooks": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/presentationHook"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "type": "array"
+        },
+        "rules": {
+          "items": {
+            "$ref": "logic-module.schema.json#/$defs/rule"
+          },
+          "maxItems": 512,
+          "minItems": 1,
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/identity"
+        },
+        "state_schema": {
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "logic-module.schema.json#/$defs/stateVariable"
+              },
+              {
+                "$ref": "#/$defs/internalCursor"
+              }
+            ]
+          },
+          "maxItems": 129,
+          "minItems": 1,
+          "type": "array"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "source",
+        "title",
+        "state_schema",
+        "initial_state",
+        "core_verbs",
+        "actions",
+        "conditions",
+        "effects",
+        "rules",
+        "goals",
+        "failures",
+        "endings",
+        "events",
+        "presentation_hooks",
+        "mechanics",
+        "narrative_cursor",
+        "narrative_transitions",
+        "execution_semantics"
+      ],
+      "type": "object"
+    },
+    "mechanicRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "core_verb_id": {
+          "$ref": "#/$defs/id"
+        },
+        "mechanic_id": {
+          "$ref": "#/$defs/id"
+        },
+        "required_feature_ids": {
+          "$ref": "#/$defs/nonEmptyTokenArray"
+        }
+      },
+      "required": [
+        "mechanic_id",
+        "core_verb_id",
+        "action_id",
+        "required_feature_ids"
+      ],
+      "type": "object"
+    },
+    "modules": {
+      "additionalProperties": false,
+      "properties": {
+        "activities": {
+          "items": {
+            "$ref": "#/$defs/activityProjection"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "narrative": {
+          "items": {
+            "$ref": "#/$defs/narrativeProjection"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "systems": {
+          "items": {
+            "$ref": "#/$defs/systemProjection"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "world": {
+          "items": {
+            "$ref": "#/$defs/worldProjection"
+          },
+          "maxItems": 256,
+          "type": "array"
+        }
+      },
+      "required": [
+        "world",
+        "activities",
+        "narrative",
+        "systems"
+      ],
+      "type": "object"
+    },
+    "narrativeChoiceOption": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "next_unit_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "next_unit_id",
+        "condition_ids",
+        "effect_ids"
+      ],
+      "type": "object"
+    },
+    "authoredNarrativeProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_unit_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "source": {
+          "$ref": "#/$defs/identity"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "units": {
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/narrativeEndingUnit"
+              },
+              {
+                "$ref": "#/$defs/narrativeStandardUnit"
+              }
+            ]
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "title",
+        "entry_unit_ids",
+        "units"
+      ],
+      "type": "object"
+    },
+    "narrativeChoiceUnit": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "next_unit_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/narrativeChoiceOption"
+          },
+          "maxItems": 64,
+          "minItems": 2,
+          "type": "array"
+        },
+        "prerequisite_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "unit_type": {
+          "const": "choice"
+        }
+      },
+      "required": [
+        "id",
+        "unit_type",
+        "title",
+        "prerequisite_ids",
+        "effect_ids",
+        "next_unit_ids",
+        "asset_binding_ids",
+        "options"
+      ],
+      "type": "object"
+    },
+    "narrativeEndingUnit": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "ending_kind": {
+          "enum": [
+            "success",
+            "failure",
+            "neutral"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "next_unit_ids": {
+          "maxItems": 0,
+          "type": "array"
+        },
+        "prerequisite_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "unit_type": {
+          "const": "ending"
+        }
+      },
+      "required": [
+        "id",
+        "unit_type",
+        "title",
+        "prerequisite_ids",
+        "effect_ids",
+        "next_unit_ids",
+        "asset_binding_ids",
+        "ending_kind"
+      ],
+      "type": "object"
+    },
+    "narrativeProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "entry_unit_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "source": {
+          "$ref": "#/$defs/identity"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "units": {
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/narrativeChoiceUnit"
+              },
+              {
+                "$ref": "#/$defs/narrativeEndingUnit"
+              },
+              {
+                "$ref": "#/$defs/narrativeStandardUnit"
+              }
+            ]
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "title",
+        "entry_unit_ids",
+        "units"
+      ],
+      "type": "object"
+    },
+    "narrativeStandardUnit": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "next_unit_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "prerequisite_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "unit_type": {
+          "enum": [
+            "arc",
+            "beat",
+            "scene",
+            "dialogue",
+            "storylet",
+            "clue",
+            "reveal",
+            "memory",
+            "episode"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "unit_type",
+        "title",
+        "prerequisite_ids",
+        "effect_ids",
+        "next_unit_ids",
+        "asset_binding_ids"
+      ],
+      "type": "object"
+    },
+    "narrativeTransition": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": {
+          "const": true
+        },
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "atomic_source_effect_ids": {
+          "$ref": "#/$defs/nonEmptyOrderedIdArray"
+        },
+        "atomic_source_condition_ids": {
+          "$ref": "#/$defs/orderedIdArray"
+        },
+        "effect": {
+          "$ref": "#/$defs/narrativeTransitionEffect"
+        },
+        "id": {
+          "pattern": "^wf_internal_transition_[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "option_id": {
+          "$ref": "#/$defs/id"
+        },
+        "precondition": {
+          "$ref": "#/$defs/narrativeTransitionPrecondition"
+        },
+        "source_unit_id": {
+          "$ref": "#/$defs/id"
+        },
+        "target_unit_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "compiler_owned",
+        "id",
+        "action_id",
+        "source_unit_id",
+        "option_id",
+        "target_unit_id",
+        "precondition",
+        "effect",
+        "atomic_source_condition_ids",
+        "atomic_source_effect_ids"
+      ],
+      "type": "object"
+    },
+    "narrativeTransitionEffect": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": {
+          "const": true
+        },
+        "cursor_state_id": {
+          "const": "wf_internal_narrative_cursor"
+        },
+        "id": {
+          "pattern": "^wf_internal_advance_[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "invalid_transition_policy": {
+          "const": "reject_transition"
+        },
+        "operation": {
+          "const": "set_cursor"
+        },
+        "value": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "compiler_owned",
+        "id",
+        "operation",
+        "cursor_state_id",
+        "value",
+        "invalid_transition_policy"
+      ],
+      "type": "object"
+    },
+    "narrativeTransitionPrecondition": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": {
+          "const": true
+        },
+        "cursor_state_id": {
+          "const": "wf_internal_narrative_cursor"
+        },
+        "id": {
+          "pattern": "^wf_internal_cursor_at_[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "operator": {
+          "const": "cursor_equals"
+        },
+        "value": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "compiler_owned",
+        "id",
+        "operator",
+        "cursor_state_id",
+        "value"
+      ],
+      "type": "object"
+    },
+    "nonEmptyIdArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "nonEmptyOrderedIdArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array"
+    },
+    "nonEmptyTokenArray": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "orderedIdArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "maxItems": 256,
+      "type": "array"
+    },
+    "platform": {
+      "additionalProperties": false,
+      "properties": {
+        "architecture": {
+          "enum": [
+            "architecture:x86_64"
+          ]
+        },
+        "backend": {
+          "const": "backend:unspecified"
+        },
+        "platform_family": {
+          "enum": [
+            "platform:linux",
+            "platform:windows"
+          ]
+        },
+        "platform_id": {
+          "enum": [
+            "platform:linux_x86_64",
+            "platform:windows_x86_64"
+          ]
+        },
+        "renderer": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "platform_id",
+        "platform_family",
+        "architecture",
+        "backend",
+        "renderer"
+      ],
+      "type": "object"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "compiled_from"
+        },
+        "subject": {
+          "$ref": "#/$defs/identity"
+        }
+      },
+      "required": [
+        "kind",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "runtimePresentation": {
+      "additionalProperties": false,
+      "properties": {
+        "camera": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "mode": {
+          "enum": [
+            "text",
+            "2d",
+            "2_5d",
+            "3d",
+            "mixed",
+            "vr",
+            "ar"
+          ]
+        },
+        "perspective": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "renderer": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "mode",
+        "camera",
+        "perspective",
+        "renderer"
+      ],
+      "type": "object"
+    },
+    "runtimeRequirements": {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_logic_formats": {
+          "items": {
+            "$ref": "creation-profile.schema.json#/$defs/acceptedLogicFormat"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "asset_formats": {
+          "items": {
+            "$ref": "#/$defs/token"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "input_capabilities": {
+          "$ref": "#/$defs/nonEmptyTokenArray"
+        },
+        "optional_features": {
+          "items": {
+            "$ref": "#/$defs/token"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "packaging_target": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "platform_matrix": {
+          "items": {
+            "$ref": "#/$defs/platform"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "type": "array"
+        },
+        "presentation": {
+          "$ref": "#/$defs/runtimePresentation"
+        },
+        "replay_expected": {
+          "type": "boolean"
+        },
+        "requested_adapter": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required_features": {
+          "$ref": "#/$defs/nonEmptyTokenArray"
+        },
+        "save_expected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "requested_adapter",
+        "accepted_logic_formats",
+        "required_features",
+        "optional_features",
+        "presentation",
+        "platform_matrix",
+        "input_capabilities",
+        "asset_formats",
+        "save_expected",
+        "replay_expected",
+        "packaging_target"
+      ],
+      "type": "object"
+    },
+    "runtimeString": {
+      "minLength": 1,
+      "pattern": "^(?!\\s*(?:[A-Za-z][A-Za-z0-9+.-]*://|[Ff][Ii][Ll][Ee]:[\\\\/]|[A-Za-z]:[\\\\/]|[\\\\/]{2}|/|@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:@[^\\s/\\\\]+)?\\s*$|(?:[Pp][Rr][Oo][Vv][Ii][Dd][Ee][Rr](?:_[Ii][Dd])?|[Mm][Oo][Dd][Ee][Ll](?:_[Ii][Dd])?|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Pp][Rr][Oo][Mm][Pp][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Ee][Nn][Dd][Pp][Oo][Ii][Nn][Tt])\\s*(?:=|:\\s*|\\s+[Ii][Ss]\\s+)|\\.{1,2}(?:[\\\\/]|\\s*$)))(?![\\s\\S]*[\\\\/]\\.{1,2}(?:[\\\\/]|\\s*$))(?!\\s*[^/\\\\\\r\\n]+(?:[\\\\/][^/\\\\\\r\\n]+)+\\.[A-Za-z0-9][A-Za-z0-9._-]*\\s*$)[\\s\\S]*$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "logic_modules": {
+          "items": {
+            "$ref": "#/$defs/identity"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "profile": {
+          "$ref": "#/$defs/identity"
+        },
+        "project": {
+          "$ref": "#/$defs/identity"
+        },
+        "source_manifest": {
+          "$ref": "#/$defs/identity"
+        }
+      },
+      "required": [
+        "project",
+        "profile",
+        "source_manifest",
+        "logic_modules"
+      ],
+      "type": "object"
+    },
+    "system": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "event_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "precondition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "system_type": {
+          "enum": [
+            "rule",
+            "event",
+            "consequence",
+            "schedule",
+            "economy",
+            "production_process",
+            "simulation_scenario",
+            "world_modifier",
+            "season"
+          ]
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "id",
+        "system_type",
+        "title",
+        "precondition_ids",
+        "effect_ids",
+        "event_ids",
+        "asset_binding_ids"
+      ],
+      "type": "object"
+    },
+    "systemProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/identity"
+        },
+        "systems": {
+          "items": {
+            "$ref": "#/$defs/system"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "source",
+        "title",
+        "systems"
+      ],
+      "type": "object"
+    },
+    "token": {
+      "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_.-]*)?$",
+      "type": "string"
+    },
+    "worldProjection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "canon"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldCanonRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "chronology"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldChronologyRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "space"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldSpaceRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "group"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldGroupRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "character"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldCharacterRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "knowledge"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldKnowledgeRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "module_type": {
+          "enum": [
+            "canon",
+            "chronology",
+            "space",
+            "group",
+            "character",
+            "knowledge"
+          ]
+        },
+        "records": {
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/worldCanonRecord"
+              },
+              {
+                "$ref": "#/$defs/worldChronologyRecord"
+              },
+              {
+                "$ref": "#/$defs/worldSpaceRecord"
+              },
+              {
+                "$ref": "#/$defs/worldGroupRecord"
+              },
+              {
+                "$ref": "#/$defs/worldCharacterRecord"
+              },
+              {
+                "$ref": "#/$defs/worldKnowledgeRecord"
+              }
+            ]
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/identity"
+        },
+        "title": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "source",
+        "module_type",
+        "title",
+        "records"
+      ],
+      "type": "object"
+    },
+    "worldCanonRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "statement": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "status": {
+          "enum": [
+            "canon",
+            "provisional"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "status"
+      ],
+      "type": "object"
+    },
+    "worldCharacterRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "role": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "role"
+      ],
+      "type": "object"
+    },
+    "worldChronologyRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "sequence": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summary": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "id",
+        "sequence",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "worldGroupRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "group_type": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "group_type"
+      ],
+      "type": "object"
+    },
+    "worldKnowledgeRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "access": {
+          "enum": [
+            "public",
+            "restricted",
+            "secret"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "statement": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "access"
+      ],
+      "type": "object"
+    },
+    "worldSpaceRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "compiler_owned": false,
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "topology": {
+          "enum": [
+            "abstract",
+            "symbolic",
+            "diegetic"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "topology"
+      ],
+      "type": "object"
+    }
+  }
+}

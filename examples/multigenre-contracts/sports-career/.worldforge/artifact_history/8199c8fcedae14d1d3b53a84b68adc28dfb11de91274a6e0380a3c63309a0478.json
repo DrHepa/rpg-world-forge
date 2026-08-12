@@ -1,0 +1,17 @@
+{
+  "content_hash": "8199c8fcedae14d1d3b53a84b68adc28dfb11de91274a6e0380a3c63309a0478",
+  "extensions": [],
+  "format": "world-forge.world_module",
+  "format_version": 1,
+  "module_id": "sports_career_space",
+  "module_type": "space",
+  "project_id": "sports_career",
+  "spaces": [
+    {
+      "id": "sports_career_space",
+      "name": "Authored league season",
+      "topology": "diegetic"
+    }
+  ],
+  "title": "Authored league season"
+}

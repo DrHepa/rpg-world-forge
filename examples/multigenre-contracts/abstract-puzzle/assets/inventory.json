@@ -1,0 +1,113 @@
+{
+  "asset_subject": {
+    "content_hash": "09742eff54989a4cba753af413b320dbfabad30f874be38c6cd646f952f6b4c7",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_eaa36e78dc8661deddec17555aa8c2bb8d15e22e70d14656"
+  },
+  "assets": [
+    {
+      "asset_id": "board_ui",
+      "binding_ids": [
+        "board_texture"
+      ],
+      "kind": "ui",
+      "outputs": [
+        {
+          "media_type": "image/png",
+          "role": "texture"
+        }
+      ],
+      "provenance_reason": "Reviewed target maps one exact binding to this asset.",
+      "referencing_subjects": [
+        {
+          "id": "symbol_board",
+          "kind": "activity"
+        },
+        {
+          "id": "restart_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "swap_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "board_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "board_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "adjacent_swap",
+          "kind": "system"
+        }
+      ],
+      "representation": "2d",
+      "required": true,
+      "selected_format": "asset:png",
+      "sharing": {
+        "group_id": null,
+        "policy": "exclusive"
+      },
+      "source_roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "system_feedback"
+      ],
+      "style": {
+        "content_hash": "8c6bc7d3654b7679921de0b9db2524abefbd5f83ca0f7f6ec45f306272fba563",
+        "format": "world-forge.asset_style",
+        "format_version": 1,
+        "id": "asset_style_1ed627dcb9cc101212f8c5b69dd218524a29610aaa8188cc"
+      },
+      "target": {
+        "content_hash": "609fa138f16bc4bb402624a7fa3082b5b377e112f7f98633f2d9c0f3971a9d33",
+        "format": "world-forge.asset_target",
+        "format_version": 1,
+        "id": "asset_target_226e1b8d904d61fc8c631fef1a188b32300712752f903f02"
+      },
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "ef6496fd27a91fe4aa19c57390b09accd0a748eff1c6bdbc280b2dfc0302335c",
+  "format": "world-forge.asset_inventory",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "abstract_puzzle"
+  },
+  "inventory_id": "asset_inventory_db1e30fe4a098bf505b52989066137a1f34f4123b5ece765",
+  "style": {
+    "content_hash": "8c6bc7d3654b7679921de0b9db2524abefbd5f83ca0f7f6ec45f306272fba563",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_1ed627dcb9cc101212f8c5b69dd218524a29610aaa8188cc"
+  },
+  "target": {
+    "content_hash": "609fa138f16bc4bb402624a7fa3082b5b377e112f7f98633f2d9c0f3971a9d33",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_226e1b8d904d61fc8c631fef1a188b32300712752f903f02"
+  }
+}

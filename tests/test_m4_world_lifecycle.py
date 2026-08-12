@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import tempfile
 import threading
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
@@ -21,6 +24,7 @@ from worldforge.world_lifecycle import (
     parse_stable_semver,
     upgrade_legacy_world_project,
 )
+from worldforge.world_lock import exclusive_world_lifecycle
 
 
 def _read(path: Path) -> dict[str, object]:
@@ -30,6 +34,68 @@ def _read(path: Path) -> dict[str, object]:
 def _write(path: Path, payload: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes((json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+
+
+def _tree_snapshot(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _assert_retained_lifecycle_lock(
+    test: unittest.TestCase,
+    root: Path,
+    *,
+    identity: tuple[int, int] | None = None,
+) -> tuple[int, int]:
+    lock = root / ".worldforge/lifecycle.lock"
+    info = os.stat(lock, follow_symlinks=False)
+    test.assertTrue(stat.S_ISREG(info.st_mode))
+    test.assertEqual(1, info.st_nlink)
+    test.assertEqual(bytes((os.getpid() & 0xFF,)), lock.read_bytes())
+    observed_identity = (info.st_dev, info.st_ino)
+    if identity is not None:
+        test.assertEqual(identity, observed_identity)
+    if os.name == "posix":
+        test.assertEqual(0o600, stat.S_IMODE(info.st_mode))
+        test.assertEqual(os.getuid(), info.st_uid)
+        test.assertEqual(os.getgid(), info.st_gid)
+    return observed_identity
+
+
+@contextmanager
+def _hold_independent_lifecycle_lock(
+    test: unittest.TestCase,
+    root: Path,
+) -> Iterator[tuple[int, int]]:
+    if os.name != "posix":
+        with exclusive_world_lifecycle(root, error_type=WorkflowError):
+            yield _assert_retained_lifecycle_lock(test, root)
+        return
+
+    import fcntl
+
+    lock = root / ".worldforge/lifecycle.lock"
+    descriptor = os.open(
+        lock,
+        os.O_CREAT | os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise AssertionError("independent lifecycle lock is not a standalone regular file")
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.ftruncate(descriptor, 1)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        os.write(descriptor, bytes((os.getpid() & 0xFF,)))
+        os.fsync(descriptor)
+        yield info.st_dev, info.st_ino
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
 
 
 def _inject_duplicate_key(path: Path, key: str) -> None:
@@ -56,7 +122,14 @@ def _make_v2_world(root: Path, *, world_id: str = "source_world", version: str =
     project = _read(project_path)
     status = _read(status_path)
     world["version"] = version
-    project.update({"format_version": 2, "project_kind": "world", "world_version": version})
+    project.update(
+        {
+            "format_version": 2,
+            "project_kind": "world",
+            "tool_repository": "rpg-world-forge",
+            "world_version": version,
+        }
+    )
     status["world_version"] = version
     _write(world_path, world)
     _write(project_path, project)
@@ -94,6 +167,38 @@ class StableSemVerTests(unittest.TestCase):
 
 
 class ProjectInspectionTests(unittest.TestCase):
+    def test_inspection_is_read_only_and_does_not_acquire_a_transient_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "world"
+            _make_v2_world(root)
+            before = _tree_snapshot(root)
+
+            with patch(
+                "worldforge.world_lifecycle._exclusive_lifecycle_lock",
+                side_effect=AssertionError("inspection attempted to acquire a writer lock"),
+            ):
+                inspection = inspect_world_project(root)
+
+            self.assertEqual("source_world", inspection.world_id)
+            self.assertEqual(before, _tree_snapshot(root))
+
+    def test_inspection_accepts_a_read_only_control_directory(self) -> None:
+        if os.name == "nt":
+            self.skipTest("POSIX directory mode semantics required")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "world"
+            _make_v2_world(root)
+            control = root / ".worldforge"
+            before_mode = control.stat().st_mode
+            control.chmod(0o555)
+            try:
+                inspection = inspect_world_project(root)
+            finally:
+                control.chmod(before_mode & 0o777)
+
+            self.assertEqual("source_world", inspection.world_id)
+            self.assertFalse((control / "lifecycle.lock").exists())
+
     def test_inspects_only_a_v2_world_authoring_repository(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "world"
@@ -509,20 +614,15 @@ class LegacyUpgradeTests(unittest.TestCase):
             status = _read(root / ".worldforge/status.json")
             status.pop("world_version", None)
             _write(root / ".worldforge/status.json", status)
-            lock_path = root / ".worldforge/lifecycle.lock"
-            lock_path.write_text("owned by another lifecycle operation\n", encoding="utf-8")
-            with self.assertRaisesRegex(WorkflowError, "already in progress"):
-                upgrade_legacy_world_project(
-                    root,
-                    version="0.1.0",
-                    reason="Must not race",
-                    approved_by="gpt-lead",
-                )
-            self.assertEqual(
-                "owned by another lifecycle operation\n",
-                lock_path.read_text(encoding="utf-8"),
-            )
-            lock_path.unlink()
+            with _hold_independent_lifecycle_lock(self, root) as lock_identity:
+                _assert_retained_lifecycle_lock(self, root, identity=lock_identity)
+                with self.assertRaisesRegex(WorkflowError, "already in progress"):
+                    upgrade_legacy_world_project(
+                        root,
+                        version="0.1.0",
+                        reason="Must not race",
+                        approved_by="gpt-lead",
+                    )
             result = upgrade_legacy_world_project(
                 root,
                 version="0.1.0",
@@ -536,7 +636,7 @@ class LegacyUpgradeTests(unittest.TestCase):
             entry = _read(root / ".worldforge/version_log.json")["entries"][0]
             self.assertIsNone(entry["from"])
             self.assertEqual("legacy_upgrade", entry["part"])
-            self.assertFalse(lock_path.exists())
+            _assert_retained_lifecycle_lock(self, root, identity=lock_identity)
 
     def test_explicit_upgrade_never_accepts_a_game_repository(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -841,8 +941,10 @@ class CloneWorldProjectTests(unittest.TestCase):
                             reason="Must not change clone snapshot",
                             approved_by="lead",
                         )
-                    with self.assertRaisesRegex(WorkflowError, "already in progress"):
-                        inspect_world_project(source)
+                    self.assertEqual(
+                        "1.2.3",
+                        inspect_world_project(source).world_version,
+                    )
                 finally:
                     release_copy.set()
                 worker.join(timeout=5)
@@ -953,7 +1055,7 @@ class BumpWorldVersionTests(unittest.TestCase):
                 approved_by="gpt-lead",
             )
             self.assertEqual("1.3.0", result)
-            self.assertFalse((root / ".worldforge/lifecycle.lock").exists())
+            _assert_retained_lifecycle_lock(self, root)
             updated_status = _read(status_path)
             self.assertEqual("p10_canon_lock", updated_status["current_phase"])
             self.assertEqual(
@@ -1043,7 +1145,7 @@ class BumpWorldVersionTests(unittest.TestCase):
             for path in paths:
                 self.assertEqual(before[path], path.read_bytes(), path)
             self.assertFalse((root / ".worldforge/version_log.json").exists())
-            self.assertFalse((root / ".worldforge/lifecycle.lock").exists())
+            _assert_retained_lifecycle_lock(self, root)
 
     def test_bump_rejects_duplicate_keys_in_version_log(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -1072,19 +1174,18 @@ class BumpWorldVersionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "world"
             _make_v2_world(root)
-            lock_path = root / ".worldforge/lifecycle.lock"
-            lock_path.write_text("stale or concurrent owner\n", encoding="utf-8")
-            with self.assertRaisesRegex(WorkflowError, "already in progress"):
-                bump_world_version(
-                    root,
-                    expected_version="1.2.3",
-                    part="patch",
-                    reason="Must not race",
-                    approved_by="lead",
-                )
-            self.assertEqual("stale or concurrent owner\n", lock_path.read_text(encoding="utf-8"))
-            with self.assertRaisesRegex(WorkflowError, "already in progress"):
-                inspect_world_project(root)
+            with _hold_independent_lifecycle_lock(self, root) as lock_identity:
+                _assert_retained_lifecycle_lock(self, root, identity=lock_identity)
+                with self.assertRaisesRegex(WorkflowError, "already in progress"):
+                    bump_world_version(
+                        root,
+                        expected_version="1.2.3",
+                        part="patch",
+                        reason="Must not race",
+                        approved_by="lead",
+                    )
+            self.assertEqual("1.2.3", inspect_world_project(root).world_version)
+            _assert_retained_lifecycle_lock(self, root, identity=lock_identity)
             self.assertEqual("1.2.3", _read(root / ".worldforge/project.json")["world_version"])
             self.assertEqual("1.2.3", _read(root / "source/world.json")["version"])
             self.assertEqual(

@@ -1,0 +1,537 @@
+{
+  "$defs": {
+    "assetBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/id"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "media_type": {
+          "$ref": "#/$defs/text"
+        },
+        "role": {
+          "$ref": "#/$defs/id"
+        },
+        "runtime_path": {
+          "$ref": "#/$defs/path"
+        }
+      },
+      "required": [
+        "binding_id",
+        "asset_id",
+        "role",
+        "media_type",
+        "runtime_path"
+      ],
+      "type": "object"
+    },
+    "formatVersions": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "versions": {
+          "items": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "format",
+        "versions"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?![./])(?!.*/(?:\\.{1,2})(?:/|$))(?!(?:.*[/])?(?:aux|con|nul|prn|com[1-9]|lpt[1-9])(?:[./]|$))[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*(?:/[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*)*$",
+      "type": "string"
+    },
+    "persistenceTarget": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/text"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "versions": {
+          "items": {
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "required",
+        "format",
+        "versions"
+      ],
+      "type": "object"
+    },
+    "platform": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "architecture": {
+              "const": "architecture:x86_64"
+            },
+            "backend": {
+              "const": "backend:raylib"
+            },
+            "platform_family": {
+              "const": "platform:linux"
+            },
+            "platform_id": {
+              "const": "platform:linux_x86_64"
+            },
+            "renderer": {
+              "const": "raylib"
+            }
+          },
+          "required": [
+            "platform_id",
+            "platform_family",
+            "architecture",
+            "backend",
+            "renderer"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "architecture": {
+              "const": "architecture:x86_64"
+            },
+            "backend": {
+              "const": "backend:raylib"
+            },
+            "platform_family": {
+              "const": "platform:windows"
+            },
+            "platform_id": {
+              "const": "platform:windows_x86_64"
+            },
+            "renderer": {
+              "const": "raylib"
+            }
+          },
+          "required": [
+            "platform_id",
+            "platform_family",
+            "architecture",
+            "backend",
+            "renderer"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "camera": {
+          "$ref": "#/$defs/text"
+        },
+        "mode": {
+          "$ref": "#/$defs/text"
+        },
+        "perspective": {
+          "$ref": "#/$defs/text"
+        },
+        "requested_renderer": {
+          "const": "raylib"
+        }
+      },
+      "required": [
+        "mode",
+        "camera",
+        "perspective",
+        "requested_renderer"
+      ],
+      "type": "object"
+    },
+    "runtimeApi": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "semver": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "text": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+    },
+    "token": {
+      "maxLength": 128,
+      "minLength": 3,
+      "pattern": "^[a-z][a-z0-9_-]*:[a-z][a-z0-9_.-]*$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/generic-runtime-adapter.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "accepted_logic_formats": {
+      "items": {
+        "$ref": "#/$defs/formatVersions"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "adapter_id": {
+      "$ref": "#/$defs/id"
+    },
+    "adapter_version": {
+      "$ref": "#/$defs/semver"
+    },
+    "asset_bindings": {
+      "items": {
+        "$ref": "#/$defs/assetBinding"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "asset_formats": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "assetpacks": {
+      "items": {
+        "$ref": "#/$defs/formatVersions"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "budgets": {
+      "additionalProperties": false,
+      "properties": {
+        "max_actions": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_assets": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_loaded_bytes": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_state_bytes": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "target_frame_milliseconds": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_actions",
+        "max_assets",
+        "max_loaded_bytes",
+        "max_state_bytes",
+        "target_frame_milliseconds"
+      ],
+      "type": "object"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "evidence_requirements": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "execution_semantics": {
+      "const": {
+        "content_hash": "f43fa43e4c54a2910ae8a99fbbfc0b2556359f95c1c88abef59a2508c9ea5983",
+        "version": 1
+      }
+    },
+    "format": {
+      "const": "world-forge.runtime_adapter"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "implementation": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "const": "backend:raylib"
+        },
+        "renderer": {
+          "const": "raylib"
+        },
+        "runtime_api": {
+          "$ref": "#/$defs/runtimeApi"
+        },
+        "snapshot": {
+          "additionalProperties": false,
+          "properties": {
+            "format": {
+              "const": "world-forge.game_runtime_snapshot"
+            },
+            "versions": {
+              "items": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "format",
+            "versions"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "backend",
+        "renderer",
+        "runtime_api",
+        "snapshot"
+      ],
+      "type": "object"
+    },
+    "input_capabilities": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "limitations": {
+      "items": {
+        "$ref": "#/$defs/text"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "packaging_targets": {
+      "items": {
+        "$ref": "#/$defs/text"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "persistence": {
+      "additionalProperties": false,
+      "properties": {
+        "replay": {
+          "$ref": "#/$defs/persistenceTarget"
+        },
+        "save": {
+          "$ref": "#/$defs/persistenceTarget"
+        }
+      },
+      "required": [
+        "save",
+        "replay"
+      ],
+      "type": "object"
+    },
+    "platforms": {
+      "items": {
+        "$ref": "#/$defs/platform"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "presentations": {
+      "items": {
+        "$ref": "#/$defs/presentation"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "state": {
+      "enum": [
+        "declared",
+        "verified"
+      ]
+    },
+    "supported_features": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "supported_profiles": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "supported_semantics": {
+      "additionalProperties": false,
+      "properties": {
+        "action_parameter_types": {
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "condition_operators": {
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "effect_operations": {
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "ending_kinds": {
+          "items": {
+            "$ref": "#/$defs/text"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "narrative_cursor": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "action_parameter_types",
+        "condition_operators",
+        "effect_operations",
+        "ending_kinds",
+        "narrative_cursor"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "adapter_id",
+    "adapter_version",
+    "state",
+    "accepted_logic_formats",
+    "execution_semantics",
+    "supported_profiles",
+    "supported_features",
+    "supported_semantics",
+    "presentations",
+    "assetpacks",
+    "asset_formats",
+    "asset_bindings",
+    "platforms",
+    "input_capabilities",
+    "persistence",
+    "packaging_targets",
+    "implementation",
+    "budgets",
+    "limitations",
+    "evidence_requirements",
+    "content_hash"
+  ],
+  "title": "World Forge declarative runtime adapter v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-generic-runtime-coherent": "generic-runtime-adapter"
+}

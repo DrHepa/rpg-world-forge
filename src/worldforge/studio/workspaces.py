@@ -64,7 +64,7 @@ def _identity(path: Path, *, context: str) -> tuple[int, int]:
     try:
         info = path_file_stat(path)
     except (OSError, ValueError) as exc:
-        raise invalid_request(f"Could not inspect {context}: {exc}") from exc
+        raise invalid_request(f"Could not inspect {context}") from exc
     return _file_identity(info, context=context)
 
 
@@ -364,50 +364,70 @@ def _pinned_ancestor_identities(
     if os.name == "posix":
         if not _POSIX_PINNED_ANCESTRY:
             raise invalid_request("Secure workspace ancestry inspection is unavailable")
-        descriptors: list[int] = []
         try:
             descriptors, identities = _open_posix_ancestry(path, context=context)
-            yield identities
-            verification, visible_identities = _open_posix_ancestry(path, context=context)
-            try:
-                if visible_identities != identities:
-                    raise invalid_request(f"{context} identity changed while being pinned")
-            finally:
-                _close_descriptors(verification)
         except StudioError:
             raise
         except (OSError, ValueError) as exc:
-            raise invalid_request(f"Could not inspect {context}: {exc}") from exc
-        finally:
-            _close_descriptors(descriptors)
-        return
-    if os.name != "nt":
-        raise invalid_request("Secure workspace ancestry inspection is unsupported")
-
-    handles: list[int] = []
-    api: _WindowsRelativeDirectoryApi | None = None
-    try:
-        api = _WindowsRelativeDirectoryApi()
-        handles, identities = _open_windows_ancestry(api, path, context=context)
-        yield identities
-        verification, visible_identities = _open_windows_ancestry(api, path, context=context)
+            raise invalid_request(f"Could not inspect {context}") from exc
         try:
-            if visible_identities != identities:
-                raise invalid_request(f"{context} identity changed while being pinned")
-        finally:
-            _close_windows_handles(api, verification)
-    except StudioError:
-        raise
-    except (OSError, ValueError) as exc:
-        raise invalid_request(f"Could not inspect {context}: {exc}") from exc
-    finally:
-        if api is not None:
+            yield identities
             try:
-                _close_windows_handles(api, handles)
+                verification, visible_identities = _open_posix_ancestry(
+                    path,
+                    context=context,
+                )
+                try:
+                    if visible_identities != identities:
+                        raise invalid_request(f"{context} identity changed while being pinned")
+                finally:
+                    _close_descriptors(verification)
+            except StudioError:
+                raise
+            except (OSError, ValueError) as exc:
+                raise invalid_request(f"Could not inspect {context}") from exc
+        finally:
+            try:
+                _close_descriptors(descriptors)
             except OSError as exc:
                 raise StudioError(
                     "internal_error", "Could not release pinned workspace ancestry"
                 ) from exc
+        return
+    if os.name != "nt":
+        raise invalid_request("Secure workspace ancestry inspection is unsupported")
+
+    try:
+        api = _WindowsRelativeDirectoryApi()
+        handles, identities = _open_windows_ancestry(api, path, context=context)
+    except StudioError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise invalid_request(f"Could not inspect {context}") from exc
+    try:
+        yield identities
+        try:
+            verification, visible_identities = _open_windows_ancestry(
+                api,
+                path,
+                context=context,
+            )
+            try:
+                if visible_identities != identities:
+                    raise invalid_request(f"{context} identity changed while being pinned")
+            finally:
+                _close_windows_handles(api, verification)
+        except StudioError:
+            raise
+        except (OSError, ValueError) as exc:
+            raise invalid_request(f"Could not inspect {context}") from exc
+    finally:
+        try:
+            _close_windows_handles(api, handles)
+        except OSError as exc:
+            raise StudioError(
+                "internal_error", "Could not release pinned workspace ancestry"
+            ) from exc
 
 
 def _overlaps(left: Path, right: Path) -> bool:
@@ -490,21 +510,21 @@ class WorkspaceManager:
         world_root = roots["world_root"]
         assert forge_root is not None and world_root is not None
         if repository_kind(forge_root) != "forge":
-            raise invalid_request("Forge root is not the RPG World Forge repository")
+            raise invalid_request("Forge root is not the World Forge repository")
         try:
             inspect_world_project(world_root)
         except ValueError as exc:
-            raise invalid_request(f"World root is not a canonical world repository: {exc}") from exc
+            raise invalid_request("World root is not a canonical world repository") from exc
         if roots["game_root"] is not None:
             try:
                 roots["game_root"] = require_standalone_game_root(roots["game_root"])
             except ValueError as exc:
-                raise invalid_request(str(exc)) from exc
+                raise invalid_request("Game root is not a standalone game repository") from exc
         if roots["bundle_root"] is not None:
             try:
                 roots["bundle_root"] = require_standalone_bundle_root(roots["bundle_root"])
             except ValueError as exc:
-                raise invalid_request(str(exc)) from exc
+                raise invalid_request("Bundle root is not a standalone bundle repository") from exc
 
         self._reject_registered_collisions(workspace_id, roots, identities)
         record = {
@@ -519,7 +539,7 @@ class WorkspaceManager:
         try:
             validate_forge_workspace(record)
         except StudioContractError as exc:
-            raise invalid_request(str(exc)) from exc
+            raise invalid_request("Workspace registration is invalid") from exc
         game_identity = identities.get("game_root")
         bundle_identity = identities.get("bundle_root")
         try:

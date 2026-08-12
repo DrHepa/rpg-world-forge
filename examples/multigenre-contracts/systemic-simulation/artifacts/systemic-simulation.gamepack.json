@@ -1,0 +1,797 @@
+{
+  "analysis_requirements": {
+    "analyzer_id": "worldforge.unsupported_profile",
+    "analyzer_version": 1,
+    "content_hash": "70f8d5bda649774eb4bcb543f9db7a430c7a74998577896bd9cdb9dd18844382",
+    "limits": {
+      "candidate_evaluations": 262144,
+      "depth": 512,
+      "parameter_combinations_per_action": 4096,
+      "state_bytes": 65536,
+      "states": 16384,
+      "total_state_bytes": 67108864,
+      "total_witness_steps": 4096,
+      "witness_traces": 128
+    },
+    "profile": "unsupported",
+    "reason_code": "analysis_profile_unsupported"
+  },
+  "asset_requirements": [],
+  "content_hash": "070d09d07b87afd20b72d882f3567559603991759d09331e82d79acef6796924",
+  "format": "world-forge.gamepack",
+  "format_version": 1,
+  "game": {
+    "default_locale": "en",
+    "id": "systemic_simulation",
+    "title": "Systemic Simulation",
+    "version": "1.0.0"
+  },
+  "localization": {
+    "externalized_text": true,
+    "references": [
+      {
+        "field": "title",
+        "key": "activity.symbol_board.title",
+        "source_text": "Bounded system scenario",
+        "subject_id": "symbol_board",
+        "subject_kind": "activity"
+      },
+      {
+        "field": "title",
+        "key": "activity_module.simulation_activities.title",
+        "source_text": "Systemic simulation activities",
+        "subject_id": "simulation_activities",
+        "subject_kind": "activity_module"
+      },
+      {
+        "field": "title",
+        "key": "game.systemic_simulation.title",
+        "source_text": "Systemic Simulation",
+        "subject_id": "systemic_simulation",
+        "subject_kind": "game"
+      },
+      {
+        "field": "title",
+        "key": "system.adjacent_swap.title",
+        "source_text": "Apply one deterministic system transition",
+        "subject_id": "adjacent_swap",
+        "subject_kind": "system"
+      },
+      {
+        "field": "title",
+        "key": "system_module.simulation_rules.title",
+        "source_text": "Systemic simulation rules",
+        "subject_id": "simulation_rules",
+        "subject_kind": "system_module"
+      },
+      {
+        "field": "title",
+        "key": "world_module.simulation_space.title",
+        "source_text": "Abstract simulation space",
+        "subject_id": "simulation_space",
+        "subject_kind": "world_module"
+      }
+    ],
+    "source_locale": "en",
+    "supported_locales": [
+      "en"
+    ]
+  },
+  "logic": {
+    "actions": [
+      {
+        "core_verb_id": "restart",
+        "id": "restart_board",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "board_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "restart_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "symbol_board"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "swap",
+        "id": "swap_tiles",
+        "parameters": [
+          {
+            "id": "first_index",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "id": "second_index",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "integer"
+          }
+        ],
+        "presentation_hook_ids": [
+          "board_feedback",
+          "board_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "swap_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "symbol_board"
+          },
+          {
+            "kind": "system",
+            "source_id": "adjacent_swap"
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "action_id": "swap_tiles",
+        "distance": 1,
+        "id": "adjacent_tile",
+        "left": {
+          "action_id": "swap_tiles",
+          "kind": "parameter",
+          "parameter_id": "first_index"
+        },
+        "operator": "integer_distance",
+        "right": {
+          "action_id": "swap_tiles",
+          "kind": "parameter",
+          "parameter_id": "second_index"
+        }
+      },
+      {
+        "action_id": null,
+        "id": "board_ready",
+        "operator": "constant",
+        "value": true
+      },
+      {
+        "action_id": null,
+        "comparison": "equal",
+        "id": "board_solved",
+        "left": {
+          "kind": "state",
+          "state_id": "board"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "state",
+          "state_id": "target"
+        }
+      },
+      {
+        "action_id": "swap_tiles",
+        "array_state_id": "board",
+        "id": "first_index_valid",
+        "index": {
+          "action_id": "swap_tiles",
+          "kind": "parameter",
+          "parameter_id": "first_index"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": null,
+        "comparison": "greater_or_equal",
+        "id": "move_limit_reached",
+        "left": {
+          "kind": "state",
+          "state_id": "move_count"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 8,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "swap_tiles",
+        "array_state_id": "board",
+        "id": "second_index_valid",
+        "index": {
+          "action_id": "swap_tiles",
+          "kind": "parameter",
+          "parameter_id": "second_index"
+        },
+        "operator": "index_valid"
+      }
+    ],
+    "core_verbs": [
+      {
+        "description": "Return the board to its deterministic initial state.",
+        "id": "restart"
+      },
+      {
+        "description": "Exchange two adjacent board symbols.",
+        "id": "swap"
+      }
+    ],
+    "effects": [
+      {
+        "action_id": "swap_tiles",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "increment_moves",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "move_count"
+      },
+      {
+        "action_id": "restart_board",
+        "id": "reset_board",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "board"
+      },
+      {
+        "action_id": "restart_board",
+        "id": "reset_move_count",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "move_count"
+      },
+      {
+        "action_id": "swap_tiles",
+        "array_state_id": "board",
+        "first_index": {
+          "action_id": "swap_tiles",
+          "kind": "parameter",
+          "parameter_id": "first_index"
+        },
+        "id": "swap_tiles",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "swap_array_items",
+        "second_index": {
+          "action_id": "swap_tiles",
+          "kind": "parameter",
+          "parameter_id": "second_index"
+        }
+      }
+    ],
+    "endings": [
+      {
+        "condition_ids": [
+          "board_solved"
+        ],
+        "event_ids": [],
+        "id": "puzzle_complete",
+        "kind": "success",
+        "presentation_hook_ids": [
+          "ending_feedback"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "id": "restart_requested"
+      },
+      {
+        "id": "tile_swapped"
+      }
+    ],
+    "execution_semantics": {
+      "active_failure_recovery": "intersection",
+      "condition_collections": "and",
+      "condition_snapshot": "pre_transition",
+      "effect_order": "rule_order_then_reference_order",
+      "effect_state_operands": "current_candidate_state",
+      "ending_match": "exactly_one",
+      "event_commit": "after_success_rule_reference_order",
+      "invalid_transition": "reject_without_mutation",
+      "narrative_transition": "source_effects_then_cursor_atomic",
+      "owned_action_rules": "all_required",
+      "semantics_version": 1,
+      "terminal_precedence": "endings_before_failures"
+    },
+    "failures": [
+      {
+        "condition_ids": [
+          "move_limit_reached"
+        ],
+        "id": "move_limit",
+        "recovery_action_ids": [
+          "restart_board"
+        ]
+      }
+    ],
+    "goals": [
+      {
+        "condition_ids": [
+          "board_solved"
+        ],
+        "id": "solved",
+        "success_ending_id": "puzzle_complete"
+      }
+    ],
+    "initial_state": {
+      "board": [
+        "B",
+        "A",
+        "C"
+      ],
+      "move_count": 0,
+      "target": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    "mechanics": [
+      {
+        "action_id": "restart_board",
+        "asset_binding_ids": [],
+        "authoritative_state_ids": [
+          "board",
+          "move_count"
+        ],
+        "condition_ids": [],
+        "core_verb_id": "restart",
+        "effect_ids": [
+          "reset_board",
+          "reset_move_count"
+        ],
+        "event_ids": [
+          "restart_requested"
+        ],
+        "id": "restart_mechanic",
+        "presentation_hook_ids": [
+          "board_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "restart_rule"
+        ]
+      },
+      {
+        "action_id": "swap_tiles",
+        "asset_binding_ids": [],
+        "authoritative_state_ids": [
+          "board",
+          "move_count"
+        ],
+        "condition_ids": [
+          "adjacent_tile",
+          "first_index_valid",
+          "second_index_valid"
+        ],
+        "core_verb_id": "swap",
+        "effect_ids": [
+          "increment_moves",
+          "swap_tiles"
+        ],
+        "event_ids": [
+          "tile_swapped"
+        ],
+        "id": "swap_mechanic",
+        "presentation_hook_ids": [
+          "board_feedback",
+          "board_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "swap_rule"
+        ]
+      }
+    ],
+    "narrative_cursor": null,
+    "narrative_transitions": [],
+    "presentation_hooks": [
+      {
+        "asset_binding_ids": [],
+        "id": "board_feedback",
+        "kind": "feedback"
+      },
+      {
+        "asset_binding_ids": [],
+        "id": "board_view",
+        "kind": "board"
+      },
+      {
+        "asset_binding_ids": [],
+        "id": "ending_feedback",
+        "kind": "ending"
+      }
+    ],
+    "rules": [
+      {
+        "action_id": "restart_board",
+        "condition_ids": [],
+        "effect_ids": [
+          "reset_board",
+          "reset_move_count"
+        ],
+        "event_ids": [
+          "restart_requested"
+        ],
+        "id": "restart_rule",
+        "order": 0
+      },
+      {
+        "action_id": "swap_tiles",
+        "condition_ids": [
+          "adjacent_tile",
+          "first_index_valid",
+          "second_index_valid"
+        ],
+        "effect_ids": [
+          "increment_moves",
+          "swap_tiles"
+        ],
+        "event_ids": [
+          "tile_swapped"
+        ],
+        "id": "swap_rule",
+        "order": 1
+      }
+    ],
+    "source": {
+      "content_hash": "42c1aa67d8cded5ba2ac6448502f9de884c522917ab44048b0ca2ceea8d5324b",
+      "format": "world-forge.logic_module",
+      "format_version": 1,
+      "id": "simulation_logic"
+    },
+    "state_schema": [
+      {
+        "allowed_values": [
+          "A",
+          "B",
+          "C"
+        ],
+        "id": "board",
+        "initial": [
+          "B",
+          "A",
+          "C"
+        ],
+        "max_items": 3,
+        "min_items": 3,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "string_array"
+      },
+      {
+        "id": "move_count",
+        "initial": 0,
+        "maximum": 8,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      },
+      {
+        "allowed_values": [
+          "A",
+          "B",
+          "C"
+        ],
+        "id": "target",
+        "initial": [
+          "A",
+          "B",
+          "C"
+        ],
+        "max_items": 3,
+        "min_items": 3,
+        "mutability": "constant",
+        "persistence": "saved",
+        "type": "string_array"
+      }
+    ],
+    "title": "Neutral bounded systemic-simulation logic"
+  },
+  "mechanic_requirements": [
+    {
+      "action_id": "restart_board",
+      "core_verb_id": "restart",
+      "mechanic_id": "restart_mechanic",
+      "required_feature_ids": [
+        "logic:finite_state"
+      ]
+    },
+    {
+      "action_id": "swap_tiles",
+      "core_verb_id": "swap",
+      "mechanic_id": "swap_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ]
+    }
+  ],
+  "modules": {
+    "activities": [
+      {
+        "activities": [
+          {
+            "activity_type": "scenario",
+            "asset_binding_ids": [],
+            "effect_ids": [
+              "increment_moves",
+              "reset_board",
+              "reset_move_count",
+              "swap_tiles"
+            ],
+            "end_condition_ids": [
+              "board_solved"
+            ],
+            "event_ids": [
+              "restart_requested",
+              "tile_swapped"
+            ],
+            "failure_condition_ids": [],
+            "id": "symbol_board",
+            "participant_ids": [],
+            "presentation_hook_ids": [
+              "board_feedback",
+              "board_view"
+            ],
+            "spatial_context_ids": [],
+            "start_condition_ids": [
+              "board_ready"
+            ],
+            "success_condition_ids": [
+              "board_solved"
+            ],
+            "title": "Bounded system scenario"
+          }
+        ],
+        "source": {
+          "content_hash": "c70efddbe10523a3a8324626d5216845ef2542cf4dc1a7b6ebb1578638071743",
+          "format": "world-forge.activity_module",
+          "format_version": 1,
+          "id": "simulation_activities"
+        },
+        "title": "Systemic simulation activities"
+      }
+    ],
+    "narrative": [],
+    "systems": [
+      {
+        "source": {
+          "content_hash": "8615f4533eb4e19b71249d9fc388bf33df1062989c6bc5464a01233e964673b2",
+          "format": "world-forge.system_module",
+          "format_version": 1,
+          "id": "simulation_rules"
+        },
+        "systems": [
+          {
+            "asset_binding_ids": [],
+            "effect_ids": [
+              "increment_moves",
+              "swap_tiles"
+            ],
+            "event_ids": [
+              "tile_swapped"
+            ],
+            "id": "adjacent_swap",
+            "precondition_ids": [
+              "adjacent_tile",
+              "first_index_valid",
+              "second_index_valid"
+            ],
+            "system_type": "simulation_scenario",
+            "title": "Apply one deterministic system transition"
+          }
+        ],
+        "title": "Systemic simulation rules"
+      }
+    ],
+    "world": [
+      {
+        "module_type": "space",
+        "records": [
+          {
+            "id": "system_state_space",
+            "name": "Bounded state space",
+            "topology": "abstract"
+          }
+        ],
+        "source": {
+          "content_hash": "48b1e3166e201632ef62d81f8b56642df286bef96d85e62b5af29b8b4c166b1e",
+          "format": "world-forge.world_module",
+          "format_version": 1,
+          "id": "simulation_space"
+        },
+        "title": "Abstract simulation space"
+      }
+    ]
+  },
+  "presentation": {
+    "accessibility": {
+      "captions": true,
+      "color_independence": true,
+      "high_contrast": true,
+      "keyboard_only": true,
+      "reduced_motion": true,
+      "remapping": true,
+      "screen_reader_structure": true,
+      "text_scaling": true,
+      "timing_alternatives": true
+    },
+    "audio_role": "optional feedback",
+    "camera": "fixed",
+    "input_assumptions": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "localization": {
+      "externalized_text": true,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "mode": "2d",
+    "perspective": "orthographic board",
+    "ui_density": "low",
+    "visual_language": "high-contrast geometric symbols"
+  },
+  "provenance": [
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "c70efddbe10523a3a8324626d5216845ef2542cf4dc1a7b6ebb1578638071743",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "simulation_activities"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "systemic_simulation_profile"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+        "format": "world-forge.creation_source_manifest",
+        "format_version": 1,
+        "id": "systemic_simulation"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "42c1aa67d8cded5ba2ac6448502f9de884c522917ab44048b0ca2ceea8d5324b",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "simulation_logic"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "64a869bf5de72926c1cabceaf263d8460351e8e0f499e9290fe4eef3f7ccd373",
+        "format": "world-forge.project",
+        "format_version": 1,
+        "id": "systemic_simulation"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "8615f4533eb4e19b71249d9fc388bf33df1062989c6bc5464a01233e964673b2",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "simulation_rules"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "48b1e3166e201632ef62d81f8b56642df286bef96d85e62b5af29b8b4c166b1e",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "simulation_space"
+      }
+    }
+  ],
+  "registered_extensions": [],
+  "runtime_requirements": {
+    "accepted_logic_formats": [
+      {
+        "format": "world-forge.gamepack",
+        "versions": [
+          1
+        ]
+      }
+    ],
+    "asset_formats": [],
+    "input_capabilities": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "optional_features": [
+      "audio:sfx"
+    ],
+    "packaging_target": "standalone desktop directory",
+    "platform_matrix": [
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:linux",
+        "platform_id": "platform:linux_x86_64",
+        "renderer": "raylib"
+      },
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:windows",
+        "platform_id": "platform:windows_x86_64",
+        "renderer": "raylib"
+      }
+    ],
+    "presentation": {
+      "camera": "fixed",
+      "mode": "2d",
+      "perspective": "orthographic board",
+      "renderer": "raylib"
+    },
+    "replay_expected": true,
+    "requested_adapter": null,
+    "required_features": [
+      "logic:deterministic_actions",
+      "logic:finite_state"
+    ],
+    "save_expected": true
+  },
+  "source": {
+    "logic_modules": [
+      {
+        "content_hash": "42c1aa67d8cded5ba2ac6448502f9de884c522917ab44048b0ca2ceea8d5324b",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "simulation_logic"
+      }
+    ],
+    "profile": {
+      "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "systemic_simulation_profile"
+    },
+    "project": {
+      "content_hash": "64a869bf5de72926c1cabceaf263d8460351e8e0f499e9290fe4eef3f7ccd373",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "systemic_simulation"
+    },
+    "source_manifest": {
+      "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "systemic_simulation"
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "activities": [
+    {
+      "activity_type": "scenario",
+      "asset_binding_ids": [
+        "strategy_map_visual"
+      ],
+      "effect_ids": [
+        "direct_north_1_influence",
+        "direct_north_1_record_target",
+        "direct_north_1_spend",
+        "direct_north_1_turn",
+        "direct_north_2_influence",
+        "direct_north_2_record_target",
+        "direct_north_2_spend",
+        "direct_north_2_turn",
+        "direct_south_1_influence",
+        "direct_south_1_record_target",
+        "direct_south_1_spend",
+        "direct_south_1_turn",
+        "direct_south_2_influence",
+        "direct_south_2_record_target",
+        "direct_south_2_spend",
+        "direct_south_2_turn",
+        "reset_command_points",
+        "reset_last_directed_faction",
+        "reset_north_influence",
+        "reset_south_influence",
+        "reset_turns_remaining"
+      ],
+      "end_condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [
+        "faction_directed",
+        "scenario_restarted"
+      ],
+      "failure_condition_ids": [],
+      "id": "faction_campaign",
+      "participant_ids": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "provenance": "authored neutral strategy fixture",
+      "spatial_context_ids": [],
+      "start_condition_ids": [
+        "scenario_ready"
+      ],
+      "success_condition_ids": [
+        "victory_condition"
+      ],
+      "title": "authored turns toward a declared faction victory",
+      "validation_profile": "authoring_only"
+    }
+  ],
+  "content_hash": "371952107550b18f61ba0c61486232b878866a68b5234e1706e7a659733cf67b",
+  "extensions": [],
+  "format": "world-forge.activity_module",
+  "format_version": 1,
+  "module_id": "faction_strategy_activities",
+  "project_id": "faction_strategy",
+  "title": "Faction Strategy authored activity"
+}

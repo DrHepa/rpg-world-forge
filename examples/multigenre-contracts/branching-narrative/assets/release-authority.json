@@ -1,0 +1,38 @@
+{
+  "authority": {
+    "artifact_snapshot_hash": "b126d4dc04779edff702cdd51cfb2bcfcdd708b2d4c286b1cd8d21f3b1e6323d",
+    "producer_job_id": "fixture-branching-narrative-release",
+    "producer_operation": "asset.release.authorize",
+    "producer_output_position": 0,
+    "root_generation": 1,
+    "source_revision": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+    "workflow_status_hash": null,
+    "workspace_id": "fixture-branching-narrative"
+  },
+  "blockers": [],
+  "candidate_assetpack": {
+    "content_hash": "701172c30368f4402374933c0e90de4eb728598ffa6183d5ceaa4e0fbe311d92",
+    "format": "world-forge.assetpack",
+    "format_version": 1,
+    "id": "assetpack_2fa07ae6550c8579f94dc75d60c7076434dfb9a60186f339"
+  },
+  "candidate_manifest": {
+    "content_hash": "5295588e1c29c550301ff101a775c9a073cfe4690e41919d77b6dfcca54f6968",
+    "format": "world-forge.asset_manifest",
+    "format_version": 1,
+    "id": "branching_narrative_asset_manifest"
+  },
+  "content_hash": "158d97f37a2ab8cbe822c8b67fb21d745221098433a2e6b9880a10c7962e7fd6",
+  "format": "world-forge.asset_release_authority",
+  "format_version": 1,
+  "qa_reviews": [
+    {
+      "content_hash": "4a164a0409f77a489d6784b2ada1df29a20be93c8e6d7f30e08e794ff4d2df01",
+      "format": "world-forge.asset_qa_review_receipt",
+      "format_version": 1,
+      "id": "branching_narrative_font_qa_review"
+    }
+  ],
+  "release_authority_id": "branching_narrative_asset_release",
+  "status": "authorized"
+}

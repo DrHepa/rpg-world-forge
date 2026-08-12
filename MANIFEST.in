@@ -7,6 +7,8 @@ include MANIFEST.in
 graft agents
 graft authoring/prompts
 graft contracts
+graft share/world-forge
+graft share/rpg-world-forge
 graft docs
 graft examples
 graft schemas

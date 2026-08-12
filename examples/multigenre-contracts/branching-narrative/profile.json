@@ -1,0 +1,168 @@
+{
+  "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+  "experience": {
+    "audiences": [
+      "players seeking a short authored choice"
+    ],
+    "experience_goals": [
+      "clear consequences",
+      "two reachable endings"
+    ],
+    "player_promise": "Make one explicit choice and see its authored consequence."
+  },
+  "extensions": [],
+  "fiction": {
+    "genres": [],
+    "tags": [],
+    "tones": [
+      "reflective"
+    ]
+  },
+  "format": "world-forge.creation_profile",
+  "format_version": 1,
+  "gameplay": {
+    "challenge_model": "informed authored choice",
+    "core_loop": [
+      "read state",
+      "choose option",
+      "observe consequence"
+    ],
+    "core_verbs": [
+      {
+        "description": "Select one authored option.",
+        "id": "choose"
+      }
+    ],
+    "dependencies": {
+      "authored": [
+        "narrative:branching_units"
+      ],
+      "procedural": [],
+      "systemic": [
+        "narrative:persistent_choice"
+      ]
+    },
+    "failure_recovery": "restart the short narrative",
+    "goal_model": "reach one authored ending",
+    "mechanic_tags": [
+      "narrative:explicit_choice"
+    ],
+    "player_role": "decision maker",
+    "primary_family": "narrative",
+    "progression": "choice state and ending state",
+    "rule_model": "deterministic branching state machine",
+    "secondary_families": [],
+    "session_structure": "single short session",
+    "social_topology": "single_player",
+    "teleology": "finite"
+  },
+  "narrative": {
+    "agency": "explicit local choice",
+    "authorship_mode": "authored",
+    "canon_variability": "ending varies by recorded choice",
+    "delivery_channels": [
+      "narrative:prose",
+      "narrative:ui"
+    ],
+    "endings": "two authored reachable endings",
+    "focalization": "player focalized",
+    "information_model": "choice history is persistent and visible",
+    "pacing": "one decision followed by resolution",
+    "protagonist_model": "abstract player position",
+    "requirement": "required",
+    "topology": "branching"
+  },
+  "presentation": {
+    "accessibility": {
+      "captions": true,
+      "color_independence": true,
+      "high_contrast": true,
+      "keyboard_only": true,
+      "reduced_motion": true,
+      "remapping": true,
+      "screen_reader_structure": true,
+      "text_scaling": true,
+      "timing_alternatives": true
+    },
+    "audio_role": "optional feedback",
+    "camera": "none",
+    "input_assumptions": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "localization": {
+      "externalized_text": true,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "mode": "text",
+    "perspective": "text interface",
+    "ui_density": "low",
+    "visual_language": "high-contrast text panels"
+  },
+  "production": {
+    "content_modes": {
+      "assets": "authored",
+      "gameplay": "authored",
+      "narrative": "authored",
+      "world": "not_applicable"
+    },
+    "human_review": true,
+    "licensing_required": true,
+    "provenance_required": true,
+    "qa_required": true,
+    "reproducibility": "all runtime inputs are content addressed",
+    "seed_policy": "no random generation",
+    "selection_policy": "one reviewed deterministic candidate"
+  },
+  "profile_id": "branching_narrative_profile",
+  "project_id": "branching_narrative",
+  "runtime_target": {
+    "accepted_logic_formats": [
+      {
+        "format": "world-forge.gamepack",
+        "versions": [
+          1
+        ]
+      }
+    ],
+    "asset_formats": [
+      "asset:font",
+      "asset:png"
+    ],
+    "input_capabilities": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "optional_features": [
+      "audio:sfx"
+    ],
+    "packaging_target": "standalone desktop directory",
+    "platforms": [
+      "platform:linux_x86_64",
+      "platform:windows_x86_64"
+    ],
+    "presentation_mode": "text",
+    "renderer": "raylib",
+    "replay_expected": true,
+    "requested_adapter": "gamepack_raylib_2d_text",
+    "required_features": [
+      "logic:branching_choice",
+      "logic:persistent_variables"
+    ],
+    "save_expected": true
+  },
+  "title": "Branching narrative profile",
+  "world": {
+    "persistence": "choice state",
+    "presence": "abstract",
+    "scale": "single interaction",
+    "simulated_domains": [],
+    "simulation_depth": "state only",
+    "spatial_structure": "authored",
+    "spatial_topology": "abstract",
+    "time_model": "turn based"
+  }
+}

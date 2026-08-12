@@ -1,0 +1,29 @@
+{
+  "completed_phases": [],
+  "content_hash": "307f88ff811793d5bd0d09fd907175246262a8313b772ae054724eb1228aec79",
+  "current_phase": "p00_brief",
+  "format": "world-forge.creation_workflow_status",
+  "format_version": 1,
+  "invalidated_reports": [],
+  "profile": {
+    "content_hash": "43e124bc8ab3655b7d5cc19e5f096f57666481a39276501444d7892e2df2c2c3",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "sports_career_profile"
+  },
+  "project": {
+    "content_hash": "dbbe5bdbca0ef83485821890c9b2273af084fc0e6b63f85547611d9391de4742",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "sports_career"
+  },
+  "reports": [],
+  "revision": 0,
+  "source_manifest": {
+    "content_hash": "7d195986ff3c23dbd2f73fc0cd29148721031c6914d786c8971b15e4d086804d",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "sports_career"
+  },
+  "workflow_id": "sports_career_workflow"
+}

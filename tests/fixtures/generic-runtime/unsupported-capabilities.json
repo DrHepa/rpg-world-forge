@@ -1,0 +1,65 @@
+{
+  "cases": [
+    {
+      "expected_status": "unsupported",
+      "missing_feature_ids": [
+        "logic:foldback"
+      ],
+      "profile": "profile:branching_foldback",
+      "required_feature_ids": [
+        "logic:foldback"
+      ]
+    },
+    {
+      "expected_status": "unsupported",
+      "missing_feature_ids": [
+        "action:realtime_combat"
+      ],
+      "profile": "profile:action_with_framing_narrative",
+      "required_feature_ids": [
+        "action:realtime_combat"
+      ]
+    },
+    {
+      "expected_status": "unsupported",
+      "missing_feature_ids": [
+        "roguelite:run_reset"
+      ],
+      "profile": "profile:roguelite_storylets",
+      "required_feature_ids": [
+        "roguelite:run_reset"
+      ]
+    },
+    {
+      "expected_status": "unsupported",
+      "missing_feature_ids": [
+        "simulation:economy"
+      ],
+      "profile": "profile:simulation_management",
+      "required_feature_ids": [
+        "simulation:economy"
+      ]
+    },
+    {
+      "expected_status": "unsupported",
+      "missing_feature_ids": [
+        "sports:season"
+      ],
+      "profile": "profile:sports_season",
+      "required_feature_ids": [
+        "sports:season"
+      ]
+    },
+    {
+      "expected_status": "unsupported",
+      "missing_feature_ids": [
+        "strategy:turn_order"
+      ],
+      "profile": "profile:strategy_scenario",
+      "required_feature_ids": [
+        "strategy:turn_order"
+      ]
+    }
+  ],
+  "policy": "Required capabilities resolve by exact feature ID, never by genre label."
+}

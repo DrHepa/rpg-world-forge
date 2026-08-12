@@ -1,0 +1,26 @@
+{
+  "content_hash": "1829438f8fcaf8054dae64a2c6b794727272a8cf784d413c2ad279681cc9a58b",
+  "extensions": [],
+  "format": "world-forge.system_module",
+  "format_version": 1,
+  "module_id": "sports_career_systems",
+  "project_id": "sports_career",
+  "systems": [
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "season_standings",
+      "precondition_ids": [],
+      "system_type": "season",
+      "title": "reach the authored season points target"
+    }
+  ],
+  "title": "Authored league season"
+}

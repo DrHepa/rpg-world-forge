@@ -1,0 +1,94 @@
+{
+  "asset": {
+    "asset_id": "action_hud",
+    "content_hash": "e4313d39e0d0a09245ffa5be7bc58d5b14707b22eb42775f4a55375e97b87b57"
+  },
+  "asset_subject": {
+    "content_hash": "95c24c228facc0f49fdbf67c0c09af0604a1e20c37da43b7461d7605315466e4",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_b5515b8b15c591d03ee19f0b9ad83d3a4047552bf70f5fd9"
+  },
+  "content_hash": "38fa2925b0441ec80377d665f188800160aa0abb29f9d2c07de2614869d6429a",
+  "executed_toolchain": {
+    "operation_id": "generate_png",
+    "production_class": "procedural_offline",
+    "seed": 421410552,
+    "tool_id": "world_forge_fixture_generator",
+    "tool_version": "1.1.0"
+  },
+  "execution_evidence": {
+    "completed_evidence_hash": "ae47e4cf4a04b85a10e88a27a1e58b5cdfc6944e8753b69d169f5a6f613b8f81",
+    "sanitized_log_hashes": [
+      "addd2c28ba0058e61abbf93f4d3bc41ff26150d3e31e2be6e9129898c276c96b"
+    ],
+    "started_evidence_hash": "8f6e83185929ca56105faf9d3411f4be43b4a8d1f1c9288ba6c3b96b2b0f0440"
+  },
+  "failure_reasons": [],
+  "format": "world-forge.asset_production_receipt",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "cadf114a3e2ed9a74d8664137c2a09888e5383468fbb98e9ded7bd79acbca506",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "action_framing"
+  },
+  "input_artifacts": [],
+  "inventory": {
+    "content_hash": "f8090c021d6e4b6497db783d7ff16bbbd961f3d1bd4ec5e68e6e60bbe3581e27",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_013a8c4d25ff85b1a541c4a4ceedb7339f5ddf883f34a33f"
+  },
+  "lineage_parents": [],
+  "outputs": [
+    {
+      "candidate_artifact_id": "action_hud_candidate",
+      "locator": "assets/production/action_hud/candidates/action-hud.png",
+      "media_type": "image/png",
+      "metadata": {
+        "height": 256,
+        "kind": "png",
+        "mode": "rgba8",
+        "width": 256
+      },
+      "role": "texture",
+      "runtime_path": "assets/ui/action-hud.png",
+      "sha256": "ff437da92b6c201db4784f72daf706fc059ca25962161843e246596aa1de8784",
+      "size_bytes": 1802
+    }
+  ],
+  "production_class": "procedural_offline",
+  "receipt_id": "action_hud_receipt",
+  "request": {
+    "content_hash": "e4c2722b272bcd2c12551aa0b13d10612a181f5fb0fad6cab791657fd5d18c34",
+    "format": "world-forge.asset_production_request",
+    "format_version": 1,
+    "id": "action_hud_production"
+  },
+  "rights_attestation": {
+    "basis": "fixture_public_domain",
+    "evidence_hashes": [
+      "ed3cde3f758ea7cb25c3ce958e7ed56d5a59357e568c400c20035e449882f727"
+    ]
+  },
+  "specification": {
+    "content_hash": "aac475a0c5841e811945e40f0ce2262147c099dc50bb108699cebbbd834090bd",
+    "format": "world-forge.asset_spec",
+    "format_version": 1,
+    "id": "asset_spec_2b734aaad5b0f3c4d15481697474f2a0141508bd9d2112b6"
+  },
+  "status": "completed",
+  "style": {
+    "content_hash": "3598dd37fb8489f10523d8d734d4e2cc4449678690be05d9acba58653afdd673",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_06a44be3d5cc949c2ee34b8bb39f991ef43461d7812cb699"
+  },
+  "target": {
+    "content_hash": "284d6835a486e5d5289aaf8b661f3a240155870f84f15eb1764293d25bba920c",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_5e7739cb414629f4e3e890c2da30caefc22c7f757de251f9"
+  }
+}

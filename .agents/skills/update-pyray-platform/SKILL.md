@@ -5,6 +5,11 @@ description: Change the locked pyray binding version, raylib backend, native API
 
 # Update the pyray platform baseline
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Change one locked Python/pyray/raylib/backend baseline in G02. Do not change the

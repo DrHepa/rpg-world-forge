@@ -133,9 +133,52 @@ status is **partial**:
 - [x] Define hash-bound capability, presentation-profile, adapter,
   composition, and compatibility-report contracts without selecting an engine
   or changing M5 packs.
+- [x] Add the generic gamepack asset D1/D2a/D2b path through reviewed planning,
+  exact production lineage, deterministic closed processing, retained-byte QA,
+  and `produced`/`processed`/`release_ready` manifests; then seal only exact
+  readiness lineage through D3 into a deterministic `world-forge.assetpack` v1
+  directory with integral Python, Studio, and packaged-runtime verification.
+  Readiness is only sealing eligibility, and a sealed pack is still not adapter,
+  execution, packaging, or release evidence.
 - [x] Define and implement an immutable composed-runtime bundle that preserves
   exact M5 bytes, recomputes compatibility evidence, resolves only a static
   adapter registry, and makes no adapter-execution or release-readiness claim.
+- [x] Add `world-forge.game_runtime_bundle` v1 as an exact, runtime-only
+  pre-execution directory containing the gamepack, sealed D3 assetpack, trusted
+  runtime snapshot tree, composition, evidence-free blocked support report,
+  bindings, and notices. Python, Studio source, built CJS, and retained ASAR
+  verify transfer integrity without claiming execution or release readiness.
+- [x] Add exact `world-forge.runtime_implementation` and
+  `world-forge.runtime_platform_lock` v1 identities plus a
+  `world-forge.game_materialization_bundle` v1 outer envelope. It preserves the
+  nested runtime bundle bytes and supports distinct `contract_only` and
+  `materialization_ready` states. Only the ready state embeds the exact
+  standalone launcher, verifier, smoke, package, source, test, license, and
+  notice inventory and may enter journaled standalone materialization.
+  Both states preserve `release: blocked` until execution and hosted native
+  evidence exist.
+- [x] Add deterministic `world-forge.game_package` v1 transport.
+  `package-game` and `verify-game-package` publish and verify one canonical
+  no-replace archive; `extract-game-package`,
+  `recover-game-package-extraction`, and
+  `rollback-game-package-extraction` use identity-bound Linux/Windows stages
+  and journals. Privileged publication never executes game-local
+  `scripts/verify_game.py`; that verifier remains an explicit post-extraction
+  evidence step. Packaging integrity does not satisfy headless, replay, or
+  native evidence gates.
+- [x] Implement bounded generic raylib 2D puzzle and authored-text adapters over
+  the exact runtime bundle. The trusted snapshot now binds both
+  `gamepack_runtime` and `gamepack_raylib_2d`; fixed-step semantic input,
+  sealed PNG/TTF resources, structured state, fake-backend rendering, and
+  save/replay compatibility are locally verified. Active descriptors are
+  v1.1.0 while exact v1.0.0 records remain historical and non-resolvable.
+- [x] Define `scripts/verify_multigenre_release.py` as the canonical external
+  source-to-package lineage gate and add its fail-fast:false Ubuntu 24.04/
+  Windows Server 2022 x Python 3.11/3.12 required-native aggregation workflow.
+  Exact hosted execution is **PENDING** until all four rows and the aggregate
+  run green on one reviewed revision; the workflow definition is not a pass.
+  The authoritative machine-readable status is
+  `docs/evidence/multigenre-release-status.json`.
 - [x] Implement target-gated pyray GLB load/animation/draw mechanics and
   deterministic render-state planning, plus Linux-native and Windows ABI gate
   definitions. Hosted/native execution evidence remains pending. The adapter
@@ -148,8 +191,10 @@ status is **partial**:
   Windows, UI/audio, or performance claims.
 - [x] Add an independent composed-release catalog and generated-game consumer.
   Its headless, save, replay, package, extraction, and extracted-package
-  workflows remain representation-neutral; native dispatch admits only the
-  exact legacy Linux x86_64 2.5D adapter.
+  workflows remain representation-neutral; the retained legacy
+  `isoworld_raylib_2_5d` adapter remains separate from the bounded generic 2D
+  puzzle/text adapters, and native dispatch is authorized only by exact
+  support evidence for the selected adapter.
 - [x] Pin x64 Studio runtime provenance and implement bounded deterministic
   acquisition plus synthetic assembly/ZIP mechanics. Real assembly remains
   fail-closed while redistribution is blocked.
@@ -198,8 +243,11 @@ gates remain open.
 The first M6 consumer path is additive: generated games can install and verify
 immutable composed releases without changing legacy M5 catalog bytes or
 simulation semantics. Headless/save/replay workflows are representation-neutral.
-Current native presentation remains the exact Linux x86_64 legacy 2.5D adapter;
-the 3D adapter is still a bounded proof, not a playable runtime claim.
+Current native-verified presentation remains the exact Linux x86_64 legacy 2.5D
+adapter. The generic 2D puzzle/text implementations are executable and have
+deterministic fake-backend evidence, but still require hosted Linux and Windows
+native graphical evidence. The 3D adapter is still a bounded proof, not a
+playable runtime claim.
 
 The exact partial-readiness verdict, local evidence limits, and remaining gates
 are recorded in [AUDIT_M6_2026-07-24.md](AUDIT_M6_2026-07-24.md). The

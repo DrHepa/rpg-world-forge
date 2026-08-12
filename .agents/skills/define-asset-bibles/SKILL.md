@@ -5,6 +5,11 @@ description: Define and approve target-scoped visual and audio bibles from a loc
 
 # Define asset bibles
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Complete only target-scoped M5 art and audio direction. GPT owns the synthesis;

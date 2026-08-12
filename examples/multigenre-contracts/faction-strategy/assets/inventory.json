@@ -1,0 +1,125 @@
+{
+  "asset_subject": {
+    "content_hash": "73c5b9d507b9bc7195ee0338c2dc24e02ac86b7f0b88a90268a416f8df1f140f",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_63de7f8ed1f82770532a386145ae4bf72c6072b7ac99c75f"
+  },
+  "assets": [
+    {
+      "asset_id": "strategy_map",
+      "binding_ids": [
+        "strategy_map_visual"
+      ],
+      "kind": "ui",
+      "outputs": [
+        {
+          "media_type": "image/png",
+          "role": "texture"
+        }
+      ],
+      "provenance_reason": "Reviewed target maps one exact binding to this asset.",
+      "referencing_subjects": [
+        {
+          "id": "faction_campaign",
+          "kind": "activity"
+        },
+        {
+          "id": "faction_direction",
+          "kind": "mechanic"
+        },
+        {
+          "id": "faction_direction_north_2",
+          "kind": "mechanic"
+        },
+        {
+          "id": "faction_direction_south_1",
+          "kind": "mechanic"
+        },
+        {
+          "id": "faction_direction_south_2",
+          "kind": "mechanic"
+        },
+        {
+          "id": "restart_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "faction_influence_system",
+          "kind": "system"
+        }
+      ],
+      "representation": "2d",
+      "required": true,
+      "selected_format": "asset:png",
+      "sharing": {
+        "group_id": null,
+        "policy": "exclusive"
+      },
+      "source_roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "system_feedback"
+      ],
+      "style": {
+        "content_hash": "cdd10039ff520a0378bf3bdf40a19c17520a40ec0ba3b5b762d524f54506bc60",
+        "format": "world-forge.asset_style",
+        "format_version": 1,
+        "id": "asset_style_4ab16d8130ea06f4d6eda95f97394043fb4d14a57ccf1952"
+      },
+      "target": {
+        "content_hash": "58ff1eaa50d19f63b7fe635198616666349c030a912e353b6ba4ce7f5cea091d",
+        "format": "world-forge.asset_target",
+        "format_version": 1,
+        "id": "asset_target_5252c318d5a54f650e5bae2d4f8c693297a9a07a2fc8399f"
+      },
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "38dba6a00fffb453accf984e9e35834bad2cafe3e7e11282eb3f1d4f38a90cef",
+  "format": "world-forge.asset_inventory",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "7a1f8b4f8436a73a4df5653987061d7f965abc9248f45367c928a87e1110bf63",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "faction_strategy"
+  },
+  "inventory_id": "asset_inventory_dd557db361dba157b50ec70c660863a777e4b007a8d9093a",
+  "style": {
+    "content_hash": "cdd10039ff520a0378bf3bdf40a19c17520a40ec0ba3b5b762d524f54506bc60",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_4ab16d8130ea06f4d6eda95f97394043fb4d14a57ccf1952"
+  },
+  "target": {
+    "content_hash": "58ff1eaa50d19f63b7fe635198616666349c030a912e353b6ba4ce7f5cea091d",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_5252c318d5a54f650e5bae2d4f8c693297a9a07a2fc8399f"
+  }
+}

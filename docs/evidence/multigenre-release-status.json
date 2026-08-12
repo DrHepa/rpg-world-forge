@@ -1,0 +1,23 @@
+{
+  "format": "world-forge.multigenre_release_documentation_status",
+  "format_version": 1,
+  "hosted_evidence": "PENDING",
+  "required_matrix": [
+    {
+      "os": "ubuntu-24.04",
+      "python": "3.11"
+    },
+    {
+      "os": "ubuntu-24.04",
+      "python": "3.12"
+    },
+    {
+      "os": "windows-2022",
+      "python": "3.11"
+    },
+    {
+      "os": "windows-2022",
+      "python": "3.12"
+    }
+  ]
+}

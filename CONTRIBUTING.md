@@ -1,6 +1,6 @@
 # Contributing
 
-RPG World Forge is public and accepts fixes, validators, schemas, authoring
+World Forge is public and accepts fixes, validators, schemas, authoring
 workflows, deterministic runtime systems and neutral examples.
 
 ## Before starting

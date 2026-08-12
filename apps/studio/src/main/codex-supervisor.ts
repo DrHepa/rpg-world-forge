@@ -252,8 +252,8 @@ export class CodexSupervisor {
         "initialize",
         {
           clientInfo: {
-            name: "rpg-world-forge-studio",
-            title: "RPG World Forge Studio",
+            name: "world-forge-studio",
+            title: "World Forge Studio",
             version: "0.1.0",
           },
           capabilities: {

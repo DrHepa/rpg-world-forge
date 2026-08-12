@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import tempfile
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,10 +21,65 @@ from worldforge.project import SourceProject, load_source_project
 from worldforge.scaffold import create_world_project
 from worldforge.validation import validate_project
 from worldforge.workflow import WorkflowError, complete_phase, describe_status, reopen_phase
+from worldforge.world_lock import exclusive_world_lifecycle
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "examples/foundation/source/manifest.json"
 COMPILED = ROOT / "content/compiled/foundation.worldpack.json"
+
+
+def _assert_retained_lifecycle_lock(
+    test: unittest.TestCase,
+    root: Path,
+    *,
+    identity: tuple[int, int] | None = None,
+) -> tuple[int, int]:
+    lock = root / ".worldforge/lifecycle.lock"
+    info = os.stat(lock, follow_symlinks=False)
+    test.assertTrue(stat.S_ISREG(info.st_mode))
+    test.assertEqual(1, info.st_nlink)
+    test.assertEqual(bytes((os.getpid() & 0xFF,)), lock.read_bytes())
+    observed_identity = (info.st_dev, info.st_ino)
+    if identity is not None:
+        test.assertEqual(identity, observed_identity)
+    if os.name == "posix":
+        test.assertEqual(0o600, stat.S_IMODE(info.st_mode))
+        test.assertEqual(os.getuid(), info.st_uid)
+        test.assertEqual(os.getgid(), info.st_gid)
+    return observed_identity
+
+
+@contextmanager
+def _hold_independent_lifecycle_lock(
+    test: unittest.TestCase,
+    root: Path,
+) -> Iterator[tuple[int, int]]:
+    if os.name != "posix":
+        with exclusive_world_lifecycle(root, error_type=WorkflowError):
+            yield _assert_retained_lifecycle_lock(test, root)
+        return
+
+    import fcntl
+
+    lock = root / ".worldforge/lifecycle.lock"
+    descriptor = os.open(
+        lock,
+        os.O_CREAT | os.O_RDWR | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise AssertionError("independent lifecycle lock is not a standalone regular file")
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.ftruncate(descriptor, 1)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        os.write(descriptor, bytes((os.getpid() & 0xFF,)))
+        os.fsync(descriptor)
+        yield info.st_dev, info.st_ino
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
 
 
 class ContentPipelineTests(unittest.TestCase):
@@ -168,7 +226,8 @@ class ContentPipelineTests(unittest.TestCase):
                 (target / ".worldforge/project.json").read_text(encoding="utf-8")
             )
             self.assertEqual("world", project_metadata["project_kind"])
-            self.assertEqual(2, project_metadata["format_version"])
+            self.assertEqual(3, project_metadata["format_version"])
+            self.assertEqual("world-forge", project_metadata["tool_repository"])
             self.assertEqual("0.1.0", project_metadata["world_version"])
             self.assertIn(
                 "world-authoring repository",
@@ -301,14 +360,13 @@ class ContentPipelineTests(unittest.TestCase):
             status_path = target / ".worldforge/status.json"
             report_target = target / ".worldforge/phase_reports/p00_brief.json"
             before = status_path.read_bytes()
-            lock = target / ".worldforge/lifecycle.lock"
-            lock.write_text("owned elsewhere\n", encoding="utf-8")
-            with self.assertRaisesRegex(WorkflowError, "already in progress"):
-                complete_phase(target, report)
-            self.assertEqual("owned elsewhere\n", lock.read_text(encoding="utf-8"))
+            with _hold_independent_lifecycle_lock(self, target) as lock_identity:
+                _assert_retained_lifecycle_lock(self, target, identity=lock_identity)
+                with self.assertRaisesRegex(WorkflowError, "already in progress"):
+                    complete_phase(target, report)
+            _assert_retained_lifecycle_lock(self, target, identity=lock_identity)
             self.assertEqual(before, status_path.read_bytes())
             self.assertFalse(report_target.exists())
-            lock.unlink()
 
             original_replace = workflow._replace_file
             calls = 0
@@ -325,18 +383,26 @@ class ContentPipelineTests(unittest.TestCase):
                     complete_phase(target, report)
             self.assertEqual(before, status_path.read_bytes())
             self.assertFalse(report_target.exists())
-            self.assertFalse(lock.exists())
+            _assert_retained_lifecycle_lock(self, target, identity=lock_identity)
 
             complete_phase(target, report)
-            lock.write_text("owned elsewhere\n", encoding="utf-8")
-            with self.assertRaisesRegex(WorkflowError, "already in progress"):
-                reopen_phase(
-                    target,
-                    "p00_brief",
-                    reason="New evidence",
-                    approved_by="lead",
-                )
-            self.assertEqual("owned elsewhere\n", lock.read_text(encoding="utf-8"))
+            _assert_retained_lifecycle_lock(self, target, identity=lock_identity)
+            with _hold_independent_lifecycle_lock(self, target):
+                with self.assertRaisesRegex(WorkflowError, "already in progress"):
+                    reopen_phase(
+                        target,
+                        "p00_brief",
+                        reason="New evidence",
+                        approved_by="lead",
+                    )
+            reopened = reopen_phase(
+                target,
+                "p00_brief",
+                reason="New evidence",
+                approved_by="lead",
+            )
+            self.assertEqual("p00_brief", reopened["current_phase"])
+            _assert_retained_lifecycle_lock(self, target, identity=lock_identity)
 
     def test_phase_status_rejects_duplicate_json_keys(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -355,7 +421,7 @@ class ContentPipelineTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(WorkflowError, "duplicate JSON object key"):
                 workflow.load_status(target)
-            self.assertFalse((target / ".worldforge/lifecycle.lock").exists())
+            _assert_retained_lifecycle_lock(self, target)
 
     def test_workflow_entry_points_reject_forged_phase_progress(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -376,9 +442,9 @@ class ContentPipelineTests(unittest.TestCase):
                 describe_status(target)
             with self.assertRaisesRegex(WorkflowError, "must follow"):
                 complete_phase(target, target / "missing-phase-report.json")
-            self.assertFalse((target / ".worldforge/lifecycle.lock").exists())
+            _assert_retained_lifecycle_lock(self, target)
 
-    def test_phase_entry_points_bind_status_to_canonical_v2_controls(self) -> None:
+    def test_phase_entry_points_bind_status_to_canonical_v3_controls(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / "canonical_controls"
             create_world_project(
@@ -423,7 +489,7 @@ class ContentPipelineTests(unittest.TestCase):
                     ),
                 ):
                     operation()
-            self.assertFalse((target / ".worldforge/lifecycle.lock").exists())
+            _assert_retained_lifecycle_lock(self, target)
 
     def test_phase_report_enforces_closed_contract_and_normalized_paths(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

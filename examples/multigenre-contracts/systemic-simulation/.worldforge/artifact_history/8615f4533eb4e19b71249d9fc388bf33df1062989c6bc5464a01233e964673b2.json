@@ -1,0 +1,29 @@
+{
+  "content_hash": "8615f4533eb4e19b71249d9fc388bf33df1062989c6bc5464a01233e964673b2",
+  "extensions": [],
+  "format": "world-forge.system_module",
+  "format_version": 1,
+  "module_id": "simulation_rules",
+  "project_id": "systemic_simulation",
+  "systems": [
+    {
+      "asset_binding_ids": [],
+      "effect_ids": [
+        "increment_moves",
+        "swap_tiles"
+      ],
+      "event_ids": [
+        "tile_swapped"
+      ],
+      "id": "adjacent_swap",
+      "precondition_ids": [
+        "adjacent_tile",
+        "first_index_valid",
+        "second_index_valid"
+      ],
+      "system_type": "simulation_scenario",
+      "title": "Apply one deterministic system transition"
+    }
+  ],
+  "title": "Systemic simulation rules"
+}

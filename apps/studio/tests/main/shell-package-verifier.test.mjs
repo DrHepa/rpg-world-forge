@@ -36,13 +36,18 @@ import {
   withWindowsBackend,
   writeShellPackageManifest as writeShellPackageManifestCore,
 } from "../../scripts/shell-package-verifier.mjs";
-import { parseShellPackageArguments } from "../../scripts/verify-shell-package.mjs";
+import {
+  parseShellPackageArguments,
+  verifyRetainedAsarContracts,
+} from "../../scripts/verify-shell-package.mjs";
 import {
   isWithin,
   PackageShellError,
   runShellPackage,
 } from "../../scripts/package-shell.mjs";
+import { verifyGenericAssetRuntimeSnapshot } from "../../scripts/verify-generic-asset-runtime.mjs";
 import { cleanProcessOutput } from "../../scripts/build-processes.mjs";
+import { resolveStudioEnvironmentValue } from "../../scripts/studio-environment.mjs";
 
 const require = createRequire(import.meta.url);
 const asar = require("@electron/asar");
@@ -52,7 +57,7 @@ const repositoryRoot = path.resolve(studioRoot, "../..");
 const canVerifySecurely = ["linux", "win32"].includes(process.platform);
 const fixtureFuseReader = async () => staticFuseFixture();
 const testPython =
-  process.env.RWF_STUDIO_BUILD_PYTHON ??
+  resolveStudioEnvironmentValue(process.env, "BUILD_PYTHON") ??
   process.env.PYTHON ??
   (process.env.pythonLocation
     ? path.join(process.env.pythonLocation, "python.exe")
@@ -67,6 +72,12 @@ const writeShellPackageManifest = (options) =>
   writeShellPackageManifestCore({
     ...options,
     pythonExecutable: testPython,
+  });
+const verifyRetainedGenericAssetRuntime = ({ bytes, sha256, size }) =>
+  verifyGenericAssetRuntimeSnapshot({
+    artifactBytes: bytes,
+    expectedSha256: sha256,
+    expectedSize: size,
   });
 
 function electronBuilderEbusyOutput(
@@ -318,7 +329,7 @@ async function makeAsar(destination, { extraPath } = {}) {
           "react-dom": "19.2.8",
         },
         main: "dist-electron/main/index.cjs",
-        name: "@rpg-world-forge/studio",
+        name: "@world-forge/studio",
         private: true,
         type: "module",
         version: "0.1.0",
@@ -1657,7 +1668,7 @@ describe(
     expect(targetFixtureLayout("win32-x64").rootFiles).toEqual([
       "LICENSE.electron.txt",
       "LICENSES.chromium.html",
-      "RPG World Forge Studio.exe",
+      "World Forge Studio.exe",
       "chrome_100_percent.pak",
       "chrome_200_percent.pak",
       "d3dcompiler_47.dll",
@@ -1784,6 +1795,7 @@ print(json.dumps(calls, sort_keys=True))
         const result = await verifyPackagedShell({
           fuseReader: fixtureFuseReader,
           outputPath: packageRoot,
+          retainedAsarVerifier: verifyRetainedGenericAssetRuntime,
           targetId,
         });
         expect(result).toMatchObject({
@@ -1795,6 +1807,65 @@ print(json.dumps(calls, sort_keys=True))
         expect(result.verified_files).toBeGreaterThan(900);
       }
     },
+  );
+
+  it.skipIf(process.platform !== "linux")(
+    "smokes the retained ASAR bytes and rejects pathname replacement afterward",
+    async () => {
+      const root = await cloneBase("linux-x64", "retained-asar-smoke");
+      const archive = path.join(root, "resources/app.asar");
+      const original = await readFile(archive);
+      let retainedSnapshot;
+      let runtimeEvidence;
+      let failure;
+      try {
+        await verifyPackagedShell({
+          beforeFinalBinding: async () => {
+            const replacement = `${archive}.replacement`;
+            await copyFile(archive, replacement);
+            await rename(replacement, archive);
+          },
+          fuseReader: fixtureFuseReader,
+          outputPath: root,
+          retainedAsarVerifier: async (snapshot) => {
+            retainedSnapshot = snapshot;
+            expect(snapshot.bytes.equals(original)).toBe(true);
+            runtimeEvidence =
+              await verifyRetainedAsarContracts(snapshot);
+            return runtimeEvidence;
+          },
+          targetId: "linux-x64",
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(retainedSnapshot).toMatchObject({
+        logical_path: "resources/app.asar",
+        sha256: createHash("sha256").update(original).digest("hex"),
+        size: original.length,
+      });
+      expect(runtimeEvidence).toMatchObject({
+        artifact_sha256: retainedSnapshot.sha256,
+        artifact_size_bytes: retainedSnapshot.size,
+        game_package: {
+          artifact_sha256: retainedSnapshot.sha256,
+          artifact_size_bytes: retainedSnapshot.size,
+          manifests_verified: 1,
+          status: "verified",
+          tamper_rejections: 8,
+        },
+        generic_materialization_contracts: {
+          artifact_sha256: retainedSnapshot.sha256,
+          artifact_size_bytes: retainedSnapshot.size,
+          invalid_documents_rejected: 7,
+          status: "verified",
+          valid_documents_accepted: 6,
+        },
+        status: "verified",
+      });
+      expect(failure).toMatchObject({ code: "package_entry_replaced" });
+    },
+    30_000,
   );
 
   it.skipIf(!canVerifySecurely)(
@@ -1893,17 +1964,36 @@ print(json.dumps(calls, sort_keys=True))
     const packageDocument = JSON.parse(
       await readFile(path.join(studioRoot, "package.json"), "utf8"),
     );
-    expect(packageDocument.build.files).toEqual([
+    const cleanBuildFiles = [
+      "dist-electron/main/generic-asset-runtime.cjs",
+      "dist-electron/main/generic-game-package.cjs",
+      "dist-electron/main/generic-game-persistence.cjs",
+      "dist-electron/main/generic-game-runtime-bundle.cjs",
+      "dist-electron/main/generic-headless-evidence.cjs",
+      "dist-electron/main/generic-materialization-contracts.cjs",
+      "dist-electron/main/generic-runtime-contracts.cjs",
       "dist-electron/main/index.cjs",
+      "dist-electron/authority-modal/index.html",
+      "dist-electron/authority-modal/preload.cjs",
+      "dist-electron/authority-modal/renderer.js",
+      "dist-electron/authority-modal/style.css",
       "dist-electron/preload/index.cjs",
       "dist-renderer/index.html",
       "dist-renderer/assets/index.css",
       "dist-renderer/assets/index.js",
+      "dist-renderer/assets/vendor.js",
       "package.json",
       "!node_modules/**/*",
-    ]);
+    ];
+    expect(packageDocument.build.files).toEqual(cleanBuildFiles);
+    expect(
+      cleanBuildFiles.filter(
+        (entry) => !entry.startsWith("!") && entry !== "package.json",
+      ),
+    ).toHaveLength(17);
+    expect(cleanBuildFiles.filter((entry) => !entry.startsWith("!"))).toHaveLength(18);
     expect(packageDocument.build.directories.output).toBe(
-      "${env.RWF_STUDIO_PACKAGE_OUTPUT}",
+      "${env.WORLD_FORGE_STUDIO_PACKAGE_OUTPUT}",
     );
   });
 
@@ -2183,6 +2273,9 @@ print(json.dumps(calls, sort_keys=True))
     expect(reservedOutputReal).toBe(canonicalOutput);
     expect(calls).toHaveLength(3);
     const boundOutput = calls[1].options.env.RWF_STUDIO_PACKAGE_OUTPUT;
+    expect(
+      calls[1].options.env.WORLD_FORGE_STUDIO_PACKAGE_OUTPUT,
+    ).toBe(boundOutput);
     expect(path.isAbsolute(boundOutput)).toBe(true);
     expect(calls[1].args).toEqual([
       tools.builderCli,
@@ -2235,6 +2328,31 @@ print(json.dumps(calls, sort_keys=True))
     });
     expect(callsForRace).toBe(1);
     await expect(stat(movedOutput)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects conflicting package aliases before invoking any build process", async () => {
+    const calls = [];
+    await expect(
+      runShellPackage({
+        argv: [
+          "--output",
+          path.join(temporaryRoot, "conflicting-env-output"),
+          "--target",
+          "linux-x64",
+        ],
+        builderCli: path.join(temporaryRoot, "electron-builder.js"),
+        environment: {
+          WORLD_FORGE_STUDIO_BUILD_PYTHON: "/canonical/python",
+          RWF_STUDIO_BUILD_PYTHON: "/legacy/python",
+        },
+        npmCli: path.join(temporaryRoot, "npm-cli.js"),
+        runner: async (...args) => {
+          calls.push(args);
+          return 0;
+        },
+      }),
+    ).rejects.toThrow(/conflicting Studio environment variables/u);
+    expect(calls).toHaveLength(0);
   });
 
   it("retries one exact CRLF EBUSY rename on a fresh reservation and returns its package path", async () => {

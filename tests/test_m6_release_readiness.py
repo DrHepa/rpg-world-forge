@@ -16,12 +16,12 @@ WORKFLOW = ROOT / ".github/workflows/ci.yml"
 STUDIO_PACKAGE = ROOT / "apps/studio/package.json"
 STUDIO_PACKAGE_LOCK = ROOT / "apps/studio/package-lock.json"
 SETUP_NODE_SHA = "49933ea5288caeca8642d1e84afbd3f7d6820020"
-EXPECTED_STUDIO_JOB_SHA256 = "42e747079c1166c526a43bf9e2fe2de35921fb3c4fdd6c7e70d5aba785f08a86"
+EXPECTED_STUDIO_JOB_SHA256 = "1fbc90880cfdc88b54a96c96dabde36c3be5f9031ce4c60ee2f285aa43a65e9a"
 NPM_BOOTSTRAP_COMMAND = "npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0"
 STUDIO_PYTHON_ENVIRONMENTS = (
     "PYTHON",
-    "RWF_STUDIO_BUILD_PYTHON",
-    "RWF_STUDIO_TEST_PYTHON",
+    "WORLD_FORGE_STUDIO_BUILD_PYTHON",
+    "WORLD_FORGE_STUDIO_TEST_PYTHON",
 )
 STUDIO_JOB_ENVIRONMENT = (
     "    env:\n"
@@ -35,8 +35,12 @@ STUDIO_PYTHON_OWNER_STEPS = (
     "Bind exact Windows Python for Studio subprocesses",
 )
 WINDOWS_NATIVE_SHELL_STEP = "Exercise native Windows shell handle contract without skips"
-WINDOWS_NATIVE_PYTHON_READ = "& $env:RWF_STUDIO_BUILD_PYTHON"
+WINDOWS_NATIVE_PYTHON_READ = "& $env:WORLD_FORGE_STUDIO_BUILD_PYTHON"
 WINDOWS_NATIVE_PYTHON_TESTS = (
+    "tests.test_m6_composed_bundle.DirectoryPublicationPortabilityTests."
+    "test_native_windows_directory_publication_and_collision",
+    "tests.test_bundle_publication.BundlePublicationTests."
+    "test_native_windows_bundle_verifier_reads_while_seal_is_active",
     "tests.test_m4_world_lifecycle.BumpWorldVersionTests."
     "test_windows_lock_rename_denial_is_fail_closed",
     "tests.test_renderpack_resources.DirectMediaValidationTests."
@@ -63,6 +67,14 @@ WINDOWS_NATIVE_PYTHON_TESTS = (
     "test_native_windows_retained_handles_block_after_write_parent_swaps",
     "tests.test_m6_game_consumer.M6GameConsumerTests."
     "test_native_windows_generation_stage_handle_blocks_swap",
+    "tests.test_multigenre_game_package.GenericGamePackageTests."
+    "test_windows_package_stage_denies_write_and_delete_sharing",
+    "tests.test_multigenre_runtime_review.GenericRuntimeReviewTests."
+    "test_windows_native_runtime_tree_retains_root_and_file_bindings",
+    "tests.test_multigenre_runtime_review.GenericRuntimeReviewTests."
+    "test_windows_native_runtime_tree_rejects_hardlinks_and_reparse_points",
+    "tests.test_studio_shell_package_snapshot.StudioShellPackageSnapshotTests."
+    "test_windows_snapshot_root_cleanup_deletes_native_empty_directory_by_handle",
 )
 WINDOWS_NATIVE_SHELL_TEST = "retains the native Windows package root against parent replacement"
 
@@ -73,6 +85,58 @@ def _studio_job(workflow: str) -> str:
     if len(studio) != 1 or len(boundary) != 1 or studio[0].start() >= boundary[0].start():
         raise ValueError("invalid Studio job boundary")
     return workflow[studio[0].end() : boundary[0].start()]
+
+
+def _workflow_job(workflow: str, job_id: str) -> str:
+    matches = list(re.finditer(rf"(?m)^  {re.escape(job_id)}:[ \t]*\r?\n", workflow))
+    if len(matches) != 1:
+        raise ValueError(f"expected exactly one {job_id!r} job")
+    start = matches[0].end()
+    next_job = re.search(r"(?m)^  [A-Za-z0-9_-]+:[ \t]*\r?\n", workflow[start:])
+    end = start + next_job.start() if next_job is not None else len(workflow)
+    return workflow[start:end]
+
+
+def _npm_bootstrap_contract_errors(workflow: str) -> tuple[str, ...]:
+    errors: list[str] = []
+    jobs = {
+        "studio-m6-readiness": (
+            "Set up Node",
+            "Install exact npm toolchain",
+            "Verify pinned Node and npm toolchain",
+        ),
+        "dependency-audit": (
+            "Set up pinned Studio Node",
+            "Install exact Studio npm audit toolchain",
+            "Verify pinned Studio dependency audit toolchain",
+        ),
+    }
+    for job_id, (setup_name, install_name, verify_name) in jobs.items():
+        try:
+            job = _workflow_job(workflow, job_id)
+            steps = _workflow_steps(job)
+            step_by_name = {name: step for name, step in steps if name is not None}
+            setup_step = step_by_name[setup_name]
+            install_step = step_by_name[install_name]
+            verify_step = step_by_name[verify_name]
+        except (KeyError, ValueError):
+            errors.append(f"{job_id}:npm_bootstrap_step")
+            continue
+        install_steps = [step for name, step in steps if name == install_name]
+        if len(install_steps) != 1:
+            errors.append(f"{job_id}:npm_bootstrap_step")
+            continue
+        if job.count(NPM_BOOTSTRAP_COMMAND) != 1:
+            errors.append(f"{job_id}:npm_bootstrap_command")
+        exact_run = f"        run: {NPM_BOOTSTRAP_COMMAND}\n"
+        if install_step.count(exact_run) != 1 or "        working-directory:" in install_step:
+            errors.append(f"{job_id}:npm_bootstrap_command")
+        npm_versions = re.findall(r"npm install --global[^\r\n]+npm@([^\s]+)", install_step)
+        if any(version != "11.13.0" for version in npm_versions):
+            errors.append(f"{job_id}:npm_bootstrap_floating")
+        if not (job.index(setup_step) < job.index(install_step) < job.index(verify_step)):
+            errors.append(f"{job_id}:npm_bootstrap_order")
+    return tuple(errors)
 
 
 def _studio_job_sha256(studio: str) -> str:
@@ -240,7 +304,19 @@ def _run_windows_native_python_tests() -> int:
     if suite.countTestCases() != len(WINDOWS_NATIVE_PYTHON_TESTS):
         return 1
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    return 0 if result.wasSuccessful() and not result.skipped else 1
+    return 0 if _windows_native_result_is_green(result) else 1
+
+
+def _windows_native_result_is_green(result: object) -> bool:
+    return bool(
+        result.wasSuccessful()
+        and result.testsRun == len(WINDOWS_NATIVE_PYTHON_TESTS)
+        and not result.skipped
+        and not result.failures
+        and not result.errors
+        and not result.expectedFailures
+        and not result.unexpectedSuccesses
+    )
 
 
 class M6ReleaseReadinessContractTests(unittest.TestCase):
@@ -316,8 +392,8 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
                     "github_environment_outside_owner",
                 ),
                 "protected PowerShell environment": (
-                    replace_verify("Write-Output ${Env:rwf_studio_build_python}"),
-                    "protected_python_name:RWF_STUDIO_BUILD_PYTHON",
+                    replace_verify("Write-Output ${Env:world_forge_studio_build_python}"),
+                    "protected_python_name:WORLD_FORGE_STUDIO_BUILD_PYTHON",
                 ),
                 "absolute tee": (
                     replace_verify("printf 'PYTHON=x' | /usr/bin/tee -a \"$GITHUB_ENV\""),
@@ -424,23 +500,47 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
             with self.subTest(action=action):
                 self.assertRegex(revision, r"\A[0-9a-f]{40}\Z")
 
-    def test_studio_bootstraps_exact_npm_once_at_repository_root(self) -> None:
+    def test_isolated_jobs_bootstrap_exact_npm_once_at_repository_root(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        studio = _studio_job(workflow)
-        step_name = "      - name: Install exact npm toolchain\n"
-        exact_step = f"{step_name}        run: {NPM_BOOTSTRAP_COMMAND}\n"
 
-        self.assertEqual(workflow.count(NPM_BOOTSTRAP_COMMAND), 1)
-        self.assertEqual(studio.count(step_name), 1)
-        step_start = studio.index(step_name)
-        step_end = studio.index("      - name:", step_start + len(step_name))
-        self.assertEqual(studio[step_start:step_end], exact_step)
+        self.assertEqual(_npm_bootstrap_contract_errors(workflow), ())
+        self.assertEqual(
+            workflow.count(NPM_BOOTSTRAP_COMMAND),
+            2,
+            "each isolated Studio job must bootstrap the exact npm once",
+        )
 
-        setup_node = studio.index(f"uses: actions/setup-node@{SETUP_NODE_SHA}")
-        npm_bootstrap = studio.index(exact_step)
-        npm_assertion = studio.index("      - name: Verify pinned Node and npm toolchain")
-        self.assertLess(setup_node, npm_bootstrap)
-        self.assertLess(npm_bootstrap, npm_assertion)
+    def test_npm_bootstrap_contract_rejects_per_job_mutations(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        studio_command = (
+            f"      - name: Install exact npm toolchain\n        run: {NPM_BOOTSTRAP_COMMAND}\n"
+        )
+        dependency_command = (
+            "      - name: Install exact Studio npm audit toolchain\n"
+            "        run: " + NPM_BOOTSTRAP_COMMAND + "\n"
+        )
+
+        mutations = {
+            "studio-m6-readiness:npm_bootstrap_step": workflow.replace(studio_command, "", 1),
+            "dependency-audit:npm_bootstrap_step": workflow.replace(
+                dependency_command, dependency_command + dependency_command, 1
+            ),
+            "dependency-audit:npm_bootstrap_floating": workflow.replace(
+                NPM_BOOTSTRAP_COMMAND,
+                "npm install --global --ignore-scripts --no-audit --no-fund npm@latest",
+                2,
+            ),
+            "studio-m6-readiness:npm_bootstrap_order": workflow.replace(
+                studio_command, "", 1
+            ).replace(
+                "      - name: Set up Node\n",
+                studio_command + "      - name: Set up Node\n",
+                1,
+            ),
+        }
+        for expected_error, mutated in mutations.items():
+            with self.subTest(expected_error=expected_error):
+                self.assertIn(expected_error, _npm_bootstrap_contract_errors(mutated))
 
     def test_studio_npm_bootstrap_correlates_manifest_and_lock_pins(self) -> None:
         studio = _studio_job(WORKFLOW.read_text(encoding="utf-8"))
@@ -630,6 +730,10 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
         self.assertEqual(
             WINDOWS_NATIVE_PYTHON_TESTS,
             (
+                "tests.test_m6_composed_bundle.DirectoryPublicationPortabilityTests."
+                "test_native_windows_directory_publication_and_collision",
+                "tests.test_bundle_publication.BundlePublicationTests."
+                "test_native_windows_bundle_verifier_reads_while_seal_is_active",
                 "tests.test_m4_world_lifecycle.BumpWorldVersionTests."
                 "test_windows_lock_rename_denial_is_fail_closed",
                 "tests.test_renderpack_resources.DirectMediaValidationTests."
@@ -656,6 +760,14 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
                 "test_native_windows_retained_handles_block_after_write_parent_swaps",
                 "tests.test_m6_game_consumer.M6GameConsumerTests."
                 "test_native_windows_generation_stage_handle_blocks_swap",
+                "tests.test_multigenre_game_package.GenericGamePackageTests."
+                "test_windows_package_stage_denies_write_and_delete_sharing",
+                "tests.test_multigenre_runtime_review.GenericRuntimeReviewTests."
+                "test_windows_native_runtime_tree_retains_root_and_file_bindings",
+                "tests.test_multigenre_runtime_review.GenericRuntimeReviewTests."
+                "test_windows_native_runtime_tree_rejects_hardlinks_and_reparse_points",
+                "tests.test_studio_shell_package_snapshot.StudioShellPackageSnapshotTests."
+                "test_windows_snapshot_root_cleanup_deletes_native_empty_directory_by_handle",
             ),
         )
         self.assertIn("--run-windows-native-python", studio)
@@ -685,8 +797,8 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
         self.assertNotIn("_FailedTest", output)
         self.assertNotIn("ModuleNotFoundError", output)
         self.assertNotIn("FAILED", output)
-        self.assertIn("Ran 13 tests", output)
-        self.assertIn("OK (skipped=13)", output)
+        self.assertIn("Ran 19 tests", output)
+        self.assertIn("OK (skipped=19)", output)
 
     def test_python_quality_gates_cover_the_shell_handle_backend(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -717,7 +829,7 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
         self.assertIn("npm run package:verify -- --path $unpacked --target win32-x64", studio)
 
     def test_studio_job_does_not_acquire_publish_sign_or_build_installers(self) -> None:
-        workflow = WORKFLOW.read_text(encoding="utf-8")
+        studio = _studio_job(WORKFLOW.read_text(encoding="utf-8"))
         prohibited = (
             "actions/upload-artifact",
             "studio_runtime_inputs.py fetch",
@@ -736,9 +848,9 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
         )
         for command in prohibited:
             with self.subTest(command=command):
-                self.assertNotIn(command, workflow)
+                self.assertNotIn(command, studio)
         self.assertNotRegex(
-            workflow,
+            studio,
             (
                 r"(?m)^\s{2}(?:runtime-acquisition|self-contained-runtime|installer|"
                 r"release-publication):"

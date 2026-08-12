@@ -1,8 +1,35 @@
 # Standalone Game Implementation Phases
 
-This document is the Forge-side execution map for building a standalone
-2D/2.5D isometric game with pyray/raylib. It is not copied into generated game
-repositories.
+The generic design and evidence model live in
+`docs/MULTI_GENRE_ARCHITECTURE.md` and `docs/SUPPORT_MATRIX.md`.
+
+## Generic creation lane
+
+Generic projects use profile-driven P00-P14, compile to gamepack, derive/seal
+generic assets, resolve a bounded adapter by capabilities, and materialize only
+from an exact ready envelope. The generic skills are additive and bounded:
+create/project profile/modules, phase workflow, gamepack/ledger, generic assets,
+runtime evidence, readiness/handoff, and materialization. Authoring validity is
+not runtime executability. P13 compatibility and P14 handoff never replace
+native or hosted platform evidence.
+
+| Operation | Primary skill | Bounded output | Exit gate |
+| --- | --- | --- | --- |
+| C00 | `$create-creation-project` | Neutral external authoring library | Exact v1 project/profile/source/workflow graph validates |
+| C01 | `$author-creation-profile` | One reviewed composable profile | Independent facets and phase dependencies validate |
+| C02 | `$author-typed-modules` | One bounded typed module set | Integral graph and extension closure validate |
+| C03 | `$manage-creation-phases` | One CAS-bound phase transition | Report, history, and invalidation evidence validate |
+| C04 | `$compile-audit-gamepack` | Deterministic gamepack, analysis, and ledger | Independent-root bytes and hashes match |
+| C05 | `$derive-seal-generic-assets` | Reviewed runtime-only assetpack | Production, processing, licensing, QA, and seal validate |
+| C06 | `$inspect-runtime-evidence` | Read-only capability and platform report | Missing support and evidence remain explicit |
+| C07 | `$prepare-creation-handoff` | Reviewed readiness and handoff | Every status dimension and blocker is hash-bound |
+| C08 | `$materialize-generic-game` | Independent standalone game | Boundary, persistence, package, and available native gates pass |
+
+## Legacy RPG lane
+
+The remainder of this document is the retained Forge-side execution map for a
+standalone 2D/2.5D isometric RPG game with `isoworld` and pyray/raylib. It is not
+the generic game workflow and is not copied into generated game repositories.
 
 Each phase has one primary skill, a bounded responsibility, and an observable
 exit gate. An agent must invoke only the skill for the active phase. Completing
@@ -32,7 +59,7 @@ or game audit. They have their own atomic skills:
 
 | Operation | Primary skill | Bounded output | Exit gate |
 | --- | --- | --- | --- |
-| W00 | `$create-world-project` | New independent authoring project | Valid v2 world status and identity |
+| W00 | `$create-world-project` | New independent authoring project | Valid v3 world status and identity |
 | W01 | `$clone-world-project` | New authoring lineage from canonical inputs | New identity, lineage, and reset workflow verify |
 | W02 | `$version-world-project` | One optimistic-lock SemVer transition | Version log and invalidated release metadata verify |
 | W10 | `$forge-world-release` | Verified immutable runtime bundle | Bundle hash, licenses, and compatibility metadata verify |

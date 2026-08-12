@@ -1,0 +1,45 @@
+{
+  "content_hash": "51a23ea30282995cbcdab2f18550ebb2fceabbf1a69aadf9aca81f096ea2e7f8",
+  "extensions": [],
+  "format": "world-forge.system_module",
+  "format_version": 1,
+  "module_id": "modular_roguelite_systems",
+  "project_id": "modular_roguelite",
+  "systems": [
+    {
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "effect_ids": [
+        "advance_progress",
+        "consume_run_health",
+        "deactivate_run",
+        "deplete_run_health",
+        "reactivate_run",
+        "record_run_death",
+        "reset_run_depth",
+        "restore_run_health"
+      ],
+      "event_ids": [
+        "hazard_endured",
+        "progress_advanced",
+        "run_failed",
+        "run_recovered"
+      ],
+      "id": "storylet_sequence",
+      "precondition_ids": [
+        "advance_depth_available",
+        "advance_run_active",
+        "endure_health_available",
+        "endure_run_active",
+        "fall_health_critical",
+        "fall_run_active",
+        "recovery_health_depleted",
+        "recovery_run_inactive"
+      ],
+      "system_type": "simulation_scenario",
+      "title": "complete the reviewed expedition depth"
+    }
+  ],
+  "title": "Modular expedition route"
+}

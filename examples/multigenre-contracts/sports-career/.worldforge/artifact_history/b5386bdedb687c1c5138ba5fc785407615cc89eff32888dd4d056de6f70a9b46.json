@@ -1,0 +1,110 @@
+{
+  "activities": [
+    {
+      "activity_type": "scenario",
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "effect_ids": [
+        "plan_aggressive_match_record",
+        "plan_aggressive_match_request_result",
+        "plan_balanced_match_record",
+        "plan_balanced_match_request_result",
+        "record_round_1_draw_advance_career",
+        "record_round_1_draw_advance_round",
+        "record_round_1_draw_record_opponent",
+        "record_round_1_draw_record_result",
+        "record_round_1_draw_return_to_planning",
+        "record_round_1_draw_update_standings",
+        "record_round_1_loss_advance_career",
+        "record_round_1_loss_advance_round",
+        "record_round_1_loss_record_opponent",
+        "record_round_1_loss_record_result",
+        "record_round_1_loss_return_to_planning",
+        "record_round_1_loss_update_standings",
+        "record_round_1_win_advance_career",
+        "record_round_1_win_advance_round",
+        "record_round_1_win_record_opponent",
+        "record_round_1_win_record_result",
+        "record_round_1_win_return_to_planning",
+        "record_round_1_win_update_standings",
+        "record_round_2_draw_advance_career",
+        "record_round_2_draw_advance_round",
+        "record_round_2_draw_record_opponent",
+        "record_round_2_draw_record_result",
+        "record_round_2_draw_return_to_planning",
+        "record_round_2_draw_update_standings",
+        "record_round_2_loss_advance_career",
+        "record_round_2_loss_advance_round",
+        "record_round_2_loss_record_opponent",
+        "record_round_2_loss_record_result",
+        "record_round_2_loss_return_to_planning",
+        "record_round_2_loss_update_standings",
+        "record_round_2_win_advance_career",
+        "record_round_2_win_advance_round",
+        "record_round_2_win_record_opponent",
+        "record_round_2_win_record_result",
+        "record_round_2_win_return_to_planning",
+        "record_round_2_win_update_standings",
+        "record_round_3_draw_advance_career",
+        "record_round_3_draw_advance_round",
+        "record_round_3_draw_record_opponent",
+        "record_round_3_draw_record_result",
+        "record_round_3_draw_return_to_planning",
+        "record_round_3_draw_update_standings",
+        "record_round_3_loss_advance_career",
+        "record_round_3_loss_advance_round",
+        "record_round_3_loss_record_opponent",
+        "record_round_3_loss_record_result",
+        "record_round_3_loss_return_to_planning",
+        "record_round_3_loss_update_standings",
+        "record_round_3_win_advance_career",
+        "record_round_3_win_advance_round",
+        "record_round_3_win_record_opponent",
+        "record_round_3_win_record_result",
+        "record_round_3_win_return_to_planning",
+        "record_round_3_win_update_standings",
+        "reset_last_match_plan",
+        "reset_last_match_result",
+        "reset_last_opponent",
+        "reset_match_phase",
+        "reset_season_round",
+        "reset_standings_points"
+      ],
+      "end_condition_ids": [
+        "season_ending_reached",
+        "season_points_target_reached"
+      ],
+      "event_ids": [
+        "match_planned",
+        "match_resolved",
+        "scenario_restarted"
+      ],
+      "failure_condition_ids": [],
+      "id": "career_season",
+      "participant_ids": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "provenance": "authored neutral sports fixture",
+      "spatial_context_ids": [],
+      "start_condition_ids": [
+        "scenario_ready"
+      ],
+      "success_condition_ids": [
+        "season_ending_reached",
+        "season_points_target_reached"
+      ],
+      "title": "one reviewed season within an authored sports career",
+      "validation_profile": "authoring_only"
+    }
+  ],
+  "content_hash": "b5386bdedb687c1c5138ba5fc785407615cc89eff32888dd4d056de6f70a9b46",
+  "extensions": [],
+  "format": "world-forge.activity_module",
+  "format_version": 1,
+  "module_id": "sports_career_activities",
+  "project_id": "sports_career",
+  "title": "Sports Career authored activity"
+}

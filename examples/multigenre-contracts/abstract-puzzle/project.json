@@ -1,0 +1,32 @@
+{
+  "content_hash": "30a6b456b00225cf9d8804349b95d4722d7d4277d27daeb69db8f55767fc2232",
+  "default_locale": "en",
+  "extensions": [
+    {
+      "content_hash": "8a2e5f8ceb357542a050a8bdaafb1d3eb4deed2fd384815f2b6e392b2688880a",
+      "id": "example.optional-metadata",
+      "required": false,
+      "version": 1
+    }
+  ],
+  "format": "world-forge.project",
+  "format_version": 1,
+  "profile": {
+    "content_hash": "5184f408db69b0ee4543ad86885a8373fdfe9f4c7aebfd36d0c7a6d62a984774",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "abstract_puzzle_profile",
+    "path": "profile.json"
+  },
+  "project_id": "abstract_puzzle",
+  "project_kind": "game",
+  "project_version": "1.0.0",
+  "source_manifest": {
+    "content_hash": "e0edb5879591acca1cf3a24a60f280ec1fd2b18054fe0ebfb80045f37b3fbb37",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "abstract_puzzle",
+    "path": "source/manifest.json"
+  },
+  "title": "Abstract Puzzle"
+}

@@ -1,0 +1,795 @@
+{
+  "$id": "https://world-forge.local/schemas/phase-report-v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "World Forge phase report v2",
+  "type": "object",
+  "properties": {
+    "format": { "const": "world-forge.phase_report" }
+  },
+  "oneOf": [
+    { "$ref": "#/$defs/p00ReadyReport" },
+    { "$ref": "#/$defs/p01ReadyReport" },
+    { "$ref": "#/$defs/p02ReadyReport" },
+    { "$ref": "#/$defs/p03ReadyReport" },
+    { "$ref": "#/$defs/p03NotApplicableReport" },
+    { "$ref": "#/$defs/p04ReadyReport" },
+    { "$ref": "#/$defs/p04NotApplicableReport" },
+    { "$ref": "#/$defs/p05ReadyReport" },
+    { "$ref": "#/$defs/p05NotApplicableReport" },
+    { "$ref": "#/$defs/p06ReadyReport" },
+    { "$ref": "#/$defs/p06NotApplicableReport" },
+    { "$ref": "#/$defs/p07ReadyReport" },
+    { "$ref": "#/$defs/p08ReadyReport" },
+    { "$ref": "#/$defs/p09ReadyReport" },
+    { "$ref": "#/$defs/p10ReadyReport" }
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "phase": {
+            "not": {
+              "enum": [
+                "p02_world_laws",
+                "p07_systems",
+                "p09_narrative_content"
+              ]
+            }
+          }
+        },
+        "required": ["phase"]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "subject": {
+                  "not": { "$ref": "#/$defs/logicModuleIdentity" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "extensionId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$"
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "required", "content_hash"],
+      "properties": {
+        "id": { "$ref": "#/$defs/extensionId" },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "required": { "type": "boolean" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "role": { "$ref": "#/$defs/id" }
+      }
+    },
+    "projectIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "const": "world-forge.project" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "profileIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "const": "world-forge.creation_profile" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "sourceManifestIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "const": "world-forge.creation_source_manifest" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "worldModuleIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "const": "world-forge.world_module" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "activityModuleIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "const": "world-forge.activity_module" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "narrativeModuleIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "const": "world-forge.narrative_module" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "systemModuleIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "const": "world-forge.system_module" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "logicModuleIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "const": "world-forge.logic_module" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "creationIdentity": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectIdentity" },
+        { "$ref": "#/$defs/profileIdentity" },
+        { "$ref": "#/$defs/sourceManifestIdentity" },
+        { "$ref": "#/$defs/worldModuleIdentity" },
+        { "$ref": "#/$defs/activityModuleIdentity" },
+        { "$ref": "#/$defs/narrativeModuleIdentity" },
+        { "$ref": "#/$defs/systemModuleIdentity" },
+        { "$ref": "#/$defs/logicModuleIdentity" }
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "claim", "subject"],
+      "properties": {
+        "evidence_id": { "$ref": "#/$defs/id" },
+        "claim": { "type": "string", "minLength": 1 },
+        "subject": { "$ref": "#/$defs/creationIdentity" }
+      }
+    },
+    "rationale": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "enum": [
+            "phase_ready",
+            "world_absent",
+            "chronology_absent",
+            "group_structures_absent",
+            "actors_absent"
+          ]
+        },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    },
+    "phaseOutputEvidenceCommon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "phase",
+        "role",
+        "subject",
+        "reviewer",
+        "content_hash"
+      ],
+      "properties": {
+        "format": { "const": "world-forge.phase_output_evidence" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/id" },
+        "phase": {
+          "enum": [
+            "p00_brief",
+            "p01_genre_style",
+            "p02_world_laws",
+            "p03_geography",
+            "p04_timeline",
+            "p05_societies",
+            "p06_characters",
+            "p07_systems",
+            "p08_world_arcs",
+            "p09_narrative_content",
+            "p10_canon_lock"
+          ]
+        },
+        "role": {
+          "enum": [
+            "brief_review",
+            "experience_classification",
+            "interaction_ontology",
+            "world_topology",
+            "chronology",
+            "group_structures",
+            "actors",
+            "systems_design",
+            "narrative_architecture",
+            "typed_content",
+            "content_lock"
+          ]
+        },
+        "subject": { "$ref": "#/$defs/creationIdentity" },
+        "reviewer": { "$ref": "#/$defs/reviewer" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "p00OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p00_brief" },
+            "role": { "const": "brief_review" },
+            "subject": { "$ref": "#/$defs/projectIdentity" }
+          }
+        }
+      ]
+    },
+    "p01OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p01_genre_style" },
+            "role": { "const": "experience_classification" },
+            "subject": { "$ref": "#/$defs/profileIdentity" }
+          }
+        }
+      ]
+    },
+    "p02OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p02_world_laws" },
+            "role": { "const": "interaction_ontology" },
+            "subject": {
+              "oneOf": [
+                { "$ref": "#/$defs/profileIdentity" },
+                { "$ref": "#/$defs/activityModuleIdentity" },
+                { "$ref": "#/$defs/systemModuleIdentity" },
+                { "$ref": "#/$defs/logicModuleIdentity" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "p03OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p03_geography" },
+            "role": { "const": "world_topology" },
+            "subject": {
+              "oneOf": [
+                { "$ref": "#/$defs/profileIdentity" },
+                { "$ref": "#/$defs/worldModuleIdentity" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "p04OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p04_timeline" },
+            "role": { "const": "chronology" },
+            "subject": {
+              "oneOf": [
+                { "$ref": "#/$defs/worldModuleIdentity" },
+                { "$ref": "#/$defs/systemModuleIdentity" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "p05OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p05_societies" },
+            "role": { "const": "group_structures" },
+            "subject": { "$ref": "#/$defs/worldModuleIdentity" }
+          }
+        }
+      ]
+    },
+    "p06OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p06_characters" },
+            "role": { "const": "actors" },
+            "subject": {
+              "oneOf": [
+                { "$ref": "#/$defs/worldModuleIdentity" },
+                { "$ref": "#/$defs/activityModuleIdentity" },
+                { "$ref": "#/$defs/narrativeModuleIdentity" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "p07OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p07_systems" },
+            "role": { "const": "systems_design" },
+            "subject": {
+              "oneOf": [
+                { "$ref": "#/$defs/profileIdentity" },
+                { "$ref": "#/$defs/activityModuleIdentity" },
+                { "$ref": "#/$defs/systemModuleIdentity" },
+                { "$ref": "#/$defs/logicModuleIdentity" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "p08OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p08_world_arcs" },
+            "role": { "const": "narrative_architecture" },
+            "subject": {
+              "oneOf": [
+                { "$ref": "#/$defs/profileIdentity" },
+                { "$ref": "#/$defs/narrativeModuleIdentity" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "p09OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p09_narrative_content" },
+            "role": { "const": "typed_content" },
+            "subject": {
+              "oneOf": [
+                { "$ref": "#/$defs/sourceManifestIdentity" },
+                { "$ref": "#/$defs/worldModuleIdentity" },
+                { "$ref": "#/$defs/activityModuleIdentity" },
+                { "$ref": "#/$defs/narrativeModuleIdentity" },
+                { "$ref": "#/$defs/systemModuleIdentity" },
+                { "$ref": "#/$defs/logicModuleIdentity" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "p10OutputEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/phaseOutputEvidenceCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p10_canon_lock" },
+            "role": { "const": "content_lock" },
+            "subject": { "$ref": "#/$defs/sourceManifestIdentity" }
+          }
+        }
+      ]
+    },
+    "reportCommon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "format_version",
+        "project",
+        "profile",
+        "source_manifest",
+        "phase",
+        "status",
+        "rationale",
+        "evidence",
+        "output_evidence",
+        "reviewer",
+        "invalidation_dependencies",
+        "extensions",
+        "content_hash"
+      ],
+      "properties": {
+        "format": { "const": "world-forge.phase_report" },
+        "format_version": { "const": 2 },
+        "project": { "$ref": "#/$defs/projectIdentity" },
+        "profile": { "$ref": "#/$defs/profileIdentity" },
+        "source_manifest": { "$ref": "#/$defs/sourceManifestIdentity" },
+        "phase": {
+          "enum": [
+            "p00_brief",
+            "p01_genre_style",
+            "p02_world_laws",
+            "p03_geography",
+            "p04_timeline",
+            "p05_societies",
+            "p06_characters",
+            "p07_systems",
+            "p08_world_arcs",
+            "p09_narrative_content",
+            "p10_canon_lock"
+          ]
+        },
+        "status": { "enum": ["ready", "not_applicable"] },
+        "rationale": { "$ref": "#/$defs/rationale" },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/evidence" }
+        },
+        "output_evidence": {
+          "oneOf": [
+            { "$ref": "#/$defs/p00OutputEvidence" },
+            { "$ref": "#/$defs/p01OutputEvidence" },
+            { "$ref": "#/$defs/p02OutputEvidence" },
+            { "$ref": "#/$defs/p03OutputEvidence" },
+            { "$ref": "#/$defs/p04OutputEvidence" },
+            { "$ref": "#/$defs/p05OutputEvidence" },
+            { "$ref": "#/$defs/p06OutputEvidence" },
+            { "$ref": "#/$defs/p07OutputEvidence" },
+            { "$ref": "#/$defs/p08OutputEvidence" },
+            { "$ref": "#/$defs/p09OutputEvidence" },
+            { "$ref": "#/$defs/p10OutputEvidence" },
+            { "type": "null" }
+          ]
+        },
+        "reviewer": { "$ref": "#/$defs/reviewer" },
+        "invalidation_dependencies": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/creationIdentity" }
+        },
+        "extensions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/extension" }
+        },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "p00ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p00_brief" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p00OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p01ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p01_genre_style" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p01OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p02ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p02_world_laws" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p02OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p03ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p03_geography" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p03OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p03NotApplicableReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p03_geography" },
+            "status": { "const": "not_applicable" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "world_absent" } }
+            },
+            "output_evidence": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "p04ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p04_timeline" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p04OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p04NotApplicableReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p04_timeline" },
+            "status": { "const": "not_applicable" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "chronology_absent" } }
+            },
+            "output_evidence": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "p05ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p05_societies" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p05OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p05NotApplicableReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p05_societies" },
+            "status": { "const": "not_applicable" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "group_structures_absent" } }
+            },
+            "output_evidence": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "p06ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p06_characters" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p06OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p06NotApplicableReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p06_characters" },
+            "status": { "const": "not_applicable" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "actors_absent" } }
+            },
+            "output_evidence": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "p07ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p07_systems" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p07OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p08ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p08_world_arcs" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p08OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p09ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p09_narrative_content" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p09OutputEvidence" }
+          }
+        }
+      ]
+    },
+    "p10ReadyReport": {
+      "allOf": [
+        { "$ref": "#/$defs/reportCommon" },
+        {
+          "type": "object",
+          "properties": {
+            "phase": { "const": "p10_canon_lock" },
+            "status": { "const": "ready" },
+            "rationale": {
+              "type": "object",
+              "properties": { "code": { "const": "phase_ready" } }
+            },
+            "output_evidence": { "$ref": "#/$defs/p10OutputEvidence" }
+          }
+        }
+      ]
+    }
+  }
+}

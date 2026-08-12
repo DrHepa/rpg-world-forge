@@ -1,0 +1,142 @@
+{
+  "$id": "https://world-forge.local/schemas/system-module.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/extension"
+      },
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.system_module"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "module_id": {
+      "$ref": "#/$defs/id"
+    },
+    "project_id": {
+      "$ref": "#/$defs/id"
+    },
+    "systems": {
+      "items": {
+        "$ref": "#/$defs/system"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "module_id",
+    "project_id",
+    "title",
+    "systems",
+    "extensions",
+    "content_hash"
+  ],
+  "title": "World Forge typed system module v1",
+  "type": "object",
+  "$defs": {
+    "extension": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$",
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "required",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "idArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "system": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "event_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "precondition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "system_type": {
+          "enum": [
+            "rule",
+            "event",
+            "consequence",
+            "schedule",
+            "economy",
+            "production_process",
+            "simulation_scenario",
+            "world_modifier",
+            "season"
+          ]
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "system_type",
+        "title",
+        "precondition_ids",
+        "effect_ids",
+        "event_ids",
+        "asset_binding_ids"
+      ],
+      "type": "object"
+    }
+  }
+}

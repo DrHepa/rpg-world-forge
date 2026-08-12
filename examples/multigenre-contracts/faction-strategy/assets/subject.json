@@ -1,0 +1,13 @@
+{
+  "content_hash": "73c5b9d507b9bc7195ee0338c2dc24e02ac86b7f0b88a90268a416f8df1f140f",
+  "format": "world-forge.asset_subject",
+  "format_version": 1,
+  "subject": {
+    "content_hash": "7a1f8b4f8436a73a4df5653987061d7f965abc9248f45367c928a87e1110bf63",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "faction_strategy",
+    "kind": "gamepack"
+  },
+  "subject_id": "asset_subject_63de7f8ed1f82770532a386145ae4bf72c6072b7ac99c75f"
+}

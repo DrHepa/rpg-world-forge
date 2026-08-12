@@ -5,6 +5,11 @@ description: Derive a complete target-scoped M5 asset inventory from locked cano
 
 # Derive an asset inventory
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Translate locked world needs into one auditable inventory for one asset target.

@@ -585,7 +585,7 @@ class _PyrayNativeOwner:
         owner = cls(pr)
         try:
             pr.set_config_flags(pr.FLAG_WINDOW_HIDDEN)
-            pr.init_window(_WINDOW_WIDTH, _WINDOW_HEIGHT, "RPG World Forge pyray 3D proof")
+            pr.init_window(_WINDOW_WIDTH, _WINDOW_HEIGHT, "World Forge pyray 3D proof")
             owner._window_owned = True
             if not pr.is_window_ready():
                 raise Pyray3DError("raylib did not create a ready hidden window")

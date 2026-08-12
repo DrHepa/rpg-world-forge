@@ -1,0 +1,29 @@
+{
+  "content_hash": "10c23cb18803f7be4b382913291a761827c1bde82d07d7c8baa606b9ab5f22a9",
+  "extensions": [],
+  "format": "world-forge.system_module",
+  "format_version": 1,
+  "module_id": "action_framing_systems",
+  "project_id": "action_framing",
+  "systems": [
+    {
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "effect_ids": [
+        "advance_progress",
+        "consume_mission_time"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "mission_resolution",
+      "precondition_ids": [
+        "mission_time_available"
+      ],
+      "system_type": "simulation_scenario",
+      "title": "complete the authored mission objective"
+    }
+  ],
+  "title": "Authored mission arena"
+}

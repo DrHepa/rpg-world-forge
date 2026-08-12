@@ -1,0 +1,29 @@
+{
+  "completed_phases": [],
+  "content_hash": "427fba1096b8ee0dc55d842badc63eb2d137dd84d289eec75ff3cd056fa9cb97",
+  "current_phase": "p00_brief",
+  "format": "world-forge.creation_workflow_status",
+  "format_version": 1,
+  "invalidated_reports": [],
+  "profile": {
+    "content_hash": "1fea4301e5a0d2a68acefa4bb1f00144398d2c7aa849ed6bb867b8340a4668a7",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "faction_strategy_profile"
+  },
+  "project": {
+    "content_hash": "89b21af4caa9607dcc8683be7f8b5da2b031089dd30ee92754cde2f1376e9679",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "faction_strategy"
+  },
+  "reports": [],
+  "revision": 0,
+  "source_manifest": {
+    "content_hash": "81641b56a45600b3b39089f8b618614a883879e4f33dc87f9b03caae9a825dd9",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "faction_strategy"
+  },
+  "workflow_id": "faction_strategy_workflow"
+}

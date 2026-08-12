@@ -1,0 +1,38 @@
+{
+  "authority": {
+    "artifact_snapshot_hash": "4e9786665bb66f9138b5c7b0364954e765760b1e805596163ade50983ec89556",
+    "producer_job_id": "fixture-modular-roguelite-release",
+    "producer_operation": "asset.release.authorize",
+    "producer_output_position": 0,
+    "root_generation": 1,
+    "source_revision": "73a63d1dfc360893198abfdb1502f94595f08570aaead157d531f6cf80cfa8ea",
+    "workflow_status_hash": null,
+    "workspace_id": "fixture-modular-roguelite"
+  },
+  "blockers": [],
+  "candidate_assetpack": {
+    "content_hash": "35b4aafc0ead1ef5efc76b0dd09decd1e4e05a98acdfdda58c3e167c2714ad91",
+    "format": "world-forge.assetpack",
+    "format_version": 1,
+    "id": "assetpack_877bf7302703bbaab8b8000f61d3355379db6688414ee839"
+  },
+  "candidate_manifest": {
+    "content_hash": "60922a53061d5da94162980b5bcb78bc695458376aecddd245012bd659c74999",
+    "format": "world-forge.asset_manifest",
+    "format_version": 1,
+    "id": "modular_roguelite_asset_manifest"
+  },
+  "content_hash": "2900a12526572527ab7a14ce811451507d918713659a4d0add6bad24f636b646",
+  "format": "world-forge.asset_release_authority",
+  "format_version": 1,
+  "qa_reviews": [
+    {
+      "content_hash": "ab4bb0b3dca97c49706aa1d276103247568bb78cd5c16b77b2b7dcb27daff656",
+      "format": "world-forge.asset_qa_review_receipt",
+      "format_version": 1,
+      "id": "modular_roguelite_texture_qa_review"
+    }
+  ],
+  "release_authority_id": "modular_roguelite_asset_release",
+  "status": "authorized"
+}

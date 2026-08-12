@@ -1,0 +1,123 @@
+{
+  "asset": {
+    "asset_id": "storylet_cards",
+    "content_hash": "89b430dbf61d725383bab7e4b5728f1e55ca6a30ffeb85e0023086f62042e073"
+  },
+  "authority": {
+    "artifact_snapshot_hash": "4e7fcdcf5591e8b7f13c5a27e208f12bb9716008926db5f0aefc87cb85ce0663",
+    "producer_job_id": "fixture-modular-roguelite-review",
+    "producer_operation": "asset.qa.review",
+    "producer_output_position": 0,
+    "root_generation": 1,
+    "source_revision": "73a63d1dfc360893198abfdb1502f94595f08570aaead157d531f6cf80cfa8ea",
+    "workflow_status_hash": null,
+    "workspace_id": "fixture-modular-roguelite"
+  },
+  "blockers": [],
+  "content_hash": "ab4bb0b3dca97c49706aa1d276103247568bb78cd5c16b77b2b7dcb27daff656",
+  "criteria": [
+    {
+      "criterion_index": 0,
+      "criterion_sha256": "9c9699219020aad3c8428cb6f6ddb7387e439de46a5af9c3a6ef5298d91e4180",
+      "decision": "approved"
+    },
+    {
+      "criterion_index": 1,
+      "criterion_sha256": "6067bfa3974907080dbc69936fb0acf28c77191b3a7bcf31b638596bbc456e57",
+      "decision": "approved"
+    }
+  ],
+  "format": "world-forge.asset_qa_review_receipt",
+  "format_version": 1,
+  "lineage": {
+    "asset_subject": {
+      "content_hash": "fa8e5bb545f893541c940a1a7ad6fa5b4db38d98152d7e6f1412e5d102f2365c",
+      "format": "world-forge.asset_subject",
+      "format_version": 1,
+      "id": "asset_subject_c21508f8920df2f295b5f8d07748717f77de005a25205cc8"
+    },
+    "gamepack": {
+      "content_hash": "73a63d1dfc360893198abfdb1502f94595f08570aaead157d531f6cf80cfa8ea",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "modular_roguelite"
+    },
+    "inventory": {
+      "content_hash": "e8ca31c8f8529ff69e7396dc9960283ae3c44cd75fd8405e4adc60d324775639",
+      "format": "world-forge.asset_inventory",
+      "format_version": 1,
+      "id": "asset_inventory_19ac3705d2d64796404b0f5a345e014dee7ac91c7adb90ea"
+    },
+    "processing_receipt": {
+      "content_hash": "ec5ea6ee99e6e07b9aebf326ae181b0b142033040f29e65a12c5fc8faec7575c",
+      "format": "world-forge.asset_processing_receipt",
+      "format_version": 1,
+      "id": "storylet_cards_processing_receipt"
+    },
+    "provenance": {
+      "content_hash": "aee66b74a0ff6244376a1293fcf9c5cd75724dc5e7802101c8a058ea58c5f07c",
+      "format": "world-forge.asset_provenance_record",
+      "format_version": 1,
+      "id": "storylet_cards_provenance"
+    },
+    "qa_report": {
+      "content_hash": "c2c9e516f133538e4e437dba5013c2e56434a279ae66112b880d7515191d8f90",
+      "format": "world-forge.asset_qa_report",
+      "format_version": 1,
+      "id": "storylet_cards_qa"
+    },
+    "receipt": {
+      "content_hash": "4c5453a8206b221754d583a35c01673a86d1e1dcd009032f1aef04e6b7c28866",
+      "format": "world-forge.asset_production_receipt",
+      "format_version": 1,
+      "id": "storylet_cards_receipt"
+    },
+    "recipe": {
+      "content_hash": "2f2ce7a4efd87bb034beaffa1312a136c70a01a2186c2f52b312b1e9737465c2",
+      "format": "world-forge.asset_processing_recipe",
+      "format_version": 1,
+      "id": "storylet_cards_recipe"
+    },
+    "request": {
+      "content_hash": "9eeec3dcd35e90a247185e54d9123b2fad4379c6eab6761adcc60f42d56fd20c",
+      "format": "world-forge.asset_production_request",
+      "format_version": 1,
+      "id": "storylet_cards_production"
+    },
+    "selection": {
+      "content_hash": "dc50ef1478f24149a99a2e65c3ecd08cc1a55dcf60db5760ae5d5acb858429d3",
+      "format": "world-forge.asset_selection",
+      "format_version": 1,
+      "id": "storylet_cards_selection"
+    },
+    "specification": {
+      "content_hash": "913960f6ee892555cbbe3eb557da06a4fd982615808becd6daf3ccb3af24e349",
+      "format": "world-forge.asset_spec",
+      "format_version": 1,
+      "id": "asset_spec_b61cc6e31f2c155d8527ae72f3ae4b67ef8a7d4fd2ccc1f0"
+    },
+    "style": {
+      "content_hash": "ca183814d2f73473b33e18f92e105b434f39fdb624bd873ec42b00da48dcbc96",
+      "format": "world-forge.asset_style",
+      "format_version": 1,
+      "id": "asset_style_51e924716e99d44cd6c094fe1ced5e0123849599c1b668fc"
+    },
+    "target": {
+      "content_hash": "b0018b09f273f566c4d91cce6fbc766f889d2e70d4dc9b0113f7a3fb89d8a7da",
+      "format": "world-forge.asset_target",
+      "format_version": 1,
+      "id": "asset_target_1166b560821f52ddd413f521037e3abe62f0365ca1fa7cb8"
+    }
+  },
+  "review_receipt_id": "modular_roguelite_texture_qa_review",
+  "reviewed_output": {
+    "candidate_artifact_id": "storylet_cards_candidate",
+    "locator": "assets/production/storylet_cards/processed/texture/storylet-cards.png",
+    "media_type": "image/png",
+    "role": "texture",
+    "runtime_path": "assets/ui/storylet-cards.png",
+    "sha256": "db353596d401280d7ac6034dda345b067b39a80d99516d755256e48c7af0bdc8",
+    "size_bytes": 1493
+  },
+  "status": "approved"
+}

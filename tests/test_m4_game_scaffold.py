@@ -12,6 +12,7 @@ import unicodedata
 import unittest
 import wave
 import zipfile
+from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
@@ -1440,18 +1441,67 @@ class GameSkillLayoutTests(unittest.TestCase):
     def test_every_skill_maps_to_one_bounded_forge_phase(self) -> None:
         skills_root = ROOT / ".agents/skills"
         skill_names = {path.parent.name for path in skills_root.glob("*/SKILL.md")}
-        self.assertEqual(37, len(skill_names))
+        expected_skill_names = {
+            "animate-3d-asset-with-blender",
+            "author-creation-profile",
+            "author-typed-modules",
+            "clone-world-project",
+            "compile-audit-gamepack",
+            "create-creation-project",
+            "create-world-project",
+            "define-asset-bibles",
+            "derive-asset-inventory",
+            "derive-seal-generic-assets",
+            "design-3d-asset-references",
+            "establish-gameplay-test-harness",
+            "forge-world-release",
+            "implement-gameplay-interactions",
+            "implement-gameplay-living-world",
+            "implement-gameplay-narrative",
+            "implement-gameplay-navigation",
+            "implement-gameplay-persistence",
+            "implement-gameplay-time-schedules",
+            "implement-pyray-app-loop",
+            "implement-pyray-audio",
+            "implement-pyray-input-camera",
+            "implement-pyray-isometric-rendering",
+            "implement-pyray-resources",
+            "implement-pyray-ui",
+            "import-world-bundle",
+            "inspect-runtime-evidence",
+            "manage-creation-phases",
+            "materialize-generic-game",
+            "model-3d-asset-with-blender",
+            "operate-modly-asset",
+            "optimize-pyray-game",
+            "prepare-creation-handoff",
+            "process-asset-deterministically",
+            "produce-openai-2d-asset",
+            "qa-3d-asset",
+            "refine-export-3d-asset-with-blender",
+            "refine-modly-output",
+            "release-pyray-game",
+            "rig-3d-asset-with-blender",
+            "scaffold-pyray-game",
+            "specify-asset-production",
+            "update-game-runtime",
+            "update-pyray-platform",
+            "verify-pyray-game",
+            "version-world-project",
+        }
+        self.assertEqual(46, len(expected_skill_names))
+        self.assertEqual(expected_skill_names, skill_names)
         phase_documents = (
             ROOT / "docs/GAME_IMPLEMENTATION_PHASES.md",
             ROOT / "docs/ASSET_PIPELINE.md",
         )
-        table_names = {
+        table_names = [
             line.split("`$")[1].split("`")[0]
             for document in phase_documents
             for line in document.read_text(encoding="utf-8").splitlines()
             if line.startswith("| ") and "`$" in line
-        }
-        self.assertEqual(skill_names, table_names)
+        ]
+        self.assertEqual(Counter(expected_skill_names), Counter(table_names))
         self.assertNotIn("build-pyray-isometric-runtime", skill_names)
         self.assertNotIn("forge-pyray-game", skill_names)
         self.assertNotIn("manage-world-repositories", skill_names)
@@ -1461,6 +1511,17 @@ class GameSkillLayoutTests(unittest.TestCase):
             "clone-world-project",
             "version-world-project",
             "forge-world-release",
+        }
+        generic_skills = {
+            "author-creation-profile",
+            "author-typed-modules",
+            "compile-audit-gamepack",
+            "create-creation-project",
+            "derive-seal-generic-assets",
+            "inspect-runtime-evidence",
+            "manage-creation-phases",
+            "materialize-generic-game",
+            "prepare-creation-handoff",
         }
         asset_skills = {
             "animate-3d-asset-with-blender",
@@ -1485,6 +1546,11 @@ class GameSkillLayoutTests(unittest.TestCase):
             self.assertEqual({"name", "description"}, fields, name)
             self.assertIn(f"name: {name}\n", skill, name)
             self.assertNotIn("TODO", skill, name)
+            if name in generic_skills:
+                self.assertIn("Authoring validity is not runtime executability", skill, name)
+                self.assertFalse((skills_root / name / "agents/openai.yaml").exists(), name)
+                self.assertNotIn("GAME_ROOT", skill, name)
+                continue
             metadata = (skills_root / name / "agents/openai.yaml").read_text(encoding="utf-8")
             self.assertIn(f"${name}", metadata, name)
             if name in asset_skills:

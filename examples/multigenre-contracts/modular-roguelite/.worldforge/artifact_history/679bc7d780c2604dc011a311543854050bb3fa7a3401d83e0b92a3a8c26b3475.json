@@ -1,0 +1,53 @@
+{
+  "content_hash": "679bc7d780c2604dc011a311543854050bb3fa7a3401d83e0b92a3a8c26b3475",
+  "extensions": [],
+  "format": "world-forge.creation_source_manifest",
+  "format_version": 1,
+  "modules": {
+    "activity_modules": [
+      {
+        "content_hash": "692916f341470c30d3f38848edb8d54060fcb5e548ce76cd87b0116e9cb7788e",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "modular_roguelite_activities",
+        "path": "activities/modular_roguelite.json"
+      }
+    ],
+    "logic_modules": [
+      {
+        "content_hash": "fa78d165ab89a6c24249c9a824cf12244919116b8e8d55ab242545eb7291dabd",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "modular_roguelite_logic",
+        "path": "logic/modular_roguelite.json"
+      }
+    ],
+    "narrative_modules": [],
+    "system_modules": [
+      {
+        "content_hash": "0c723bbcf65dd0da112a51a0192ff233d71464165e38642e01ad37b973797bcf",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "modular_roguelite_systems",
+        "path": "systems/modular_roguelite.json"
+      }
+    ],
+    "world_modules": [
+      {
+        "content_hash": "2d3beeec4eef1ed8190105382215077aa9f8f2be3cc63eb5a62646e70b04b3d8",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "modular_roguelite_space",
+        "path": "world/modular_roguelite.json"
+      }
+    ]
+  },
+  "profile": {
+    "content_hash": "3e66a9136b1bc394bb63c07a0473b1561057513ae894e15e4e97047ef6c97f94",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "modular_roguelite_profile",
+    "path": "profile.json"
+  },
+  "project_id": "modular_roguelite"
+}

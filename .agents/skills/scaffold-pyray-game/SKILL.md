@@ -5,6 +5,11 @@ description: Create the initial clean standalone pyray/raylib game repository fr
 
 # Scaffold a pyray game
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Materialize only the G00 standalone-game shell. Do not import content or

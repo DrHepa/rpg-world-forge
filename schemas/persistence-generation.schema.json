@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/persistence-generation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "replay"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "game-replay.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "save"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "game-save.schema.json"
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "world-forge.persistence_generation"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "kind": {
+      "enum": [
+        "replay",
+        "save"
+      ]
+    },
+    "operation": {
+      "enum": [
+        "conflict_resolution",
+        "legacy_migration",
+        "rollback",
+        "write"
+      ]
+    },
+    "parent_hashes": {
+      "items": {
+        "$ref": "#/$defs/sha256"
+      },
+      "maxItems": 128,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "payload": {
+      "oneOf": [
+        {
+          "$ref": "game-replay.schema.json"
+        },
+        {
+          "$ref": "game-save.schema.json"
+        }
+      ]
+    },
+    "payload_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "sequence": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "slot": {
+      "maxLength": 32,
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "kind",
+    "slot",
+    "sequence",
+    "parent_hashes",
+    "operation",
+    "payload",
+    "payload_hash",
+    "content_hash"
+  ],
+  "title": "World Forge immutable persistence generation v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-persistence-generation-coherent": true
+}

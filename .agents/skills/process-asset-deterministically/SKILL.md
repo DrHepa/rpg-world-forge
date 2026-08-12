@@ -5,6 +5,11 @@ description: Apply one reviewed declarative deterministic recipe to an authorize
 
 # Process an asset deterministically
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Transform one authorized selected candidate into specification-bound runtime

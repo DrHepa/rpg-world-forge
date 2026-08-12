@@ -1,0 +1,848 @@
+{
+  "analysis_requirements": {
+    "analyzer_id": "worldforge.unsupported_profile",
+    "analyzer_version": 1,
+    "content_hash": "70f8d5bda649774eb4bcb543f9db7a430c7a74998577896bd9cdb9dd18844382",
+    "limits": {
+      "candidate_evaluations": 262144,
+      "depth": 512,
+      "parameter_combinations_per_action": 4096,
+      "state_bytes": 65536,
+      "states": 16384,
+      "total_state_bytes": 67108864,
+      "total_witness_steps": 4096,
+      "witness_traces": 128
+    },
+    "profile": "unsupported",
+    "reason_code": "analysis_profile_unsupported"
+  },
+  "asset_requirements": [
+    {
+      "accepted_formats": [
+        "asset:png"
+      ],
+      "binding_id": "action_hud_visual",
+      "referencing_subjects": [
+        {
+          "id": "action_mission",
+          "kind": "activity"
+        },
+        {
+          "id": "objective_engagement",
+          "kind": "mechanic"
+        },
+        {
+          "id": "restart_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "mission_conclusion",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "mission_framing",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "mission_resolution",
+          "kind": "system"
+        }
+      ],
+      "required": true,
+      "roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "narrative_ui",
+        "system_feedback"
+      ],
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "narrative",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "cadf114a3e2ed9a74d8664137c2a09888e5383468fbb98e9ded7bd79acbca506",
+  "format": "world-forge.gamepack",
+  "format_version": 1,
+  "game": {
+    "default_locale": "en",
+    "id": "action_framing",
+    "title": "Action Framing",
+    "version": "1.0.0"
+  },
+  "localization": {
+    "externalized_text": true,
+    "references": [
+      {
+        "field": "title",
+        "key": "activity.action_mission.title",
+        "source_text": "one action mission with framing narrative",
+        "subject_id": "action_mission",
+        "subject_kind": "activity"
+      },
+      {
+        "field": "title",
+        "key": "activity_module.action_framing_activities.title",
+        "source_text": "Action Framing authored activity",
+        "subject_id": "action_framing_activities",
+        "subject_kind": "activity_module"
+      },
+      {
+        "field": "title",
+        "key": "game.action_framing.title",
+        "source_text": "Action Framing",
+        "subject_id": "action_framing",
+        "subject_kind": "game"
+      },
+      {
+        "field": "title",
+        "key": "narrative_module.action_framing_narrative.title",
+        "source_text": "Authored action framing narrative",
+        "subject_id": "action_framing_narrative",
+        "subject_kind": "narrative_module"
+      },
+      {
+        "field": "title",
+        "key": "narrative_unit.mission_conclusion.title",
+        "source_text": "Authored conclusion for the bounded action mission",
+        "subject_id": "mission_conclusion",
+        "subject_kind": "narrative_unit"
+      },
+      {
+        "field": "title",
+        "key": "narrative_unit.mission_framing.title",
+        "source_text": "Authored framing narrative for the action mission",
+        "subject_id": "mission_framing",
+        "subject_kind": "narrative_unit"
+      },
+      {
+        "field": "title",
+        "key": "system.mission_resolution.title",
+        "source_text": "complete the authored mission objective",
+        "subject_id": "mission_resolution",
+        "subject_kind": "system"
+      },
+      {
+        "field": "title",
+        "key": "system_module.action_framing_systems.title",
+        "source_text": "Authored mission arena",
+        "subject_id": "action_framing_systems",
+        "subject_kind": "system_module"
+      },
+      {
+        "field": "title",
+        "key": "world_module.action_framing_space.title",
+        "source_text": "Authored mission arena",
+        "subject_id": "action_framing_space",
+        "subject_kind": "world_module"
+      }
+    ],
+    "source_locale": "en",
+    "supported_locales": [
+      "en"
+    ]
+  },
+  "logic": {
+    "actions": [
+      {
+        "core_verb_id": "engage",
+        "id": "engage_objective",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "action:realtime_combat",
+          "logic:deterministic_actions",
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "advance_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "action_mission"
+          },
+          {
+            "kind": "system",
+            "source_id": "mission_resolution"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "restart",
+        "id": "restart_scenario",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "restart_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "action_mission"
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "action_id": "engage_objective",
+        "comparison": "greater_than",
+        "id": "mission_time_available",
+        "left": {
+          "kind": "state",
+          "state_id": "mission_time_remaining"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": null,
+        "id": "scenario_ready",
+        "operator": "constant",
+        "value": true
+      },
+      {
+        "action_id": null,
+        "comparison": "greater_or_equal",
+        "id": "victory_condition",
+        "left": {
+          "kind": "state",
+          "state_id": "mission_progress"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        }
+      }
+    ],
+    "core_verbs": [
+      {
+        "description": "Advance the authored action scenario.",
+        "id": "engage"
+      },
+      {
+        "description": "Restart the bounded authored scenario.",
+        "id": "restart"
+      }
+    ],
+    "effects": [
+      {
+        "action_id": "engage_objective",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "advance_progress",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "mission_progress"
+      },
+      {
+        "action_id": "engage_objective",
+        "amount": {
+          "kind": "literal",
+          "value": -1,
+          "value_type": "integer"
+        },
+        "id": "consume_mission_time",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "mission_time_remaining"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_mission_time",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "mission_time_remaining"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_progress",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "mission_progress"
+      }
+    ],
+    "endings": [
+      {
+        "condition_ids": [
+          "victory_condition"
+        ],
+        "event_ids": [],
+        "id": "scenario_complete",
+        "kind": "success",
+        "presentation_hook_ids": [
+          "ending_feedback"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "id": "progress_advanced"
+      },
+      {
+        "id": "scenario_restarted"
+      }
+    ],
+    "execution_semantics": {
+      "active_failure_recovery": "intersection",
+      "condition_collections": "and",
+      "condition_snapshot": "pre_transition",
+      "effect_order": "rule_order_then_reference_order",
+      "effect_state_operands": "current_candidate_state",
+      "ending_match": "exactly_one",
+      "event_commit": "after_success_rule_reference_order",
+      "invalid_transition": "reject_without_mutation",
+      "narrative_transition": "source_effects_then_cursor_atomic",
+      "owned_action_rules": "all_required",
+      "semantics_version": 1,
+      "terminal_precedence": "endings_before_failures"
+    },
+    "failures": [],
+    "goals": [
+      {
+        "condition_ids": [
+          "victory_condition"
+        ],
+        "id": "authored_victory",
+        "success_ending_id": "scenario_complete"
+      }
+    ],
+    "initial_state": {
+      "mission_progress": 0,
+      "mission_time_remaining": 3
+    },
+    "mechanics": [
+      {
+        "action_id": "engage_objective",
+        "asset_binding_ids": [
+          "action_hud_visual"
+        ],
+        "authoritative_state_ids": [
+          "mission_progress",
+          "mission_time_remaining"
+        ],
+        "condition_ids": [
+          "mission_time_available"
+        ],
+        "core_verb_id": "engage",
+        "effect_ids": [
+          "advance_progress",
+          "consume_mission_time"
+        ],
+        "event_ids": [
+          "progress_advanced"
+        ],
+        "id": "objective_engagement",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "action:realtime_combat",
+          "logic:deterministic_actions",
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "advance_rule"
+        ]
+      },
+      {
+        "action_id": "restart_scenario",
+        "asset_binding_ids": [
+          "action_hud_visual"
+        ],
+        "authoritative_state_ids": [
+          "mission_progress",
+          "mission_time_remaining"
+        ],
+        "condition_ids": [],
+        "core_verb_id": "restart",
+        "effect_ids": [
+          "reset_mission_time",
+          "reset_progress"
+        ],
+        "event_ids": [
+          "scenario_restarted"
+        ],
+        "id": "restart_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "restart_rule"
+        ]
+      }
+    ],
+    "narrative_cursor": null,
+    "narrative_transitions": [],
+    "presentation_hooks": [
+      {
+        "asset_binding_ids": [
+          "action_hud_visual"
+        ],
+        "id": "ending_feedback",
+        "kind": "ending"
+      },
+      {
+        "asset_binding_ids": [
+          "action_hud_visual"
+        ],
+        "id": "progress_feedback",
+        "kind": "feedback"
+      },
+      {
+        "asset_binding_ids": [
+          "action_hud_visual"
+        ],
+        "id": "progress_view",
+        "kind": "board"
+      }
+    ],
+    "rules": [
+      {
+        "action_id": "engage_objective",
+        "condition_ids": [
+          "mission_time_available"
+        ],
+        "effect_ids": [
+          "advance_progress",
+          "consume_mission_time"
+        ],
+        "event_ids": [
+          "progress_advanced"
+        ],
+        "id": "advance_rule",
+        "order": 0
+      },
+      {
+        "action_id": "restart_scenario",
+        "condition_ids": [],
+        "effect_ids": [
+          "reset_mission_time",
+          "reset_progress"
+        ],
+        "event_ids": [
+          "scenario_restarted"
+        ],
+        "id": "restart_rule",
+        "order": 1
+      }
+    ],
+    "source": {
+      "content_hash": "db2f73c5a07fecad38d6fbbd6e3b2747fc63bd6c5ccdb8225e32e242f129fd7b",
+      "format": "world-forge.logic_module",
+      "format_version": 1,
+      "id": "action_framing_logic"
+    },
+    "state_schema": [
+      {
+        "id": "mission_progress",
+        "initial": 0,
+        "maximum": 3,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      },
+      {
+        "id": "mission_time_remaining",
+        "initial": 3,
+        "maximum": 3,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      }
+    ],
+    "title": "Neutral authored action logic"
+  },
+  "mechanic_requirements": [
+    {
+      "action_id": "engage_objective",
+      "core_verb_id": "engage",
+      "mechanic_id": "objective_engagement",
+      "required_feature_ids": [
+        "action:realtime_combat",
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ]
+    },
+    {
+      "action_id": "restart_scenario",
+      "core_verb_id": "restart",
+      "mechanic_id": "restart_mechanic",
+      "required_feature_ids": [
+        "logic:finite_state"
+      ]
+    }
+  ],
+  "modules": {
+    "activities": [
+      {
+        "activities": [
+          {
+            "activity_type": "scenario",
+            "asset_binding_ids": [
+              "action_hud_visual"
+            ],
+            "effect_ids": [
+              "advance_progress",
+              "consume_mission_time",
+              "reset_mission_time",
+              "reset_progress"
+            ],
+            "end_condition_ids": [
+              "victory_condition"
+            ],
+            "event_ids": [
+              "progress_advanced",
+              "scenario_restarted"
+            ],
+            "failure_condition_ids": [],
+            "id": "action_mission",
+            "participant_ids": [],
+            "presentation_hook_ids": [
+              "progress_feedback",
+              "progress_view"
+            ],
+            "spatial_context_ids": [],
+            "start_condition_ids": [
+              "scenario_ready"
+            ],
+            "success_condition_ids": [
+              "victory_condition"
+            ],
+            "title": "one action mission with framing narrative"
+          }
+        ],
+        "source": {
+          "content_hash": "8ae41817bcd72c6bf4b3143a20a16033d594fcb853bfe687c4a489aaed932d88",
+          "format": "world-forge.activity_module",
+          "format_version": 1,
+          "id": "action_framing_activities"
+        },
+        "title": "Action Framing authored activity"
+      }
+    ],
+    "narrative": [
+      {
+        "entry_unit_ids": [
+          "mission_framing"
+        ],
+        "source": {
+          "content_hash": "76da592c31d755218d9a3f9e1d9bfee3308d47770a7e519088c869d8a2de6d2a",
+          "format": "world-forge.narrative_module",
+          "format_version": 1,
+          "id": "action_framing_narrative"
+        },
+        "title": "Authored action framing narrative",
+        "units": [
+          {
+            "asset_binding_ids": [
+              "action_hud_visual"
+            ],
+            "effect_ids": [],
+            "id": "mission_framing",
+            "next_unit_ids": [
+              "mission_conclusion"
+            ],
+            "prerequisite_ids": [],
+            "title": "Authored framing narrative for the action mission",
+            "unit_type": "scene"
+          },
+          {
+            "asset_binding_ids": [
+              "action_hud_visual"
+            ],
+            "effect_ids": [],
+            "ending_kind": "success",
+            "id": "mission_conclusion",
+            "next_unit_ids": [],
+            "prerequisite_ids": [
+              "victory_condition"
+            ],
+            "title": "Authored conclusion for the bounded action mission",
+            "unit_type": "ending"
+          }
+        ]
+      }
+    ],
+    "systems": [
+      {
+        "source": {
+          "content_hash": "10c23cb18803f7be4b382913291a761827c1bde82d07d7c8baa606b9ab5f22a9",
+          "format": "world-forge.system_module",
+          "format_version": 1,
+          "id": "action_framing_systems"
+        },
+        "systems": [
+          {
+            "asset_binding_ids": [
+              "action_hud_visual"
+            ],
+            "effect_ids": [
+              "advance_progress",
+              "consume_mission_time"
+            ],
+            "event_ids": [
+              "progress_advanced"
+            ],
+            "id": "mission_resolution",
+            "precondition_ids": [
+              "mission_time_available"
+            ],
+            "system_type": "simulation_scenario",
+            "title": "complete the authored mission objective"
+          }
+        ],
+        "title": "Authored mission arena"
+      }
+    ],
+    "world": [
+      {
+        "module_type": "space",
+        "records": [
+          {
+            "id": "action_framing_space",
+            "name": "Authored mission arena",
+            "topology": "diegetic"
+          }
+        ],
+        "source": {
+          "content_hash": "31632bcf802e1e602ae5b35e0ee059286a54fd23514ad4dcdefb3a9f55dfb088",
+          "format": "world-forge.world_module",
+          "format_version": 1,
+          "id": "action_framing_space"
+        },
+        "title": "Authored mission arena"
+      }
+    ]
+  },
+  "presentation": {
+    "accessibility": {
+      "captions": true,
+      "color_independence": true,
+      "high_contrast": true,
+      "keyboard_only": true,
+      "reduced_motion": true,
+      "remapping": true,
+      "screen_reader_structure": true,
+      "text_scaling": true,
+      "timing_alternatives": true
+    },
+    "audio_role": "optional feedback",
+    "camera": "fixed",
+    "input_assumptions": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "localization": {
+      "externalized_text": true,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "mode": "2d",
+    "perspective": "orthographic board",
+    "ui_density": "low",
+    "visual_language": "high-contrast geometric symbols"
+  },
+  "provenance": [
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "8ae41817bcd72c6bf4b3143a20a16033d594fcb853bfe687c4a489aaed932d88",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "action_framing_activities"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "de17d92a8781a925ee26586d07c7f14f72a80b8153e517aaf3ebde67a97349b3",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "action_framing_profile"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "942f0078f72362503e7ac65c4622e8660e81ba47e15173a304c5b7d6848fec38",
+        "format": "world-forge.creation_source_manifest",
+        "format_version": 1,
+        "id": "action_framing"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "db2f73c5a07fecad38d6fbbd6e3b2747fc63bd6c5ccdb8225e32e242f129fd7b",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "action_framing_logic"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "76da592c31d755218d9a3f9e1d9bfee3308d47770a7e519088c869d8a2de6d2a",
+        "format": "world-forge.narrative_module",
+        "format_version": 1,
+        "id": "action_framing_narrative"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "b6ab5caff4927c6cbe7bdb9d7a867463e542aae407443cc10c25d362fba9f568",
+        "format": "world-forge.project",
+        "format_version": 1,
+        "id": "action_framing"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "10c23cb18803f7be4b382913291a761827c1bde82d07d7c8baa606b9ab5f22a9",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "action_framing_systems"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "31632bcf802e1e602ae5b35e0ee059286a54fd23514ad4dcdefb3a9f55dfb088",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "action_framing_space"
+      }
+    }
+  ],
+  "registered_extensions": [],
+  "runtime_requirements": {
+    "accepted_logic_formats": [
+      {
+        "format": "world-forge.gamepack",
+        "versions": [
+          1
+        ]
+      }
+    ],
+    "asset_formats": [
+      "asset:png"
+    ],
+    "input_capabilities": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "optional_features": [
+      "audio:sfx"
+    ],
+    "packaging_target": "standalone desktop directory",
+    "platform_matrix": [
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:linux",
+        "platform_id": "platform:linux_x86_64",
+        "renderer": "raylib"
+      },
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:windows",
+        "platform_id": "platform:windows_x86_64",
+        "renderer": "raylib"
+      }
+    ],
+    "presentation": {
+      "camera": "fixed",
+      "mode": "2d",
+      "perspective": "orthographic board",
+      "renderer": "raylib"
+    },
+    "replay_expected": true,
+    "requested_adapter": null,
+    "required_features": [
+      "action:realtime_combat",
+      "logic:deterministic_actions",
+      "logic:finite_state"
+    ],
+    "save_expected": true
+  },
+  "source": {
+    "logic_modules": [
+      {
+        "content_hash": "db2f73c5a07fecad38d6fbbd6e3b2747fc63bd6c5ccdb8225e32e242f129fd7b",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "action_framing_logic"
+      }
+    ],
+    "profile": {
+      "content_hash": "de17d92a8781a925ee26586d07c7f14f72a80b8153e517aaf3ebde67a97349b3",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "action_framing_profile"
+    },
+    "project": {
+      "content_hash": "b6ab5caff4927c6cbe7bdb9d7a867463e542aae407443cc10c25d362fba9f568",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "action_framing"
+    },
+    "source_manifest": {
+      "content_hash": "942f0078f72362503e7ac65c4622e8660e81ba47e15173a304c5b7d6848fec38",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "action_framing"
+    }
+  }
+}

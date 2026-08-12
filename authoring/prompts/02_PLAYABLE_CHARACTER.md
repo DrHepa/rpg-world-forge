@@ -1,5 +1,9 @@
 # Session: playable actor and personal campaign
 
+> **Retained legacy-world prompt.** Use only when the reviewed RPG/world profile
+> requires playable actors and personal campaigns. Never invent an actor for a
+> no-actor generic project.
+
 Design the actor as data independent from the engine and base world.
 
 ## Required content

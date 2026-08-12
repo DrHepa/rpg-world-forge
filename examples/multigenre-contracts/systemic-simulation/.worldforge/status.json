@@ -1,0 +1,29 @@
+{
+  "completed_phases": [],
+  "content_hash": "24d945193f5dfe8ff7d7134421a9f718bafa2bcc2e54d3a8f45c425f24f3d87e",
+  "current_phase": "p00_brief",
+  "format": "world-forge.creation_workflow_status",
+  "format_version": 1,
+  "invalidated_reports": [],
+  "profile": {
+    "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "systemic_simulation_profile"
+  },
+  "project": {
+    "content_hash": "64a869bf5de72926c1cabceaf263d8460351e8e0f499e9290fe4eef3f7ccd373",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "systemic_simulation"
+  },
+  "reports": [],
+  "revision": 0,
+  "source_manifest": {
+    "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "systemic_simulation"
+  },
+  "workflow_id": "systemic_simulation_workflow"
+}

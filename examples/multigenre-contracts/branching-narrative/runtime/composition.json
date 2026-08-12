@@ -1,0 +1,80 @@
+{
+  "adapter": {
+    "content_hash": "4d0d0a8d9c17eccc2f040a2275e487cf0a21a5af63a8cbfda90811f2dbfc599b",
+    "format": "world-forge.runtime_adapter",
+    "format_version": 1,
+    "id": "gamepack_raylib_2d_text"
+  },
+  "asset_inventory": {
+    "content_hash": "30ce782cac942ca1388a6d588b337315b041255f6b19ece15de32660856411fb",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_aad1ff36087fa98580e94a50251becee8573446a82f94644"
+  },
+  "assetpack": {
+    "content_hash": "701172c30368f4402374933c0e90de4eb728598ffa6183d5ceaa4e0fbe311d92",
+    "format": "world-forge.assetpack",
+    "format_version": 1,
+    "id": "assetpack_2fa07ae6550c8579f94dc75d60c7076434dfb9a60186f339",
+    "inventory_hash": "1e9be232a798b147cd4b61d66f28debdb9875c432ce5f80b962c8f854931b1ed",
+    "root_hash": "97529a8323772ffe48f31aad2f0ac72465b1bbfc517b8b4a3cfa7af465466fe8"
+  },
+  "bindings": [
+    {
+      "asset_id": "narrative_ui_font",
+      "binding_id": "choice_panel",
+      "media_type": "font/ttf",
+      "role": "font",
+      "runtime_path": "assets/fonts/narrative-ui.ttf",
+      "sha256": "c7362ddaf3102b66b24e4ea5a566b9cd339b082b14165fc73ba04f76f8a2273e",
+      "size_bytes": 28748
+    },
+    {
+      "asset_id": "narrative_ui_font",
+      "binding_id": "ending_panel",
+      "media_type": "font/ttf",
+      "role": "font",
+      "runtime_path": "assets/fonts/narrative-ui.ttf",
+      "sha256": "c7362ddaf3102b66b24e4ea5a566b9cd339b082b14165fc73ba04f76f8a2273e",
+      "size_bytes": 28748
+    }
+  ],
+  "composition_id": "runtime_composition_b378850799890a8db800f4b68bfcee7b3af7ece5",
+  "content_hash": "7a5d2f0aaa6ff0f5f68643c868adfd8fef4947d999b0bcc9a0d245bf538a1994",
+  "format": "world-forge.game_runtime_composition",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "branching_narrative"
+  },
+  "platforms": [
+    {
+      "architecture": "architecture:x86_64",
+      "backend": "backend:raylib",
+      "platform_family": "platform:linux",
+      "platform_id": "platform:linux_x86_64",
+      "renderer": "raylib"
+    },
+    {
+      "architecture": "architecture:x86_64",
+      "backend": "backend:raylib",
+      "platform_family": "platform:windows",
+      "platform_id": "platform:windows_x86_64",
+      "renderer": "raylib"
+    }
+  ],
+  "registry": {
+    "content_hash": "b8f22310fe80765ae1750404214ee159dda10b8f99b2e567ed8725929c474aba",
+    "format": "world-forge.runtime_adapter_registry",
+    "format_version": 1,
+    "id": "runtime_registry_ec71747b963dd32c3cecda799592ff0ee6087061"
+  },
+  "runtime_snapshot": {
+    "content_hash": "b1c94cac79ced1107f87174fcb367eec6ae832f089bb43e24d21dc618568b4bf",
+    "format": "world-forge.game_runtime_snapshot",
+    "format_version": 1,
+    "id": "runtime_snapshot_002ec4f5a0da3b1f306eec02e163f28a72d628a0"
+  }
+}

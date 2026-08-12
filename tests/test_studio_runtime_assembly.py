@@ -68,6 +68,45 @@ def _forge_source(root: Path) -> Path:
     _write(root / "src/worldforge/studio/__main__.py", b"def main(): return 0\n")
     _write(root / "src/worldforge/studio/mcp_server.py", b"def main(): return 0\n")
     _write(root / "src/worldforge/templates/pyray_game/readme.tmpl", b"template\n")
+    for module in (
+        "__init__.py",
+        "contracts.py",
+        "distribution.py",
+        "distribution_names.py",
+        "file_stat.py",
+        "game_package.py",
+        "headless.py",
+        "persistence.py",
+        "persistence_generation.py",
+        "persistence_io.py",
+        "runtime_io.py",
+        "semantics_v1.py",
+        "session.py",
+    ):
+        _write(
+            root / "src/gamepack_runtime" / module,
+            b'"""Synthetic neutral runtime kernel."""\n',
+        )
+    for module in (
+        "__init__.py",
+        "app.py",
+        "audit.py",
+        "backend.py",
+        "descriptor_policy.py",
+        "executable_shape.py",
+        "fixed_step.py",
+        "input.py",
+        "narrative_text.py",
+        "native_smoke.py",
+        "puzzle.py",
+        "registry.py",
+        "resources.py",
+        "types.py",
+    ):
+        _write(
+            root / "src/gamepack_raylib_2d" / module,
+            b'"""Synthetic bounded raylib adapter."""\n',
+        )
     _write(root / "schemas/example.schema.json", b'{"type":"object"}\n')
     _write(root / "contracts/catalog.json", b'{"contracts":[]}\n')
     _write(root / "contracts/README.md", b"# Contracts\n")
@@ -769,25 +808,390 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
     def test_package_budget_covers_exact_pbs_codex_and_project_inventory(
         self,
     ) -> None:
+        self.assertEqual(
+            assembly.GAMEPACK_RUNTIME_MODULES,
+            (
+                "__init__.py",
+                "contracts.py",
+                "distribution.py",
+                "distribution_names.py",
+                "file_stat.py",
+                "game_package.py",
+                "headless.py",
+                "persistence.py",
+                "persistence_generation.py",
+                "persistence_io.py",
+                "runtime_io.py",
+                "semantics_v1.py",
+                "session.py",
+            ),
+        )
+        self.assertEqual(
+            assembly.GAMEPACK_RAYLIB_2D_MODULES,
+            (
+                "__init__.py",
+                "app.py",
+                "audit.py",
+                "backend.py",
+                "descriptor_policy.py",
+                "executable_shape.py",
+                "fixed_step.py",
+                "input.py",
+                "narrative_text.py",
+                "native_smoke.py",
+                "puzzle.py",
+                "registry.py",
+                "resources.py",
+                "types.py",
+            ),
+        )
         source_document = assembly._parse_runtime_sources_control(
             assembly._read_runtime_sources_bytes()
         )
         codex_target = next(
             item for item in source_document["codex"]["targets"] if item["target_id"] == "linux-x64"
         )
-        exact_inventory = (
-            4_522
-            + len(codex_target["inventory"])
-            + len(
-                assembly._source_files(
-                    ROOT,
-                    "linux-x64",
-                    assembly._PackageOutputBudget(),
-                )
-            )
-            + 3
+        forge_files = assembly._source_files(
+            ROOT,
+            "linux-x64",
+            assembly._PackageOutputBudget(),
         )
-        self.assertEqual(exact_inventory, 5_558)
+        forge_file_count = len(forge_files)
+        exact_inventory = 4_522 + len(codex_target["inventory"]) + forge_file_count + 3
+        self.assertEqual((len(codex_target["inventory"]), forge_file_count), (6, 1_321))
+        paths = {item.path for item in forge_files}
+        site_packages = "runtime/python/linux-x64/lib/python3.12/site-packages"
+        expected_new_paths = {
+            f"{site_packages}/worldforge/creation_contracts.py",
+            f"{site_packages}/worldforge/generated_creation_content_modes.py",
+            f"{site_packages}/worldforge/file_stat.py",
+            f"{site_packages}/worldforge/game_package.py",
+            f"{site_packages}/worldforge/game_persistence.py",
+            f"{site_packages}/worldforge/game_materialization_bundle.py",
+            f"{site_packages}/worldforge/game_runtime_bundle.py",
+            f"{site_packages}/worldforge/gamepack.py",
+            f"{site_packages}/worldforge/generic_asset_authority.py",
+            f"{site_packages}/worldforge/generic_asset_fixture_authority.py",
+            f"{site_packages}/worldforge/generic_asset_fixture_policy.py",
+            f"{site_packages}/worldforge/generic_asset_limits.py",
+            f"{site_packages}/worldforge/generic_headless.py",
+            f"{site_packages}/worldforge/generic_runtime.py",
+            f"{site_packages}/worldforge/generic_asset_processing.py",
+            f"{site_packages}/worldforge/generic_asset_production.py",
+            f"{site_packages}/worldforge/generic_assetpack.py",
+            f"{site_packages}/worldforge/generic_assets.py",
+            f"{site_packages}/worldforge/identity_audit.py",
+            f"{site_packages}/worldforge/lorepack.py",
+            f"{site_packages}/worldforge/multigenre_release_contract.py",
+            f"{site_packages}/worldforge/persistence_generation.py",
+            f"{site_packages}/worldforge/phase_report_v2.py",
+            f"{site_packages}/worldforge/runtime_implementation.py",
+            f"{site_packages}/worldforge/runtime_implementation_policy.py",
+            f"{site_packages}/worldforge/runtime_platform_lock.py",
+            f"{site_packages}/worldforge/runtime_support_authority.py",
+            f"{site_packages}/worldforge/standalone_game.py",
+            f"{site_packages}/worldforge/standalone_templates.py",
+            f"{site_packages}/worldforge/validation_memo.py",
+            f"{site_packages}/worldforge/studio/creation_artifacts.py",
+            f"{site_packages}/worldforge/studio/creation_asset_authority.py",
+            f"{site_packages}/worldforge/studio/creation_authoring.py",
+            f"{site_packages}/worldforge/studio/creation_evidence.py",
+            f"{site_packages}/worldforge/studio/creation_executor.py",
+            f"{site_packages}/worldforge/studio/creation_grants.py",
+            f"{site_packages}/worldforge/studio/creation_job_protocol.py",
+            f"{site_packages}/worldforge/studio/creation_jobs.py",
+            f"{site_packages}/worldforge/studio/creation_output_grants.py",
+            f"{site_packages}/worldforge/studio/creation_previews.py",
+            f"{site_packages}/worldforge/studio/creation_process.py",
+            f"{site_packages}/worldforge/studio/creation_worker.py",
+            f"{site_packages}/worldforge/studio/creation_workspaces.py",
+            f"{site_packages}/worldforge/studio/external_grants.py",
+            f"{site_packages}/worldforge/studio/external_jobs.py",
+            *{
+                f"{site_packages}/gamepack_runtime/{name}"
+                for name in (
+                    "__init__.py",
+                    "contracts.py",
+                    "distribution.py",
+                    "distribution_names.py",
+                    "file_stat.py",
+                    "game_package.py",
+                    "headless.py",
+                    "persistence.py",
+                    "persistence_generation.py",
+                    "persistence_io.py",
+                    "runtime_io.py",
+                    "semantics_v1.py",
+                    "session.py",
+                )
+            },
+            *{
+                f"{site_packages}/gamepack_raylib_2d/{name}"
+                for name in assembly.GAMEPACK_RAYLIB_2D_MODULES
+            },
+            *{
+                f"runtime/python/linux-x64/share/rpg-world-forge/schemas/{name}.schema.json"
+                for name in (
+                    "activity-module",
+                    "creation-profile",
+                    "creation-project",
+                    "creation-source-manifest",
+                    "game-replay",
+                    "game-execution-script",
+                    "game-materialization-bundle",
+                    "game-package",
+                    "headless-evidence-set",
+                    "headless-execution-receipt",
+                    "game-runtime-composition",
+                    "game-runtime-bundle",
+                    "game-runtime-snapshot",
+                    "game-save",
+                    "gamepack",
+                    "generic-asset-inventory",
+                    "generic-asset-license-record",
+                    "generic-asset-manifest",
+                    "generic-asset-processing-receipt",
+                    "generic-asset-processing-recipe",
+                    "generic-asset-production-receipt",
+                    "generic-asset-production-request",
+                    "generic-asset-provenance-record",
+                    "generic-asset-qa-report",
+                    "generic-asset-qa-review-receipt",
+                    "generic-asset-release-authority",
+                    "generic-asset-selection",
+                    "generic-asset-spec",
+                    "generic-asset-style",
+                    "generic-asset-subject",
+                    "generic-asset-target",
+                    "generic-assetpack",
+                    "generic-runtime-adapter",
+                    "generic-runtime-adapter-registry",
+                    "generic-runtime-evidence",
+                    "generic-runtime-support-report",
+                    "logic-module",
+                    "lorepack",
+                    "mechanic-capability-ledger",
+                    "narrative-module",
+                    "phase-report-v2",
+                    "persistence-generation",
+                    "runtime-implementation",
+                    "runtime-platform-lock",
+                    "runtime-support-authority",
+                    "standalone-game",
+                    "standalone-game-lock",
+                    "standalone-platform",
+                    "studio-creation-artifact",
+                    "studio-creation-changeset",
+                    "studio-creation-evidence",
+                    "studio-creation-job",
+                    "studio-creation-job-v12",
+                    "studio-creation-output-grant",
+                    "studio-creation-output-grant-v6",
+                    "studio-creation-preview",
+                    "studio-creation-preview-v2",
+                    "studio-external-grant",
+                    "studio-creation-root-grant",
+                    "studio-creation-worker",
+                    "studio-creation-workspace",
+                    "studio-job-v3",
+                    "studio-protocol-v2",
+                    "studio-protocol-v3",
+                    "studio-protocol-v4",
+                    "studio-protocol-v5",
+                    "system-module",
+                    "world-module",
+                )
+            },
+            *{
+                f"runtime/python/linux-x64/share/world-forge/schemas/{name}.schema.json"
+                for name in (
+                    "generic-asset-qa-review-receipt",
+                    "generic-asset-release-authority",
+                    "runtime-support-authority",
+                    "studio-creation-artifact",
+                    "studio-creation-changeset",
+                    "studio-creation-evidence",
+                    "studio-creation-job",
+                    "studio-creation-job-v12",
+                    "studio-creation-output-grant",
+                    "studio-creation-output-grant-v6",
+                    "studio-creation-preview",
+                    "studio-creation-preview-v2",
+                    "studio-creation-root-grant",
+                    "studio-creation-worker",
+                    "studio-creation-workspace",
+                    "studio-protocol-v3",
+                    "studio-protocol-v4",
+                    "studio-protocol-v5",
+                )
+            },
+        }
+        self.assertLessEqual(expected_new_paths, paths)
+        self.assertEqual(exact_inventory, 5_852)
+        generated_content_modes_path = (
+            f"{site_packages}/worldforge/generated_creation_content_modes.py"
+        )
+        generated_content_modes_payload = (
+            ROOT / "src/worldforge/generated_creation_content_modes.py"
+        ).read_bytes()
+        self.assertEqual(
+            [
+                item.path
+                for item in forge_files
+                if item.path.endswith("/generated_creation_content_modes.py")
+            ],
+            [generated_content_modes_path],
+        )
+        generated_content_modes_file = next(
+            item for item in forge_files if item.path == generated_content_modes_path
+        )
+        self.assertEqual(
+            (
+                len(generated_content_modes_file.payload),
+                _sha256(generated_content_modes_file.payload),
+            ),
+            (
+                len(generated_content_modes_payload),
+                _sha256(generated_content_modes_payload),
+            ),
+        )
+        for target_id, runtime_root in (
+            (
+                "linux-x64",
+                "runtime/python/linux-x64",
+            ),
+            (
+                "win32-x64",
+                "runtime/python/win32-x64",
+            ),
+        ):
+            with self.subTest(target_id=target_id):
+                target_paths = {
+                    item.path
+                    for item in assembly._source_files(
+                        ROOT,
+                        target_id,
+                        assembly._PackageOutputBudget(),
+                    )
+                }
+                self.assertIn(
+                    f"{runtime_root}/share/rpg-world-forge/schemas/logic-module.schema.json",
+                    target_paths,
+                )
+                target_site_packages = (
+                    f"{runtime_root}/Lib/site-packages"
+                    if target_id == "win32-x64"
+                    else f"{runtime_root}/lib/python3.12/site-packages"
+                )
+                self.assertEqual(
+                    {
+                        *{
+                            f"{target_site_packages}/gamepack_runtime/{name}"
+                            for name in (
+                                "__init__.py",
+                                "contracts.py",
+                                "distribution.py",
+                                "runtime_io.py",
+                                "semantics_v1.py",
+                                "session.py",
+                            )
+                        },
+                        *{
+                            f"{target_site_packages}/gamepack_raylib_2d/{name}"
+                            for name in assembly.GAMEPACK_RAYLIB_2D_MODULES
+                        },
+                        f"{target_site_packages}/worldforge/generic_asset_limits.py",
+                        f"{target_site_packages}/worldforge/generic_asset_processing.py",
+                        f"{target_site_packages}/worldforge/game_materialization_bundle.py",
+                        f"{target_site_packages}/worldforge/game_runtime_bundle.py",
+                        f"{target_site_packages}/worldforge/generated_creation_content_modes.py",
+                        f"{target_site_packages}/worldforge/generic_runtime.py",
+                        f"{target_site_packages}/worldforge/identity_audit.py",
+                        f"{target_site_packages}/worldforge/multigenre_release_contract.py",
+                        f"{target_site_packages}/worldforge/runtime_implementation.py",
+                        f"{target_site_packages}/worldforge/runtime_implementation_policy.py",
+                        f"{target_site_packages}/worldforge/runtime_platform_lock.py",
+                        f"{target_site_packages}/worldforge/standalone_game.py",
+                        f"{target_site_packages}/worldforge/standalone_templates.py",
+                        f"{target_site_packages}/worldforge/validation_memo.py",
+                        f"{target_site_packages}/worldforge/studio/creation_artifacts.py",
+                        f"{target_site_packages}/worldforge/studio/creation_asset_authority.py",
+                        f"{target_site_packages}/worldforge/studio/creation_authoring.py",
+                        f"{target_site_packages}/worldforge/studio/creation_evidence.py",
+                        f"{target_site_packages}/worldforge/studio/creation_executor.py",
+                        f"{target_site_packages}/worldforge/studio/creation_grants.py",
+                        f"{target_site_packages}/worldforge/studio/creation_job_protocol.py",
+                        f"{target_site_packages}/worldforge/studio/creation_jobs.py",
+                        f"{target_site_packages}/worldforge/studio/creation_process.py",
+                        f"{target_site_packages}/worldforge/studio/creation_worker.py",
+                        f"{target_site_packages}/worldforge/studio/creation_workspaces.py",
+                        *{
+                            f"{runtime_root}/share/rpg-world-forge/schemas/{name}.schema.json"
+                            for name in (
+                                "game-runtime-composition",
+                                "game-runtime-bundle",
+                                "game-runtime-snapshot",
+                                "game-materialization-bundle",
+                                "generic-asset-manifest",
+                                "generic-asset-processing-receipt",
+                                "generic-asset-processing-recipe",
+                                "generic-asset-qa-report",
+                                "generic-runtime-adapter",
+                                "generic-runtime-adapter-registry",
+                                "generic-runtime-evidence",
+                                "generic-runtime-support-report",
+                                "runtime-implementation",
+                                "runtime-platform-lock",
+                                "standalone-game",
+                                "standalone-game-lock",
+                                "standalone-platform",
+                                "studio-creation-artifact",
+                                "studio-creation-changeset",
+                                "studio-creation-evidence",
+                                "studio-creation-job",
+                                "studio-creation-job-v12",
+                                "studio-creation-root-grant",
+                                "studio-creation-worker",
+                                "studio-creation-workspace",
+                                "studio-protocol-v3",
+                                "studio-protocol-v4",
+                                "studio-protocol-v5",
+                            )
+                        },
+                        *{
+                            f"{runtime_root}/share/world-forge/schemas/{name}.schema.json"
+                            for name in (
+                                "studio-creation-artifact",
+                                "studio-creation-changeset",
+                                "studio-creation-evidence",
+                                "studio-creation-job",
+                                "studio-creation-job-v12",
+                                "studio-creation-root-grant",
+                                "studio-creation-worker",
+                                "studio-creation-workspace",
+                                "studio-protocol-v3",
+                                "studio-protocol-v4",
+                                "studio-protocol-v5",
+                            )
+                        },
+                    }
+                    - target_paths,
+                    set(),
+                )
+                generated_target_files = [
+                    item
+                    for item in assembly._source_files(
+                        ROOT,
+                        target_id,
+                        assembly._PackageOutputBudget(),
+                    )
+                    if item.path.endswith("/generated_creation_content_modes.py")
+                ]
+                self.assertEqual(len(generated_target_files), 1)
+                self.assertEqual(
+                    _sha256(generated_target_files[0].payload),
+                    _sha256(generated_content_modes_payload),
+                )
         self.assertLessEqual(
             exact_inventory * assembly._PACKAGE_INVENTORY_ENTRY_JSON_NODES
             + assembly._PACKAGE_NON_INVENTORY_MAX_JSON_NODES,
@@ -797,6 +1201,168 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             exact_inventory * assembly._PACKAGE_INVENTORY_ENTRY_MAX_CANONICAL_BYTES
             + assembly._PACKAGE_NON_INVENTORY_MAX_CANONICAL_BYTES,
             assembly.MAX_PACKAGE_MANIFEST_BYTES,
+        )
+
+    def test_real_source_assembly_imports_and_resolves_the_neutral_runtime(
+        self,
+    ) -> None:
+        source_files = assembly._source_files(
+            ROOT,
+            "linux-x64",
+            assembly._PackageOutputBudget(),
+        )
+        output = self.root / "real-forge-source-assembly"
+        for item in source_files:
+            _write(output / item.path, item.payload, item.mode)
+        site_packages = output / "runtime/python/linux-x64/lib/python3.12/site-packages"
+        script = """
+import json
+import sys
+from pathlib import Path
+
+site_packages = Path(sys.argv[1]).resolve()
+fixture_path = Path(sys.argv[2]).resolve()
+sys.path.insert(0, str(site_packages))
+
+import gamepack_raylib_2d
+import gamepack_runtime
+import worldforge.game_materialization_bundle as materialization
+import worldforge.generic_runtime as runtime
+import worldforge.runtime_implementation as implementation_contract
+import worldforge.runtime_platform_lock as platform_lock_contract
+import worldforge.standalone_game as standalone
+import worldforge.standalone_templates as standalone_templates
+
+adapter_root = Path(gamepack_raylib_2d.__file__).resolve().parent
+kernel_root = Path(gamepack_runtime.__file__).resolve().parent
+if adapter_root != site_packages / "gamepack_raylib_2d":
+    raise SystemExit("bounded adapter imported outside the clean assembly")
+if kernel_root != site_packages / "gamepack_runtime":
+    raise SystemExit("neutral runtime imported outside the clean assembly")
+if Path(runtime.__file__).resolve().parent != site_packages / "worldforge":
+    raise SystemExit("Forge runtime contracts imported outside the clean assembly")
+for module in (
+    materialization,
+    implementation_contract,
+    platform_lock_contract,
+    standalone,
+    standalone_templates,
+):
+    if Path(module.__file__).resolve().parent != site_packages / "worldforge":
+        raise SystemExit("materialization contracts imported outside the clean assembly")
+
+adapters = runtime.build_builtin_runtime_adapters()
+snapshot = runtime.build_game_runtime_snapshot(
+    kernel_root,
+    adapter_runtime_root=adapter_root,
+    adapters=adapters,
+)
+registry = runtime.build_runtime_adapter_registry(
+    snapshot=snapshot,
+    adapters=adapters,
+)
+gamepack = json.loads(fixture_path.read_text(encoding="utf-8"))
+adapter = runtime.resolve_runtime_adapter(
+    gamepack,
+    registry=registry,
+    snapshot=snapshot,
+)
+platform_locks = platform_lock_contract.build_builtin_runtime_platform_locks()
+implementation = implementation_contract.build_runtime_implementation(
+    adapter=adapter,
+    snapshot=snapshot,
+    platform_locks=platform_locks,
+)
+print(
+    json.dumps(
+        {
+            "adapter_id": adapter["adapter_id"],
+            "implementation_adapter_id": implementation["adapter"]["adapter_id"],
+            "platform_lock_count": len(platform_locks),
+            "adapter_files": [
+                item["path"]
+                for item in snapshot["files"]
+                if item["path"].startswith("gamepack_raylib_2d/")
+            ],
+            "kernel_files": [
+                item["path"]
+                for item in snapshot["files"]
+                if item["path"].startswith("gamepack_runtime/")
+            ],
+        },
+        sort_keys=True,
+    )
+)
+"""
+        environment = os.environ.copy()
+        environment.pop("PYTHONHOME", None)
+        environment.pop("PYTHONPATH", None)
+        environment.update(
+            {
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONNOUSERSITE": "1",
+                "PYTHONUTF8": "1",
+            }
+        )
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-I",
+                "-S",
+                "-c",
+                script,
+                os.fspath(site_packages),
+                os.fspath(
+                    ROOT / "examples/multigenre-contracts/abstract-puzzle/artifacts/"
+                    "abstract-puzzle.gamepack.json"
+                ),
+            ],
+            cwd=self.root,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, msg=completed.stderr)
+        self.assertEqual(
+            json.loads(completed.stdout),
+            {
+                "adapter_id": "gamepack_raylib_2d_puzzle",
+                "implementation_adapter_id": "gamepack_raylib_2d_puzzle",
+                "platform_lock_count": 4,
+                "adapter_files": [
+                    "gamepack_raylib_2d/__init__.py",
+                    "gamepack_raylib_2d/app.py",
+                    "gamepack_raylib_2d/audit.py",
+                    "gamepack_raylib_2d/backend.py",
+                    "gamepack_raylib_2d/descriptor_policy.py",
+                    "gamepack_raylib_2d/executable_shape.py",
+                    "gamepack_raylib_2d/fixed_step.py",
+                    "gamepack_raylib_2d/input.py",
+                    "gamepack_raylib_2d/narrative_text.py",
+                    "gamepack_raylib_2d/native_smoke.py",
+                    "gamepack_raylib_2d/puzzle.py",
+                    "gamepack_raylib_2d/registry.py",
+                    "gamepack_raylib_2d/resources.py",
+                    "gamepack_raylib_2d/types.py",
+                ],
+                "kernel_files": [
+                    "gamepack_runtime/__init__.py",
+                    "gamepack_runtime/contracts.py",
+                    "gamepack_runtime/distribution.py",
+                    "gamepack_runtime/distribution_names.py",
+                    "gamepack_runtime/file_stat.py",
+                    "gamepack_runtime/game_package.py",
+                    "gamepack_runtime/headless.py",
+                    "gamepack_runtime/persistence.py",
+                    "gamepack_runtime/persistence_generation.py",
+                    "gamepack_runtime/persistence_io.py",
+                    "gamepack_runtime/runtime_io.py",
+                    "gamepack_runtime/semantics_v1.py",
+                    "gamepack_runtime/session.py",
+                ],
+            },
         )
 
     def test_committed_publication_journal_is_collected_once_for_every_target(
@@ -820,6 +1386,29 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
                 self.assertEqual(len(matches), 1)
                 self.assertEqual(matches[0].payload, source_payload)
                 self.assertEqual(matches[0].mode, 0o644)
+
+    def test_runtime_assembly_contains_identical_canonical_and_legacy_public_data(
+        self,
+    ) -> None:
+        for target_id in ("linux-x64", "win32-x64"):
+            with self.subTest(target_id=target_id):
+                files = assembly._source_files(
+                    ROOT,
+                    target_id,
+                    assembly._PackageOutputBudget(),
+                )
+                by_path = {item.path: item.payload for item in files}
+                prefix = f"runtime/python/{target_id}/share"
+                for relative in (
+                    "contracts/catalog.json",
+                    "contracts/README.md",
+                    "schemas/source-manifest.schema.json",
+                    "LICENSE",
+                    "THIRD_PARTY_NOTICES.md",
+                ):
+                    canonical = by_path[f"{prefix}/world-forge/{relative}"]
+                    legacy = by_path[f"{prefix}/rpg-world-forge/{relative}"]
+                    self.assertEqual(canonical, legacy)
 
     def test_assembler_preflights_manifest_readability_before_output_creation(
         self,

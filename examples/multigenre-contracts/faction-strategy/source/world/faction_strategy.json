@@ -1,0 +1,17 @@
+{
+  "content_hash": "8c04342d35b1b5e91fdc3dcb072999e80f305bb15a98f4339e508e0f37eae934",
+  "extensions": [],
+  "format": "world-forge.world_module",
+  "format_version": 1,
+  "module_id": "faction_strategy_space",
+  "module_type": "space",
+  "project_id": "faction_strategy",
+  "spaces": [
+    {
+      "id": "faction_strategy_space",
+      "name": "North and South faction theater",
+      "topology": "diegetic"
+    }
+  ],
+  "title": "North and South faction theater"
+}

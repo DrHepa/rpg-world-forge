@@ -1,0 +1,239 @@
+{
+  "$defs": {
+    "aggregate": {
+      "additionalProperties": false,
+      "properties": {
+        "fixtures": {
+          "items": { "$ref": "#/$defs/aggregateFixture" },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "format": { "const": "world-forge.multigenre_release_aggregate" },
+        "format_version": { "const": 1 },
+        "matrix": {
+          "const": [
+            { "os": "linux", "python_minor": "3.11" },
+            { "os": "linux", "python_minor": "3.12" },
+            { "os": "windows", "python_minor": "3.11" },
+            { "os": "windows", "python_minor": "3.12" }
+          ]
+        },
+        "reports": {
+          "items": { "$ref": "#/$defs/aggregateReport" },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "source_input_tree_hash": { "$ref": "#/$defs/sha256" },
+        "source_revision": { "$ref": "#/$defs/sha1" },
+        "status": { "const": "passed" }
+      },
+      "required": ["format", "format_version", "status", "source_input_tree_hash", "source_revision", "matrix", "reports", "fixtures"],
+      "type": "object"
+    },
+    "aggregateFixture": {
+      "additionalProperties": false,
+      "properties": {
+        "case_id": { "enum": ["abstract-puzzle", "branching-narrative"] },
+        "gamepack_hash": { "$ref": "#/$defs/sha256" },
+        "package_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "package_hash": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["case_id", "gamepack_hash", "package_hash", "package_archive_sha256"],
+      "type": "object"
+    },
+    "aggregateReport": {
+      "additionalProperties": false,
+      "properties": {
+        "os": { "enum": ["linux", "windows"] },
+        "python_minor": { "enum": ["3.11", "3.12"] },
+        "report_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["os", "python_minor", "report_sha256"],
+      "type": "object"
+    },
+    "dimensions": {
+      "additionalProperties": false,
+      "properties": {
+        "events": { "const": ["push"] },
+        "native_modes": { "const": ["required"] },
+        "platforms": { "const": ["linux", "windows"] },
+        "python_abis": { "const": ["cp311", "cp312"] },
+        "refs": { "const": ["refs/heads/main"] },
+        "repositories": {
+          "items": { "enum": ["DrHepa/rpg-world-forge", "DrHepa/world-forge"] },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "subjects": { "const": ["abstract-puzzle", "branching-narrative"] }
+      },
+      "required": ["repositories", "refs", "events", "platforms", "python_abis", "subjects", "native_modes"],
+      "type": "object"
+    },
+    "hashes": {
+      "additionalProperties": false,
+      "properties": {
+        "analysis": { "$ref": "#/$defs/sha256" },
+        "assetpack": { "$ref": "#/$defs/sha256" },
+        "capability_ledger": { "$ref": "#/$defs/sha256" },
+        "gamepack": { "$ref": "#/$defs/sha256" },
+        "materialization_bundle": { "$ref": "#/$defs/sha256" },
+        "package": { "$ref": "#/$defs/sha256" },
+        "package_archive": { "$ref": "#/$defs/sha256" },
+        "runtime_bundle": { "$ref": "#/$defs/sha256" },
+        "runtime_support_authority": { "$ref": "#/$defs/sha256" },
+        "runtime_support_report": { "$ref": "#/$defs/sha256" },
+        "standalone_game": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["analysis", "assetpack", "capability_ledger", "gamepack", "materialization_bundle", "package", "package_archive", "runtime_bundle", "runtime_support_authority", "runtime_support_report", "standalone_game"],
+      "type": "object"
+    },
+    "idHash": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": { "$ref": "#/$defs/sha256" },
+        "id": { "maxLength": 160, "minLength": 1, "type": "string" }
+      },
+      "required": ["id", "content_hash"],
+      "type": "object"
+    },
+    "identities": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": { "maxLength": 160, "minLength": 1, "type": "string" },
+        "adapter_version": { "maxLength": 160, "minLength": 1, "type": "string" },
+        "assetpack_id": { "maxLength": 160, "minLength": 1, "type": "string" },
+        "materialization_bundle_id": { "maxLength": 160, "minLength": 1, "type": "string" },
+        "package_id": { "maxLength": 160, "minLength": 1, "type": "string" },
+        "runtime_bundle_id": { "maxLength": 160, "minLength": 1, "type": "string" },
+        "runtime_support_authority_id": { "maxLength": 160, "minLength": 1, "type": "string" },
+        "runtime_support_report_id": { "maxLength": 160, "minLength": 1, "type": "string" },
+        "standalone_game_id": { "maxLength": 160, "minLength": 1, "type": "string" }
+      },
+      "required": ["adapter_id", "adapter_version", "assetpack_id", "materialization_bundle_id", "package_id", "runtime_bundle_id", "runtime_support_authority_id", "runtime_support_report_id", "standalone_game_id"],
+      "type": "object"
+    },
+    "lineage": {
+      "additionalProperties": false,
+      "properties": {
+        "analysis": { "$ref": "#/$defs/sha256" },
+        "asset_processing": { "$ref": "#/$defs/sha256" },
+        "asset_production": { "$ref": "#/$defs/sha256" },
+        "asset_qa": { "$ref": "#/$defs/sha256" },
+        "asset_seal": { "$ref": "#/$defs/sha256" },
+        "capability_ledger": { "$ref": "#/$defs/sha256" },
+        "compile_first": { "$ref": "#/$defs/sha256" },
+        "compile_second": { "$ref": "#/$defs/sha256" },
+        "extract": { "$ref": "#/$defs/sha256" },
+        "extracted_headless": { "$ref": "#/$defs/sha256" },
+        "extracted_verify": { "$ref": "#/$defs/sha256" },
+        "headless": { "$ref": "#/$defs/sha256" },
+        "independent_verify": { "$ref": "#/$defs/sha256" },
+        "materialization_bundle": { "$ref": "#/$defs/sha256" },
+        "package_first": { "$ref": "#/$defs/sha256" },
+        "package_second": { "$ref": "#/$defs/sha256" },
+        "persistence": { "$ref": "#/$defs/sha256" },
+        "runtime_bundle": { "$ref": "#/$defs/sha256" },
+        "runtime_support": { "$ref": "#/$defs/sha256" },
+        "standalone_audit": { "$ref": "#/$defs/sha256" },
+        "standalone_materialize": { "$ref": "#/$defs/sha256" },
+        "validate": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["validate", "compile_first", "compile_second", "analysis", "capability_ledger", "asset_production", "asset_processing", "asset_qa", "asset_seal", "runtime_support", "runtime_bundle", "materialization_bundle", "standalone_materialize", "standalone_audit", "independent_verify", "headless", "persistence", "package_first", "package_second", "extract", "extracted_verify", "extracted_headless"],
+      "type": "object"
+    },
+    "row": {
+      "additionalProperties": false,
+      "properties": {
+        "native_mode": { "const": "required" },
+        "os": { "enum": ["linux", "windows"] },
+        "python_abi": { "enum": ["cp311", "cp312"] },
+        "python_minor": { "enum": ["3.11", "3.12"] },
+        "report_format": { "const": "world-forge.multigenre_release_evidence" },
+        "report_sha256": { "$ref": "#/$defs/sha256" },
+        "report_version": { "const": 1 },
+        "runner_image": { "enum": ["ubuntu-24.04", "windows-2022"] },
+        "source_input_tree_hash": { "$ref": "#/$defs/sha256" },
+        "source_revision": { "$ref": "#/$defs/sha1" },
+        "status": { "const": "passed" }
+      },
+      "required": ["os", "python_minor", "python_abi", "runner_image", "report_format", "report_version", "report_sha256", "source_revision", "source_input_tree_hash", "native_mode", "status"],
+      "type": "object"
+    },
+    "sha1": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "event": { "const": "push" },
+        "input_tree_hash": { "$ref": "#/$defs/sha256" },
+        "ref": { "const": "refs/heads/main" },
+        "repository": { "enum": ["DrHepa/rpg-world-forge", "DrHepa/world-forge"] },
+        "repository_id": { "const": "1305601753" },
+        "revision": { "$ref": "#/$defs/sha1" },
+        "run_attempt": { "maximum": 9007199254740991, "minimum": 1, "type": "integer" },
+        "run_id": { "pattern": "^[1-9][0-9]{0,31}$", "type": "string" },
+        "workflow_ref": { "pattern": "^DrHepa/(?:rpg-world-forge|world-forge)/\\.github/workflows/ci\\.yml@refs/heads/main$", "type": "string" },
+        "workflow_sha": { "$ref": "#/$defs/sha1" }
+      },
+      "required": ["repository_id", "repository", "workflow_ref", "workflow_sha", "revision", "input_tree_hash", "ref", "event", "run_id", "run_attempt"],
+      "type": "object"
+    },
+    "subject": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_verified": { "const": true },
+        "hashes": { "$ref": "#/$defs/hashes" },
+        "identities": { "$ref": "#/$defs/identities" },
+        "lineage": { "$ref": "#/$defs/lineage" },
+        "native_verified": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "os": { "enum": ["linux", "windows"] },
+              "python_abi": { "enum": ["cp311", "cp312"] }
+            },
+            "required": ["os", "python_abi"],
+            "type": "object"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "packaging_verified": { "const": true },
+        "reason_codes": { "maxItems": 0, "type": "array" },
+        "release_status": { "const": "ready" },
+        "runtime_support_authority": { "$ref": "#/$defs/idHash" },
+        "runtime_support_report": { "$ref": "#/$defs/idHash" },
+        "subject_id": { "enum": ["abstract-puzzle", "branching-narrative"] },
+        "supported": { "const": true }
+      },
+      "required": ["subject_id", "runtime_support_authority", "runtime_support_report", "lineage", "identities", "hashes", "native_verified", "adapter_verified", "packaging_verified", "release_status", "supported", "reason_codes"],
+      "type": "object"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/hosted-native-release-authority.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "aggregate": { "$ref": "#/$defs/aggregate" },
+    "authority_id": { "pattern": "^hosted_native_release_[0-9a-f]{40}$", "type": "string" },
+    "content_hash": { "$ref": "#/$defs/sha256" },
+    "dimensions": { "$ref": "#/$defs/dimensions" },
+    "format": { "const": "world-forge.hosted_native_release_authority" },
+    "format_version": { "const": 1 },
+    "reason_codes": { "maxItems": 0, "type": "array" },
+    "release_status": { "const": "ready" },
+    "rows": { "items": { "$ref": "#/$defs/row" }, "maxItems": 4, "minItems": 4, "type": "array" },
+    "source": { "$ref": "#/$defs/source" },
+    "subjects": { "items": { "$ref": "#/$defs/subject" }, "maxItems": 2, "minItems": 2, "type": "array" },
+    "supported": { "const": true }
+  },
+  "required": ["format", "format_version", "authority_id", "source", "aggregate", "rows", "subjects", "dimensions", "release_status", "supported", "reason_codes", "content_hash"],
+  "title": "World Forge hosted native release authority v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-hosted-native-authority": true
+}

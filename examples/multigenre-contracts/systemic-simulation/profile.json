@@ -1,0 +1,171 @@
+{
+  "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+  "experience": {
+    "audiences": [
+      "systems design reviewers"
+    ],
+    "experience_goals": [
+      "inspect causal state",
+      "verify deterministic transitions"
+    ],
+    "player_promise": "Operate a bounded deterministic system and observe transparent state changes."
+  },
+  "extensions": [],
+  "fiction": {
+    "genres": [],
+    "tags": [
+      "fiction:none"
+    ],
+    "tones": [
+      "analytical"
+    ]
+  },
+  "format": "world-forge.creation_profile",
+  "format_version": 1,
+  "gameplay": {
+    "challenge_model": "causal systems reasoning",
+    "core_loop": [
+      "inspect current state",
+      "apply one legal operation",
+      "observe deterministic consequences",
+      "evaluate the target state"
+    ],
+    "core_verbs": [
+      {
+        "description": "Exchange two adjacent board symbols.",
+        "id": "swap"
+      },
+      {
+        "description": "Return the board to its deterministic initial state.",
+        "id": "restart"
+      }
+    ],
+    "dependencies": {
+      "authored": [
+        "simulation:initial_state"
+      ],
+      "procedural": [],
+      "systemic": [
+        "simulation:transition_rules"
+      ]
+    },
+    "failure_recovery": "explicit deterministic restart",
+    "goal_model": "reach the reviewed target state",
+    "mechanic_tags": [
+      "simulation:bounded_system"
+    ],
+    "player_role": "system operator",
+    "primary_family": "simulation",
+    "progression": "one bounded validation scenario",
+    "rule_model": "deterministic bounded state transition system",
+    "secondary_families": [],
+    "session_structure": "single bounded session",
+    "social_topology": "single_player",
+    "teleology": "finite"
+  },
+  "narrative": {
+    "agency": "none",
+    "authorship_mode": "none",
+    "canon_variability": "none",
+    "delivery_channels": [],
+    "endings": "none",
+    "focalization": "none",
+    "information_model": "none",
+    "pacing": "none",
+    "protagonist_model": "none",
+    "requirement": "none",
+    "topology": "none"
+  },
+  "presentation": {
+    "accessibility": {
+      "captions": true,
+      "color_independence": true,
+      "high_contrast": true,
+      "keyboard_only": true,
+      "reduced_motion": true,
+      "remapping": true,
+      "screen_reader_structure": true,
+      "text_scaling": true,
+      "timing_alternatives": true
+    },
+    "audio_role": "optional feedback",
+    "camera": "fixed",
+    "input_assumptions": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "localization": {
+      "externalized_text": true,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "mode": "2d",
+    "perspective": "orthographic board",
+    "ui_density": "low",
+    "visual_language": "high-contrast geometric symbols"
+  },
+  "production": {
+    "content_modes": {
+      "assets": "not_applicable",
+      "gameplay": "authored",
+      "narrative": "not_applicable",
+      "world": "authored"
+    },
+    "human_review": true,
+    "licensing_required": true,
+    "provenance_required": true,
+    "qa_required": true,
+    "reproducibility": "all runtime inputs are content addressed",
+    "seed_policy": "no random generation",
+    "selection_policy": "no external asset candidate is required for this authoring-only fixture"
+  },
+  "profile_id": "systemic_simulation_profile",
+  "project_id": "systemic_simulation",
+  "runtime_target": {
+    "accepted_logic_formats": [
+      {
+        "format": "world-forge.gamepack",
+        "versions": [
+          1
+        ]
+      }
+    ],
+    "asset_formats": [],
+    "input_capabilities": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "optional_features": [
+      "audio:sfx"
+    ],
+    "packaging_target": "standalone desktop directory",
+    "platforms": [
+      "platform:linux_x86_64",
+      "platform:windows_x86_64"
+    ],
+    "presentation_mode": "2d",
+    "renderer": "raylib",
+    "replay_expected": true,
+    "requested_adapter": null,
+    "required_features": [
+      "logic:deterministic_actions",
+      "logic:finite_state"
+    ],
+    "save_expected": true
+  },
+  "title": "Systemic simulation profile",
+  "world": {
+    "persistence": "session state",
+    "presence": "abstract",
+    "scale": "single bounded system",
+    "simulated_domains": [
+      "system:state_transition"
+    ],
+    "simulation_depth": "bounded deterministic",
+    "spatial_structure": "authored symbolic topology",
+    "spatial_topology": "symbolic state graph",
+    "time_model": "discrete operations"
+  }
+}

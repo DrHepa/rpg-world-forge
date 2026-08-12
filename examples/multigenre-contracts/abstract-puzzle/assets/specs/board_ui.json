@@ -1,0 +1,58 @@
+{
+  "acceptance_criteria": [
+    "Every board symbol remains distinguishable without color.",
+    "The exact runtime output matches the reviewed target."
+  ],
+  "asset": {
+    "asset_id": "board_ui",
+    "content_hash": "c60401da521cff7fa3d6e08ac3c309f1a71d4b6b73b5e9c09d1985e90768ffe9"
+  },
+  "asset_subject": {
+    "content_hash": "09742eff54989a4cba753af413b320dbfabad30f874be38c6cd646f952f6b4c7",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_eaa36e78dc8661deddec17555aa8c2bb8d15e22e70d14656"
+  },
+  "content_hash": "046c7d15b317c290f2c3487a8e50853bc7fc961e1d815273acc086a06af1473a",
+  "format": "world-forge.asset_spec",
+  "format_version": 1,
+  "inventory": {
+    "content_hash": "ef6496fd27a91fe4aa19c57390b09accd0a748eff1c6bdbc280b2dfc0302335c",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_db1e30fe4a098bf505b52989066137a1f34f4123b5ece765"
+  },
+  "outputs": [
+    {
+      "expectations": {
+        "color_type": "rgba8",
+        "height": 256,
+        "kind": "png",
+        "max_bytes": 262144,
+        "width": 256
+      },
+      "media_type": "image/png",
+      "role": "texture",
+      "runtime_path": "assets/ui/board.png"
+    }
+  ],
+  "production_class": "procedural_offline",
+  "review_requirements": {
+    "evidence_required": true,
+    "human_review_required": true,
+    "qa_profile": "ui_readability"
+  },
+  "spec_id": "asset_spec_327fa7c7303d4f06a0f86589cc971d3d4c3ed8d53ff5f8b2",
+  "style": {
+    "content_hash": "8c6bc7d3654b7679921de0b9db2524abefbd5f83ca0f7f6ec45f306272fba563",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_1ed627dcb9cc101212f8c5b69dd218524a29610aaa8188cc"
+  },
+  "target": {
+    "content_hash": "609fa138f16bc4bb402624a7fa3082b5b377e112f7f98633f2d9c0f3971a9d33",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_226e1b8d904d61fc8c631fef1a188b32300712752f903f02"
+  }
+}

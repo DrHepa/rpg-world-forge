@@ -1,6 +1,43 @@
-# Offline content pipeline
+# Offline content pipelines
 
-## Stages
+The generic architecture is canonical in
+`docs/MULTI_GENRE_ARCHITECTURE.md`; evidence is tracked in
+`docs/SUPPORT_MATRIX.md`. Authoring validity is not runtime executability.
+
+## Generic creation lane
+
+1. **Brief/profile**: define experience, gameplay, optional world, optional
+   narrative, fiction/tone, presentation/accessibility, production, and runtime
+   target independently.
+2. **Typed source**: author only applicable world, activity, narrative, system,
+   and logic modules. No-world and narrative-none choices create no filler.
+3. **Profile-aware review**: complete phase-report v3 P00-P14 with exact
+   evidence or validated `not_applicable` status.
+4. **Compilation/analysis**: emit deterministic `world-forge.gamepack` v1,
+   bounded analysis, and a mechanic ledger. Unsupported profiles fail with
+   reason codes rather than being reinterpreted as RPGs.
+5. **Assets**: derive from the exact `gamepack` subject through D1 planning,
+   D2 production/processing/QA, and D3 runtime-only sealing when applicable.
+6. **Compatibility**: resolve a code-owned adapter against exact required
+   mechanics, presentation, inputs, asset formats, persistence, packaging, and
+   platform matrix.
+7. **Handoff/materialization**: bind readiness and immutable runtime artifacts,
+   then create and independently verify an external standalone game.
+8. **Execution evidence**: keep headless, save/replay, native, hosted, package,
+   and release evidence distinct for the same logic hash.
+
+AI and provider tools remain authoring-only. Every generated contribution needs
+review, provenance, licensing, deterministic processing where applicable, and
+QA. No prompt, provider SDK, model, credential, or runtime AI crosses the game
+boundary.
+
+## Legacy RPG lane
+
+The stages below are retained for published RPG world repositories and their
+`isoworld.worldpack`/renderpack runtime path. They are a specialization, not the
+generic template.
+
+### Stages
 
 1. **Canon**: record confirmed facts, tone, themes, and exclusions.
 2. **Design**: create structured actors, factions, places, scenes, quests,

@@ -1,0 +1,65 @@
+{
+  "blocker_reason_codes": [
+    "assets_not_sealed",
+    "native_evidence_missing",
+    "packaging_evidence_missing",
+    "runtime_adapter_not_requested"
+  ],
+  "content_hash": "76056b09d7cdd967a7193f6fd77959dcedecf4e6e1e2601d2f2205c2bfc24b78",
+  "dimensions": {
+    "adapter": "absent",
+    "assets": "unplanned",
+    "authoring": "valid",
+    "compilation": "compiled",
+    "execution": [
+      {
+        "evidence_ids": [],
+        "platform": "platform:linux_x86_64",
+        "status": "untested"
+      },
+      {
+        "evidence_ids": [],
+        "platform": "platform:windows_x86_64",
+        "status": "untested"
+      }
+    ],
+    "packaging": "unverified",
+    "release": "blocked"
+  },
+  "evidence": [
+    {
+      "content_hash": "d6958dd478bbf1f9010a2455d2b4887d53fa1d372c3a4e202886be4b15e4303b",
+      "format": "world-forge.game_analysis",
+      "format_version": 1,
+      "id": "analysis_73a63d1dfc360893"
+    },
+    {
+      "content_hash": "73a63d1dfc360893198abfdb1502f94595f08570aaead157d531f6cf80cfa8ea",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "modular_roguelite"
+    }
+  ],
+  "format": "world-forge.creation_readiness",
+  "format_version": 1,
+  "profile": {
+    "content_hash": "63745ee45c0bb39730938ffc13bfb51334eae5bc00b94024097ebad894429391",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "modular_roguelite_profile"
+  },
+  "project": {
+    "content_hash": "29528ed740130535366b3716a23f8b1ee0b72daadb952f24cb64885be237de43",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "modular_roguelite"
+  },
+  "readiness_id": "readiness_1d4466e83bf9cb6156680a49",
+  "release_ready": false,
+  "source_manifest": {
+    "content_hash": "86d839fb5634bc658c6fd803e5f0ebbe7dd43cad00dad0b3156b0038fe7ae14c",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "modular_roguelite"
+  }
+}

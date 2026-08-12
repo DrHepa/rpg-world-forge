@@ -5,6 +5,11 @@ description: Implement deterministic facts, knowledge boundaries, relationships,
 
 # Implement narrative execution
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Implement only G13 deterministic execution of authored facts, knowledge,

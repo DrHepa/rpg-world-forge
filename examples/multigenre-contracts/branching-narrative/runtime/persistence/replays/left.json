@@ -1,0 +1,61 @@
+{
+  "bindings": {
+    "execution_semantics": {
+      "content_hash": "f43fa43e4c54a2910ae8a99fbbfc0b2556359f95c1c88abef59a2508c9ea5983",
+      "version": 1
+    },
+    "gamepack": {
+      "content_hash": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "branching_narrative"
+    },
+    "runtime_api": {
+      "id": "gamepack_runtime",
+      "version": "1.0.0"
+    },
+    "runtime_bundle": {
+      "content_hash": "c1d27383c0f816135f637c4ae0345741f65a563c8b99a7556734c11f08f48f31",
+      "format": "world-forge.game_runtime_bundle",
+      "format_version": 1,
+      "id": "game_runtime_bundle_72bfb9be044f4742627750e64edc459d93efbe4f6cd38047"
+    },
+    "runtime_composition": {
+      "content_hash": "7a5d2f0aaa6ff0f5f68643c868adfd8fef4947d999b0bcc9a0d245bf538a1994",
+      "format": "world-forge.game_runtime_composition",
+      "format_version": 1,
+      "id": "runtime_composition_b378850799890a8db800f4b68bfcee7b3af7ece5"
+    }
+  },
+  "classification": {
+    "ending_ids": [
+      "ending_left"
+    ],
+    "ending_kind": "success",
+    "failure_ids": [],
+    "goal_ids": [
+      "reach_left"
+    ],
+    "recovery_action_ids": [],
+    "terminal": true
+  },
+  "content_hash": "ef21f4be7420689b9c1daa98a9acd22e07d1c194d86e659f5fca0b24ab45a32f",
+  "final_state_hash": "1083d4e41a6bfad92c38beee91b01a267d67ca428c3a2625dc30bac79d2d7f51",
+  "format": "world-forge.game_replay",
+  "format_version": 1,
+  "initial_state_hash": "d36c421fcde1dac5f68bc059902364d5216106f1057e891ab1984aea96204093",
+  "replay_id": "game_replay_989dd237c61bb86ba2d6bc8e79b5f575ef2b644a166f9d34",
+  "steps": [
+    {
+      "action_id": "choose_left",
+      "events": [
+        "choice_left"
+      ],
+      "index": 0,
+      "parameters": {},
+      "post_state_hash": "1083d4e41a6bfad92c38beee91b01a267d67ca428c3a2625dc30bac79d2d7f51",
+      "pre_state_hash": "d36c421fcde1dac5f68bc059902364d5216106f1057e891ab1984aea96204093"
+    }
+  ],
+  "trace_hash": "ea2f357d98198db1c688148aef6829b56fe379361d045b1ea4f7dd3721f557ae"
+}

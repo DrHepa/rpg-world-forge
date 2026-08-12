@@ -1,0 +1,31 @@
+body {
+  margin: 0;
+  background: #11151c;
+  color: #eef2ff;
+  font-family: system-ui, sans-serif;
+}
+
+main {
+  padding: 24px;
+}
+
+dd {
+  margin: 0 0 12px;
+  overflow-wrap: anywhere;
+}
+
+button {
+  margin-right: 8px;
+}
+
+img,
+audio {
+  display: block;
+  max-width: 100%;
+}
+
+pre {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+}

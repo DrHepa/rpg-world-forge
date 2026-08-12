@@ -26,6 +26,7 @@ WORKFLOW = ROOT / ".github/workflows/ci.yml"
 CHECKOUT_SHA = "11d5960a326750d5838078e36cf38b85af677262"
 SETUP_PYTHON_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
 PIP_AUDIT_ACTION_SHA = "1220774d901786e6f652ae159f7b6bc8fea6d266"
+SETUP_NODE_SHA = "49933ea5288caeca8642d1e84afbd3f7d6820020"
 GITLEAKS_CHECKSUM_FILE_SHA256 = "061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae"
 GITLEAKS_LINUX_X64_SHA256 = "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
 GITLEAKS_IGNORED_FINGERPRINT = (
@@ -151,6 +152,86 @@ class M5ReleaseReadinessTests(unittest.TestCase):
             if line.strip() and not line.lstrip().startswith("#")
         ]
         self.assertEqual([GITLEAKS_IGNORED_FINGERPRINT], ignored)
+
+    def test_dependency_audit_combines_python_and_studio_lock_security_without_check_drift(
+        self,
+    ) -> None:
+        def dependency_audit_errors(workflow: str) -> set[str]:
+            errors: set[str] = set()
+            if workflow.count("  dependency-audit:\n") != 1:
+                errors.add("job-id-drift")
+                return errors
+            dependency_audit = workflow.split("  dependency-audit:\n", 1)[1].split(
+                "  secret-scan:\n", 1
+            )[0]
+            step_blocks = re.findall(
+                r"(?ms)^      - name: (?P<name>[^\n]+)\n(?P<body>.*?)(?=^      - name: |\Z)",
+                dependency_audit,
+            )
+            steps = {name: body for name, body in step_blocks}
+            setup_node = steps.get("Set up pinned Studio Node", "")
+            verify_node = steps.get("Verify pinned Studio dependency audit toolchain", "")
+            studio_audit = steps.get("Audit exact Studio package lock", "")
+
+            if "name: Dependency audit" not in dependency_audit:
+                errors.add("check-identity-drift")
+            if f"uses: actions/setup-node@{SETUP_NODE_SHA}" not in setup_node:
+                errors.add("floating-node-action")
+            if 'node-version: "24.14.1"' not in setup_node:
+                errors.add("node-version-drift")
+            if "cache: npm" not in setup_node or (
+                "cache-dependency-path: apps/studio/package-lock.json" not in setup_node
+            ):
+                errors.add("studio-lock-cache-drift")
+            if (
+                "npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0"
+                not in dependency_audit
+            ):
+                errors.add("npm-toolchain-drift")
+            if (
+                'test "$(node --version)" = "v24.14.1"' not in verify_node
+                or 'test "$(npm --version)" = "11.13.0"' not in verify_node
+            ):
+                errors.add("toolchain-version-check-drift")
+            if "working-directory: apps/studio" not in studio_audit:
+                errors.add("studio-working-directory-drift")
+            if "npm audit --package-lock-only --audit-level=high" not in studio_audit:
+                errors.add("studio-audit-command-drift")
+            if "--omit=dev" in studio_audit:
+                errors.add("studio-audit-omits-dev")
+            if "npm audit fix" in studio_audit or "npm install\n" in studio_audit:
+                errors.add("studio-lock-mutation")
+            return errors
+
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertEqual(dependency_audit_errors(workflow), set())
+
+        mutations = {
+            "job-id-drift": workflow.replace(
+                "  dependency-audit:\n", "  dependency-security-audit:\n", 1
+            ),
+            "floating-node-action": workflow.replace(
+                f"Set up pinned Studio Node\n        uses: actions/setup-node@{SETUP_NODE_SHA}",
+                "Set up pinned Studio Node\n        uses: actions/setup-node@v4",
+                1,
+            ),
+            "studio-audit-omits-dev": workflow.replace(
+                "npm audit --package-lock-only --audit-level=high",
+                "npm audit --package-lock-only --audit-level=high --omit=dev",
+                1,
+            ),
+            "studio-working-directory-drift": workflow.replace(
+                (
+                    "      - name: Audit exact Studio package lock\n"
+                    "        working-directory: apps/studio\n"
+                ),
+                "      - name: Audit exact Studio package lock\n",
+                1,
+            ),
+        }
+        for expected, mutated in mutations.items():
+            with self.subTest(expected=expected):
+                self.assertIn(expected, dependency_audit_errors(mutated))
 
     def test_driver_refuses_to_write_inside_repository(self) -> None:
         blocked = ROOT / "must-not-create-readiness-output"

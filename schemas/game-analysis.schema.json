@@ -1,0 +1,990 @@
+{
+  "$id": "https://world-forge.local/schemas/game-analysis.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "requirement": {
+            "properties": {
+              "profile": {
+                "const": "abstract_puzzle"
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "requirement"
+        ]
+      },
+      "then": {
+        "properties": {
+          "analyzer": {
+            "properties": {
+              "profile": {
+                "const": "abstract_puzzle"
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "failed",
+              "inconclusive"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "requirement": {
+            "properties": {
+              "profile": {
+                "const": "branching_narrative"
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "requirement"
+        ]
+      },
+      "then": {
+        "properties": {
+          "analyzer": {
+            "properties": {
+              "profile": {
+                "const": "branching_narrative"
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "failed",
+              "inconclusive"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "requirement": {
+            "properties": {
+              "profile": {
+                "const": "unsupported"
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "requirement"
+        ]
+      },
+      "then": {
+        "properties": {
+          "analyzer": {
+            "properties": {
+              "profile": {
+                "const": "unsupported"
+              }
+            },
+            "required": [
+              "profile"
+            ],
+            "type": "object"
+          },
+          "status": {
+            "const": "unsupported"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "failed",
+              "inconclusive",
+              "unsupported"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reason_codes": {
+            "minItems": 1,
+            "type": "array"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "passed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checks": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "passed"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "findings": {
+            "maxItems": 0,
+            "type": "array"
+          },
+          "metrics": {
+            "properties": {
+              "frontier_closed": {
+                "const": true
+              }
+            },
+            "required": [
+              "frontier_closed"
+            ],
+            "type": "object"
+          },
+          "reason_codes": {
+            "maxItems": 0,
+            "type": "array"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "properties": {
+              "findings": {
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "findings"
+            ]
+          },
+          {
+            "properties": {
+              "checks": {
+                "contains": {
+                  "properties": {
+                    "status": {
+                      "const": "failed"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "type": "object"
+                },
+                "minContains": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "checks"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "inconclusive"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checks": {
+            "contains": {
+              "properties": {
+                "status": {
+                  "const": "inconclusive"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "type": "object"
+            },
+            "minContains": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "checks"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "unsupported"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "checks": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "not_applicable"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "findings": {
+            "maxItems": 0,
+            "type": "array"
+          },
+          "metrics": {
+            "properties": {
+              "frontier_closed": {
+                "const": false
+              }
+            },
+            "required": [
+              "frontier_closed"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "analysis_id": {
+      "$ref": "#/$defs/id"
+    },
+    "analyzer": {
+      "$ref": "#/$defs/analyzer"
+    },
+    "assumptions": {
+      "items": false,
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "const": "The validated gamepack is the complete authoritative logic input."
+        },
+        {
+          "const": "Action parameter domains are finite and exactly declared by the gamepack."
+        },
+        {
+          "const": "Array order is authoritative and state equality uses compact canonical JSON."
+        }
+      ],
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/check"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "false_negative_risks": {
+      "items": false,
+      "maxItems": 1,
+      "minItems": 1,
+      "prefixItems": [
+        {
+          "const": "Any configured bound reached before frontier closure makes the result inconclusive."
+        }
+      ],
+      "type": "array"
+    },
+    "false_positive_risks": {
+      "items": false,
+      "maxItems": 1,
+      "minItems": 1,
+      "prefixItems": [
+        {
+          "const": "A modeled state may be reachable but unusable in an unmodeled presentation adapter."
+        }
+      ],
+      "type": "array"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/finding"
+      },
+      "maxItems": 16384,
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.game_analysis"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "gamepack": {
+      "$ref": "#/$defs/gamepackIdentity"
+    },
+    "method": {
+      "$ref": "#/$defs/method"
+    },
+    "metrics": {
+      "$ref": "#/$defs/metrics"
+    },
+    "out_of_scope_claims": {
+      "items": false,
+      "maxItems": 5,
+      "minItems": 5,
+      "prefixItems": [
+        {
+          "const": "asset_readability"
+        },
+        {
+          "const": "native_adapter_execution"
+        },
+        {
+          "const": "platform_performance"
+        },
+        {
+          "const": "save_replay_serialization"
+        },
+        {
+          "const": "timing_and_input_ux"
+        }
+      ],
+      "type": "array"
+    },
+    "reason_codes": {
+      "$ref": "#/$defs/stringArray"
+    },
+    "requirement": {
+      "$ref": "gamepack.schema.json#/$defs/analysisRequirements"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "failed",
+        "inconclusive",
+        "unsupported"
+      ]
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    },
+    "witnesses": {
+      "items": {
+        "$ref": "#/$defs/witness"
+      },
+      "maxItems": 128,
+      "type": "array"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "analysis_id",
+    "gamepack",
+    "requirement",
+    "analyzer",
+    "status",
+    "reason_codes",
+    "method",
+    "assumptions",
+    "false_positive_risks",
+    "false_negative_risks",
+    "out_of_scope_claims",
+    "summary",
+    "metrics",
+    "checks",
+    "findings",
+    "witnesses",
+    "content_hash"
+  ],
+  "title": "World Forge deterministic game analysis v1",
+  "type": "object",
+  "$defs": {
+    "analyzer": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "abstract_puzzle"
+              }
+            },
+            "required": [
+              "profile"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "worldforge.abstract_puzzle_exhaustive"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "branching_narrative"
+              }
+            },
+            "required": [
+              "profile"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "worldforge.branching_narrative_exhaustive"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "profile": {
+                "const": "unsupported"
+              }
+            },
+            "required": [
+              "profile"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "worldforge.unsupported_profile"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "worldforge.abstract_puzzle_exhaustive",
+            "worldforge.branching_narrative_exhaustive",
+            "worldforge.unsupported_profile"
+          ]
+        },
+        "profile": {
+          "enum": [
+            "abstract_puzzle",
+            "branching_narrative",
+            "unsupported"
+          ]
+        },
+        "version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "profile"
+      ],
+      "type": "object"
+    },
+    "check": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "passed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "maxItems": 0,
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "failed",
+                  "inconclusive"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reason_codes": {
+                "minItems": 1,
+                "type": "array"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "reason_codes": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "inconclusive",
+            "not_applicable"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "status",
+        "reason_codes"
+      ],
+      "type": "object"
+    },
+    "finding": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason_code": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "error",
+            "warning"
+          ]
+        },
+        "state_hash": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sha256"
+            }
+          ]
+        },
+        "subject_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "subject_kind": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "witness_id": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/id"
+            }
+          ]
+        }
+      },
+      "required": [
+        "reason_code",
+        "severity",
+        "subject_kind",
+        "subject_id",
+        "state_hash",
+        "message",
+        "witness_id"
+      ],
+      "type": "object"
+    },
+    "gamepackIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.gamepack"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{1,127}$",
+      "type": "string"
+    },
+    "method": {
+      "additionalProperties": false,
+      "properties": {
+        "bound_policy": {
+          "const": "inconclusive_before_frontier_closure"
+        },
+        "evidence_kind": {
+          "const": "exhaustive_within_declared_bounds"
+        },
+        "kind": {
+          "const": "bounded_exhaustive_state_analysis"
+        },
+        "state_identity": {
+          "const": "sha256_compact_canonical_json"
+        },
+        "traversal": {
+          "const": "canonical_breadth_first_first_discovery"
+        }
+      },
+      "required": [
+        "kind",
+        "traversal",
+        "state_identity",
+        "bound_policy",
+        "evidence_kind"
+      ],
+      "type": "object"
+    },
+    "metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_evaluations": {
+          "maximum": 262144,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "endings_reached": {
+          "maximum": 64,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frontier_closed": {
+          "type": "boolean"
+        },
+        "goals_reached": {
+          "maximum": 64,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "largest_state_bytes": {
+          "maximum": 67108864,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_depth": {
+          "maximum": 512,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "narrative_options_reached": {
+          "maximum": 65536,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "narrative_units_reached": {
+          "maximum": 65536,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "states": {
+          "maximum": 16384,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_state_bytes": {
+          "maximum": 67108864,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "transitions": {
+          "maximum": 262144,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "candidate_evaluations",
+        "states",
+        "transitions",
+        "max_depth",
+        "largest_state_bytes",
+        "total_state_bytes",
+        "goals_reached",
+        "endings_reached",
+        "narrative_units_reached",
+        "narrative_options_reached",
+        "frontier_closed"
+      ],
+      "type": "object"
+    },
+    "parameterValue": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "maximum": 9007199254740991,
+          "minimum": -9007199254740991,
+          "type": "integer"
+        },
+        {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        }
+      ]
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "step": {
+      "additionalProperties": false,
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "parameters": {
+          "additionalProperties": {
+            "$ref": "#/$defs/parameterValue"
+          },
+          "maxProperties": 16,
+          "propertyNames": {
+            "$ref": "#/$defs/id"
+          },
+          "type": "object"
+        },
+        "post_state_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "pre_state_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "action_id",
+        "parameters",
+        "pre_state_hash",
+        "post_state_hash",
+        "events"
+      ],
+      "type": "object"
+    },
+    "stringArray": {
+      "items": {
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 256,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "summary": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "maximum": 32,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "failed": {
+          "maximum": 32,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "findings": {
+          "maximum": 16384,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inconclusive": {
+          "maximum": 32,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "passed": {
+          "maximum": 32,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "witnesses": {
+          "maximum": 128,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "checks",
+        "passed",
+        "failed",
+        "inconclusive",
+        "findings",
+        "witnesses"
+      ],
+      "type": "object"
+    },
+    "witness": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^witness_[0-9]{4}$",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "ending",
+            "failure",
+            "goal",
+            "narrative_option",
+            "narrative_unit",
+            "state"
+          ]
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/step"
+          },
+          "maxItems": 4096,
+          "type": "array"
+        },
+        "target_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "target_id",
+        "steps"
+      ],
+      "type": "object"
+    }
+  }
+}

@@ -1,5 +1,9 @@
 # Session: asset inventory and specification
 
+> **Retained legacy-world prompt.** This M5 inventory/specification flow is
+> bound to a worldpack and its visual/audio bibles. It does not define generic
+> gamepack asset planning.
+
 Receive a locked worldpack, one asset target, and approved visual/audio bibles.
 GPT first derives the complete target inventory, then writes one
 provider-neutral specification per requirement. Do not generate candidates in

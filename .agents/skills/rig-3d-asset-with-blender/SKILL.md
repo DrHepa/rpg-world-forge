@@ -5,6 +5,11 @@ description: Rig one reviewed Blender model through bounded Blender MCP operatio
 
 # Rig a 3D asset with Blender
 
+> **Retained legacy specialization.** This skill belongs to the published
+> worldpack/M5/isoworld/pyray lane named by its existing inputs. It is not a
+> generic creation/gamepack workflow and must not be used to infer generic
+> runtime support. Use the bounded generic skills for `world-forge.*` projects.
+
 ## Scope
 
 Add the specification-defined rig and skinning to one reviewed model lineage.

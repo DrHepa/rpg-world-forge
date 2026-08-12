@@ -1,0 +1,2150 @@
+{
+  "$defs": {
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+      "type": "string",
+      "x-world-forge-portable-runtime-path": true
+    }
+  },
+  "$id": "https://world-forge.local/schemas/generic-asset-production-receipt.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "production_class": {
+            "const": "human"
+          }
+        },
+        "required": [
+          "production_class"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "executed_toolchain": {
+            "additionalProperties": false,
+            "properties": {
+              "creator_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "operation_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "production_class": {
+                "const": "human"
+              },
+              "work_attestation_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "production_class",
+              "creator_id",
+              "operation_id",
+              "work_attestation_hash"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "production_class": {
+            "const": "procedural_offline"
+          }
+        },
+        "required": [
+          "production_class"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "executed_toolchain": {
+            "additionalProperties": false,
+            "properties": {
+              "operation_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "production_class": {
+                "const": "procedural_offline"
+              },
+              "seed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "tool_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "tool_version": {
+                "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "production_class",
+              "tool_id",
+              "tool_version",
+              "operation_id",
+              "seed"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "production_class": {
+            "const": "external_authoring"
+          }
+        },
+        "required": [
+          "production_class"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "executed_toolchain": {
+            "additionalProperties": false,
+            "properties": {
+              "operation_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "production_class": {
+                "const": "external_authoring"
+              },
+              "tool_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "tool_version": {
+                "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "production_class",
+              "tool_id",
+              "tool_version",
+              "operation_id"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "production_class": {
+            "const": "generative_authoring"
+          }
+        },
+        "required": [
+          "production_class"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "executed_toolchain": {
+            "additionalProperties": false,
+            "properties": {
+              "dataset_ids": {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 2,
+                  "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true,
+                "x-world-forge-canonical-string-array": true
+              },
+              "instruction_artifact_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "model_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "model_version": {
+                "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+                "type": "string"
+              },
+              "operation_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "production_class": {
+                "const": "generative_authoring"
+              },
+              "provider_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "seed": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "seed_policy": {
+                "enum": [
+                  "fixed",
+                  "recorded"
+                ]
+              },
+              "tool_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "tool_version": {
+                "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+                "type": "string"
+              },
+              "weights_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "weights_version": {
+                "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "production_class",
+              "provider_id",
+              "tool_id",
+              "tool_version",
+              "operation_id",
+              "model_id",
+              "model_version",
+              "weights_id",
+              "weights_version",
+              "dataset_ids",
+              "seed_policy",
+              "seed",
+              "instruction_artifact_hash"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "failure_reasons": {
+            "maxItems": 0,
+            "type": "array"
+          },
+          "outputs": {
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "failure_reasons": {
+            "minItems": 1,
+            "type": "array"
+          },
+          "outputs": {
+            "maxItems": 0,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    }
+  ],
+  "properties": {
+    "asset": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset_id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "asset_subject": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "format": {
+          "const": "world-forge.asset_subject"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "content_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "executed_toolchain": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "creator_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "operation_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "production_class": {
+              "const": "human"
+            },
+            "work_attestation_hash": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "production_class",
+            "creator_id",
+            "operation_id",
+            "work_attestation_hash"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "production_class": {
+              "const": "procedural_offline"
+            },
+            "seed": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "tool_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "tool_version": {
+              "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "production_class",
+            "tool_id",
+            "tool_version",
+            "operation_id",
+            "seed"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "production_class": {
+              "const": "external_authoring"
+            },
+            "tool_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "tool_version": {
+              "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "production_class",
+            "tool_id",
+            "tool_version",
+            "operation_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "dataset_ids": {
+              "items": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true,
+              "x-world-forge-canonical-string-array": true
+            },
+            "instruction_artifact_hash": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "model_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "model_version": {
+              "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+              "type": "string"
+            },
+            "operation_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "production_class": {
+              "const": "generative_authoring"
+            },
+            "provider_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "seed": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "seed_policy": {
+              "enum": [
+                "fixed",
+                "recorded"
+              ]
+            },
+            "tool_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "tool_version": {
+              "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+              "type": "string"
+            },
+            "weights_id": {
+              "maxLength": 64,
+              "minLength": 2,
+              "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+              "type": "string"
+            },
+            "weights_version": {
+              "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "production_class",
+            "provider_id",
+            "tool_id",
+            "tool_version",
+            "operation_id",
+            "model_id",
+            "model_version",
+            "weights_id",
+            "weights_version",
+            "dataset_ids",
+            "seed_policy",
+            "seed",
+            "instruction_artifact_hash"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "execution_evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "completed_evidence_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "sanitized_log_hashes": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true,
+          "x-world-forge-canonical-string-array": true
+        },
+        "started_evidence_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "started_evidence_hash",
+        "completed_evidence_hash",
+        "sanitized_log_hashes"
+      ],
+      "type": "object"
+    },
+    "failure_reasons": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 2,
+        "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+        "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true,
+      "x-world-forge-canonical-string-array": true
+    },
+    "format": {
+      "const": "world-forge.asset_production_receipt"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "gamepack": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "format": {
+          "const": "world-forge.gamepack"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "input_artifacts": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "maxLength": 64,
+            "minLength": 2,
+            "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+            "type": "string"
+          },
+          "locator": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+            "type": "string",
+            "x-world-forge-portable-runtime-path": true
+          },
+          "role": {
+            "maxLength": 64,
+            "minLength": 2,
+            "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "size_bytes": {
+            "maximum": 16777216,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "role",
+          "locator",
+          "size_bytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "maxItems": 64,
+      "minItems": 0,
+      "type": "array",
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "artifact_id"
+        ],
+        "uniqueBy": [
+          [
+            "artifact_id"
+          ],
+          [
+            "locator"
+          ],
+          [
+            "sha256"
+          ]
+        ]
+      },
+      "x-world-forge-portable-path-tree": "locator"
+    },
+    "inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "format": {
+          "const": "world-forge.asset_inventory"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "lineage_parents": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "receipt_id": {
+            "maxLength": 64,
+            "minLength": 2,
+            "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "receipt_id",
+          "content_hash"
+        ],
+        "type": "object"
+      },
+      "maxItems": 64,
+      "minItems": 0,
+      "type": "array",
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "receipt_id"
+        ],
+        "uniqueBy": [
+          [
+            "receipt_id"
+          ],
+          [
+            "content_hash"
+          ]
+        ]
+      }
+    },
+    "outputs": {
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "model/gltf-binary"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "glb"
+                  },
+                  "max_texture_dimension": {
+                    "maximum": 65536,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "metrics": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "animations": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "joints": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "materials": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "meshes": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "nodes": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "primitives": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "triangles": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "nodes",
+                      "meshes",
+                      "primitives",
+                      "materials",
+                      "joints",
+                      "animations",
+                      "triangles"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "metrics",
+                  "max_texture_dimension"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "animation"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "audio/wav"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "channels": {
+                    "enum": [
+                      1,
+                      2
+                    ]
+                  },
+                  "frames": {
+                    "maximum": 192000000,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "const": "wav_pcm16"
+                  },
+                  "sample_rate": {
+                    "maximum": 192000,
+                    "minimum": 8000,
+                    "type": "integer"
+                  },
+                  "sample_width": {
+                    "const": 2
+                  }
+                },
+                "required": [
+                  "kind",
+                  "channels",
+                  "sample_rate",
+                  "frames",
+                  "sample_width"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "audio"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "application/json"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "schema_json"
+                  },
+                  "record_count": {
+                    "maximum": 1000000,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "schema_id": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^(?!\\s*(?:[A-Za-z][A-Za-z0-9+.-]*://|[Ff][Ii][Ll][Ee]:[\\\\/]|[A-Za-z]:[\\\\/]|[\\\\/]{2}|/|@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:@[^\\s/\\\\]+)?\\s*$|(?:[Pp][Rr][Oo][Vv][Ii][Dd][Ee][Rr](?:_[Ii][Dd])?|[Mm][Oo][Dd][Ee][Ll](?:_[Ii][Dd])?|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Pp][Rr][Oo][Mm][Pp][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Ee][Nn][Dd][Pp][Oo][Ii][Nn][Tt])\\s*(?:=|:\\s*|\\s+[Ii][Ss]\\s+)|\\.{1,2}(?:[\\\\/]|\\s*$)))(?![\\s\\S]*[\\\\/]\\.{1,2}(?:[\\\\/]|\\s*$))(?!\\s*[^/\\\\\\r\\n]+(?:[\\\\/][^/\\\\\\r\\n]+)+\\.[A-Za-z0-9][A-Za-z0-9._-]*\\s*$)[\\s\\S]*$",
+                    "type": "string",
+                    "x-world-forge-safe-runtime-text": true
+                  },
+                  "schema_version": {
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "schema_id",
+                  "schema_version",
+                  "record_count"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "clipset"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "model/gltf-binary"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "glb"
+                  },
+                  "max_texture_dimension": {
+                    "maximum": 65536,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "metrics": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "animations": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "joints": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "materials": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "meshes": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "nodes": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "primitives": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "triangles": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "nodes",
+                      "meshes",
+                      "primitives",
+                      "materials",
+                      "joints",
+                      "animations",
+                      "triangles"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "metrics",
+                  "max_texture_dimension"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "collision"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "font/otf"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "container": {
+                    "const": "otf"
+                  },
+                  "glyph_count": {
+                    "maximum": 1114112,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "glyph_ranges": {
+                    "items": {
+                      "pattern": "^U\\+[0-9A-F]{4,6}-[0-9A-F]{4,6}$",
+                      "type": "string"
+                    },
+                    "maxItems": 256,
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true,
+                    "x-world-forge-canonical-glyph-ranges": true
+                  },
+                  "kind": {
+                    "const": "font"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "container",
+                  "glyph_count",
+                  "glyph_ranges"
+                ],
+                "type": "object",
+                "x-world-forge-glyph-count-match": true
+              },
+              "role": {
+                "const": "font"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "font/ttf"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "container": {
+                    "const": "ttf"
+                  },
+                  "glyph_count": {
+                    "maximum": 1114112,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "glyph_ranges": {
+                    "items": {
+                      "pattern": "^U\\+[0-9A-F]{4,6}-[0-9A-F]{4,6}$",
+                      "type": "string"
+                    },
+                    "maxItems": 256,
+                    "minItems": 1,
+                    "type": "array",
+                    "uniqueItems": true,
+                    "x-world-forge-canonical-glyph-ranges": true
+                  },
+                  "kind": {
+                    "const": "font"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "container",
+                  "glyph_count",
+                  "glyph_ranges"
+                ],
+                "type": "object",
+                "x-world-forge-glyph-count-match": true
+              },
+              "role": {
+                "const": "font"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "text/x-glsl"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "glsl"
+                  },
+                  "line_count": {
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "stage": {
+                    "const": "fragment"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "stage",
+                  "line_count"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "fragment_shader"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "application/json"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "schema_json"
+                  },
+                  "record_count": {
+                    "maximum": 1000000,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "schema_id": {
+                    "maxLength": 1024,
+                    "minLength": 1,
+                    "pattern": "^(?!\\s*(?:[A-Za-z][A-Za-z0-9+.-]*://|[Ff][Ii][Ll][Ee]:[\\\\/]|[A-Za-z]:[\\\\/]|[\\\\/]{2}|/|@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:@[^\\s/\\\\]+)?\\s*$|(?:[Pp][Rr][Oo][Vv][Ii][Dd][Ee][Rr](?:_[Ii][Dd])?|[Mm][Oo][Dd][Ee][Ll](?:_[Ii][Dd])?|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Pp][Rr][Oo][Mm][Pp][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Ee][Nn][Dd][Pp][Oo][Ii][Nn][Tt])\\s*(?:=|:\\s*|\\s+[Ii][Ss]\\s+)|\\.{1,2}(?:[\\\\/]|\\s*$)))(?![\\s\\S]*[\\\\/]\\.{1,2}(?:[\\\\/]|\\s*$))(?!\\s*[^/\\\\\\r\\n]+(?:[\\\\/][^/\\\\\\r\\n]+)+\\.[A-Za-z0-9][A-Za-z0-9._-]*\\s*$)[\\s\\S]*$",
+                    "type": "string",
+                    "x-world-forge-safe-runtime-text": true
+                  },
+                  "schema_version": {
+                    "maximum": 65535,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "schema_id",
+                  "schema_version",
+                  "record_count"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "localized_text"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "model/gltf-binary"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "glb"
+                  },
+                  "max_texture_dimension": {
+                    "maximum": 65536,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "metrics": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "animations": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "joints": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "materials": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "meshes": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "nodes": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "primitives": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "triangles": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "nodes",
+                      "meshes",
+                      "primitives",
+                      "materials",
+                      "joints",
+                      "animations",
+                      "triangles"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "metrics",
+                  "max_texture_dimension"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "model"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "model/gltf-binary"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "glb"
+                  },
+                  "max_texture_dimension": {
+                    "maximum": 65536,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "metrics": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "animations": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "joints": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "materials": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "meshes": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "nodes": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "primitives": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "triangles": {
+                        "maximum": 100000000,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "nodes",
+                      "meshes",
+                      "primitives",
+                      "materials",
+                      "joints",
+                      "animations",
+                      "triangles"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "metrics",
+                  "max_texture_dimension"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "skeleton"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "image/png"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "height": {
+                    "maximum": 16384,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "const": "png"
+                  },
+                  "mode": {
+                    "enum": [
+                      "rgba8",
+                      "rgb8",
+                      "grayscale8"
+                    ]
+                  },
+                  "width": {
+                    "maximum": 16384,
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "width",
+                  "height",
+                  "mode"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "texture"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidate_artifact_id": {
+                "maxLength": 64,
+                "minLength": 2,
+                "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+                "type": "string"
+              },
+              "locator": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "media_type": {
+                "const": "text/x-glsl"
+              },
+              "metadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "glsl"
+                  },
+                  "line_count": {
+                    "maximum": 65536,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "stage": {
+                    "const": "vertex"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "stage",
+                  "line_count"
+                ],
+                "type": "object"
+              },
+              "role": {
+                "const": "vertex_shader"
+              },
+              "runtime_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+                "type": "string",
+                "x-world-forge-portable-runtime-path": true
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "size_bytes": {
+                "maximum": 16777216,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "candidate_artifact_id",
+              "locator",
+              "runtime_path",
+              "role",
+              "size_bytes",
+              "sha256",
+              "media_type",
+              "metadata"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "maxItems": 4,
+      "minItems": 0,
+      "type": "array",
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "role"
+        ],
+        "uniqueBy": [
+          [
+            "role"
+          ],
+          [
+            "candidate_artifact_id"
+          ],
+          [
+            "locator"
+          ],
+          [
+            "sha256"
+          ]
+        ]
+      },
+      "x-world-forge-portable-path-tree": "locator"
+    },
+    "production_class": {
+      "enum": [
+        "human",
+        "procedural_offline",
+        "external_authoring",
+        "generative_authoring"
+      ]
+    },
+    "receipt_id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "request": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "format": {
+          "const": "world-forge.asset_production_request"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "rights_attestation": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        },
+        "evidence_hashes": {
+          "items": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true,
+          "x-world-forge-canonical-string-array": true
+        }
+      },
+      "required": [
+        "basis",
+        "evidence_hashes"
+      ],
+      "type": "object"
+    },
+    "specification": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "format": {
+          "const": "world-forge.asset_spec"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "failed"
+      ]
+    },
+    "style": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "format": {
+          "const": "world-forge.asset_style"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "target": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "format": {
+          "const": "world-forge.asset_target"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 64,
+          "minLength": 2,
+          "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "receipt_id",
+    "gamepack",
+    "asset_subject",
+    "target",
+    "style",
+    "inventory",
+    "specification",
+    "asset",
+    "request",
+    "production_class",
+    "status",
+    "executed_toolchain",
+    "input_artifacts",
+    "outputs",
+    "lineage_parents",
+    "execution_evidence",
+    "rights_attestation",
+    "failure_reasons",
+    "content_hash"
+  ],
+  "title": "World Forge asset production receipt v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-distinct-content-hashes": true
+}

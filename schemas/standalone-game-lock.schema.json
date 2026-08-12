@@ -1,0 +1,98 @@
+{
+  "$defs": {
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "maximum": 33554432,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?![./])(?!.*/(?:\\.{1,2})(?:/|$))(?!(?:.*[/])?(?:aux|con|nul|prn|com[1-9]|lpt[1-9])(?:[./]|$))[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*(?:/[a-zA-Z0-9_.@ -]+)*$",
+      "type": "string"
+    },
+    "semver": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/standalone-game-lock.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/file"
+      },
+      "maxItems": 768,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true,
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "path"
+        ],
+        "uniqueBy": [
+          [
+            "path"
+          ]
+        ]
+      }
+    },
+    "format": {
+      "const": "world-forge.standalone_game_lock"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "lock_id": {
+      "pattern": "^standalone_game_lock_[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "tree_hash": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "lock_id",
+    "files",
+    "tree_hash",
+    "content_hash"
+  ],
+  "title": "World Forge standalone payload lock v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-standalone-game-lock-coherent": true
+}

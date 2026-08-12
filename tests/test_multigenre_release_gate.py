@@ -1,0 +1,1940 @@
+from __future__ import annotations
+
+import ast
+import copy
+import hashlib
+import json
+import os
+import re
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+from worldforge.integrity import canonical_json_bytes
+from worldforge.standalone_templates import STANDALONE_TEMPLATE_FILES
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _workflow_job_block(workflow: str, job_id: str) -> str:
+    marker = f"  {job_id}:\n"
+    if workflow.count(marker) != 1:
+        raise AssertionError(f"workflow must contain exactly one {job_id} job")
+    block = workflow.split(marker, 1)[1]
+    lines = block.splitlines(keepends=True)
+    end = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("  ") and not line.startswith("    ")
+        ),
+        len(lines),
+    )
+    return "".join(lines[:end])
+
+
+def _workflow_job_contract(workflow: str, job_id: str) -> dict[str, object]:
+    """Parse the complete closed YAML subset used by one release job."""
+
+    def add(target: dict[str, object], key: str, value: object) -> None:
+        if key in target:
+            raise AssertionError(f"duplicate workflow field: {key}")
+        target[key] = value
+
+    def scalar(line: str, *, indent: int, allowed: set[str]) -> tuple[str, str]:
+        if not line.startswith(" " * indent) or line.startswith(" " * (indent + 2)):
+            raise AssertionError(f"invalid workflow indentation: {line!r}")
+        key, separator, value = line[indent:].partition(": ")
+        if separator != ": " or key not in allowed or not value:
+            raise AssertionError(f"unsupported workflow field: {line!r}")
+        return key, value
+
+    def block_scalar(lines: list[str], index: int, *, indent: int, key: str) -> tuple[str, int]:
+        marker = " " * indent + f"{key}: >-"
+        if lines[index] != marker:
+            raise AssertionError(f"unsupported workflow block scalar: {lines[index]!r}")
+        index += 1
+        payload = []
+        payload_indent = " " * (indent + 2)
+        while index < len(lines) and lines[index].startswith(payload_indent):
+            payload.append(lines[index][indent + 2 :])
+            index += 1
+        if not payload:
+            raise AssertionError(f"empty workflow block scalar: {key}")
+        return " ".join(line.strip() for line in payload), index
+
+    def literal_scalar(lines: list[str], index: int, *, indent: int, key: str) -> tuple[str, int]:
+        marker = " " * indent + f"{key}: |"
+        if lines[index] != marker:
+            raise AssertionError(f"unsupported workflow literal scalar: {lines[index]!r}")
+        index += 1
+        payload = []
+        payload_indent = " " * (indent + 2)
+        while index < len(lines) and lines[index].startswith(payload_indent):
+            payload.append(lines[index][indent + 2 :])
+            index += 1
+        if not payload:
+            raise AssertionError(f"empty workflow literal scalar: {key}")
+        return "\n".join(payload), index
+
+    marker = f"  {job_id}:\n"
+    if workflow.count(marker) != 1:
+        raise AssertionError(f"workflow must contain exactly one {job_id} job")
+    block = workflow.split(marker, 1)[1]
+    lines = block.splitlines()
+    end = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if line.startswith("  ") and not line.startswith("    ")
+        ),
+        len(lines),
+    )
+    lines = lines[:end]
+    job: dict[str, object] = {}
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if not line:
+            index += 1
+            continue
+        if line in {"    env:", "    needs:", "    permissions:", "    strategy:", "    steps:"}:
+            section = line[4:-1]
+            index += 1
+            if section == "needs":
+                values = []
+                while index < len(lines) and lines[index].startswith("      - "):
+                    values.append(lines[index].removeprefix("      - "))
+                    index += 1
+                if not values:
+                    raise AssertionError("release job needs list must not be empty")
+                add(job, section, values)
+                continue
+            if section == "env":
+                values: dict[str, object] = {}
+                while index < len(lines) and lines[index].startswith("      "):
+                    key, value = scalar(
+                        lines[index], indent=6, allowed={"WORLD_FORGE_RUNNER_IMAGE"}
+                    )
+                    add(values, key, value)
+                    index += 1
+                add(job, section, values)
+                continue
+            if section == "permissions":
+                values: dict[str, object] = {}
+                while index < len(lines) and lines[index].startswith("      "):
+                    key, value = scalar(
+                        lines[index],
+                        indent=6,
+                        allowed={"attestations", "contents", "id-token"},
+                    )
+                    add(values, key, value)
+                    index += 1
+                add(job, section, values)
+                continue
+            if section == "strategy":
+                strategy: dict[str, object] = {}
+                key, value = scalar(lines[index], indent=6, allowed={"fail-fast"})
+                add(strategy, key, value)
+                index += 1
+                if lines[index] != "      matrix:":
+                    raise AssertionError("release strategy must contain one matrix")
+                index += 1
+                matrix: dict[str, object] = {}
+                if lines[index] != "        os:":
+                    raise AssertionError("release matrix must declare os first")
+                index += 1
+                operating_systems = []
+                while index < len(lines) and lines[index].startswith("          - "):
+                    operating_systems.append(lines[index].removeprefix("          - "))
+                    index += 1
+                add(matrix, "os", operating_systems)
+                key, value = scalar(lines[index], indent=8, allowed={"python-version"})
+                if value.startswith("["):
+                    value = ast.literal_eval(value)
+                add(matrix, key, value)
+                index += 1
+                add(strategy, "matrix", matrix)
+                add(job, section, strategy)
+                continue
+            steps: list[dict[str, object]] = []
+            while index < len(lines):
+                if not lines[index].startswith("      - name: "):
+                    raise AssertionError(f"every release step needs a name: {lines[index]!r}")
+                step: dict[str, object] = {"name": lines[index].removeprefix("      - name: ")}
+                index += 1
+                while index < len(lines) and not lines[index].startswith("      - "):
+                    current = lines[index]
+                    if not current:
+                        index += 1
+                        continue
+                    if current == "        run: |":
+                        if "run" in step:
+                            raise AssertionError("duplicate run field")
+                        step["run"], index = literal_scalar(lines, index, indent=8, key="run")
+                        continue
+                    if current == "        env:":
+                        values = {}
+                        index += 1
+                        while index < len(lines) and lines[index].startswith("          "):
+                            key, value = scalar(
+                                lines[index],
+                                indent=10,
+                                allowed={
+                                    "ATTESTATION_BUNDLE_PATH",
+                                    "ATTESTATION_ID",
+                                    "ATTESTATION_URL",
+                                },
+                            )
+                            add(values, key, value)
+                            index += 1
+                        add(step, "env", values)
+                        continue
+                    if current == "        with:":
+                        values = {}
+                        index += 1
+                        while index < len(lines) and lines[index].startswith("          "):
+                            if lines[index] == "          path: |":
+                                value, index = literal_scalar(lines, index, indent=10, key="path")
+                                add(values, "path", value)
+                                continue
+                            key, value = scalar(
+                                lines[index],
+                                indent=10,
+                                allowed={
+                                    "cache",
+                                    "cache-dependency-path",
+                                    "if-no-files-found",
+                                    "merge-multiple",
+                                    "name",
+                                    "path",
+                                    "pattern",
+                                    "persist-credentials",
+                                    "python-version",
+                                    "retention-days",
+                                    "subject-path",
+                                },
+                            )
+                            add(values, key, value)
+                            index += 1
+                        add(step, "with", values)
+                        continue
+                    key, value = scalar(
+                        current,
+                        indent=8,
+                        allowed={"id", "if", "run", "shell", "uses"},
+                    )
+                    add(step, key, value)
+                    index += 1
+                if ("run" in step) == ("uses" in step):
+                    raise AssertionError("each release step needs exactly one run or uses field")
+                steps.append(step)
+            add(job, section, steps)
+            continue
+        if line == "    if: >-":
+            value, index = block_scalar(lines, index, indent=4, key="if")
+            add(job, "if", value)
+            continue
+        key, value = scalar(line, indent=4, allowed={"name", "needs", "runs-on", "if"})
+        add(job, key, value)
+        index += 1
+    return job
+
+
+def _workflow_job_steps(workflow: str, job_id: str) -> list[dict[str, object]]:
+    steps = _workflow_job_contract(workflow, job_id).get("steps")
+    if not isinstance(steps, list):
+        raise AssertionError(f"workflow job {job_id} has no steps")
+    return steps
+
+
+def _action_ref(value: object) -> str:
+    if not isinstance(value, str):
+        raise AssertionError("workflow action ref must be a string")
+    ref = value.split(" # ", 1)[0]
+    if not re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", ref):
+        raise AssertionError(f"workflow action must use a pinned 40-hex ref: {value!r}")
+    return ref
+
+
+def _step_by_name(job: dict[str, object], name: str) -> dict[str, object]:
+    steps = job.get("steps")
+    if not isinstance(steps, list):
+        raise AssertionError("workflow job must define steps")
+    matches = [step for step in steps if isinstance(step, dict) and step.get("name") == name]
+    if len(matches) != 1:
+        raise AssertionError(f"workflow job must contain exactly one step named {name!r}")
+    return matches[0]
+
+
+def _literal_lines(value: object) -> list[str]:
+    if not isinstance(value, str):
+        raise AssertionError("workflow literal field must be a string")
+    return value.splitlines()
+
+
+def _assert_closed_run_tokens(run: object, *, required: set[str], forbidden: set[str]) -> None:
+    if not isinstance(run, str):
+        raise AssertionError("workflow run block must be a string")
+    for token in required:
+        if token not in run:
+            raise AssertionError(f"workflow run block missing required token: {token}")
+    for token in forbidden:
+        if token in run:
+            raise AssertionError(f"workflow run block contains forbidden token: {token}")
+
+
+def _assert_all_uses_are_pinned(workflow: str) -> None:
+    uses = re.findall(r"^\s*uses:\s*(.+)$", workflow, flags=re.MULTILINE)
+    if len(uses) < 10:
+        raise AssertionError("workflow must contain at least ten action uses")
+    for uses_value in uses:
+        _action_ref(uses_value)
+
+
+def _assert_native_release_job_contract(job: dict[str, object]) -> None:
+    if job.get("needs") is not None:
+        raise AssertionError("native release matrix job must not declare needs")
+    self_permissions = job.get("permissions")
+    if self_permissions is not None:
+        raise AssertionError("native release matrix job must not declare permissions")
+    if job.get("runs-on") != "${{ matrix.os }}":
+        raise AssertionError("native release matrix job must run on matrix.os")
+    if job.get("env") != {"WORLD_FORGE_RUNNER_IMAGE": "${{ matrix.os }}"}:
+        raise AssertionError("native release matrix job must bind runner image to matrix.os")
+    if job.get("strategy") != {
+        "fail-fast": "false",
+        "matrix": {"os": ["ubuntu-24.04", "windows-2022"], "python-version": ["3.11", "3.12"]},
+    }:
+        raise AssertionError(
+            "native release matrix must be the exact Linux/Windows x 3.11/3.12 grid"
+        )
+    upload = _step_by_name(job, "Upload exact matrix evidence")
+    if _action_ref(upload.get("uses")) != (
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+    ):
+        raise AssertionError("native release upload must use the audited upload-artifact ref")
+    if upload.get("with") != {
+        "name": "multigenre-release-${{ runner.os }}-py${{ matrix.python-version }}",
+        "path": (
+            "${{ runner.temp }}/world-forge-${{ runner.os }}-py${{ matrix.python-version }}.json"
+        ),
+        "if-no-files-found": "error",
+        "retention-days": "90",
+    }:
+        raise AssertionError("native release upload artifact contract drifted")
+    verify = _step_by_name(job, "Verify exact generic release lineage with native raylib")
+    _assert_closed_run_tokens(
+        verify.get("run"),
+        required={
+            "--native required",
+            'expected_cases=["abstract-puzzle", "branching-narrative"]',
+            'report["status"] == "passed"',
+            'case["native_evidence"]["state"] == "passed"',
+        },
+        forbidden={"continue-on-error", "--native optional"},
+    )
+
+
+def _assert_aggregate_job_contract(job: dict[str, object]) -> None:
+    if job.get("needs") != "multigenre-native-release":
+        raise AssertionError("aggregate job must need only the native release matrix")
+    if job.get("runs-on") != "ubuntu-24.04":
+        raise AssertionError("aggregate job runner drifted")
+    if job.get("permissions") != {"contents": "read"}:
+        raise AssertionError("aggregate job permissions drifted")
+    downloads = [
+        step
+        for step in job.get("steps", [])
+        if isinstance(step, dict) and step.get("uses", "").startswith("actions/download-artifact@")
+    ]
+    expected_downloads = [
+        (
+            "Download Linux Python 3.11 matrix evidence",
+            "multigenre-release-Linux-py3.11",
+            "${{ runner.temp }}/multigenre-release-Linux-py3.11",
+        ),
+        (
+            "Download Linux Python 3.12 matrix evidence",
+            "multigenre-release-Linux-py3.12",
+            "${{ runner.temp }}/multigenre-release-Linux-py3.12",
+        ),
+        (
+            "Download Windows Python 3.11 matrix evidence",
+            "multigenre-release-Windows-py3.11",
+            "${{ runner.temp }}/multigenre-release-Windows-py3.11",
+        ),
+        (
+            "Download Windows Python 3.12 matrix evidence",
+            "multigenre-release-Windows-py3.12",
+            "${{ runner.temp }}/multigenre-release-Windows-py3.12",
+        ),
+    ]
+    if len(downloads) != 4:
+        raise AssertionError("aggregate job must use exactly four explicit artifact downloads")
+    for step, (name, artifact_name, path) in zip(downloads, expected_downloads, strict=True):
+        if step.get("name") != name:
+            raise AssertionError("aggregate download step name drifted")
+        if _action_ref(step.get("uses")) != (
+            "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
+        ):
+            raise AssertionError("aggregate download step action ref drifted")
+        if step.get("with") != {"name": artifact_name, "path": path}:
+            raise AssertionError("aggregate download step must use an exact name/path pair")
+    aggregate = _step_by_name(job, "Aggregate exact 2x2 native evidence")
+    _assert_closed_run_tokens(
+        aggregate.get("run"),
+        required={
+            "expected_os expected_python expected_runner directory expected_name",
+            "world-forge-Linux-py3.11.json",
+            "world-forge-Linux-py3.12.json",
+            "world-forge-Windows-py3.11.json",
+            "world-forge-Windows-py3.12.json",
+            "from worldforge.multigenre_release_contract import validate_aggregate_report",
+            "from worldforge.multigenre_release_contract import validate_release_report",
+            'report["host"]["os"] == sys.argv[2]',
+            'report["host"]["python_minor"] == sys.argv[3]',
+            'report["host"]["runner_image"] == sys.argv[4]',
+            'report["toolchain"]["python"].startswith(sys.argv[3] + ".")',
+            '--aggregate "${reports[@]}"',
+            (
+                'aggregate["matrix"] == [{"os": "linux", "python_minor": "3.11"}, '
+                '{"os": "linux", "python_minor": "3.12"}, '
+                '{"os": "windows", "python_minor": "3.11"}, '
+                '{"os": "windows", "python_minor": "3.12"}]'
+            ),
+            "validate_aggregate_report(aggregate)",
+        },
+        forbidden={
+            "pattern:",
+            "merge-multiple",
+            "continue-on-error",
+            'host"]["runner_os"]',
+            'toolchain"]["python_version"]',
+            "operating_systems",
+            "python_versions",
+        },
+    )
+    upload = _step_by_name(job, "Upload aggregate and exact rows evidence")
+    if _action_ref(upload.get("uses")) != (
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+    ):
+        raise AssertionError("aggregate upload action ref drifted")
+    if upload.get("with") != {
+        "name": "multigenre-release-aggregate-and-rows",
+        "path": "\n".join(
+            [
+                (
+                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
+                    "world-forge-multigenre-aggregate.json"
+                ),
+                (
+                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
+                    "world-forge-Linux-py3.11.json"
+                ),
+                (
+                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
+                    "world-forge-Linux-py3.12.json"
+                ),
+                (
+                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
+                    "world-forge-Windows-py3.11.json"
+                ),
+                (
+                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
+                    "world-forge-Windows-py3.12.json"
+                ),
+            ]
+        ),
+        "if-no-files-found": "error",
+        "retention-days": "90",
+    }:
+        raise AssertionError("aggregate upload file list/retention drifted")
+
+
+def _assert_authority_job_contract(job: dict[str, object]) -> None:
+    if job.get("needs") != "multigenre-native-release-aggregate":
+        raise AssertionError("authority job must need only the aggregate job")
+    if job.get("runs-on") != "ubuntu-24.04":
+        raise AssertionError("authority job runner drifted")
+    if job.get("permissions") != {
+        "contents": "read",
+        "id-token": "write",
+        "attestations": "write",
+    }:
+        raise AssertionError("authority job permissions drifted")
+    if job.get("if") != (
+        "github.event_name == 'push' && github.ref == 'refs/heads/main' && "
+        "github.repository_id == '1305601753' && "
+        "(github.repository == 'DrHepa/rpg-world-forge' || "
+        "github.repository == 'DrHepa/world-forge')"
+    ):
+        raise AssertionError("authority trusted-main condition drifted")
+    checkout = _step_by_name(job, "Check out source")
+    if _action_ref(checkout.get("uses")) != (
+        "actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
+    ):
+        raise AssertionError("authority checkout action ref drifted")
+    if checkout.get("with") != {"persist-credentials": "false"}:
+        raise AssertionError("authority checkout must not persist credentials")
+    download = _step_by_name(job, "Download exact aggregate and rows evidence")
+    if _action_ref(download.get("uses")) != (
+        "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
+    ):
+        raise AssertionError("authority download action ref drifted")
+    if download.get("with") != {
+        "name": "multigenre-release-aggregate-and-rows",
+        "path": "${{ runner.temp }}/hosted-native-aggregate",
+    }:
+        raise AssertionError("authority download artifact contract drifted")
+    attest = _step_by_name(job, "Attest hosted native release authority candidate")
+    if attest.get("id") != "attest":
+        raise AssertionError("authority attest step id drifted")
+    if _action_ref(attest.get("uses")) != (
+        "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
+    ):
+        raise AssertionError("authority attest action ref drifted")
+    if attest.get("with") != {
+        "subject-path": (
+            "${{ runner.temp }}/hosted-native-authority/hosted-native-release-authority.json"
+        )
+    }:
+        raise AssertionError("authority attest subject path drifted")
+    build = _step_by_name(job, "Build hosted native release authority candidate")
+    _assert_closed_run_tokens(
+        build.get("run"),
+        required={
+            "${aggregate_dir}/world-forge-Linux-py3.11.json",
+            "${aggregate_dir}/world-forge-Linux-py3.12.json",
+            "${aggregate_dir}/world-forge-Windows-py3.11.json",
+            "${aggregate_dir}/world-forge-Windows-py3.12.json",
+            '--output "${authority_dir}/hosted-native-release-authority.json"',
+        },
+        forbidden={"docs/evidence/multigenre-release-status.json", "registry"},
+    )
+    verify = _step_by_name(job, "Verify attestation, write receipt, and reverify")
+    if verify.get("env") != {
+        "ATTESTATION_ID": "${{ steps.attest.outputs.attestation-id }}",
+        "ATTESTATION_URL": "${{ steps.attest.outputs.attestation-url }}",
+        "ATTESTATION_BUNDLE_PATH": "${{ steps.attest.outputs.bundle-path }}",
+    }:
+        raise AssertionError("authority attestation env contract drifted")
+    _assert_closed_run_tokens(
+        verify.get("run"),
+        required={
+            "verify-write-receipt",
+            "reverify",
+            '--candidate "${authority_dir}/hosted-native-release-authority.json"',
+            '--bundle "${authority_dir}/hosted-native-release-attestation.bundle.json"',
+            '--gh-archive "${gh_archive}"',
+            '--gh "${gh_bin}"',
+            '--receipt "${authority_dir}/hosted-native-release-attestation-receipt.json"',
+            '--attestation-id "${ATTESTATION_ID}"',
+            '--attestation-url "${ATTESTATION_URL}"',
+        },
+        forbidden={"docs/evidence/multigenre-release-status.json", "registry"},
+    )
+    upload = _step_by_name(job, "Upload hosted native authority evidence")
+    if _action_ref(upload.get("uses")) != (
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+    ):
+        raise AssertionError("authority upload action ref drifted")
+    if upload.get("with") != {
+        "name": "multigenre-hosted-native-release-authority-evidence",
+        "path": "\n".join(
+            [
+                "${{ runner.temp }}/hosted-native-authority/hosted-native-release-authority.json",
+                "${{ runner.temp }}/hosted-native-aggregate/world-forge-Linux-py3.11.json",
+                "${{ runner.temp }}/hosted-native-aggregate/world-forge-Linux-py3.12.json",
+                "${{ runner.temp }}/hosted-native-aggregate/world-forge-Windows-py3.11.json",
+                "${{ runner.temp }}/hosted-native-aggregate/world-forge-Windows-py3.12.json",
+                "${{ runner.temp }}/hosted-native-aggregate/world-forge-multigenre-aggregate.json",
+                (
+                    "${{ runner.temp }}/hosted-native-authority/"
+                    "hosted-native-release-attestation.bundle.json"
+                ),
+                (
+                    "${{ runner.temp }}/hosted-native-authority/"
+                    "hosted-native-release-attestation-receipt.json"
+                ),
+                (
+                    "${{ runner.temp }}/hosted-native-authority/"
+                    "hosted-native-release-candidate-build-status.json"
+                ),
+                (
+                    "${{ runner.temp }}/hosted-native-authority/"
+                    "hosted-native-release-receipt-status.json"
+                ),
+                (
+                    "${{ runner.temp }}/hosted-native-authority/"
+                    "hosted-native-release-reverify-status.json"
+                ),
+            ]
+        ),
+        "if-no-files-found": "error",
+        "retention-days": "90",
+    }:
+        raise AssertionError("authority upload file list/retention drifted")
+
+
+def _hosted_native_release_status(
+    *,
+    trusted_main_push: bool,
+    matrix_result: str | None,
+    aggregate_result: str | None,
+    authority_result: str | None,
+) -> tuple[bool, str]:
+    if matrix_result != "success":
+        return False, f"native matrix must succeed; got {matrix_result}"
+    if aggregate_result != "success":
+        return False, f"native aggregate must succeed; got {aggregate_result}"
+    if trusted_main_push:
+        if authority_result != "success":
+            return (
+                False,
+                f"trusted hosted native authority is required on main push; got {authority_result}",
+            )
+        return True, "release_status=hosted-pending"
+    if authority_result != "skipped":
+        return False, f"authority must be skipped outside trusted main push; got {authority_result}"
+    return True, "release_status=not-hosted-authoritative"
+
+
+def _assert_status_job_contract(job: dict[str, object]) -> None:
+    if job.get("needs") != [
+        "multigenre-native-release",
+        "multigenre-native-release-aggregate",
+        "multigenre-hosted-native-release-authority",
+    ]:
+        raise AssertionError("status job needs list drifted")
+    if job.get("if") != "always()":
+        raise AssertionError("status job must run with always()")
+    if job.get("runs-on") != "ubuntu-24.04":
+        raise AssertionError("status job runner drifted")
+    if job.get("permissions") != {"contents": "read"}:
+        raise AssertionError("status job permissions drifted")
+    status = _step_by_name(job, "Enforce hosted native release status truth table")
+    _assert_closed_run_tokens(
+        status.get("run"),
+        required={
+            "trusted_main_push=false",
+            "trusted_main_push=true",
+            'matrix_result="${{ needs.multigenre-native-release.result }}"',
+            'aggregate_result="${{ needs.multigenre-native-release-aggregate.result }}"',
+            'authority_result="${{ needs.multigenre-hosted-native-release-authority.result }}"',
+            "release_status=hosted-pending",
+            "release_status=not-hosted-authoritative",
+            "authority must be skipped outside trusted main push",
+            "trusted hosted native authority is required on main push",
+        },
+        forbidden={"release_status=ready", "multigenre-hosted-native-release-authority-evidence"},
+    )
+
+
+def _load_gate():
+    from scripts import verify_multigenre_release
+
+    return verify_multigenre_release
+
+
+def _fixture_hashes() -> dict[str, dict[str, str]]:
+    return {
+        "abstract-puzzle": {
+            "gamepack": "1" * 64,
+            "package": "2" * 64,
+            "package_archive": "3" * 64,
+        },
+        "branching-narrative": {
+            "gamepack": "4" * 64,
+            "package": "5" * 64,
+            "package_archive": "6" * 64,
+        },
+    }
+
+
+def _matrix_report(os_name: str, python_minor: str) -> dict[str, object]:
+    gate = _load_gate()
+    host = {
+        "architecture": "x86_64",
+        "os": os_name,
+        "platform_id": f"platform:{os_name}_x86_64",
+        "python_abi": f"cp{python_minor.replace('.', '')}",
+        "python_implementation": "cpython",
+        "python_minor": python_minor,
+        "runner_image": "ubuntu-24.04" if os_name == "linux" else "windows-2022",
+    }
+    expected_lock = gate._expected_platform_lock(host)
+    if expected_lock is None:
+        raise AssertionError("matrix host must have one built-in platform lock")
+    cases = []
+    for case_id, hashes in _fixture_hashes().items():
+        adapter_id, adapter_version = gate.CASE_ADAPTERS[case_id]
+        cases.append(
+            {
+                "case_id": case_id,
+                "status": "passed",
+                "stages": [
+                    {"reason_code": None, "stage": stage, "state": "passed"}
+                    for stage in gate.REQUIRED_CASE_STAGES
+                ],
+                "hashes": {
+                    "analysis": "7" * 64,
+                    "assetpack": "8" * 64,
+                    "capability_ledger": "9" * 64,
+                    "gamepack": hashes["gamepack"],
+                    "materialization_bundle": "a" * 64,
+                    "package": hashes["package"],
+                    "package_archive": hashes["package_archive"],
+                    "runtime_bundle": "b" * 64,
+                    "runtime_support_authority": "d" * 64,
+                    "runtime_support_report": "e" * 64,
+                    "standalone_game": "c" * 64,
+                },
+                "lineage": {stage: hashes["gamepack"] for stage in gate.LINEAGE_STAGES},
+                "identities": {
+                    "adapter_id": adapter_id,
+                    "adapter_version": adapter_version,
+                    "assetpack_id": f"assetpack_{case_id.replace('-', '_')}",
+                    "materialization_bundle_id": f"materialization_{case_id.replace('-', '_')}",
+                    "package_id": f"package_{case_id.replace('-', '_')}",
+                    "runtime_bundle_id": f"runtime_{case_id.replace('-', '_')}",
+                    "runtime_support_authority_id": (
+                        f"runtime_authority_{case_id.replace('-', '_')}"
+                    ),
+                    "runtime_support_report_id": f"runtime_report_{case_id.replace('-', '_')}",
+                    "standalone_game_id": case_id.replace("-", "_"),
+                },
+                "native_evidence": {
+                    "adapter_id": adapter_id,
+                    "adapter_version": adapter_version,
+                    "extracted_runtime_bundle_hash": "b" * 64,
+                    "frames": 2,
+                    "gamepack_hash": hashes["gamepack"],
+                    "platform_lock_hash": expected_lock["content_hash"],
+                    "platform_lock_id": expected_lock["lock_id"],
+                    "reason_code": None,
+                    "runtime_artifact_sha256": expected_lock["dependency"]["artifact"]["sha256"],
+                    "state": "passed",
+                },
+                "persistence": {
+                    "endings": (
+                        ["puzzle_complete"]
+                        if case_id == "abstract-puzzle"
+                        else ["ending_left", "ending_right"]
+                    ),
+                    "replays_verified": 1 if case_id == "abstract-puzzle" else 2,
+                    "saves_restored": 1 if case_id == "abstract-puzzle" else 2,
+                    "saves_verified": 1 if case_id == "abstract-puzzle" else 2,
+                },
+            }
+        )
+    report = {
+        "format": gate.REPORT_FORMAT,
+        "format_version": 1,
+        "status": "passed",
+        "source": {
+            "input_tree_hash": "d" * 64,
+            "revision": "e" * 40,
+            "tree_state": "clean",
+        },
+        "toolchain": {
+            "pillow": "12.3.0",
+            "python": f"{python_minor}.0",
+            "raylib": "6.0.1.0",
+            "raylib_artifact": gate._runtime_artifact_identity(expected_lock),
+            "world_forge": "0.7.0",
+        },
+        "host": host,
+        "native_mode": "required",
+        "cases": cases,
+        "failure_reasons": [],
+    }
+    return gate.validate_release_report(report)
+
+
+def _native_off_report(os_name: str, python_minor: str) -> dict[str, object]:
+    gate = _load_gate()
+    report = copy.deepcopy(_matrix_report(os_name, python_minor))
+    report["native_mode"] = "off"
+    report["toolchain"]["raylib_artifact"] = None
+    for case in report["cases"]:
+        case["native_evidence"] = gate.native_untested_evidence("off")
+        case["stages"][-1] = {
+            "reason_code": "native_disabled",
+            "stage": "native",
+            "state": "untested",
+        }
+    return gate.validate_release_report(report)
+
+
+class MultigenreReleaseGateContractTests(unittest.TestCase):
+    def test_script_does_not_import_tests_or_provider_sdks(self) -> None:
+        path = ROOT / "scripts/verify_multigenre_release.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        roots = {
+            alias.name.split(".", 1)[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Import)
+            for alias in node.names
+        }
+        roots.update(
+            (node.module or "").split(".", 1)[0]
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+        )
+        self.assertTrue({"gamepack_runtime", "worldforge"}.issubset(roots))
+        self.assertTrue(
+            roots.isdisjoint({"tests", "openai", "anthropic", "ollama", "requests", "httpx"})
+        )
+        imported_modules = {
+            node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+        }
+        self.assertNotIn("gamepack_raylib_2d.native_smoke", imported_modules)
+        self.assertIn('"scripts/native_smoke.py"', path.read_text(encoding="utf-8"))
+
+        run_case = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_run_case"
+        )
+        called_names = {
+            node.func.id
+            for node in ast.walk(run_case)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        self.assertLessEqual(
+            {
+                "initialize_runtime_support_authority",
+                "build_headless_evidence_set",
+                "attach_verified_headless_evidence",
+                "build_game_package_extraction_evidence",
+                "attach_verified_game_package",
+                "derive_runtime_evidence",
+                "derive_runtime_support_report",
+            },
+            called_names,
+        )
+
+    def test_external_authority_markers_are_rejected_on_all_distribution_surfaces(self) -> None:
+        gate = _load_gate()
+        markers = (
+            b"world-forge.runtime_support_authority",
+            b"world-forge.hosted_native_release_authority",
+            b"world-forge.hosted_native_release_attestation_receipt",
+        )
+        surfaces = (
+            "assetpack",
+            "runtime bundle",
+            "materialization bundle",
+            "standalone files",
+            "package archive",
+            "package extracted files",
+            "save file",
+            "replay file",
+            "runtime snapshot",
+        )
+        for surface in surfaces:
+            for marker in markers:
+                with (
+                    self.subTest(surface=surface, marker=marker.decode("ascii")),
+                    self.assertRaisesRegex(
+                        gate.MultigenreReleaseError,
+                        "^runtime_support_authority_leaked:",
+                    ),
+                ):
+                    gate._assert_runtime_authority_external(
+                        surface,
+                        {f"{surface.replace(' ', '-')}.json": b'{"format":"' + marker + b'"}'},
+                    )
+
+    def test_release_report_rejects_unknown_stage_hash_and_source_tampering(self) -> None:
+        gate = _load_gate()
+        report = _matrix_report("linux", "3.12")
+        mutations = []
+
+        unknown_stage = copy.deepcopy(report)
+        unknown_stage["cases"][0]["stages"][0]["stage"] = "unknown"
+        mutations.append((unknown_stage, "release_report_stage_invalid"))
+
+        crossed_hash = copy.deepcopy(report)
+        crossed_hash["cases"][0]["lineage"][gate.LINEAGE_STAGES[0]] = "f" * 64
+        mutations.append((crossed_hash, "release_report_lineage_mismatch"))
+
+        dirty_source = copy.deepcopy(report)
+        dirty_source["source"]["tree_state"] = "dirty"
+        mutations.append((dirty_source, "release_report_source_invalid"))
+
+        extra = copy.deepcopy(report)
+        extra["unexpected"] = True
+        mutations.append((extra, "release_report_fields_invalid"))
+
+        for document, reason in mutations:
+            with (
+                self.subTest(reason=reason),
+                self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    f"^{reason}:",
+                ),
+            ):
+                gate.validate_release_report(document, hosted=True)
+
+    def test_native_off_report_rejects_unsupported_headless_platforms(self) -> None:
+        gate = _load_gate()
+        linux_arm64 = copy.deepcopy(_native_off_report("linux", "3.12"))
+        linux_arm64["host"]["architecture"] = "arm64"
+        linux_arm64["host"]["platform_id"] = "platform:linux_arm64"
+
+        unsupported_os = copy.deepcopy(_native_off_report("linux", "3.12"))
+        unsupported_os["host"]["os"] = "darwin"
+        unsupported_os["host"]["platform_id"] = "platform:darwin_x86_64"
+        unsupported_os["host"]["runner_image"] = "local"
+
+        for document in (linux_arm64, unsupported_os):
+            with (
+                self.subTest(host=document["host"]["platform_id"]),
+                self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    "^release_report_host_invalid:",
+                ),
+            ):
+                gate.validate_release_report(document)
+
+    def test_native_off_report_accepts_exact_x86_headless_platforms(self) -> None:
+        gate = _load_gate()
+        for os_name in ("linux", "windows"):
+            with self.subTest(os_name=os_name):
+                report = _native_off_report(os_name, "3.12")
+                checked = gate.validate_release_report(report)
+                self.assertEqual(checked["status"], "passed")
+                self.assertEqual(checked["host"]["architecture"], "x86_64")
+                self.assertEqual(checked["native_mode"], "off")
+                for case in checked["cases"]:
+                    self.assertEqual(case["native_evidence"], gate.native_untested_evidence("off"))
+
+    def test_native_required_rejects_arm64_before_claiming_evidence(self) -> None:
+        gate = _load_gate()
+        host = {
+            "architecture": "arm64",
+            "os": "linux",
+            "platform_id": "platform:linux_arm64",
+            "python_minor": "3.12",
+        }
+        with self.assertRaisesRegex(
+            gate.MultigenreReleaseError,
+            "^native_platform_unsupported:",
+        ):
+            gate.require_native_host("required", host)
+        self.assertEqual(
+            gate.native_untested_evidence("off"),
+            {
+                "adapter_id": None,
+                "adapter_version": None,
+                "extracted_runtime_bundle_hash": None,
+                "frames": 0,
+                "gamepack_hash": None,
+                "platform_lock_hash": None,
+                "platform_lock_id": None,
+                "reason_code": "native_disabled",
+                "runtime_artifact_sha256": None,
+                "state": "untested",
+            },
+        )
+
+    def test_release_report_closes_host_identity_native_and_persistence_fields(self) -> None:
+        gate = _load_gate()
+        report = _matrix_report("windows", "3.11")
+        mutations = []
+
+        bad_toolchain = copy.deepcopy(report)
+        bad_toolchain["toolchain"]["provider"] = "forbidden"
+        mutations.append((bad_toolchain, "release_report_toolchain_invalid"))
+
+        bad_artifact = copy.deepcopy(report)
+        bad_artifact["toolchain"]["raylib_artifact"]["sha256"] = "0" * 64
+        mutations.append((bad_artifact, "release_report_toolchain_invalid"))
+
+        bad_host = copy.deepcopy(report)
+        bad_host["host"]["platform_id"] = "platform:linux_x86_64"
+        mutations.append((bad_host, "release_report_host_invalid"))
+
+        bad_identity = copy.deepcopy(report)
+        bad_identity["cases"][0]["identities"]["unexpected"] = "value"
+        mutations.append((bad_identity, "release_report_identity_invalid"))
+
+        bad_native = copy.deepcopy(report)
+        bad_native["cases"][0]["native_evidence"]["frames"] = 0
+        mutations.append((bad_native, "release_report_native_invalid"))
+
+        bad_native_artifact = copy.deepcopy(report)
+        bad_native_artifact["cases"][0]["native_evidence"]["runtime_artifact_sha256"] = "0" * 64
+        mutations.append((bad_native_artifact, "release_report_native_invalid"))
+
+        crossed_stage = copy.deepcopy(report)
+        crossed_stage["cases"][0]["stages"][-1]["state"] = "failed"
+        crossed_stage["cases"][0]["stages"][-1]["reason_code"] = "native_execution_failed"
+        mutations.append((crossed_stage, "release_report_native_invalid"))
+
+        duplicate_endings = copy.deepcopy(report)
+        duplicate_endings["cases"][1]["persistence"]["endings"] = [
+            "ending_left",
+            "ending_left",
+        ]
+        mutations.append((duplicate_endings, "release_report_persistence_invalid"))
+
+        missing_restore = copy.deepcopy(report)
+        missing_restore["cases"][0]["persistence"]["saves_restored"] = 0
+        mutations.append((missing_restore, "release_report_persistence_invalid"))
+
+        for document, reason in mutations:
+            with (
+                self.subTest(reason=reason),
+                self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    f"^{reason}:",
+                ),
+            ):
+                gate.validate_release_report(document, hosted=True)
+
+    def test_release_report_rejects_non_integer_zero_native_frames(self) -> None:
+        gate = _load_gate()
+        required = _matrix_report("linux", "3.12")
+        off = copy.deepcopy(required)
+        off["native_mode"] = "off"
+        off["toolchain"]["raylib_artifact"] = None
+        for case in off["cases"]:
+            case["native_evidence"] = gate.native_untested_evidence("off")
+            case["stages"][-1] = {
+                "reason_code": "native_disabled",
+                "stage": "native",
+                "state": "untested",
+            }
+        self.assertEqual(gate.validate_release_report(off), off)
+
+        failed = copy.deepcopy(required)
+        failed["native_mode"] = "optional"
+        failed["status"] = "completed_with_native_gap"
+        failed["failure_reasons"] = ["native_execution_failed"]
+        for case in failed["cases"]:
+            case["native_evidence"] = {
+                **gate.native_untested_evidence("off"),
+                "reason_code": "native_execution_failed",
+                "state": "failed",
+            }
+            case["stages"][-1] = {
+                "reason_code": "native_execution_failed",
+                "stage": "native",
+                "state": "failed",
+            }
+            case["status"] = "failed"
+        self.assertEqual(gate.validate_release_report(failed), failed)
+
+        for template in (off, failed):
+            for invalid_frames in (False, 0.0):
+                malformed = copy.deepcopy(template)
+                malformed["cases"][0]["native_evidence"]["frames"] = invalid_frames
+                with (
+                    self.subTest(
+                        state=template["cases"][0]["native_evidence"]["state"],
+                        frames=repr(invalid_frames),
+                    ),
+                    self.assertRaisesRegex(
+                        gate.MultigenreReleaseError,
+                        "^release_report_native_invalid:",
+                    ),
+                ):
+                    gate.validate_release_report(malformed)
+
+    def test_release_report_rejects_malformed_nested_values_and_incoherent_reasons(self) -> None:
+        gate = _load_gate()
+        report = _matrix_report("windows", "3.11")
+        mutations = []
+
+        non_object_case = copy.deepcopy(report)
+        non_object_case["cases"][0] = None
+        mutations.append((non_object_case, "release_report_cases_invalid"))
+
+        non_object_stage = copy.deepcopy(report)
+        non_object_stage["cases"][0]["stages"][0] = []
+        mutations.append((non_object_stage, "release_report_stage_invalid"))
+
+        non_string_lineage = copy.deepcopy(report)
+        non_string_lineage["cases"][0]["lineage"]["validate"] = []
+        mutations.append((non_string_lineage, "release_report_lineage_mismatch"))
+
+        unhashable_reason = copy.deepcopy(report)
+        unhashable_reason["failure_reasons"] = [[]]
+        mutations.append((unhashable_reason, "release_report_invalid"))
+
+        unexpected_reason = copy.deepcopy(report)
+        unexpected_reason["failure_reasons"] = ["invented_failure"]
+        mutations.append((unexpected_reason, "release_report_native_invalid"))
+
+        non_hex_lock = copy.deepcopy(report)
+        non_hex_lock["cases"][0]["native_evidence"]["platform_lock_hash"] = "g" * 64
+        mutations.append((non_hex_lock, "release_report_native_invalid"))
+
+        empty_lock_id = copy.deepcopy(report)
+        empty_lock_id["cases"][0]["native_evidence"]["platform_lock_id"] = ""
+        mutations.append((empty_lock_id, "release_report_native_invalid"))
+
+        python_mismatch = copy.deepcopy(report)
+        python_mismatch["toolchain"]["python"] = "3.12.0"
+        mutations.append((python_mismatch, "release_report_toolchain_invalid"))
+
+        unavailable_hosted_raylib = copy.deepcopy(report)
+        unavailable_hosted_raylib["toolchain"]["raylib"] = "unavailable"
+        mutations.append((unavailable_hosted_raylib, "release_report_toolchain_invalid"))
+
+        non_string_toolchain = copy.deepcopy(report)
+        non_string_toolchain["toolchain"]["python"] = 312
+        mutations.append((non_string_toolchain, "release_report_toolchain_invalid"))
+
+        boolean_persistence_count = copy.deepcopy(report)
+        boolean_persistence_count["cases"][0]["persistence"]["replays_verified"] = True
+        mutations.append((boolean_persistence_count, "release_report_persistence_invalid"))
+
+        arm_host = copy.deepcopy(report)
+        arm_host["host"]["architecture"] = "arm64"
+        arm_host["host"]["platform_id"] = "platform:windows_arm64"
+        mutations.append((arm_host, "release_report_host_invalid"))
+
+        fake_valid_lock = copy.deepcopy(report)
+        fake_valid_lock["cases"][0]["native_evidence"]["platform_lock_hash"] = "e" * 64
+        fake_valid_lock["cases"][0]["native_evidence"]["platform_lock_id"] = "fake_lock"
+        mutations.append((fake_valid_lock, "release_report_native_invalid"))
+
+        malformed_mode = copy.deepcopy(report)
+        malformed_mode["native_mode"] = []
+        mutations.append((malformed_mode, "release_report_native_invalid"))
+
+        for document, reason in mutations:
+            with (
+                self.subTest(reason=reason),
+                self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    f"^{reason}:",
+                ),
+            ):
+                gate.validate_release_report(document, hosted=True)
+
+    def test_aggregate_requires_exact_complete_unique_matrix_and_hashes(self) -> None:
+        gate = _load_gate()
+        reports = [
+            _matrix_report(os_name, python_minor)
+            for os_name in ("linux", "windows")
+            for python_minor in ("3.11", "3.12")
+        ]
+        aggregate = gate.aggregate_release_reports(reports)
+        self.assertEqual(aggregate["status"], "passed")
+        self.assertEqual(
+            aggregate["matrix"],
+            [
+                {"os": "linux", "python_minor": "3.11"},
+                {"os": "linux", "python_minor": "3.12"},
+                {"os": "windows", "python_minor": "3.11"},
+                {"os": "windows", "python_minor": "3.12"},
+            ],
+        )
+        self.assertEqual(aggregate["source_revision"], "e" * 40)
+        self.assertEqual(aggregate["source_input_tree_hash"], "d" * 64)
+        self.assertEqual(len(aggregate["reports"]), 4)
+        self.assertEqual(
+            aggregate["reports"][0],
+            {
+                "os": "linux",
+                "python_minor": "3.11",
+                "report_sha256": hashlib.sha256(canonical_json_bytes(reports[0])).hexdigest(),
+            },
+        )
+        self.assertEqual(
+            aggregate["fixtures"][0]["gamepack_hash"],
+            _fixture_hashes()["abstract-puzzle"]["gamepack"],
+        )
+        self.assertEqual(gate.validate_aggregate_report(aggregate), aggregate)
+
+        bad_sets = []
+        bad_sets.append((reports[:3], "release_aggregate_matrix_incomplete"))
+        bad_sets.append(([reports[0], *reports], "release_aggregate_matrix_duplicate"))
+        source_mismatch = copy.deepcopy(reports)
+        source_mismatch[-1]["source"]["revision"] = "f" * 40
+        bad_sets.append((source_mismatch, "release_aggregate_source_mismatch"))
+        input_mismatch = copy.deepcopy(reports)
+        input_mismatch[-1]["source"]["input_tree_hash"] = "f" * 64
+        bad_sets.append((input_mismatch, "release_aggregate_source_mismatch"))
+        fixture_mismatch = copy.deepcopy(reports)
+        fixture_mismatch[-1]["cases"][0]["hashes"]["package_archive"] = "0" * 64
+        bad_sets.append((fixture_mismatch, "release_aggregate_fixture_mismatch"))
+        analysis_mismatch = copy.deepcopy(reports)
+        analysis_mismatch[-1]["cases"][0]["hashes"]["analysis"] = "0" * 64
+        bad_sets.append((analysis_mismatch, "release_aggregate_fixture_mismatch"))
+        identity_mismatch = copy.deepcopy(reports)
+        identity_mismatch[-1]["cases"][0]["identities"]["assetpack_id"] += "_drift"
+        bad_sets.append((identity_mismatch, "release_aggregate_fixture_mismatch"))
+        native_gap = copy.deepcopy(reports)
+        failed_case = native_gap[-1]["cases"][0]
+        failed_case["native_evidence"] = {
+            **gate.native_untested_evidence("off"),
+            "reason_code": "native_execution_failed",
+            "state": "failed",
+        }
+        failed_case["stages"][-1] = {
+            "reason_code": "native_execution_failed",
+            "stage": "native",
+            "state": "failed",
+        }
+        failed_case["status"] = "failed"
+        native_gap[-1]["status"] = "failed"
+        native_gap[-1]["failure_reasons"] = ["native_execution_failed"]
+        bad_sets.append((native_gap, "release_aggregate_native_incomplete"))
+        for documents, reason in bad_sets:
+            with (
+                self.subTest(reason=reason),
+                self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    f"^{reason}:",
+                ),
+            ):
+                gate.aggregate_release_reports(documents)
+
+        invalid_aggregates = []
+        extra = copy.deepcopy(aggregate)
+        extra["unexpected"] = True
+        invalid_aggregates.append(extra)
+        bad_report_hash = copy.deepcopy(aggregate)
+        bad_report_hash["reports"][0]["report_sha256"] = "g" * 64
+        invalid_aggregates.append(bad_report_hash)
+        bad_fixture_hash = copy.deepcopy(aggregate)
+        bad_fixture_hash["fixtures"][0]["gamepack_hash"] = "short"
+        invalid_aggregates.append(bad_fixture_hash)
+        for document in invalid_aggregates:
+            with self.assertRaisesRegex(
+                gate.MultigenreReleaseError,
+                "^release_aggregate_invalid:",
+            ):
+                gate.validate_aggregate_report(document)
+
+    def test_aggregate_loader_rejects_duplicate_json_keys(self) -> None:
+        gate = _load_gate()
+        with tempfile.TemporaryDirectory(prefix="wf-release-load-") as temporary:
+            path = Path(temporary) / "report.json"
+            path.write_bytes(b'{"format":"first","format":"second"}')
+            with self.assertRaisesRegex(Exception, "duplicate JSON object key"):
+                gate.load_release_report(path)
+
+    def test_aggregate_hashes_exact_canonical_report_file_bytes(self) -> None:
+        gate = _load_gate()
+        reports = [
+            _matrix_report(os_name, python_minor)
+            for os_name in ("linux", "windows")
+            for python_minor in ("3.11", "3.12")
+        ]
+        with tempfile.TemporaryDirectory(prefix="wf-release-file-hash-") as temporary:
+            root = Path(temporary)
+            loaded = []
+            for index, report in enumerate(reports):
+                path = root / f"report-{index}.json"
+                payload = canonical_json_bytes(report)
+                path.write_bytes(payload)
+                item = gate.load_release_report(path)
+                self.assertEqual(item.payload, payload)
+                loaded.append(item)
+            aggregate = gate.aggregate_release_reports(loaded)
+            self.assertEqual(
+                [item["report_sha256"] for item in aggregate["reports"]],
+                [hashlib.sha256(item.payload).hexdigest() for item in loaded],
+            )
+
+            noncanonical = root / "noncanonical.json"
+            noncanonical.write_text(
+                json.dumps(reports[0], sort_keys=True),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                gate.MultigenreReleaseError,
+                "^release_report_encoding_invalid:",
+            ):
+                gate.load_release_report(noncanonical)
+
+    def test_aggregate_loader_reads_only_one_bounded_retained_file(self) -> None:
+        gate = _load_gate()
+        report = _matrix_report("linux", "3.12")
+        with tempfile.TemporaryDirectory(prefix="wf-release-bounded-load-") as temporary:
+            root = Path(temporary)
+            path = root / "report.json"
+            path.write_bytes(canonical_json_bytes(report))
+            root.joinpath("unrelated.bin").write_bytes(b"x" * 2048)
+            with mock.patch.object(
+                gate,
+                "capture_retained_tree",
+                side_effect=AssertionError("parent tree must not be captured"),
+            ):
+                loaded = gate.load_release_report(path)
+            self.assertEqual(loaded.payload, canonical_json_bytes(report))
+
+    def test_runtime_wheel_bytes_match_the_selected_platform_lock(self) -> None:
+        gate = _load_gate()
+        payload = b"synthetic locked wheel bytes"
+        with tempfile.TemporaryDirectory(prefix="wf-runtime-wheel-") as temporary:
+            root = Path(temporary)
+            wheel = root / "raylib-synthetic.whl"
+            wheel.write_bytes(payload)
+            lock = {
+                "lock_id": "synthetic_lock",
+                "content_hash": "1" * 64,
+                "dependency": {
+                    "artifact": {
+                        "filename": wheel.name,
+                        "sha256": hashlib.sha256(payload).hexdigest(),
+                        "size_bytes": len(payload),
+                    }
+                },
+            }
+            expected = {
+                "filename": wheel.name,
+                "platform_lock_hash": "1" * 64,
+                "platform_lock_id": "synthetic_lock",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "size_bytes": len(payload),
+            }
+            self.assertEqual(gate.verify_runtime_wheel(wheel, lock), expected)
+            wheel.write_bytes(payload + b"tampered")
+            with self.assertRaisesRegex(
+                gate.MultigenreReleaseError,
+                "^native_runtime_artifact_mismatch:",
+            ):
+                gate.verify_runtime_wheel(wheel, lock)
+
+    def test_subprocess_json_boundary_is_bounded_strict_and_timed(self) -> None:
+        gate = _load_gate()
+        with tempfile.TemporaryDirectory(prefix="wf-release-process-") as temporary:
+            root = Path(temporary)
+            cases = (
+                (
+                    "duplicate.py",
+                    'print(\'{"status":"first","status":"second"}\')\n',
+                    "standalone_execution_invalid",
+                    2.0,
+                ),
+                (
+                    "oversized.py",
+                    'print("x" * 4096)\n',
+                    "standalone_output_too_large",
+                    2.0,
+                ),
+                (
+                    "timeout.py",
+                    "import time\ntime.sleep(5)\n",
+                    "standalone_execution_timeout",
+                    0.05,
+                ),
+            )
+            for name, source, reason, timeout_seconds in cases:
+                path = root / name
+                path.write_text(source, encoding="utf-8")
+                with (
+                    self.subTest(name=name),
+                    self.assertRaisesRegex(
+                        gate.MultigenreReleaseError,
+                        f"^{reason}:",
+                    ),
+                ):
+                    gate._checked_subprocess_json(
+                        (sys.executable, "-I", str(path)),
+                        cwd=root,
+                        environment={},
+                        timeout_seconds=timeout_seconds,
+                        output_limit=1024,
+                    )
+
+    def test_source_tree_copy_rejects_hardlinks_and_preserves_exact_bytes(self) -> None:
+        gate = _load_gate()
+        with tempfile.TemporaryDirectory(prefix="wf-release-copy-") as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            source.joinpath("payload.json").write_text("{}\n", encoding="utf-8")
+            destination = root / "destination"
+            gate.copy_release_source_tree(source, destination)
+            self.assertEqual(destination.joinpath("payload.json").read_bytes(), b"{}\n")
+
+            hostile = root / "hostile"
+            hostile.mkdir()
+            hostile.joinpath("one.bin").write_bytes(b"same inode")
+            os.link(hostile / "one.bin", hostile / "two.bin")
+            with self.assertRaisesRegex(
+                gate.MultigenreReleaseError,
+                "^release_source_tree_invalid:",
+            ):
+                gate.copy_release_source_tree(hostile, root / "forbidden")
+
+    def test_release_inputs_remain_bound_to_the_original_retained_bytes(self) -> None:
+        gate = _load_gate()
+        with tempfile.TemporaryDirectory(prefix="wf-release-inputs-") as temporary:
+            root = Path(temporary)
+            source = root / "repository"
+            inputs = source / "examples" / "multigenre-contracts"
+            case = inputs / "abstract-puzzle"
+            runtime = inputs / "runtime"
+            case.mkdir(parents=True)
+            runtime.mkdir()
+            case.joinpath("fixture.json").write_bytes(b"{}\n")
+            runtime.joinpath("snapshot.json").write_bytes(b'{"runtime":true}\n')
+
+            authority = gate.capture_release_inputs(source)
+            self.assertEqual(len(authority.tree_hash), 64)
+
+            case.joinpath("fixture.json").write_bytes(b'{"substituted":true}\n')
+            runtime.joinpath("snapshot.json").write_bytes(b'{"substituted":true}\n')
+            staged = root / "staged"
+            gate.materialize_release_input_subtree(
+                authority,
+                "abstract-puzzle",
+                staged / "abstract-puzzle",
+            )
+            gate.materialize_release_input_subtree(authority, "runtime", staged / "runtime")
+
+            self.assertEqual(
+                staged.joinpath("abstract-puzzle/fixture.json").read_bytes(),
+                b"{}\n",
+            )
+            self.assertEqual(
+                staged.joinpath("runtime/snapshot.json").read_bytes(),
+                b'{"runtime":true}\n',
+            )
+
+        tree = ast.parse(
+            (ROOT / "scripts/verify_multigenre_release.py").read_text(encoding="utf-8")
+        )
+        run_case = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_run_case"
+        )
+        called_names = {
+            node.func.id
+            for node in ast.walk(run_case)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        self.assertNotIn("capture_retained_tree", called_names)
+        self.assertNotIn("copy_release_source_tree", called_names)
+
+    def test_packaged_runner_exposes_bounded_save_restoration(self) -> None:
+        runner = STANDALONE_TEMPLATE_FILES["src/game/runner.py"][0].decode("utf-8")
+        self.assertIn('parser.add_argument("--verify-save-slot")', runner)
+        self.assertIn('"status": "save_restored"', runner)
+
+    def test_required_native_host_rejection_precedes_output_creation(self) -> None:
+        gate = _load_gate()
+        arm_host = {
+            "architecture": "arm64",
+            "os": "linux",
+            "platform_id": "platform:linux_arm64",
+            "python_minor": "3.12",
+        }
+        with tempfile.TemporaryDirectory(prefix="wf-native-preflight-") as temporary:
+            root = Path(temporary)
+            report = root / "evidence" / "report.json"
+            work = root / "work"
+            with (
+                mock.patch.object(gate, "_host_context", return_value=arm_host),
+                self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    "^native_platform_unsupported:",
+                ),
+            ):
+                gate.run_release_gate(
+                    source_root=ROOT,
+                    report_path=report,
+                    work_root=work,
+                    native_mode="required",
+                )
+            self.assertFalse(report.parent.exists())
+            self.assertFalse(work.exists())
+
+    def test_native_off_unsupported_host_fails_before_publishing_passed_report(self) -> None:
+        gate = _load_gate()
+        arm_host = {
+            "architecture": "arm64",
+            "os": "linux",
+            "platform_id": "platform:linux_arm64",
+            "python_abi": "cp312",
+            "python_implementation": "cpython",
+            "python_minor": "3.12",
+            "runner_image": "local",
+        }
+        with tempfile.TemporaryDirectory(prefix="wf-native-off-preflight-") as temporary:
+            root = Path(temporary)
+            report = root / "evidence" / "report.json"
+            work = root / "work"
+            with (
+                mock.patch.object(gate, "_host_context", return_value=arm_host),
+                self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    "^release_report_host_invalid:",
+                ),
+            ):
+                gate.run_release_gate(
+                    source_root=ROOT,
+                    report_path=report,
+                    work_root=work,
+                    native_mode="off",
+                )
+            self.assertFalse(report.parent.exists())
+            self.assertFalse(work.exists())
+
+    def test_required_native_missing_runtime_wheel_preflight_creates_no_outputs(self) -> None:
+        gate = _load_gate()
+        host = {
+            "architecture": "x86_64",
+            "os": "linux",
+            "platform_id": "platform:linux_x86_64",
+            "python_abi": "cp312",
+            "python_implementation": "cpython",
+            "python_minor": "3.12",
+            "runner_image": "local",
+        }
+        with tempfile.TemporaryDirectory(prefix="wf-native-wheel-preflight-") as temporary:
+            root = Path(temporary)
+            report = root / "evidence" / "report.json"
+            work = root / "work"
+            with (
+                mock.patch.object(gate, "_host_context", return_value=host),
+                mock.patch.object(
+                    gate,
+                    "capture_release_inputs",
+                    side_effect=AssertionError("release inputs must not be captured"),
+                ),
+                self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    "^native_runtime_artifact_missing:",
+                ),
+            ):
+                gate.run_release_gate(
+                    source_root=ROOT,
+                    report_path=report,
+                    work_root=work,
+                    native_mode="required",
+                )
+            self.assertFalse(report.parent.exists())
+            self.assertFalse(work.exists())
+
+    def test_required_native_invalid_runtime_wheel_preflight_creates_no_outputs(self) -> None:
+        gate = _load_gate()
+        host = {
+            "architecture": "x86_64",
+            "os": "linux",
+            "platform_id": "platform:linux_x86_64",
+            "python_abi": "cp312",
+            "python_implementation": "cpython",
+            "python_minor": "3.12",
+            "runner_image": "local",
+        }
+        with tempfile.TemporaryDirectory(prefix="wf-native-wheel-preflight-") as temporary:
+            root = Path(temporary)
+            missing = root / "missing.whl"
+            directory = root / "wheel-dir.whl"
+            directory.mkdir()
+            target = root / "target.whl"
+            target.write_bytes(b"not the locked wheel")
+            symlink = root / "symlink.whl"
+            try:
+                symlink.symlink_to(target)
+            except OSError:
+                symlink = target
+            for runtime_wheel in (missing, directory, symlink):
+                report = root / f"evidence-{runtime_wheel.stem}" / "report.json"
+                work = root / f"work-{runtime_wheel.stem}"
+                with (
+                    self.subTest(runtime_wheel=runtime_wheel.name),
+                    mock.patch.object(gate, "_host_context", return_value=host),
+                    mock.patch.object(
+                        gate,
+                        "capture_release_inputs",
+                        side_effect=AssertionError("release inputs must not be captured"),
+                    ),
+                    self.assertRaisesRegex(
+                        gate.MultigenreReleaseError,
+                        "^native_runtime_artifact_mismatch:",
+                    ),
+                ):
+                    gate.run_release_gate(
+                        source_root=ROOT,
+                        report_path=report,
+                        work_root=work,
+                        native_mode="required",
+                        runtime_wheel=runtime_wheel,
+                    )
+                self.assertFalse(report.parent.exists())
+                self.assertFalse(work.exists())
+
+    def test_native_platform_lock_must_be_bound_into_materialization(self) -> None:
+        gate = _load_gate()
+        selected = {
+            "lock_id": "platform_linux_x86_64_cp312",
+            "content_hash": "d" * 64,
+            "platform": {"os": "linux", "architecture": "x86_64"},
+            "python": {"minor": "3.12"},
+        }
+        materialization = {
+            "platform_locks": {
+                "locks": [
+                    {
+                        "id": selected["lock_id"],
+                        "content_hash": selected["content_hash"],
+                        "os": "linux",
+                        "python_minor": "3.12",
+                    }
+                ]
+            }
+        }
+        gate.assert_materialized_platform_lock(materialization, selected)
+        drifted = copy.deepcopy(materialization)
+        drifted["platform_locks"]["locks"][0]["content_hash"] = "e" * 64
+        with self.assertRaisesRegex(
+            gate.MultigenreReleaseError,
+            "^native_platform_lock_identity_mismatch:",
+        ):
+            gate.assert_materialized_platform_lock(drifted, selected)
+
+    def test_local_native_off_runs_complete_external_chain_deterministically(self) -> None:
+        gate = _load_gate()
+        with tempfile.TemporaryDirectory(prefix="wf-multigenre-release-test-") as temporary:
+            root = Path(temporary)
+            first_path = root / "first.json"
+            second_path = root / "second.json"
+            host = gate._host_context()
+            host.update(
+                {
+                    "architecture": "x86_64",
+                    "platform_id": f"platform:{host['os']}_x86_64",
+                }
+            )
+            with (
+                mock.patch.object(gate, "_host_context", return_value=host),
+                mock.patch(
+                    "gamepack_runtime.headless._native_machine",
+                    return_value="x86_64",
+                ),
+            ):
+                first = gate.run_release_gate(
+                    source_root=ROOT,
+                    report_path=first_path,
+                    work_root=root / "work-first",
+                    native_mode="off",
+                )
+                second = gate.run_release_gate(
+                    source_root=ROOT,
+                    report_path=second_path,
+                    work_root=root / "work-second",
+                    native_mode="off",
+                )
+            self.assertEqual(first, second)
+            self.assertEqual(first_path.read_bytes(), second_path.read_bytes())
+            self.assertEqual(first_path.read_bytes(), canonical_json_bytes(first))
+            self.assertEqual(first["status"], "passed")
+            self.assertEqual(
+                [case["case_id"] for case in first["cases"]],
+                ["abstract-puzzle", "branching-narrative"],
+            )
+            for case in first["cases"]:
+                self.assertEqual(case["native_evidence"]["state"], "untested")
+                self.assertEqual(case["native_evidence"]["reason_code"], "native_disabled")
+                self.assertEqual(
+                    set(case["lineage"].values()),
+                    {case["hashes"]["gamepack"]},
+                )
+                self.assertEqual(
+                    [stage["stage"] for stage in case["stages"]],
+                    list(gate.REQUIRED_CASE_STAGES),
+                )
+                self.assertTrue(
+                    all(
+                        stage["state"] == "passed" or stage["stage"] == "native"
+                        for stage in case["stages"]
+                    )
+                )
+
+    def test_operational_report_publication_is_external_and_exclusive(self) -> None:
+        gate = _load_gate()
+        report = _matrix_report("linux", "3.12")
+        with tempfile.TemporaryDirectory(prefix="wf-release-report-") as temporary:
+            target = Path(temporary) / "report.json"
+            gate.publish_operational_report(target, report, source_root=ROOT)
+            self.assertEqual(target.read_bytes(), canonical_json_bytes(report))
+            with self.assertRaisesRegex(
+                gate.MultigenreReleaseError,
+                "^release_report_output_exists:",
+            ):
+                gate.publish_operational_report(target, report, source_root=ROOT)
+        with self.assertRaisesRegex(
+            gate.MultigenreReleaseError,
+            "^release_output_inside_repository:",
+        ):
+            gate.publish_operational_report(
+                ROOT / "forbidden-release-report.json",
+                report,
+                source_root=ROOT,
+            )
+        if os.name != "nt":
+            with tempfile.TemporaryDirectory(prefix="wf-release-symlink-") as temporary:
+                root = Path(temporary)
+                repository = root / "repository"
+                repository.mkdir()
+                link = root / "external-link"
+                link.symlink_to(repository, target_is_directory=True)
+                escaped = link / "escaped-report.json"
+                with self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    "^release_output_inside_repository:",
+                ):
+                    gate.publish_operational_report(
+                        escaped,
+                        report,
+                        source_root=repository,
+                    )
+                self.assertFalse((repository / escaped.name).exists())
+
+                broken = root / "broken-report.json"
+                broken.symlink_to(root / "missing-target")
+                with self.assertRaisesRegex(
+                    gate.MultigenreReleaseError,
+                    "^release_report_output_exists:",
+                ):
+                    gate.publish_operational_report(
+                        broken,
+                        report,
+                        source_root=repository,
+                    )
+
+    def test_ci_declares_exact_native_matrix_and_pinned_artifact_aggregation(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        release_job = _workflow_job_contract(workflow, "multigenre-native-release")
+        aggregate_job = _workflow_job_contract(workflow, "multigenre-native-release-aggregate")
+
+        _assert_native_release_job_contract(release_job)
+        _assert_aggregate_job_contract(aggregate_job)
+
+    def test_ci_declares_hosted_native_authority_attestation_job(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        authority = _workflow_job_contract(workflow, "multigenre-hosted-native-release-authority")
+
+        _assert_authority_job_contract(authority)
+
+    def test_ci_final_status_enforces_main_authority_and_pr_skip_truth_table(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        status = _workflow_job_contract(workflow, "multigenre-native-release-status")
+
+        _assert_status_job_contract(status)
+
+        cases = [
+            (True, "success", "success", "success", True, "release_status=hosted-pending"),
+            (
+                False,
+                "success",
+                "success",
+                "skipped",
+                True,
+                "release_status=not-hosted-authoritative",
+            ),
+            (True, "failure", "success", "success", False, "native matrix must succeed"),
+            (True, "cancelled", "success", "success", False, "native matrix must succeed"),
+            (True, None, "success", "success", False, "native matrix must succeed"),
+            (True, "success", "failure", "success", False, "native aggregate must succeed"),
+            (
+                True,
+                "success",
+                "success",
+                "skipped",
+                False,
+                "trusted hosted native authority is required on main push",
+            ),
+            (
+                True,
+                "success",
+                "success",
+                None,
+                False,
+                "trusted hosted native authority is required on main push",
+            ),
+            (
+                False,
+                "success",
+                "success",
+                "success",
+                False,
+                "authority must be skipped outside trusted main push",
+            ),
+            (
+                False,
+                "success",
+                "success",
+                "failure",
+                False,
+                "authority must be skipped outside trusted main push",
+            ),
+        ]
+        for trusted, matrix, aggregate, authority, expected_ok, expected_message in cases:
+            with self.subTest(
+                trusted=trusted, matrix=matrix, aggregate=aggregate, authority=authority
+            ):
+                ok, message = _hosted_native_release_status(
+                    trusted_main_push=trusted,
+                    matrix_result=matrix,
+                    aggregate_result=aggregate,
+                    authority_result=authority,
+                )
+                self.assertIs(ok, expected_ok)
+                self.assertIn(expected_message, message)
+
+    def test_ci_structural_contract_helpers_reject_broken_workflow_mutations(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+        aggregate = _workflow_job_contract(workflow, "multigenre-native-release-aggregate")
+        broken_aggregate = copy.deepcopy(aggregate)
+        broken_aggregate["needs"] = "multigenre-hosted-native-release-authority"
+        with self.assertRaisesRegex(AssertionError, "aggregate job must need only"):
+            _assert_aggregate_job_contract(broken_aggregate)
+
+        broken_aggregate = copy.deepcopy(aggregate)
+        first_download = _step_by_name(
+            broken_aggregate,
+            "Download Linux Python 3.11 matrix evidence",
+        )
+        first_download["with"]["path"] = "${{ runner.temp }}/wrong"
+        with self.assertRaisesRegex(AssertionError, "exact name/path pair"):
+            _assert_aggregate_job_contract(broken_aggregate)
+
+        authority = _workflow_job_contract(workflow, "multigenre-hosted-native-release-authority")
+        broken_authority = copy.deepcopy(authority)
+        broken_authority["permissions"]["attestations"] = "read"
+        with self.assertRaisesRegex(AssertionError, "authority job permissions drifted"):
+            _assert_authority_job_contract(broken_authority)
+
+        broken_authority = copy.deepcopy(authority)
+        broken_authority["if"] = "github.event_name == 'push'"
+        with self.assertRaisesRegex(AssertionError, "trusted-main condition drifted"):
+            _assert_authority_job_contract(broken_authority)
+
+        status = _workflow_job_contract(workflow, "multigenre-native-release-status")
+        broken_status = copy.deepcopy(status)
+        broken_status["if"] = "success()"
+        with self.assertRaisesRegex(AssertionError, "always"):
+            _assert_status_job_contract(broken_status)
+
+        broken_status = copy.deepcopy(status)
+        status_step = _step_by_name(
+            broken_status,
+            "Enforce hosted native release status truth table",
+        )
+        status_step["run"] = status_step["run"].replace(
+            'authority_result="${{ needs.multigenre-hosted-native-release-authority.result }}"',
+            'authority_result="success"',
+        )
+        with self.assertRaisesRegex(AssertionError, "authority_result"):
+            _assert_status_job_contract(broken_status)
+
+    def test_ci_forbids_untrusted_hosted_release_topologies(self) -> None:
+        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertNotIn("pull_request_target", workflow)
+        self.assertNotIn("workflow_run", workflow)
+        self.assertNotIn("self-hosted", workflow)
+        self.assertNotIn("github.event.inputs", workflow)
+        self.assertNotIn("github.head_ref", workflow)
+        self.assertNotIn("secrets.", workflow)
+        self.assertNotIn("run-id:", workflow)
+        self.assertNotIn("github-token:", workflow)
+        self.assertNotIn("packages:", workflow)
+        _assert_all_uses_are_pinned(workflow)
+
+    def test_windows_native_list_contains_exact_nineteen_tests(self) -> None:
+        from tests.test_m6_release_readiness import (
+            WINDOWS_NATIVE_PYTHON_TESTS,
+            _windows_native_result_is_green,
+        )
+
+        self.assertEqual(len(WINDOWS_NATIVE_PYTHON_TESTS), 19)
+        self.assertEqual(len(set(WINDOWS_NATIVE_PYTHON_TESTS)), 19)
+        required = {
+            "tests.test_m6_composed_bundle.DirectoryPublicationPortabilityTests."
+            "test_native_windows_directory_publication_and_collision",
+            "tests.test_bundle_publication.BundlePublicationTests."
+            "test_native_windows_bundle_verifier_reads_while_seal_is_active",
+            "tests.test_multigenre_game_package.GenericGamePackageTests."
+            "test_windows_package_stage_denies_write_and_delete_sharing",
+            "tests.test_multigenre_runtime_review.GenericRuntimeReviewTests."
+            "test_windows_native_runtime_tree_retains_root_and_file_bindings",
+            "tests.test_multigenre_runtime_review.GenericRuntimeReviewTests."
+            "test_windows_native_runtime_tree_rejects_hardlinks_and_reparse_points",
+            "tests.test_studio_shell_package_snapshot.StudioShellPackageSnapshotTests."
+            "test_windows_snapshot_root_cleanup_deletes_native_empty_directory_by_handle",
+        }
+        self.assertTrue(required.issubset(WINDOWS_NATIVE_PYTHON_TESTS))
+        result = SimpleNamespace(
+            errors=[],
+            expectedFailures=[("test", "failure")],
+            failures=[],
+            skipped=[],
+            testsRun=19,
+            unexpectedSuccesses=[],
+            wasSuccessful=lambda: True,
+        )
+        self.assertFalse(_windows_native_result_is_green(result))
+
+    def test_release_gate_is_documented_without_claiming_pending_hosted_evidence(self) -> None:
+        required_documents = (
+            ROOT / "AGENTS.md",
+            ROOT / "agents/QUALITY_GATES.md",
+            ROOT / "README.md",
+            ROOT / "docs/MULTI_GENRE_ARCHITECTURE.md",
+            ROOT / "docs/SUPPORT_MATRIX.md",
+            ROOT / "docs/ROADMAP.md",
+        )
+        for path in required_documents:
+            with self.subTest(path=path.relative_to(ROOT)):
+                text = path.read_text(encoding="utf-8")
+                marker = text.index("verify_multigenre_release")
+                statement = text[max(0, marker - 300) : marker + 1400]
+                normalized = " ".join(statement.split())
+                self.assertIn("PENDING", normalized)
+                self.assertIn("Ubuntu 24.04", normalized)
+                self.assertIn("Windows Server 2022", normalized)
+                lowered = " ".join(text.split()).casefold()
+                for forbidden in (
+                    "hosted evidence is complete",
+                    "hosted evidence passed",
+                    "hosted status is complete",
+                    "hosted status passed",
+                ):
+                    self.assertNotIn(forbidden, lowered)
+
+        architecture = (ROOT / "docs/MULTI_GENRE_ARCHITECTURE.md").read_text(encoding="utf-8")
+        table_end = architecture.index("\n\nThe canonical operational closure")
+        table = architecture[architecture.index("| Example |") : table_end]
+        self.assertEqual(sum(line.startswith("|") for line in table.splitlines()), 6)
+
+        status_path = ROOT / "docs/evidence/multigenre-release-status.json"
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            status,
+            {
+                "format": "world-forge.multigenre_release_documentation_status",
+                "format_version": 1,
+                "hosted_evidence": "PENDING",
+                "required_matrix": [
+                    {"os": "ubuntu-24.04", "python": "3.11"},
+                    {"os": "ubuntu-24.04", "python": "3.12"},
+                    {"os": "windows-2022", "python": "3.11"},
+                    {"os": "windows-2022", "python": "3.12"},
+                ],
+            },
+        )
+        for path in required_documents:
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("docs/evidence/multigenre-release-status.json", text)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,13 @@
+{
+  "content_hash": "fa8e5bb545f893541c940a1a7ad6fa5b4db38d98152d7e6f1412e5d102f2365c",
+  "format": "world-forge.asset_subject",
+  "format_version": 1,
+  "subject": {
+    "content_hash": "73a63d1dfc360893198abfdb1502f94595f08570aaead157d531f6cf80cfa8ea",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "modular_roguelite",
+    "kind": "gamepack"
+  },
+  "subject_id": "asset_subject_c21508f8920df2f295b5f8d07748717f77de005a25205cc8"
+}

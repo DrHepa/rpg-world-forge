@@ -1,0 +1,179 @@
+{
+  "content_hash": "63745ee45c0bb39730938ffc13bfb51334eae5bc00b94024097ebad894429391",
+  "experience": {
+    "audiences": [
+      "multi-genre authoring reviewers"
+    ],
+    "experience_goals": [
+      "complete the reviewed expedition depth",
+      "deterministic expedition sequencing"
+    ],
+    "player_promise": "Advance through a bounded expedition assembled from authored modular storylets."
+  },
+  "extensions": [],
+  "fiction": {
+    "genres": [
+      "roguelite"
+    ],
+    "tags": [
+      "narrative:modular_storylets"
+    ],
+    "tones": [
+      "neutral"
+    ]
+  },
+  "format": "world-forge.creation_profile",
+  "format_version": 1,
+  "gameplay": {
+    "challenge_model": "deterministic expedition sequencing",
+    "core_loop": [
+      "inspect authored state",
+      "venture within the reviewed rules",
+      "observe deterministic progress",
+      "evaluate the authored victory condition"
+    ],
+    "core_verbs": [
+      {
+        "description": "Advance the authored roguelite scenario.",
+        "id": "venture"
+      },
+      {
+        "description": "Recover from authored run death and begin a new bounded run.",
+        "id": "recover"
+      }
+    ],
+    "dependencies": {
+      "authored": [
+        "roguelite:reviewed_content"
+      ],
+      "procedural": [],
+      "systemic": [
+        "roguelite:deterministic_rules"
+      ]
+    },
+    "failure_recovery": "explicit deterministic restart",
+    "goal_model": "complete the reviewed expedition depth",
+    "mechanic_tags": [
+      "roguelite:authored_progression"
+    ],
+    "player_role": "expedition leader",
+    "primary_family": "action",
+    "progression": "bounded run through modular authored storylets",
+    "rule_model": "deterministic bounded authored progression",
+    "secondary_families": [],
+    "session_structure": "single bounded authoring fixture",
+    "social_topology": "single_player",
+    "teleology": "finite"
+  },
+  "narrative": {
+    "agency": "bounded expedition progression",
+    "authorship_mode": "authored",
+    "canon_variability": "fixed reviewed storylet sequence",
+    "delivery_channels": [
+      "narrative:prose",
+      "narrative:ui"
+    ],
+    "endings": "one authored run conclusion",
+    "focalization": "player focalized",
+    "information_model": "storylet order and run depth are explicit",
+    "pacing": "short modular storylet beats",
+    "protagonist_model": "authored expedition leader",
+    "requirement": "required",
+    "topology": "modular"
+  },
+  "presentation": {
+    "accessibility": {
+      "captions": true,
+      "color_independence": true,
+      "high_contrast": true,
+      "keyboard_only": true,
+      "reduced_motion": true,
+      "remapping": true,
+      "screen_reader_structure": true,
+      "text_scaling": true,
+      "timing_alternatives": true
+    },
+    "audio_role": "optional feedback",
+    "camera": "fixed",
+    "input_assumptions": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "localization": {
+      "externalized_text": true,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "mode": "2d",
+    "perspective": "orthographic board",
+    "ui_density": "low",
+    "visual_language": "high-contrast geometric symbols"
+  },
+  "production": {
+    "content_modes": {
+      "assets": "authored",
+      "gameplay": "authored",
+      "narrative": "authored",
+      "world": "authored"
+    },
+    "human_review": true,
+    "licensing_required": true,
+    "provenance_required": true,
+    "qa_required": true,
+    "reproducibility": "all runtime inputs are content addressed",
+    "seed_policy": "no random generation",
+    "selection_policy": "select the exact deterministic project-authored fixture asset after human review"
+  },
+  "profile_id": "modular_roguelite_profile",
+  "project_id": "modular_roguelite",
+  "runtime_target": {
+    "accepted_logic_formats": [
+      {
+        "format": "world-forge.gamepack",
+        "versions": [
+          1
+        ]
+      }
+    ],
+    "asset_formats": [
+      "asset:png"
+    ],
+    "input_capabilities": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "optional_features": [
+      "audio:sfx"
+    ],
+    "packaging_target": "standalone desktop directory",
+    "platforms": [
+      "platform:linux_x86_64",
+      "platform:windows_x86_64"
+    ],
+    "presentation_mode": "2d",
+    "renderer": "raylib",
+    "replay_expected": true,
+    "requested_adapter": null,
+    "required_features": [
+      "logic:deterministic_actions",
+      "logic:finite_state",
+      "roguelite:run_reset"
+    ],
+    "save_expected": true
+  },
+  "title": "Modular Roguelite authoring profile",
+  "world": {
+    "persistence": "session and authored progression state",
+    "presence": "symbolic",
+    "scale": "single reviewed scenario",
+    "simulated_domains": [
+      "roguelite:progression"
+    ],
+    "simulation_depth": "bounded deterministic",
+    "spatial_structure": "Modular expedition route",
+    "spatial_topology": "authored bounded topology",
+    "time_model": "discrete authored turns"
+  }
+}

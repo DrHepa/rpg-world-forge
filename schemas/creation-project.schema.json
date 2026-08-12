@@ -1,0 +1,174 @@
+{
+  "$id": "https://world-forge.local/schemas/creation-project.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "default_locale": {
+      "$ref": "#/$defs/locale"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/extension"
+      },
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.project"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "profile": {
+      "$ref": "#/$defs/profileReference"
+    },
+    "project_id": {
+      "$ref": "#/$defs/id"
+    },
+    "project_kind": {
+      "enum": [
+        "game",
+        "universe_library",
+        "asset_library"
+      ]
+    },
+    "project_version": {
+      "$ref": "#/$defs/semver"
+    },
+    "source_manifest": {
+      "$ref": "#/$defs/sourceManifestReference"
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "project_kind",
+    "project_id",
+    "title",
+    "project_version",
+    "default_locale",
+    "profile",
+    "source_manifest",
+    "extensions",
+    "content_hash"
+  ],
+  "title": "World Forge creation project v1",
+  "type": "object",
+  "$defs": {
+    "extension": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "$ref": "#/$defs/extensionId"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "required",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "extensionId": {
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "locale": {
+      "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
+      "type": "string"
+    },
+    "path": {
+      "description": "Portable NFC-normalized relative POSIX path. Python validation additionally enforces UTF-8 byte length, path depth, reserved names, trailing-dot/space rules, and NFC/casefold collisions that JSON Schema cannot express exactly.",
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?(?:/|$))[^<>:\"\\\\|?*\\u0000-\\u001F/]+(?:/[^<>:\"\\\\|?*\\u0000-\\u001F/]+)*$",
+      "type": "string"
+    },
+    "profileReference": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_profile"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "path",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "semver": {
+      "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "sourceManifestReference": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_source_manifest"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "$ref": "#/$defs/path"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "path",
+        "content_hash"
+      ],
+      "type": "object"
+    }
+  }
+}

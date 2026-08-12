@@ -1,0 +1,31 @@
+{
+  "content_hash": "e0489398cbb6a815b8cb72a54e8dc7bbf38adfe4bc0db0c6a9db8a70a2467b39",
+  "dependency": {
+    "artifact": {
+      "filename": "raylib-6.0.1.0-cp311-cp311-win_amd64.whl",
+      "sha256": "a665bd824128396f70435f959399d76c2bb460ce1867fb9d19b41490b70a0d2a",
+      "size_bytes": 2297998,
+      "url": "https://pypi.org/project/raylib/6.0.1.0/#files"
+    },
+    "distribution": "raylib",
+    "import_module": "pyray",
+    "native_api": "raylib-5.5",
+    "pin": "raylib==6.0.1.0",
+    "version": "6.0.1.0"
+  },
+  "format": "world-forge.runtime_platform_lock",
+  "format_version": 1,
+  "lock_id": "runtime_platform_lock_81596ec3acdfdafef473811996b0ac3381cc24df",
+  "platform": {
+    "architecture": "x86_64",
+    "backend": "backend:raylib",
+    "os": "windows",
+    "renderer": "raylib"
+  },
+  "python": {
+    "abi": "cp311",
+    "implementation": "cpython",
+    "minor": "3.11",
+    "requires_python": ">=3.11,<3.13"
+  }
+}

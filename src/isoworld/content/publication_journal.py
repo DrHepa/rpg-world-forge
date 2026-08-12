@@ -233,7 +233,11 @@ def _complete_frame_at(
     return record, footer_end
 
 
-def _plausible_partial_frame(fragment: bytes) -> bool:
+def _plausible_partial_frame(
+    fragment: bytes,
+    *,
+    max_record_bytes: int = MAX_JOURNAL_RECORD_BYTES,
+) -> bool:
     if not fragment:
         return False
     if len(fragment) < len(JOURNAL_FRAME_MAGIC):
@@ -259,7 +263,7 @@ def _plausible_partial_frame(fragment: bytes) -> bool:
         return True
     record_size = int(header_fragment[:16], 16)
     expected_hash = header_fragment[17:81].decode("ascii")
-    if record_size < 1 or record_size > MAX_JOURNAL_RECORD_BYTES:
+    if record_size < 1 or record_size > max_record_bytes:
         return False
     record_offset = header_offset + header_length
     available_record = fragment[record_offset : record_offset + record_size]
@@ -296,6 +300,70 @@ def recover_last_complete_payload(
             break
         last, cursor = complete
     return last
+
+
+def recover_validated_journal_prefix(
+    payload: bytes,
+    *,
+    max_record_bytes: int,
+) -> tuple[bytes, int, bool]:
+    """Return the exact complete prefix and classify only a plausible torn tail.
+
+    Unlike ``recover_last_complete_payload``, this writer-facing parser rejects
+    malformed or ambiguous trailing bytes. The returned tuple contains the last
+    complete payload, the byte length of the complete prefix, and whether a
+    plausible partial frame follows that prefix.
+    """
+
+    records, cursor, partial_tail = recover_validated_journal_history(
+        payload,
+        max_record_bytes=max_record_bytes,
+    )
+    return records[-1], cursor, partial_tail
+
+
+def recover_validated_journal_history(
+    payload: bytes,
+    *,
+    max_record_bytes: int,
+) -> tuple[tuple[bytes, ...], int, bool]:
+    """Return every complete record and classify only one plausible torn tail.
+
+    The complete-prefix byte count binds the exact raw frame history. Callers
+    that mutate a journal must compare the entire returned sequence and raw
+    prefix, not merely the terminal payload.
+    """
+
+    base, cursor = _legacy_base_record(
+        payload,
+        max_record_bytes=max_record_bytes,
+    )
+    records = [base]
+    while cursor < len(payload):
+        if len(records) >= MAX_JOURNAL_RECORDS:
+            raise PublicationJournalError("journal contains too many records")
+        if not payload.startswith(JOURNAL_FRAME_MAGIC, cursor):
+            if _plausible_partial_frame(
+                payload[cursor:],
+                max_record_bytes=max_record_bytes,
+            ):
+                return tuple(records), cursor, True
+            raise PublicationJournalError("journal contains a malformed frame")
+        complete = _complete_frame_at(
+            payload,
+            cursor,
+            max_record_bytes=max_record_bytes,
+        )
+        if complete is None:
+            if _plausible_partial_frame(
+                payload[cursor:],
+                max_record_bytes=max_record_bytes,
+            ):
+                return tuple(records), cursor, True
+            raise PublicationJournalError("journal contains a malformed frame")
+        record, cursor = complete
+        records.append(record)
+    return tuple(records), cursor, False
 
 
 def _raise_invalid_frame_tail(payload: bytes, cursor: int) -> None:

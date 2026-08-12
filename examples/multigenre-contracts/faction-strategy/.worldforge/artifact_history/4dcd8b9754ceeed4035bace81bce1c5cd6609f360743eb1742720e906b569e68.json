@@ -1,0 +1,26 @@
+{
+  "content_hash": "4dcd8b9754ceeed4035bace81bce1c5cd6609f360743eb1742720e906b569e68",
+  "extensions": [],
+  "format": "world-forge.system_module",
+  "format_version": 1,
+  "module_id": "faction_strategy_systems",
+  "project_id": "faction_strategy",
+  "systems": [
+    {
+      "asset_binding_ids": [
+        "strategy_map_visual"
+      ],
+      "effect_ids": [
+        "advance_progress"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "faction_influence_system",
+      "precondition_ids": [],
+      "system_type": "economy",
+      "title": "reach the authored faction influence victory threshold"
+    }
+  ],
+  "title": "North and South faction theater"
+}

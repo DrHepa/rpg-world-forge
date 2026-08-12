@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-forge.local/schemas/studio-creation-root-grant.schema.json",
+  "title": "World Forge Studio creation root grant v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "grant_id",
+    "role",
+    "display_name",
+    "state",
+    "expected_target_state",
+    "expected_project",
+    "generation",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "format": { "const": "world-forge.studio_creation_root_grant" },
+    "format_version": { "const": 1 },
+    "grant_id": { "$ref": "#/$defs/entityId" },
+    "role": { "enum": ["existing_root", "new_target"] },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^/\\\\\\u0000-\\u001f\\u007f]+$"
+    },
+    "state": {
+      "enum": ["ready", "reserved", "recovery_required", "consumed", "revoked"]
+    },
+    "expected_target_state": { "enum": ["existing_project", "absent"] },
+    "expected_project": {
+      "oneOf": [
+        { "$ref": "#/$defs/projectIdentity" },
+        { "type": "null" }
+      ]
+    },
+    "generation": { "type": "integer", "minimum": 0 },
+    "created_at": { "$ref": "#/$defs/timestamp" },
+    "updated_at": { "$ref": "#/$defs/timestamp" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "role": { "const": "existing_root" },
+        "expected_target_state": { "const": "existing_project" },
+        "expected_project": { "$ref": "#/$defs/projectIdentity" }
+      },
+      "required": ["role", "expected_target_state", "expected_project"]
+    },
+    {
+      "properties": {
+        "role": { "const": "new_target" },
+        "expected_target_state": { "const": "absent" },
+        "expected_project": { "type": "null" }
+      },
+      "required": ["role", "expected_target_state", "expected_project"]
+    }
+  ],
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "projectIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "format_version", "id", "content_hash"],
+      "properties": {
+        "format": { "const": "world-forge.project" },
+        "format_version": { "const": 1 },
+        "id": { "$ref": "#/$defs/entityId" },
+        "content_hash": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

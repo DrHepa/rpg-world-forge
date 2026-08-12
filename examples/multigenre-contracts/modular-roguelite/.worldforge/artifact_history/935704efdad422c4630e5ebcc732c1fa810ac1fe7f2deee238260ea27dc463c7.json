@@ -1,0 +1,56 @@
+{
+  "activities": [
+    {
+      "activity_type": "scenario",
+      "asset_binding_ids": [
+        "storylet_card_visual"
+      ],
+      "effect_ids": [
+        "advance_progress",
+        "consume_run_health",
+        "deactivate_run",
+        "deplete_run_health",
+        "reactivate_run",
+        "record_run_death",
+        "reset_run_depth",
+        "restore_run_health"
+      ],
+      "end_condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [
+        "hazard_endured",
+        "progress_advanced",
+        "run_failed",
+        "run_recovered"
+      ],
+      "failure_condition_ids": [
+        "death_condition",
+        "run_is_inactive"
+      ],
+      "id": "roguelite_run",
+      "participant_ids": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "provenance": "authored neutral roguelite fixture",
+      "spatial_context_ids": [],
+      "start_condition_ids": [
+        "scenario_ready"
+      ],
+      "success_condition_ids": [
+        "victory_condition"
+      ],
+      "title": "bounded run through modular authored storylets",
+      "validation_profile": "authoring_only"
+    }
+  ],
+  "content_hash": "935704efdad422c4630e5ebcc732c1fa810ac1fe7f2deee238260ea27dc463c7",
+  "extensions": [],
+  "format": "world-forge.activity_module",
+  "format_version": 1,
+  "module_id": "modular_roguelite_activities",
+  "project_id": "modular_roguelite",
+  "title": "Modular Roguelite authored activity"
+}

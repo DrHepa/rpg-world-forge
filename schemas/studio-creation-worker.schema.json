@@ -1,0 +1,2049 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-forge.local/schemas/studio-creation-worker.schema.json",
+  "title": "World Forge Studio isolated creation worker envelope v11",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "world-forge.studio_creation_worker"
+    },
+    "format_version": {
+      "enum": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/requestV1"
+    },
+    {
+      "$ref": "#/$defs/successResponseV1"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV1"
+    },
+    {
+      "$ref": "#/$defs/requestV2"
+    },
+    {
+      "$ref": "#/$defs/successResponseV2"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV2"
+    },
+    {
+      "$ref": "#/$defs/requestV3"
+    },
+    {
+      "$ref": "#/$defs/successResponseV3"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV3"
+    },
+    {
+      "$ref": "#/$defs/requestV4"
+    },
+    {
+      "$ref": "#/$defs/successResponseV4"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV4"
+    },
+    {
+      "$ref": "#/$defs/requestV5"
+    },
+    {
+      "$ref": "#/$defs/successResponseV5"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV5"
+    },
+    {
+      "$ref": "#/$defs/requestV6"
+    },
+    {
+      "$ref": "#/$defs/successResponseV6"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV6"
+    },
+    {
+      "$ref": "#/$defs/requestV7"
+    },
+    {
+      "$ref": "#/$defs/successResponseV7"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV7"
+    },
+    {
+      "$ref": "#/$defs/requestV8"
+    },
+    {
+      "$ref": "#/$defs/successResponseV8"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV8"
+    },
+    {
+      "$ref": "#/$defs/requestV9"
+    },
+    {
+      "$ref": "#/$defs/successResponseV9"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV9"
+    },
+    {
+      "$ref": "#/$defs/requestV10"
+    },
+    {
+      "$ref": "#/$defs/successResponseV10"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV10"
+    },
+    {
+      "$ref": "#/$defs/requestV11"
+    },
+    {
+      "$ref": "#/$defs/successResponseV11"
+    },
+    {
+      "$ref": "#/$defs/errorResponseV11"
+    }
+  ],
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "operationId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{0,127}$"
+    },
+    "publicToken": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "artifactIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/operationId"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locator",
+        "subject",
+        "size",
+        "sha256"
+      ],
+      "properties": {
+        "locator": {
+          "$ref": "#/$defs/entityId"
+        },
+        "subject": {
+          "$ref": "#/$defs/artifactIdentity"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "analysis_status"
+      ],
+      "properties": {
+        "analysis_status": {
+          "enum": [
+            "passed",
+            "failed",
+            "inconclusive",
+            "unsupported",
+            "not_applicable"
+          ]
+        },
+        "reason_codes": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/publicToken"
+          }
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "authority_changed",
+            "canceled",
+            "input_changed",
+            "internal_error",
+            "invalid_artifact",
+            "invalid_project",
+            "recovery_ambiguous",
+            "service_restart",
+            "timeout",
+            "worker_crashed",
+            "worker_protocol"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "commonV1": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "enum": [
+            "artifact.admit",
+            "creation.compile"
+          ]
+        }
+      }
+    },
+    "requestV1": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV1"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "enum": [
+                "artifact.admit",
+                "creation.compile"
+              ]
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV1": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV1"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "enum": [
+                "artifact.admit",
+                "creation.compile"
+              ]
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV1": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV1"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "enum": [
+                "artifact.admit",
+                "creation.compile"
+              ]
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "commonV2": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 2
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "asset.process"
+        }
+      }
+    },
+    "requestV2": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV2"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 2
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.process"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV2": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV2"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 2
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.process"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV2": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV2"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 2
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.process"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "commonV3": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 3
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "asset.release.seal"
+        }
+      }
+    },
+    "requestV3": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV3"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 3
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.release.seal"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV3": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV3"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 3
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.release.seal"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV3": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV3"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 3
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.release.seal"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "commonV4": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 4
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "runtime.compose"
+        }
+      }
+    },
+    "requestV4": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV4"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 4
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "runtime.compose"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV4": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV4"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 4
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "runtime.compose"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV4": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV4"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 4
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "runtime.compose"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "commonV5": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 5
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "runtime.bundle.build"
+        }
+      }
+    },
+    "requestV5": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV5"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 5
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "runtime.bundle.build"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV5": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV5"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 5
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "runtime.bundle.build"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV5": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV5"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 5
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "runtime.bundle.build"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "commonV6": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 6
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "game.materialization.bundle.build"
+        }
+      }
+    },
+    "requestV6": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV6"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 6
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.materialization.bundle.build"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV6": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV6"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 6
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.materialization.bundle.build"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV6": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV6"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 6
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.materialization.bundle.build"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "requestV7": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV7"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 7
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.materialize"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV7": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV7"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 7
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.materialize"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV7": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV7"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 7
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.materialize"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "commonV7": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 7
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "game.materialize"
+        }
+      }
+    },
+    "commonV8": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 8
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "game.package"
+        }
+      }
+    },
+    "requestV8": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV8"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 8
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.package"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV8": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV8"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 8
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.package"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV8": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV8"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 8
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.package"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "commonV9": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 9
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "game.package.extract"
+        }
+      }
+    },
+    "requestV9": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV9"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 9
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.package.extract"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV9": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV9"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 9
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.package.extract"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV9": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV9"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 9
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "game.package.extract"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "commonV10": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 10
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "asset.qa.review"
+        }
+      }
+    },
+    "requestV10": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV10"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 10
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.qa.review"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV10": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV10"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 10
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.qa.review"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV10": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV10"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 10
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.qa.review"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    },
+    "commonV11": {
+      "type": "object",
+      "required": [
+        "format",
+        "format_version",
+        "kind",
+        "job_id",
+        "operation"
+      ],
+      "properties": {
+        "format": {
+          "const": "world-forge.studio_creation_worker"
+        },
+        "format_version": {
+          "const": 11
+        },
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "operation": {
+          "const": "asset.release.authorize"
+        }
+      }
+    },
+    "requestV11": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV11"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "request_locator",
+            "request_sha256"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 11
+            },
+            "kind": {
+              "const": "request"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.release.authorize"
+            },
+            "request_locator": {
+              "$ref": "#/$defs/entityId"
+            },
+            "request_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      ]
+    },
+    "successResponseV11": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV11"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "outputs",
+            "metadata"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 11
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.release.authorize"
+            },
+            "ok": {
+              "const": true
+            },
+            "outputs": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/output"
+              }
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadata"
+            }
+          }
+        }
+      ]
+    },
+    "errorResponseV11": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonV11"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "format_version",
+            "kind",
+            "job_id",
+            "operation",
+            "ok",
+            "error"
+          ],
+          "properties": {
+            "format": {
+              "const": "world-forge.studio_creation_worker"
+            },
+            "format_version": {
+              "const": 11
+            },
+            "kind": {
+              "const": "response"
+            },
+            "job_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "operation": {
+              "const": "asset.release.authorize"
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "$ref": "#/$defs/error"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,153 @@
+{
+  "asset_subject": {
+    "content_hash": "0dd2f03aa2b3c4582d616d22507704445ddcf2c58691003c02f00a109b57d48d",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_9259c4cbd29829b3b6f9a90f269567bd757f86f0239d3292"
+  },
+  "assets": [
+    {
+      "asset_id": "season_dashboard",
+      "binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "kind": "ui",
+      "outputs": [
+        {
+          "media_type": "image/png",
+          "role": "texture"
+        }
+      ],
+      "provenance_reason": "Reviewed target maps one exact binding to this asset.",
+      "referencing_subjects": [
+        {
+          "id": "career_season",
+          "kind": "activity"
+        },
+        {
+          "id": "career_match",
+          "kind": "mechanic"
+        },
+        {
+          "id": "plan_aggressive_match_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "plan_balanced_match_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_1_draw_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_1_loss_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_2_draw_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_2_loss_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_2_win_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_3_draw_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_3_loss_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_3_win_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "restart_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "season_standings",
+          "kind": "system"
+        }
+      ],
+      "representation": "2d",
+      "required": true,
+      "selected_format": "asset:png",
+      "sharing": {
+        "group_id": null,
+        "policy": "exclusive"
+      },
+      "source_roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "system_feedback"
+      ],
+      "style": {
+        "content_hash": "6a33cb6231d5071d8c3d56e9f336738655d1e53fa56f066246f7f656b2faca64",
+        "format": "world-forge.asset_style",
+        "format_version": 1,
+        "id": "asset_style_6827ba36b8acb65b58aa6905c784297b839593fa9e5abf14"
+      },
+      "target": {
+        "content_hash": "afece1ac52756f93bc2ce0ecf34406b860a6400f77f9355a9a12bdf1e598d2d2",
+        "format": "world-forge.asset_target",
+        "format_version": 1,
+        "id": "asset_target_53adc0b6b9cbfff5a698a8d997726483c1b7f53760922ebe"
+      },
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "0a9fde3f496d850756e029acf56aa0a875109f7f831a921474d43e8f63115a6c",
+  "format": "world-forge.asset_inventory",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "sports_career"
+  },
+  "inventory_id": "asset_inventory_53dd128ca6758a57c68caf9beea84a9f1aea18a1e4a6577d",
+  "style": {
+    "content_hash": "6a33cb6231d5071d8c3d56e9f336738655d1e53fa56f066246f7f656b2faca64",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_6827ba36b8acb65b58aa6905c784297b839593fa9e5abf14"
+  },
+  "target": {
+    "content_hash": "afece1ac52756f93bc2ce0ecf34406b860a6400f77f9355a9a12bdf1e598d2d2",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_53adc0b6b9cbfff5a698a8d997726483c1b7f53760922ebe"
+  }
+}

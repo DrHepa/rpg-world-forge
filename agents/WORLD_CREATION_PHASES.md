@@ -1,4 +1,86 @@
-# World-creation phases
+# Generic creation phases
+
+The generic workflow uses the exact phase-report v3 P00-P14 catalog below.
+Titles and order mirror `worldforge.creation_workflow.phase_catalog()`; the
+machine synchronization test rejects drift.
+
+<!-- phase-catalog:start -->
+| Phase | Contract ID | Canonical title |
+| --- | --- | --- |
+| P00 | `p00_brief` | Brief, audience, constraints, and non-goals |
+| P01 | `p01_genre_style` | Experience classification and player promise |
+| P02 | `p02_world_laws` | Interaction grammar, ontology, rules, and goals |
+| P03 | `p03_geography` | World presence, topology, and environments |
+| P04 | `p04_timeline` | History, progression chronology, and time |
+| P05 | `p05_societies` | Societies, teams, factions, and institutions |
+| P06 | `p06_characters` | Player representation, actors, and personal arcs |
+| P07 | `p07_systems` | Core loops, systems, progression, and interaction matrix |
+| P08 | `p08_world_arcs` | Narrative architecture or explicit no-narrative design |
+| P09 | `p09_narrative_content` | Typed content architecture |
+| P10 | `p10_canon_lock` | Playability, continuity, solvability, and content lock |
+| P11 | `p11_art_audio` | Presentation, visual, and audio direction |
+| P12 | `p12_asset_specs` | Asset inventory, specification, production policy, and QA |
+| P13 | `p13_asset_production` | Runtime compatibility and implementation support |
+| P14 | `p14_handoff` | Reviewed implementation handoff |
+<!-- phase-catalog:end -->
+
+## Phase semantics
+
+- **P00** fixes the brief, audience, constraints, accessibility baseline, and
+  non-goals before content is invented.
+- **P01** classifies the experience with independent gameplay, fiction, world,
+  narrative, presentation, production, and runtime-target facets.
+- **P02** defines player verbs, interaction grammar, rules, goals, challenge,
+  failure/recovery, teleology, and authoritative state concepts.
+- **P03** establishes no world, abstract/symbolic space, or diegetic world and,
+  when applicable, its topology and environments.
+- **P04** defines authored chronology, progression chronology, or time semantics
+  only when required.
+- **P05** defines societies, teams, factions, institutions, or group structures
+  only when required.
+- **P06** defines player representation, controllable entities, actors, and
+  personal arcs only when required.
+- **P07** closes the core loop, systemic interactions, progression, failure,
+  recovery, events, and mechanic coverage.
+- **P08** records narrative topology and delivery or an explicit reviewed
+  no-narrative design.
+- **P09** authors the discriminated world/activity/narrative/system/logic
+  modules required by the profile, without RPG-only fields on neutral modules.
+- **P10** runs bounded analyzers, validates references, records limitations, and
+  locks the accepted source graph. Static or bounded evidence must not claim
+  properties it cannot prove.
+- **P11** fixes presentation, UI hierarchy, accessibility, localization, visual
+  language, and audio direction when assets apply.
+- **P12** derives requirements and closes specification, production,
+  provenance, licensing, processing, QA, and sealing policy when assets apply.
+- **P13** evaluates the requested adapter, required mechanics, asset formats,
+  platform matrix, persistence, packaging, and exact evidence. P13 is
+  compatibility review, not execution proof.
+- **P14** binds readiness and handoff artifacts to the same immutable logic and
+  asset/runtime identities. P14 is a reviewed handoff, not a release claim.
+
+## Conditional status rules
+
+Phase-report v3 accepts `ready` and `not_applicable`. P03-P06 and P08 can be
+`not_applicable` only for their profile-derived absence codes. P11/P12 require
+`assets_not_applicable`; P13 requires `runtime_not_applicable`. P00-P02, P07,
+P09, P10, and P14 always require reviewed output. An explicit no-narrative
+design remains evidence even when P08 is not applicable.
+
+Authoring validity is not runtime executability. `ready` is local to one phase;
+it does not promote compilation, assets, adapter, platform execution,
+packaging, or release.
+
+## Retained legacy specialization
+
+Legacy RPG world repositories keep their published worldpack/isoworld phase
+semantics, M5 production gates, and compatible phase-report readers. Their
+legacy skills and prompts are specializations; they do not define the generic
+taxonomy and their published IDs are not relabeled.
+
+## Retained legacy RPG phase interpretation
+
+The following pre-existing authoring interpretation applies only to retained diegetic RPG world projects. Generic projects use the canonical catalog and conditional semantics above.
 
 The phases are sequential because downstream work depends on upstream canon.
 Iteration is expected, but a regression reopens every affected phase.

@@ -1,0 +1,31 @@
+{
+  "content_hash": "b3d4bfe67c1bddf85371521e178517f0f6ab266c4ee3365364408d8c9a610507",
+  "extensions": [],
+  "format": "world-forge.system_module",
+  "format_version": 1,
+  "module_id": "puzzle_rules",
+  "project_id": "abstract_puzzle",
+  "systems": [
+    {
+      "asset_binding_ids": [
+        "board_texture"
+      ],
+      "effect_ids": [
+        "increment_moves",
+        "swap_tiles"
+      ],
+      "event_ids": [
+        "tile_swapped"
+      ],
+      "id": "adjacent_swap",
+      "precondition_ids": [
+        "adjacent_tile",
+        "first_index_valid",
+        "second_index_valid"
+      ],
+      "system_type": "rule",
+      "title": "Swap adjacent symbols"
+    }
+  ],
+  "title": "Abstract puzzle rules"
+}

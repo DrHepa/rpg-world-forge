@@ -47,4 +47,8 @@ export default tseslint.config(
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+  {
+    files: ["src/authority-modal/*.js"],
+    ...tseslint.configs.disableTypeChecked,
+  },
 );

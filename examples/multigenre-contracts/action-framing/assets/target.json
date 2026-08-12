@@ -1,0 +1,106 @@
+{
+  "asset_subject": {
+    "content_hash": "95c24c228facc0f49fdbf67c0c09af0604a1e20c37da43b7461d7605315466e4",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_b5515b8b15c591d03ee19f0b9ad83d3a4047552bf70f5fd9"
+  },
+  "bindings": [
+    {
+      "asset_id": "action_hud",
+      "binding_id": "action_hud_visual",
+      "kind": "ui",
+      "outputs": [
+        {
+          "media_type": "image/png",
+          "role": "texture"
+        }
+      ],
+      "referencing_subjects": [
+        {
+          "id": "action_mission",
+          "kind": "activity"
+        },
+        {
+          "id": "objective_engagement",
+          "kind": "mechanic"
+        },
+        {
+          "id": "restart_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "mission_conclusion",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "mission_framing",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "mission_resolution",
+          "kind": "system"
+        }
+      ],
+      "representation": "2d",
+      "required": true,
+      "roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "narrative_ui",
+        "system_feedback"
+      ],
+      "selected_format": "asset:png",
+      "sharing": {
+        "group_id": null,
+        "policy": "exclusive"
+      },
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "narrative",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "284d6835a486e5d5289aaf8b661f3a240155870f84f15eb1764293d25bba920c",
+  "format": "world-forge.asset_target",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "cadf114a3e2ed9a74d8664137c2a09888e5383468fbb98e9ded7bd79acbca506",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "action_framing"
+  },
+  "review": {
+    "evidence": [
+      {
+        "content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "evidence_id": "binding_review"
+      }
+    ],
+    "rationale": "The binding plan was reviewed against every compiled requirement.",
+    "reviewer_id": "asset_director"
+  },
+  "target_id": "asset_target_5e7739cb414629f4e3e890c2da30caefc22c7f757de251f9"
+}

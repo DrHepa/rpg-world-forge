@@ -1,0 +1,35 @@
+{
+  "accepted": [
+    "row/column",
+    "Choose left / right.",
+    "A prompt: choose the visible symbol.",
+    "The provider helps a model citizen.",
+    "The model is visible in the scene.",
+    "provider",
+    "mañana remains visible"
+  ],
+  "rejected": [
+    "/tmp/authoring/project.json",
+    "  /tmp/authoring/project.json  ",
+    "C:\\authoring\\project.json",
+    "\\\\server\\share\\project.json",
+    "//server/share/project.json",
+    " file:///tmp/project.json ",
+    "https://provider.invalid/project.json",
+    "assets/project.json",
+    "assets/My File.png",
+    "assets/mañana.png",
+    "assets/../project.json",
+    "./project.json",
+    "../project.json",
+    "@scope/package",
+    "provider=openai",
+    "provider_id=openai",
+    "provider is openai",
+    "model_id:gpt-5",
+    "credentials=secret",
+    "provider:openai/gpt-5",
+    "MODEL=gpt-5",
+    "prompt=private authoring instruction"
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://world-forge.local/schemas/studio-creation-preview-v2.schema.json",
+  "title": "World Forge Studio QA review candidate preview v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "handle",
+    "workspace_id",
+    "source",
+    "media_type",
+    "byte_length",
+    "sha256",
+    "chunk_bytes",
+    "metadata"
+  ],
+  "properties": {
+    "format": {
+      "const": "world-forge.studio_creation_preview"
+    },
+    "format_version": {
+      "const": 2
+    },
+    "handle": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "workspace_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "qa_report_artifact_id",
+        "asset_id",
+        "output_role"
+      ],
+      "properties": {
+        "kind": {
+          "const": "qa_review_candidate"
+        },
+        "qa_report_artifact_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+        },
+        "asset_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+        },
+        "output_role": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+        }
+      }
+    },
+    "media_type": {
+      "enum": [
+        "audio/wav",
+        "image/png"
+      ]
+    },
+    "byte_length": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 67108864
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "chunk_bytes": {
+      "const": 65536
+    },
+    "metadata": {
+      "oneOf": [
+        {
+          "$ref": "studio-creation-preview.schema.json#/$defs/pngMetadata"
+        },
+        {
+          "$ref": "studio-creation-preview.schema.json#/$defs/wavMetadata"
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "media_type": {
+          "const": "image/png"
+        },
+        "metadata": {
+          "$ref": "studio-creation-preview.schema.json#/$defs/pngMetadata"
+        }
+      },
+      "required": [
+        "media_type",
+        "metadata"
+      ]
+    },
+    {
+      "properties": {
+        "media_type": {
+          "const": "audio/wav"
+        },
+        "metadata": {
+          "$ref": "studio-creation-preview.schema.json#/$defs/wavMetadata"
+        }
+      },
+      "required": [
+        "media_type",
+        "metadata"
+      ]
+    }
+  ]
+}

@@ -1,1580 +1,2653 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    act,
+    cleanup,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "../../src/renderer/App";
 import type {
-  CodexActivityEvent,
-  ForgeStudioApi,
-  StudioActivityEvent,
+    CodexActivityEvent,
+    ForgeStudioApi,
+    StudioActivityEvent,
 } from "../../src/shared/studio-api";
 
 const SHA_WORLD = "a".repeat(64);
 const SHA_MAP = "b".repeat(64);
-const SHA_PROPOSED = "6cd86327e443282ef8b2e4109125f8fc9c43c64951ba100f47665f62c468577e";
+const SHA_PROPOSED =
+    "6cd86327e443282ef8b2e4109125f8fc9c43c64951ba100f47665f62c468577e";
 const SHA_REVIEW = "d".repeat(64);
 const ASSET_REVISION = "e".repeat(64);
 const ASSET_ENTRY_ID = `asset_${"1".repeat(64)}`;
 const UPDATED_WORLD_CONTENT = '{"id":"world_01","title":"A quieter world"}';
 const COMPACT_DISCIPLINE_TABS_QUERY = "(max-width: 860px)";
 
-const originalMatchMediaDescriptor = Object.getOwnPropertyDescriptor(window, "matchMedia");
+const originalMatchMediaDescriptor = Object.getOwnPropertyDescriptor(
+    window,
+    "matchMedia",
+);
 
 beforeEach(() => {
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(canvasContext());
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+        canvasContext(),
+    );
 });
 
 afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-  vi.restoreAllMocks();
-  if (originalMatchMediaDescriptor) {
-    Object.defineProperty(window, "matchMedia", originalMatchMediaDescriptor);
-  } else {
-    Reflect.deleteProperty(window, "matchMedia");
-  }
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    if (originalMatchMediaDescriptor) {
+        Object.defineProperty(
+            window,
+            "matchMedia",
+            originalMatchMediaDescriptor,
+        );
+    } else {
+        Reflect.deleteProperty(window, "matchMedia");
+    }
 });
 
 describe("Studio World authoring cockpit", () => {
-  it("loads registered workspaces and the four named World resources on selection", async () => {
-    const { api, mocks } = createApi();
-    installApi(api);
-    render(<App />);
+    it("routes a registered generic creation workspace without invoking legacy World APIs", async () => {
+        const creation = appCreationApi();
+        const { api, mocks } = createApi(creation.api);
+        installApi(api);
+        render(<App />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-
-    await waitFor(() => {
-      expect(mocks.getWorkspaceOverview).toHaveBeenCalledWith("workspace_01");
-      expect(mocks.listSourceDocuments).toHaveBeenCalledWith("workspace_01");
-      expect(mocks.validateWorld).toHaveBeenCalledWith("workspace_01");
-      expect(mocks.analyzeWorld).toHaveBeenCalledWith("workspace_01");
-    });
-    expect(await screen.findByRole("heading", { name: "Neutral World" })).toBeInTheDocument();
-    expect(await screen.findByLabelText("In-memory source draft")).toHaveValue(
-      WORLD_DOCUMENT.content,
-    );
-    expect(screen.getByText("foundation")).toBeInTheDocument();
-    expect(screen.getByText("Release validation passed · 7 objects")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Assets" })).toBeEnabled();
-    expect(screen.getByRole("tab", { name: "Game" })).toBeEnabled();
-  });
-
-  it("uses roving tabs, lazy-loads Assets, and preserves the exact dirty World draft", async () => {
-    const { api, mocks } = createApi();
-    installApi(api);
-    render(<App />);
-    expect(mocks.listAssetCatalog).not.toHaveBeenCalled();
-
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    const editor = await screen.findByLabelText("In-memory source draft");
-    fireEvent.change(editor, { target: { value: UPDATED_WORLD_CONTENT } });
-    expect(mocks.listAssetCatalog).not.toHaveBeenCalled();
-
-    const worldTab = screen.getByRole("tab", { name: "World" });
-    const assetsTab = screen.getByRole("tab", { name: "Assets" });
-    const gameTab = screen.getByRole("tab", { name: "Game" });
-    expect(worldTab).toHaveAttribute("tabindex", "0");
-    expect(assetsTab).toHaveAttribute("tabindex", "-1");
-    expect(gameTab).toHaveAttribute("tabindex", "-1");
-    worldTab.focus();
-    fireEvent.keyDown(worldTab, { key: "End" });
-    await waitFor(() => expect(gameTab).toHaveFocus());
-    expect(gameTab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("link", { name: "Skip to Game workbench" })).toHaveAttribute(
-      "href",
-      "#game-workbench",
-    );
-    fireEvent.keyDown(gameTab, { key: "ArrowUp" });
-    await waitFor(() => expect(assetsTab).toHaveFocus());
-    expect(assetsTab).toHaveAttribute("aria-selected", "true");
-    expect(gameTab).toBeEnabled();
-    await waitFor(() =>
-      expect(mocks.listAssetCatalog).toHaveBeenCalledWith("workspace_01"),
-    );
-    expect(mocks.listAssetCatalog).toHaveBeenCalledTimes(1);
-    expect(await screen.findByRole("heading", { name: "Verified asset catalog" })).toBeInTheDocument();
-    expect(document.querySelector("#world-workbench")).toHaveAttribute("hidden");
-    expect(document.querySelector("#assets-workbench")).not.toHaveAttribute("hidden");
-    expect(document.querySelector<HTMLTextAreaElement>("#source-draft")).toHaveValue(
-      UPDATED_WORLD_CONTENT,
-    );
-    expect(screen.getByRole("link", { name: "Skip to Assets workbench" })).toHaveAttribute(
-      "href",
-      "#assets-workbench",
-    );
-
-    expect(screen.getByRole("tablist", { name: "Forge disciplines" })).toHaveAttribute(
-      "aria-orientation",
-      "vertical",
-    );
-    expect(fireEvent.keyDown(assetsTab, { key: "ArrowRight" })).toBe(true);
-    expect(assetsTab).toHaveFocus();
-    expect(assetsTab).toHaveAttribute("aria-selected", "true");
-
-    expect(fireEvent.keyDown(assetsTab, { key: "ArrowDown" })).toBe(false);
-    await waitFor(() => expect(gameTab).toHaveFocus());
-    expect(gameTab).toHaveAttribute("aria-selected", "true");
-    expect(document.querySelector("#game-workbench")).not.toHaveAttribute("hidden");
-    expect(document.querySelector<HTMLTextAreaElement>("#source-draft")).toHaveValue(
-      UPDATED_WORLD_CONTENT,
-    );
-    expect(fireEvent.keyDown(gameTab, { key: "ArrowDown" })).toBe(false);
-    await waitFor(() => expect(worldTab).toHaveFocus());
-    expect(document.querySelector("#assets-workbench")).toHaveAttribute("hidden");
-    expect(document.querySelector<HTMLTextAreaElement>("#source-draft")).toHaveValue(
-      UPDATED_WORLD_CONTENT,
-    );
-    expect(mocks.getWorkspaceOverview).toHaveBeenCalledTimes(1);
-    expect(mocks.listSourceDocuments).toHaveBeenCalledTimes(1);
-    expect(mocks.readSourceDocument).toHaveBeenCalledTimes(1);
-  });
-
-  it("uses horizontal arrow keys across all disciplines at the compact breakpoint", async () => {
-    const media = installMatchMedia(true);
-    const { api } = createApi();
-    installApi(api);
-    const view = render(<App />);
-
-    const tablist = screen.getByRole("tablist", { name: "Forge disciplines" });
-    const worldTab = screen.getByRole("tab", { name: "World" });
-    const assetsTab = screen.getByRole("tab", { name: "Assets" });
-    const gameTab = screen.getByRole("tab", { name: "Game" });
-    expect(tablist).toHaveAttribute("aria-orientation", "horizontal");
-    expect(gameTab).toBeEnabled();
-
-    worldTab.focus();
-    expect(fireEvent.keyDown(worldTab, { key: "ArrowDown" })).toBe(true);
-    expect(worldTab).toHaveFocus();
-    expect(worldTab).toHaveAttribute("aria-selected", "true");
-
-    expect(fireEvent.keyDown(worldTab, { key: "ArrowRight" })).toBe(false);
-    await waitFor(() => expect(assetsTab).toHaveFocus());
-    expect(assetsTab).toHaveAttribute("aria-selected", "true");
-
-    expect(fireEvent.keyDown(assetsTab, { key: "ArrowRight" })).toBe(false);
-    await waitFor(() => expect(gameTab).toHaveFocus());
-    expect(gameTab).toHaveAttribute("aria-selected", "true");
-
-    expect(fireEvent.keyDown(gameTab, { key: "ArrowRight" })).toBe(false);
-    await waitFor(() => expect(worldTab).toHaveFocus());
-    expect(worldTab).toHaveAttribute("aria-selected", "true");
-    expect(gameTab).toHaveAttribute("tabindex", "-1");
-
-    act(() => media.setMatches(false));
-    expect(tablist).toHaveAttribute("aria-orientation", "vertical");
-    view.unmount();
-    expect(media.removeEventListener).toHaveBeenCalledWith(
-      "change",
-      media.changeListener,
-    );
-  });
-
-  it("uses exact revision-bound list and inspect API calls with page replacement", async () => {
-    const secondEntryId = `asset_${"2".repeat(64)}`;
-    const listAssetCatalog = vi
-      .fn()
-      .mockResolvedValueOnce(
-        assetCatalogListResponse({ entries: [assetEntry()], nextOffset: 64 }),
-      )
-      .mockResolvedValueOnce(
-        assetCatalogListResponse({
-          offset: 64,
-          entries: [
-            assetEntry({
-              entry_id: secondEntryId,
-              asset_id: "asset_02",
-              category: "qa",
-              path: "assets/qa.json",
-              media_type: "application/json",
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /creation_workspace.*Universe library/iu,
             }),
-          ],
-        }),
-      )
-      .mockResolvedValueOnce(
-        assetCatalogListResponse({ entries: [assetEntry()], nextOffset: 64 }),
-      )
-      .mockResolvedValueOnce(
-        assetCatalogListResponse({
-          revision: "9".repeat(64),
-          entries: [],
-        }),
-      );
-    const inspectAssetCatalogEntry = vi.fn().mockResolvedValue(
-      assetCatalogInspectResponse({
-        entry: assetEntry({
-          entry_id: secondEntryId,
-          asset_id: "asset_02",
-          category: "qa",
-          path: "assets/qa.json",
-          media_type: "application/json",
-        }),
-        inspection: {
-          kind: "json",
-          encoding: "utf-8",
-          content: '{"valid":true}',
-          value: { valid: true },
-        },
-      }),
-    );
-    const { api } = createApi({ listAssetCatalog, inspectAssetCatalogEntry });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
-    await waitFor(() => expect(listAssetCatalog).toHaveBeenNthCalledWith(1, "workspace_01"));
-    expect(await screen.findByRole("button", { name: /asset_01/u })).toBeInTheDocument();
+        );
 
-    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
-    await waitFor(() =>
-      expect(listAssetCatalog).toHaveBeenNthCalledWith(2, "workspace_01", {
-        offset: 64,
-        manifestRevision: ASSET_REVISION,
-      }),
-    );
-    expect(await screen.findByRole("button", { name: /asset_02/u })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /asset_01/u })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /asset_02/u }));
-    await waitFor(() =>
-      expect(inspectAssetCatalogEntry).toHaveBeenCalledWith(
-        "workspace_01",
-        ASSET_REVISION,
-        secondEntryId,
-      ),
-    );
-    expect(await screen.findByRole("heading", { name: "Semantic JSON tree" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Previous page" }));
-    await waitFor(() =>
-      expect(listAssetCatalog).toHaveBeenNthCalledWith(3, "workspace_01", {
-        offset: 0,
-        manifestRevision: ASSET_REVISION,
-      }),
-    );
-    expect(await screen.findByRole("button", { name: /asset_01/u })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /asset_02/u })).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Refresh revision snapshot" }));
-    await waitFor(() => expect(listAssetCatalog).toHaveBeenCalledTimes(4));
-    expect(listAssetCatalog.mock.calls[3]).toEqual(["workspace_01"]);
-    expect(await screen.findByText("0 entries on current page")).toBeInTheDocument();
-  });
-
-  it("fails closed on a catalog conflict and refreshes without exposing diagnostics", async () => {
-    const listAssetCatalog = vi
-      .fn()
-      .mockResolvedValueOnce(
-        assetCatalogListResponse({ entries: [assetEntry()], nextOffset: 64 }),
-      )
-      .mockResolvedValueOnce({
-        ok: true,
-        value: {
-          protocol: "rpg-world-forge.studio_protocol",
-          protocol_version: 1,
-          kind: "error",
-          request_id: "catalog-conflict",
-          error: {
-            code: "conflict",
-            message: "SECRET /home/private/catalog.json",
-            details: { absolute_root: "/home/private" },
-          },
-        },
-      })
-      .mockResolvedValueOnce(
-        assetCatalogListResponse({
-          revision: "8".repeat(64),
-          entries: [assetEntry({ category: "runtime_output" })],
-        }),
-      );
-    const { api } = createApi({ listAssetCatalog });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
-    await screen.findByRole("button", { name: /asset_01/u });
-    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/revision conflicted/u);
-    expect(screen.queryByRole("button", { name: /asset_01/u })).not.toBeInTheDocument();
-    expect(screen.queryByText(/SECRET|\/home\/private/u)).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Refresh revision snapshot" }));
-    await waitFor(() => expect(listAssetCatalog.mock.calls[2]).toEqual(["workspace_01"]));
-    expect(await screen.findByRole("button", { name: /asset_01/u })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Runtime output/u })).toBeInTheDocument();
-  });
-
-  it("keeps dirty-workspace confirmation active when selection starts from Assets", async () => {
-    const { api, mocks } = createApi({
-      listWorkspaces: vi.fn().mockResolvedValue(
-        legacyResponse("workspace.list", {
-          workspaces: [
-            { workspace_id: "workspace_01" },
-            { workspace_id: "workspace_02" },
-          ],
-        }),
-      ),
-    });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.change(await screen.findByLabelText("In-memory source draft"), {
-      target: { value: UPDATED_WORLD_CONTENT },
-    });
-    fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
-    await waitFor(() => expect(mocks.listAssetCatalog).toHaveBeenCalledWith("workspace_01"));
-
-    const workspaceTwo = screen.getByRole("button", { name: /workspace_02/u });
-    fireEvent.click(workspaceTwo);
-    expect(
-      screen.getByRole("dialog", { name: /Discard this in-memory draft/u }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
-    await waitFor(() => expect(workspaceTwo).toHaveFocus());
-    expect(screen.getByRole("tab", { name: "Assets" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(document.querySelector<HTMLTextAreaElement>("#source-draft")).toHaveValue(
-      UPDATED_WORLD_CONTENT,
-    );
-  });
-
-  it("calls the three exact Game job APIs and merges their immediate queued jobs", async () => {
-    const verifyAssetpack = vi.fn().mockImplementation(
-      (workspaceId: string, input: object) =>
-        Promise.resolve(jobCreateResponse("assetpack-job", workspaceId, "assetpack.verify", input)),
-    );
-    const runHeadless = vi.fn().mockImplementation(
-      (workspaceId: string, input: object) =>
-        Promise.resolve(jobCreateResponse("headless-job", workspaceId, "runtime.headless", input)),
-    );
-    const runReplay = vi.fn().mockImplementation(
-      (workspaceId: string, input: object) =>
-        Promise.resolve(jobCreateResponse("replay-job", workspaceId, "runtime.replay", input)),
-    );
-    const { api } = createApi({ verifyAssetpack, runHeadless, runReplay });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Game" }));
-
-    expect(screen.getByRole("link", { name: "Skip to Game workbench" })).toHaveAttribute(
-      "href",
-      "#game-workbench",
-    );
-    expect(screen.getByText("Game repository").closest("div")).toHaveTextContent(
-      "Not registered",
-    );
-
-    fireEvent.change(screen.getByLabelText("Assetpack path"), {
-      target: { value: "build/assets/assetpack.json" },
-    });
-    fireEvent.change(screen.getByLabelText("Worldpack path for assetpack verification"), {
-      target: { value: "build/worldpack.json" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Verify assetpack" }));
-
-    fireEvent.change(screen.getByLabelText("Worldpack path for headless simulation"), {
-      target: { value: "build/worldpack.json" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Run headless simulation" }));
-
-    fireEvent.change(screen.getByLabelText("Worldpack path for replay verification"), {
-      target: { value: "build/worldpack.json" },
-    });
-    fireEvent.change(screen.getByLabelText("Existing replay path"), {
-      target: { value: "replays/accepted.json" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Verify existing replay" }));
-
-    await waitFor(() => {
-      expect(verifyAssetpack).toHaveBeenCalledWith("workspace_01", {
-        assetpack: "build/assets/assetpack.json",
-        worldpack: "build/worldpack.json",
-      });
-      expect(runHeadless).toHaveBeenCalledWith("workspace_01", {
-        worldpack: "build/worldpack.json",
-        ticks: 0,
-      });
-      expect(runReplay).toHaveBeenCalledWith("workspace_01", {
-        worldpack: "build/worldpack.json",
-        replay: "replays/accepted.json",
-      });
-    });
-    expect(
-      await screen.findByRole("article", { name: "Assetpack verification job assetpack-job" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("article", { name: "Headless simulation job headless-job" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("article", { name: "Replay verification job replay-job" }),
-    ).toBeInTheDocument();
-  });
-
-  it("keeps dirty World drafts and workspace confirmation active from Game", async () => {
-    const { api } = createApi({
-      listWorkspaces: vi.fn().mockResolvedValue(
-        legacyResponse("workspace.list", {
-          workspaces: [
-            { workspace_id: "workspace_01" },
-            { workspace_id: "workspace_02" },
-          ],
-        }),
-      ),
-    });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.change(await screen.findByLabelText("In-memory source draft"), {
-      target: { value: UPDATED_WORLD_CONTENT },
-    });
-    fireEvent.click(screen.getByRole("tab", { name: "Game" }));
-    fireEvent.change(screen.getByLabelText("Worldpack path for headless simulation"), {
-      target: { value: "build/worldpack.json" },
+        expect(
+            await screen.findByRole("heading", { name: "Neutral universe" }),
+        ).toBeInTheDocument();
+        expect(screen.getByText("Valid for authoring")).toBeInTheDocument();
+        expect(
+            screen.getByText("Not implementation-ready"),
+        ).toBeInTheDocument();
+        expect(creation.mocks.openCreationWorkspace).toHaveBeenCalledWith(
+            "creation_workspace",
+        );
+        expect(mocks.getWorkspaceOverview).not.toHaveBeenCalled();
+        expect(mocks.listSourceDocuments).not.toHaveBeenCalled();
+        expect(mocks.validateWorld).not.toHaveBeenCalled();
+        expect(mocks.analyzeWorld).not.toHaveBeenCalled();
+        expect(mocks.listAssetCatalog).not.toHaveBeenCalled();
+        expect(
+            screen.queryByRole("tablist", { name: "Forge disciplines" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Assistant" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("tab", { name: "Activity" }),
+        ).not.toBeInTheDocument();
     });
 
-    const workspaceTwo = screen.getByRole("button", { name: /workspace_02/u });
-    fireEvent.click(workspaceTwo);
-    expect(
-      screen.getByRole("dialog", { name: /Discard this in-memory draft/u }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
-    await waitFor(() => expect(workspaceTwo).toHaveFocus());
-    expect(screen.getByRole("tab", { name: "Game" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(document.querySelector<HTMLTextAreaElement>("#source-draft")).toHaveValue(
-      UPDATED_WORLD_CONTENT,
-    );
-    expect(screen.getByLabelText("Worldpack path for headless simulation")).toHaveValue(
-      "build/worldpack.json",
-    );
-  });
+    it("protects a generic profile draft when navigating back to a legacy workspace", async () => {
+        const creation = appCreationApi();
+        const { api, mocks } = createApi(creation.api);
+        installApi(api);
+        render(<App />);
 
-  it("ignores a late Game reply after the workspace generation changes", async () => {
-    let resolveHeadless:
-      | ((value: ReturnType<typeof jobCreateResponse>) => void)
-      | undefined;
-    const runHeadless = vi.fn().mockReturnValue(
-      new Promise<ReturnType<typeof jobCreateResponse>>((resolve) => {
-        resolveHeadless = resolve;
-      }),
-    );
-    const { api } = createApi({
-      listWorkspaces: vi.fn().mockResolvedValue(
-        legacyResponse("workspace.list", {
-          workspaces: [
-            { workspace_id: "workspace_01" },
-            { workspace_id: "workspace_02" },
-          ],
-        }),
-      ),
-      getWorkspaceOverview: vi.fn().mockImplementation((workspaceId: string) =>
-        Promise.resolve(
-          namedResponse("workspace.overview", {
-            overview: { ...OVERVIEW, workspace_id: workspaceId },
-          }),
-        ),
-      ),
-      runHeadless,
-    });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Game" }));
-    fireEvent.change(screen.getByLabelText("Worldpack path for headless simulation"), {
-      target: { value: "build/worldpack.json" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Run headless simulation" }));
-    await waitFor(() => expect(runHeadless).toHaveBeenCalledOnce());
-
-    fireEvent.click(screen.getByRole("button", { name: /workspace_02/u }));
-    resolveHeadless?.(
-      jobCreateResponse(
-        "late-headless-job",
-        "workspace_01",
-        "runtime.headless",
-        { worldpack: "build/worldpack.json", ticks: 0 },
-      ),
-    );
-    await act(async () => Promise.resolve());
-    expect(screen.queryByText("late-headless-job")).not.toBeInTheDocument();
-    expect(screen.queryByText(/invalid Game job response/u)).not.toBeInTheDocument();
-  });
-
-  it("calls the named cancel API only for eligible current-workspace Game jobs", async () => {
-    const queued = gameJobRecord({ job_id: "queued-job" });
-    const running = gameJobRecord({ job_id: "running-job", state: "running" });
-    const succeeded = gameJobRecord({
-      job_id: "succeeded-job",
-      state: "succeeded",
-      result: {
-        operation: "runtime.headless",
-        world_id: "world_01",
-        world_content_hash: "a".repeat(64),
-        ticks: 0,
-        state_tick: 0,
-        absolute_minute: 0,
-        state_digest: "b".repeat(64),
-      },
-    });
-    const cancelJob = vi.fn().mockImplementation((jobId: string) =>
-      Promise.resolve(
-        jobCancelResponse(
-          gameJobRecord({
-            ...(jobId === "running-job" ? running : queued),
-            state: jobId === "running-job" ? "running" : "canceled",
-            updated_at: "2026-07-23T10:00:01Z",
-          }),
-        ),
-      ),
-    );
-    const { api } = createApi({
-      listJobs: vi.fn().mockResolvedValue(
-        legacyResponse("job.list", {
-          jobs: [
-            queued,
-            running,
-            succeeded,
-            gameJobRecord({
-              job_id: "other-workspace-job",
-              workspace_id: "workspace_02",
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /creation_workspace.*Universe library/iu,
             }),
-          ],
-        }),
-      ),
-      cancelJob,
+        );
+        await screen.findByRole("heading", { name: "Neutral universe" });
+        fireEvent.click(screen.getByRole("tab", { name: "Profile" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Edit Fiction JSON" }),
+        );
+        const fictionEditor = screen.getByLabelText("Fiction facet JSON");
+        const dirtyFiction =
+            '{"genres":["mystery"],"tones":["focused"],"tags":[]}';
+        fireEvent.change(fictionEditor, { target: { value: dirtyFiction } });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Update Fiction draft" }),
+        );
+        expect(
+            await screen.findByText(/Draft differs from the verified profile/u),
+        ).toBeInTheDocument();
+
+        const legacyTrigger = screen.getByRole("button", {
+            name: /workspace_01.*Legacy RPG/iu,
+        });
+        fireEvent.click(legacyTrigger);
+        expect(
+            await screen.findByRole("dialog", {
+                name: "Discard this in-memory profile draft?",
+            }),
+        ).toBeInTheDocument();
+        expect(mocks.getWorkspaceOverview).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
+        await waitFor(() => expect(legacyTrigger).toHaveFocus());
+        expect(screen.getByLabelText("Fiction facet JSON")).toHaveValue(
+            `${JSON.stringify({ genres: ["mystery"], tones: ["focused"], tags: [] }, null, 2)}\n`,
+        );
+
+        fireEvent.click(legacyTrigger);
+        fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+        expect(
+            await screen.findByRole("heading", { name: "Neutral World" }),
+        ).toBeInTheDocument();
+        expect(mocks.getWorkspaceOverview).toHaveBeenCalledWith("workspace_01");
     });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Game" }));
 
-    const queuedCancel = await screen.findByRole("button", {
-      name: "Cancel Headless simulation job queued-job",
+    it("protects typed facet text that has not been committed to the profile draft", async () => {
+        const creation = appCreationApi();
+        const { api, mocks } = createApi(creation.api);
+        installApi(api);
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /creation_workspace.*Universe library/iu,
+            }),
+        );
+        await screen.findByRole("heading", { name: "Neutral universe" });
+        fireEvent.click(screen.getByRole("tab", { name: "Profile" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Edit Fiction JSON" }),
+        );
+        const editor = screen.getByLabelText("Fiction facet JSON");
+        const typed = '{"genres":["mystery"],"tones":[],"tags":[]}';
+        fireEvent.change(editor, { target: { value: typed } });
+
+        const legacyTrigger = screen.getByRole("button", {
+            name: /workspace_01.*Legacy RPG/iu,
+        });
+        fireEvent.click(legacyTrigger);
+        expect(
+            await screen.findByRole("dialog", {
+                name: "Discard typed facet edits?",
+            }),
+        ).toBeInTheDocument();
+        expect(mocks.getWorkspaceOverview).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
+        expect(screen.getByLabelText("Fiction facet JSON")).toHaveValue(typed);
     });
-    const runningCancel = screen.getByRole("button", {
-      name: "Cancel Headless simulation job running-job",
+
+    it("keeps a persisted creation changeset reachable until it reaches a terminal state", async () => {
+        const creation = appCreationApi();
+        const { api, mocks } = createApi(creation.api);
+        installApi(api);
+        render(<App />);
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: /creation_workspace.*Universe library/iu,
+            }),
+        );
+        await screen.findByRole("heading", { name: "Neutral universe" });
+        fireEvent.click(screen.getByRole("tab", { name: "Profile" }));
+        fireEvent.click(
+            screen.getByRole("button", { name: "Edit Fiction JSON" }),
+        );
+        fireEvent.change(screen.getByLabelText("Fiction facet JSON"), {
+            target: { value: '{"genres":["mystery"],"tones":[],"tags":[]}' },
+        });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Update Fiction draft" }),
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Stage profile for review" }),
+        );
+        expect(
+            await screen.findByRole("heading", { name: "Profile review" }),
+        ).toBeInTheDocument();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: /workspace_01.*Legacy RPG/iu }),
+        );
+        expect(
+            await screen.findByRole("dialog", {
+                name: "Finish this reviewed changeset before leaving",
+            }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Discard draft" }),
+        ).not.toBeInTheDocument();
+        expect(mocks.getWorkspaceOverview).not.toHaveBeenCalled();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Return to profile review" }),
+        );
+        expect(
+            screen.getByRole("heading", { name: "Profile review" }),
+        ).toBeInTheDocument();
     });
-    expect(
-      screen.queryByRole("button", { name: /succeeded-job/u }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("other-workspace-job")).not.toBeInTheDocument();
 
-    fireEvent.click(queuedCancel);
-    await waitFor(() => expect(cancelJob).toHaveBeenCalledWith("queued-job"));
-    expect(
-      await screen.findByRole("article", {
-        name: "Headless simulation job queued-job",
-      }),
-    ).toHaveTextContent("Canceled");
+    it("loads registered workspaces and the four named World resources on selection", async () => {
+        const { api, mocks } = createApi();
+        installApi(api);
+        render(<App />);
 
-    fireEvent.click(runningCancel);
-    await waitFor(() => expect(cancelJob).toHaveBeenCalledWith("running-job"));
-    expect(cancelJob).toHaveBeenCalledTimes(2);
-  });
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
 
-  it("rejects a mismatched Game cancel reply without exposing raw data", async () => {
-    const queued = gameJobRecord({ job_id: "queued-job" });
-    const cancelJob = vi.fn().mockResolvedValue(
-      jobCancelResponse(
-        gameJobRecord({
-          job_id: "queued-job",
-          workspace_id: "workspace_02",
-          state: "canceled",
-          updated_at: "2026-07-23T10:00:01Z",
-        }),
-      ),
-    );
-    const { api } = createApi({
-      listJobs: vi.fn().mockResolvedValue(
-        legacyResponse("job.list", { jobs: [queued] }),
-      ),
-      cancelJob,
+        await waitFor(() => {
+            expect(mocks.getWorkspaceOverview).toHaveBeenCalledWith(
+                "workspace_01",
+            );
+            expect(mocks.listSourceDocuments).toHaveBeenCalledWith(
+                "workspace_01",
+            );
+            expect(mocks.validateWorld).toHaveBeenCalledWith("workspace_01");
+            expect(mocks.analyzeWorld).toHaveBeenCalledWith("workspace_01");
+        });
+        expect(
+            await screen.findByRole("heading", { name: "Neutral World" }),
+        ).toBeInTheDocument();
+        expect(
+            await screen.findByLabelText("In-memory source draft"),
+        ).toHaveValue(WORLD_DOCUMENT.content);
+        expect(screen.getByText("foundation")).toBeInTheDocument();
+        expect(
+            screen.getByText("Release validation passed · 7 objects"),
+        ).toBeInTheDocument();
+        expect(screen.getByRole("tab", { name: "Assets" })).toBeEnabled();
+        expect(screen.getByRole("tab", { name: "Game" })).toBeEnabled();
     });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Game" }));
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Cancel Headless simulation job queued-job",
-      }),
-    );
 
-    expect(
-      await screen.findByText("Forge Studio returned an invalid job cancellation response."),
-    ).toHaveAttribute("role", "alert");
-    expect(cancelJob).toHaveBeenCalledOnce();
-    expect(
-      screen.getByRole("article", { name: "Headless simulation job queued-job" }),
-    ).toHaveTextContent("Queued");
-    expect(screen.queryByText(/workspace_02|absolute_root|stderr/u)).not.toBeInTheDocument();
-  });
+    it("uses roving tabs, lazy-loads Assets, and preserves the exact dirty World draft", async () => {
+        const { api, mocks } = createApi();
+        installApi(api);
+        render(<App />);
+        expect(mocks.listAssetCatalog).not.toHaveBeenCalled();
 
-  it("ignores a late Game cancel reply after the workspace generation changes", async () => {
-    const queued = gameJobRecord({ job_id: "queued-job" });
-    let resolveCancel:
-      | ((value: ReturnType<typeof jobCancelResponse>) => void)
-      | undefined;
-    const cancelJob = vi.fn().mockReturnValue(
-      new Promise<ReturnType<typeof jobCancelResponse>>((resolve) => {
-        resolveCancel = resolve;
-      }),
-    );
-    const { api } = createApi({
-      listWorkspaces: vi.fn().mockResolvedValue(
-        legacyResponse("workspace.list", {
-          workspaces: [
-            { workspace_id: "workspace_01" },
-            { workspace_id: "workspace_02" },
-          ],
-        }),
-      ),
-      listJobs: vi.fn().mockImplementation(({ workspace_id }: { workspace_id?: string }) =>
-        Promise.resolve(
-          legacyResponse("job.list", {
-            jobs: workspace_id === "workspace_01" ? [queued] : [],
-          }),
-        ),
-      ),
-      getWorkspaceOverview: vi.fn().mockImplementation((workspaceId: string) =>
-        Promise.resolve(
-          namedResponse("workspace.overview", {
-            overview: { ...OVERVIEW, workspace_id: workspaceId },
-          }),
-        ),
-      ),
-      cancelJob,
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        const editor = await screen.findByLabelText("In-memory source draft");
+        fireEvent.change(editor, { target: { value: UPDATED_WORLD_CONTENT } });
+        expect(mocks.listAssetCatalog).not.toHaveBeenCalled();
+
+        const worldTab = screen.getByRole("tab", { name: "World" });
+        const assetsTab = screen.getByRole("tab", { name: "Assets" });
+        const gameTab = screen.getByRole("tab", { name: "Game" });
+        expect(worldTab).toHaveAttribute("tabindex", "0");
+        expect(assetsTab).toHaveAttribute("tabindex", "-1");
+        expect(gameTab).toHaveAttribute("tabindex", "-1");
+        worldTab.focus();
+        fireEvent.keyDown(worldTab, { key: "End" });
+        await waitFor(() => expect(gameTab).toHaveFocus());
+        expect(gameTab).toHaveAttribute("aria-selected", "true");
+        expect(
+            screen.getByRole("link", { name: "Skip to Game workbench" }),
+        ).toHaveAttribute("href", "#game-workbench");
+        fireEvent.keyDown(gameTab, { key: "ArrowUp" });
+        await waitFor(() => expect(assetsTab).toHaveFocus());
+        expect(assetsTab).toHaveAttribute("aria-selected", "true");
+        expect(gameTab).toBeEnabled();
+        await waitFor(() =>
+            expect(mocks.listAssetCatalog).toHaveBeenCalledWith("workspace_01"),
+        );
+        expect(mocks.listAssetCatalog).toHaveBeenCalledTimes(1);
+        expect(
+            await screen.findByRole("heading", {
+                name: "Verified asset catalog",
+            }),
+        ).toBeInTheDocument();
+        expect(document.querySelector("#world-workbench")).toHaveAttribute(
+            "hidden",
+        );
+        expect(document.querySelector("#assets-workbench")).not.toHaveAttribute(
+            "hidden",
+        );
+        expect(
+            document.querySelector<HTMLTextAreaElement>("#source-draft"),
+        ).toHaveValue(UPDATED_WORLD_CONTENT);
+        expect(
+            screen.getByRole("link", { name: "Skip to Assets workbench" }),
+        ).toHaveAttribute("href", "#assets-workbench");
+
+        expect(
+            screen.getByRole("tablist", { name: "Forge disciplines" }),
+        ).toHaveAttribute("aria-orientation", "vertical");
+        expect(fireEvent.keyDown(assetsTab, { key: "ArrowRight" })).toBe(true);
+        expect(assetsTab).toHaveFocus();
+        expect(assetsTab).toHaveAttribute("aria-selected", "true");
+
+        expect(fireEvent.keyDown(assetsTab, { key: "ArrowDown" })).toBe(false);
+        await waitFor(() => expect(gameTab).toHaveFocus());
+        expect(gameTab).toHaveAttribute("aria-selected", "true");
+        expect(document.querySelector("#game-workbench")).not.toHaveAttribute(
+            "hidden",
+        );
+        expect(
+            document.querySelector<HTMLTextAreaElement>("#source-draft"),
+        ).toHaveValue(UPDATED_WORLD_CONTENT);
+        expect(fireEvent.keyDown(gameTab, { key: "ArrowDown" })).toBe(false);
+        await waitFor(() => expect(worldTab).toHaveFocus());
+        expect(document.querySelector("#assets-workbench")).toHaveAttribute(
+            "hidden",
+        );
+        expect(
+            document.querySelector<HTMLTextAreaElement>("#source-draft"),
+        ).toHaveValue(UPDATED_WORLD_CONTENT);
+        expect(mocks.getWorkspaceOverview).toHaveBeenCalledTimes(1);
+        expect(mocks.listSourceDocuments).toHaveBeenCalledTimes(1);
+        expect(mocks.readSourceDocument).toHaveBeenCalledTimes(1);
     });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Game" }));
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Cancel Headless simulation job queued-job",
-      }),
-    );
-    await waitFor(() => expect(cancelJob).toHaveBeenCalledWith("queued-job"));
 
-    fireEvent.click(screen.getByRole("button", { name: /workspace_02/u }));
-    resolveCancel?.(
-      jobCancelResponse(
-        gameJobRecord({
-          job_id: "queued-job",
-          state: "canceled",
-          updated_at: "2026-07-23T10:00:01Z",
-        }),
-      ),
-    );
-    await act(async () => Promise.resolve());
-    expect(screen.queryByText("queued-job")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(/invalid job cancellation response|could not be canceled/u),
-    ).not.toBeInTheDocument();
-  });
+    it("uses horizontal arrow keys across all disciplines at the compact breakpoint", async () => {
+        const media = installMatchMedia(true);
+        const { api } = createApi();
+        installApi(api);
+        const view = render(<App />);
 
-  it("reports JSON syntax and confirms dirty source navigation with focus restoration", async () => {
-    const { api, mocks } = createApi();
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    const editor = await screen.findByLabelText("In-memory source draft");
-    fireEvent.change(editor, { target: { value: '{"broken":' } });
-    expect(await screen.findByText(/JSON syntax:/u)).toBeInTheDocument();
-    expect(screen.getByText("Draft — not staged")).toBeInTheDocument();
+        const tablist = screen.getByRole("tablist", {
+            name: "Forge disciplines",
+        });
+        const worldTab = screen.getByRole("tab", { name: "World" });
+        const assetsTab = screen.getByRole("tab", { name: "Assets" });
+        const gameTab = screen.getByRole("tab", { name: "Game" });
+        expect(tablist).toHaveAttribute("aria-orientation", "horizontal");
+        expect(gameTab).toBeEnabled();
 
-    const mapButton = screen.getByRole("button", { name: /garden\.json/u });
-    fireEvent.click(mapButton);
-    expect(screen.getByRole("dialog", { name: /Discard this in-memory draft/u })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
-    await waitFor(() => expect(mapButton).toHaveFocus());
-    expect(screen.getByLabelText("In-memory source draft")).toHaveValue('{"broken":');
+        worldTab.focus();
+        expect(fireEvent.keyDown(worldTab, { key: "ArrowDown" })).toBe(true);
+        expect(worldTab).toHaveFocus();
+        expect(worldTab).toHaveAttribute("aria-selected", "true");
 
-    fireEvent.click(mapButton);
-    fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
-    expect(await screen.findByText(/Neutral garden: 3 × 2 cells/u)).toBeInTheDocument();
-    expect(mocks.readSourceDocument).toHaveBeenCalledWith("workspace_01", "source/maps/garden.json");
-    expect(screen.getByText("Draft preview — non-authoritative")).toBeInTheDocument();
-  });
+        expect(fireEvent.keyDown(worldTab, { key: "ArrowRight" })).toBe(false);
+        await waitFor(() => expect(assetsTab).toHaveFocus());
+        expect(assetsTab).toHaveAttribute("aria-selected", "true");
 
-  it("rejects a source read whose SHA no longer matches the authorized list", async () => {
-    const { api } = createApi({
-      readSourceDocument: vi.fn().mockResolvedValue(
-        namedResponse("source.read", {
-          document: { ...WORLD_DOCUMENT, sha256: "c".repeat(64) },
-        }),
-      ),
+        expect(fireEvent.keyDown(assetsTab, { key: "ArrowRight" })).toBe(false);
+        await waitFor(() => expect(gameTab).toHaveFocus());
+        expect(gameTab).toHaveAttribute("aria-selected", "true");
+
+        expect(fireEvent.keyDown(gameTab, { key: "ArrowRight" })).toBe(false);
+        await waitFor(() => expect(worldTab).toHaveFocus());
+        expect(worldTab).toHaveAttribute("aria-selected", "true");
+        expect(gameTab).toHaveAttribute("tabindex", "-1");
+
+        act(() => media.setMatches(false));
+        expect(tablist).toHaveAttribute("aria-orientation", "vertical");
+        view.unmount();
+        expect(media.removeEventListener).toHaveBeenCalledWith(
+            "change",
+            media.changeListener,
+        );
     });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Source changed after listing/u);
-    expect(screen.queryByLabelText("In-memory source draft")).not.toBeInTheDocument();
-  });
 
-  it("polls each bounded dock category once per cycle", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const { api, mocks } = createApi();
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    await waitFor(() => {
-      expect(mocks.listEvents).toHaveBeenCalledTimes(1);
-      expect(mocks.listChangesets).toHaveBeenCalledTimes(1);
-      expect(mocks.listJobs).toHaveBeenCalledTimes(1);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(15_000);
-    });
-    await waitFor(() => {
-      expect(mocks.listEvents).toHaveBeenCalledTimes(2);
-      expect(mocks.listChangesets).toHaveBeenCalledTimes(2);
-      expect(mocks.listJobs).toHaveBeenCalledTimes(2);
-    });
-  });
+    it("uses exact revision-bound list and inspect API calls with page replacement", async () => {
+        const secondEntryId = `asset_${"2".repeat(64)}`;
+        const listAssetCatalog = vi
+            .fn()
+            .mockResolvedValueOnce(
+                assetCatalogListResponse({
+                    entries: [assetEntry()],
+                    nextOffset: 64,
+                }),
+            )
+            .mockResolvedValueOnce(
+                assetCatalogListResponse({
+                    offset: 64,
+                    entries: [
+                        assetEntry({
+                            entry_id: secondEntryId,
+                            asset_id: "asset_02",
+                            category: "qa",
+                            path: "assets/qa.json",
+                            media_type: "application/json",
+                        }),
+                    ],
+                }),
+            )
+            .mockResolvedValueOnce(
+                assetCatalogListResponse({
+                    entries: [assetEntry()],
+                    nextOffset: 64,
+                }),
+            )
+            .mockResolvedValueOnce(
+                assetCatalogListResponse({
+                    revision: "9".repeat(64),
+                    entries: [],
+                }),
+            );
+        const inspectAssetCatalogEntry = vi.fn().mockResolvedValue(
+            assetCatalogInspectResponse({
+                entry: assetEntry({
+                    entry_id: secondEntryId,
+                    asset_id: "asset_02",
+                    category: "qa",
+                    path: "assets/qa.json",
+                    media_type: "application/json",
+                }),
+                inspection: {
+                    kind: "json",
+                    encoding: "utf-8",
+                    content: '{"valid":true}',
+                    value: { valid: true },
+                },
+            }),
+        );
+        const { api } = createApi({
+            listAssetCatalog,
+            inspectAssetCatalogEntry,
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
+        await waitFor(() =>
+            expect(listAssetCatalog).toHaveBeenNthCalledWith(1, "workspace_01"),
+        );
+        expect(
+            await screen.findByRole("button", { name: /asset_01/u }),
+        ).toBeInTheDocument();
 
-  it("retains named Codex bind, thread, turn, interrupt, and user-input controls", async () => {
-    let codexListener: ((event: CodexActivityEvent) => void) | undefined;
-    const { api, mocks } = createApi({
-      onCodexEvent: (listener) => {
-        codexListener = listener;
-        return vi.fn();
-      },
+        fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+        await waitFor(() =>
+            expect(listAssetCatalog).toHaveBeenNthCalledWith(
+                2,
+                "workspace_01",
+                {
+                    offset: 64,
+                    manifestRevision: ASSET_REVISION,
+                },
+            ),
+        );
+        expect(
+            await screen.findByRole("button", { name: /asset_02/u }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: /asset_01/u }),
+        ).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: /asset_02/u }));
+        await waitFor(() =>
+            expect(inspectAssetCatalogEntry).toHaveBeenCalledWith(
+                "workspace_01",
+                ASSET_REVISION,
+                secondEntryId,
+            ),
+        );
+        expect(
+            await screen.findByRole("heading", { name: "Semantic JSON tree" }),
+        ).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Previous page" }));
+        await waitFor(() =>
+            expect(listAssetCatalog).toHaveBeenNthCalledWith(
+                3,
+                "workspace_01",
+                {
+                    offset: 0,
+                    manifestRevision: ASSET_REVISION,
+                },
+            ),
+        );
+        expect(
+            await screen.findByRole("button", { name: /asset_01/u }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: /asset_02/u }),
+        ).not.toBeInTheDocument();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Refresh revision snapshot" }),
+        );
+        await waitFor(() => expect(listAssetCatalog).toHaveBeenCalledTimes(4));
+        expect(listAssetCatalog.mock.calls[3]).toEqual(["workspace_01"]);
+        expect(
+            await screen.findByText("0 entries on current page"),
+        ).toBeInTheDocument();
     });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    await screen.findByRole("heading", { name: "Neutral World" });
-    fireEvent.click(screen.getByRole("button", { name: "Assistant" }));
-    fireEvent.click(screen.getByRole("button", { name: "Bind Codex" }));
-    await waitFor(() => expect(mocks.bindCodexWorkspace).toHaveBeenCalledWith("workspace_01"));
-    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
-    await waitFor(() => expect(mocks.startCodexThread).toHaveBeenCalledOnce());
-    fireEvent.change(screen.getByLabelText("Turn message"), { target: { value: "Review this lore" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send turn" }));
-    await waitFor(() =>
-      expect(mocks.startCodexTurn).toHaveBeenCalledWith("thread-1", "Review this lore"),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Interrupt turn" }));
-    await waitFor(() =>
-      expect(mocks.interruptCodexTurn).toHaveBeenCalledWith("thread-1", "turn-1"),
-    );
 
-    act(() => {
-      codexListener?.({
-        type: "codex-user-input",
-        token: "token-1",
-        threadId: "thread-1",
-        turnId: "turn-2",
-        questions: [
-          {
-            id: "tone",
-            header: "Tone",
-            question: "Choose a neutral tone",
-            isOther: false,
-            isSecret: false,
-            options: [{ label: "Quiet", description: "Restrained" }],
-          },
-        ],
-      });
+    it("fails closed on a catalog conflict and refreshes without exposing diagnostics", async () => {
+        const listAssetCatalog = vi
+            .fn()
+            .mockResolvedValueOnce(
+                assetCatalogListResponse({
+                    entries: [assetEntry()],
+                    nextOffset: 64,
+                }),
+            )
+            .mockResolvedValueOnce({
+                ok: true,
+                value: {
+                    protocol: "rpg-world-forge.studio_protocol",
+                    protocol_version: 1,
+                    kind: "error",
+                    request_id: "catalog-conflict",
+                    error: {
+                        code: "conflict",
+                        message: "SECRET /home/private/catalog.json",
+                        details: { absolute_root: "/home/private" },
+                    },
+                },
+            })
+            .mockResolvedValueOnce(
+                assetCatalogListResponse({
+                    revision: "8".repeat(64),
+                    entries: [assetEntry({ category: "runtime_output" })],
+                }),
+            );
+        const { api } = createApi({ listAssetCatalog });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
+        await screen.findByRole("button", { name: /asset_01/u });
+        fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            /revision conflicted/u,
+        );
+        expect(
+            screen.queryByRole("button", { name: /asset_01/u }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByText(/SECRET|\/home\/private/u),
+        ).not.toBeInTheDocument();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Refresh revision snapshot" }),
+        );
+        await waitFor(() =>
+            expect(listAssetCatalog.mock.calls[2]).toEqual(["workspace_01"]),
+        );
+        expect(
+            await screen.findByRole("button", { name: /asset_01/u }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: /Runtime output/u }),
+        ).toBeInTheDocument();
     });
-    fireEvent.change(screen.getByLabelText("Choose a neutral tone"), {
-      target: { value: "Quiet" },
+
+    it("keeps dirty-workspace confirmation active when selection starts from Assets", async () => {
+        const { api, mocks } = createApi({
+            listWorkspaces: vi.fn().mockResolvedValue(
+                legacyResponse("workspace.list", {
+                    workspaces: [
+                        { workspace_id: "workspace_01" },
+                        { workspace_id: "workspace_02" },
+                    ],
+                }),
+            ),
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.change(
+            await screen.findByLabelText("In-memory source draft"),
+            {
+                target: { value: UPDATED_WORLD_CONTENT },
+            },
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
+        await waitFor(() =>
+            expect(mocks.listAssetCatalog).toHaveBeenCalledWith("workspace_01"),
+        );
+
+        const workspaceTwo = screen.getByRole("button", {
+            name: /workspace_02/u,
+        });
+        fireEvent.click(workspaceTwo);
+        expect(
+            screen.getByRole("dialog", {
+                name: /Discard this in-memory draft/u,
+            }),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
+        await waitFor(() => expect(workspaceTwo).toHaveFocus());
+        expect(screen.getByRole("tab", { name: "Assets" })).toHaveAttribute(
+            "aria-selected",
+            "true",
+        );
+        expect(
+            document.querySelector<HTMLTextAreaElement>("#source-draft"),
+        ).toHaveValue(UPDATED_WORLD_CONTENT);
     });
-    fireEvent.click(screen.getByRole("button", { name: "Submit answers" }));
-    await waitFor(() =>
-      expect(mocks.answerCodexUserInput).toHaveBeenCalledWith("token-1", { tone: ["Quiet"] }),
-    );
-  });
 
-  it("summarizes service diagnostics without injecting raw stderr", () => {
-    let activityListener: ((event: StudioActivityEvent) => void) | undefined;
-    const { api } = createApi({
-      onEvent: (listener) => {
-        activityListener = listener;
-        return vi.fn();
-      },
+    it("calls the three exact Game job APIs and merges their immediate queued jobs", async () => {
+        const verifyAssetpack = vi
+            .fn()
+            .mockImplementation((workspaceId: string, input: object) =>
+                Promise.resolve(
+                    jobCreateResponse(
+                        "assetpack-job",
+                        workspaceId,
+                        "assetpack.verify",
+                        input,
+                    ),
+                ),
+            );
+        const runHeadless = vi
+            .fn()
+            .mockImplementation((workspaceId: string, input: object) =>
+                Promise.resolve(
+                    jobCreateResponse(
+                        "headless-job",
+                        workspaceId,
+                        "runtime.headless",
+                        input,
+                    ),
+                ),
+            );
+        const runReplay = vi
+            .fn()
+            .mockImplementation((workspaceId: string, input: object) =>
+                Promise.resolve(
+                    jobCreateResponse(
+                        "replay-job",
+                        workspaceId,
+                        "runtime.replay",
+                        input,
+                    ),
+                ),
+            );
+        const { api } = createApi({ verifyAssetpack, runHeadless, runReplay });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Game" }));
+
+        expect(
+            screen.getByRole("link", { name: "Skip to Game workbench" }),
+        ).toHaveAttribute("href", "#game-workbench");
+        expect(
+            screen.getByText("Game repository").closest("div"),
+        ).toHaveTextContent("Not registered");
+
+        fireEvent.change(screen.getByLabelText("Assetpack path"), {
+            target: { value: "build/assets/assetpack.json" },
+        });
+        fireEvent.change(
+            screen.getByLabelText("Worldpack path for assetpack verification"),
+            {
+                target: { value: "build/worldpack.json" },
+            },
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Verify assetpack" }),
+        );
+
+        fireEvent.change(
+            screen.getByLabelText("Worldpack path for headless simulation"),
+            {
+                target: { value: "build/worldpack.json" },
+            },
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Run headless simulation" }),
+        );
+
+        fireEvent.change(
+            screen.getByLabelText("Worldpack path for replay verification"),
+            {
+                target: { value: "build/worldpack.json" },
+            },
+        );
+        fireEvent.change(screen.getByLabelText("Existing replay path"), {
+            target: { value: "replays/accepted.json" },
+        });
+        fireEvent.click(
+            screen.getByRole("button", { name: "Verify existing replay" }),
+        );
+
+        await waitFor(() => {
+            expect(verifyAssetpack).toHaveBeenCalledWith("workspace_01", {
+                assetpack: "build/assets/assetpack.json",
+                worldpack: "build/worldpack.json",
+            });
+            expect(runHeadless).toHaveBeenCalledWith("workspace_01", {
+                worldpack: "build/worldpack.json",
+                ticks: 0,
+            });
+            expect(runReplay).toHaveBeenCalledWith("workspace_01", {
+                worldpack: "build/worldpack.json",
+                replay: "replays/accepted.json",
+            });
+        });
+        expect(
+            await screen.findByRole("article", {
+                name: "Assetpack verification job assetpack-job",
+            }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("article", {
+                name: "Headless simulation job headless-job",
+            }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("article", {
+                name: "Replay verification job replay-job",
+            }),
+        ).toBeInTheDocument();
     });
-    installApi(api);
-    render(<App />);
-    act(() => activityListener?.({ type: "service-stderr", text: "SECRET absolute/path" }));
-    expect(screen.queryByText(/SECRET absolute\/path/u)).not.toBeInTheDocument();
-    expect(screen.getByText(/1 live updates/u)).toBeInTheDocument();
-  });
 
-  it("stages an exact draft, approves without applying, then separately applies and refreshes", async () => {
-    const appliedSha = "e".repeat(64);
-    const listSourceDocuments = vi
-      .fn()
-      .mockResolvedValueOnce(sourceListResponse(SHA_WORLD))
-      .mockResolvedValueOnce(sourceListResponse(appliedSha));
-    const readSourceDocument = vi.fn().mockImplementation((_workspaceId: string, path: string) =>
-      Promise.resolve(
-        namedResponse("source.read", {
-          document:
-            path === "source/maps/garden.json"
-              ? MAP_DOCUMENT
-              : listSourceDocuments.mock.calls.length > 1
-                ? { ...WORLD_DOCUMENT, sha256: appliedSha, content: UPDATED_WORLD_CONTENT }
-                : WORLD_DOCUMENT,
-        }),
-      ),
-    );
-    const { api, mocks } = createApi({ listSourceDocuments, readSourceDocument });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    const editor = await screen.findByLabelText("In-memory source draft");
-    fireEvent.change(editor, { target: { value: UPDATED_WORLD_CONTENT } });
-    expect(mocks.stageSourceDocument).not.toHaveBeenCalled();
+    it("keeps dirty World drafts and workspace confirmation active from Game", async () => {
+        const { api } = createApi({
+            listWorkspaces: vi.fn().mockResolvedValue(
+                legacyResponse("workspace.list", {
+                    workspaces: [
+                        { workspace_id: "workspace_01" },
+                        { workspace_id: "workspace_02" },
+                    ],
+                }),
+            ),
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.change(
+            await screen.findByLabelText("In-memory source draft"),
+            {
+                target: { value: UPDATED_WORLD_CONTENT },
+            },
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Game" }));
+        fireEvent.change(
+            screen.getByLabelText("Worldpack path for headless simulation"),
+            {
+                target: { value: "build/worldpack.json" },
+            },
+        );
 
-    fireEvent.click(screen.getByRole("button", { name: "Stage for review" }));
-    await waitFor(() =>
-      expect(mocks.stageSourceDocument).toHaveBeenCalledWith(
-        "workspace_01",
-        "source/world.json",
-        SHA_WORLD,
-        UPDATED_WORLD_CONTENT,
-      ),
-    );
-    expect(await screen.findByRole("dialog", { name: "Changeset review" })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(mocks.getChangeset).toHaveBeenCalledWith("changeset_01");
-      expect(mocks.readChangesetDiff).toHaveBeenCalledWith("changeset_01");
+        const workspaceTwo = screen.getByRole("button", {
+            name: /workspace_02/u,
+        });
+        fireEvent.click(workspaceTwo);
+        expect(
+            screen.getByRole("dialog", {
+                name: /Discard this in-memory draft/u,
+            }),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
+        await waitFor(() => expect(workspaceTwo).toHaveFocus());
+        expect(screen.getByRole("tab", { name: "Game" })).toHaveAttribute(
+            "aria-selected",
+            "true",
+        );
+        expect(
+            document.querySelector<HTMLTextAreaElement>("#source-draft"),
+        ).toHaveValue(UPDATED_WORLD_CONTENT);
+        expect(
+            screen.getByLabelText("Worldpack path for headless simulation"),
+        ).toHaveValue("build/worldpack.json");
     });
-    expect(screen.getByText(SHA_REVIEW)).toBeInTheDocument();
-    expect(screen.getByText("/title")).toBeInTheDocument();
-    expect(screen.getByText('"A quieter world"')).toBeInTheDocument();
-    expect(document.querySelector("pre")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve review" }));
-    expect(screen.getByRole("dialog", { name: /Approve this reviewed changeset/u })).toBeInTheDocument();
-    expect(mocks.approveChangeset).not.toHaveBeenCalled();
-    expect(mocks.applyChangeset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Approve only" }));
-    await waitFor(() =>
-      expect(mocks.approveChangeset).toHaveBeenCalledWith("changeset_01", SHA_REVIEW),
-    );
-    expect(mocks.applyChangeset).not.toHaveBeenCalled();
+    it("ignores a late Game reply after the workspace generation changes", async () => {
+        let resolveHeadless:
+            ((value: ReturnType<typeof jobCreateResponse>) => void) | undefined;
+        const runHeadless = vi.fn().mockReturnValue(
+            new Promise<ReturnType<typeof jobCreateResponse>>((resolve) => {
+                resolveHeadless = resolve;
+            }),
+        );
+        const { api } = createApi({
+            listWorkspaces: vi.fn().mockResolvedValue(
+                legacyResponse("workspace.list", {
+                    workspaces: [
+                        { workspace_id: "workspace_01" },
+                        { workspace_id: "workspace_02" },
+                    ],
+                }),
+            ),
+            getWorkspaceOverview: vi
+                .fn()
+                .mockImplementation((workspaceId: string) =>
+                    Promise.resolve(
+                        namedResponse("workspace.overview", {
+                            overview: {
+                                ...OVERVIEW,
+                                workspace_id: workspaceId,
+                            },
+                        }),
+                    ),
+                ),
+            runHeadless,
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Game" }));
+        fireEvent.change(
+            screen.getByLabelText("Worldpack path for headless simulation"),
+            {
+                target: { value: "build/worldpack.json" },
+            },
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Run headless simulation" }),
+        );
+        await waitFor(() => expect(runHeadless).toHaveBeenCalledOnce());
 
-    fireEvent.click(await screen.findByRole("button", { name: "Apply approved changeset" }));
-    expect(screen.getByRole("dialog", { name: /Apply this approved changeset/u })).toBeInTheDocument();
-    expect(screen.getByText(/draft based on a changed source will no longer be active/u)).toBeInTheDocument();
-    expect(mocks.applyChangeset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm apply" }));
-    await waitFor(() =>
-      expect(mocks.applyChangeset).toHaveBeenCalledWith("changeset_01", SHA_REVIEW),
-    );
-    await waitFor(() => expect(listSourceDocuments).toHaveBeenCalledTimes(2));
-    expect(await screen.findByLabelText("In-memory source draft")).toHaveValue(UPDATED_WORLD_CONTENT);
-    expect(screen.queryByRole("dialog", { name: "Changeset review" })).not.toBeInTheDocument();
-  });
-
-  it("opens a v2 dock proposal, confirms rejection, and restores focus", async () => {
-    const { api, mocks } = createApi({
-      listChangesets: vi.fn().mockResolvedValue(
-        legacyResponse("changeset.list", { changesets: [V2_STAGED] }),
-      ),
+        fireEvent.click(screen.getByRole("button", { name: /workspace_02/u }));
+        resolveHeadless?.(
+            jobCreateResponse(
+                "late-headless-job",
+                "workspace_01",
+                "runtime.headless",
+                { worldpack: "build/worldpack.json", ticks: 0 },
+            ),
+        );
+        await act(async () => Promise.resolve());
+        expect(screen.queryByText("late-headless-job")).not.toBeInTheDocument();
+        expect(
+            screen.queryByText(/invalid Game job response/u),
+        ).not.toBeInTheDocument();
     });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
-    const openButton = await screen.findByRole("button", { name: "Open review" });
-    fireEvent.click(openButton);
-    expect(await screen.findByRole("button", { name: "Close changeset review" })).toHaveFocus();
-    const rejectButton = await screen.findByRole("button", { name: "Reject changeset" });
-    fireEvent.click(rejectButton);
-    fireEvent.click(screen.getByRole("button", { name: "Return to review" }));
-    await waitFor(() => expect(rejectButton).toHaveFocus());
-    fireEvent.click(rejectButton);
-    expect(mocks.rejectChangeset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm rejection" }));
-    await waitFor(() =>
-      expect(mocks.rejectChangeset).toHaveBeenCalledWith("changeset_01", SHA_REVIEW),
-    );
-    expect(mocks.applyChangeset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Close changeset review" }));
-    await waitFor(() => expect(openButton).toHaveFocus());
-  });
 
-  it("exposes only the top review dialog and focuses a stable pending action status", async () => {
-    let resolveApproval: ((value: ReturnType<typeof approvalResponse>) => void) | undefined;
-    const approveChangeset = vi.fn().mockImplementation(
-      () =>
-        new Promise<ReturnType<typeof approvalResponse>>((resolve) => {
-          resolveApproval = resolve;
-        }),
-    );
-    const { api } = createApi({
-      listChangesets: vi.fn().mockResolvedValue(
-        legacyResponse("changeset.list", { changesets: [V2_STAGED] }),
-      ),
-      approveChangeset,
-    });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Open review" }));
-    const reviewDialog = await screen.findByRole("dialog", { name: "Changeset review" });
-    fireEvent.click(screen.getByRole("button", { name: "Approve review" }));
+    it("calls the named cancel API only for eligible current-workspace Game jobs", async () => {
+        const queued = gameJobRecord({ job_id: "queued-job" });
+        const running = gameJobRecord({
+            job_id: "running-job",
+            state: "running",
+        });
+        const succeeded = gameJobRecord({
+            job_id: "succeeded-job",
+            state: "succeeded",
+            result: {
+                operation: "runtime.headless",
+                world_id: "world_01",
+                world_content_hash: "a".repeat(64),
+                ticks: 0,
+                state_tick: 0,
+                absolute_minute: 0,
+                state_digest: "b".repeat(64),
+            },
+        });
+        const cancelJob = vi.fn().mockImplementation((jobId: string) =>
+            Promise.resolve(
+                jobCancelResponse(
+                    gameJobRecord({
+                        ...(jobId === "running-job" ? running : queued),
+                        state: jobId === "running-job" ? "running" : "canceled",
+                        updated_at: "2026-07-23T10:00:01Z",
+                    }),
+                ),
+            ),
+        );
+        const { api } = createApi({
+            listJobs: vi.fn().mockResolvedValue(
+                legacyResponse("job.list", {
+                    jobs: [
+                        queued,
+                        running,
+                        succeeded,
+                        gameJobRecord({
+                            job_id: "other-workspace-job",
+                            workspace_id: "workspace_02",
+                        }),
+                    ],
+                }),
+            ),
+            cancelJob,
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Game" }));
 
-    const confirmation = screen.getByRole("dialog", { name: /Approve this reviewed changeset/u });
-    expect(screen.getAllByRole("dialog")).toEqual([confirmation]);
-    expect(reviewDialog).toHaveAttribute("aria-hidden", "true");
-    expect(reviewDialog).not.toHaveAttribute("aria-modal");
-    expect(reviewDialog).toHaveAttribute("inert");
-    expect(document.querySelector(".studio-content")).toHaveAttribute("inert");
-    expect(screen.getByRole("button", { name: "Return to review" })).toHaveFocus();
+        const queuedCancel = await screen.findByRole("button", {
+            name: "Cancel Headless simulation job queued-job",
+        });
+        const runningCancel = screen.getByRole("button", {
+            name: "Cancel Headless simulation job running-job",
+        });
+        expect(
+            screen.queryByRole("button", { name: /succeeded-job/u }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByText("other-workspace-job"),
+        ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve only" }));
-    const pending = await screen.findByText("Approval request pending. Source files remain unchanged.");
-    expect(pending).toHaveFocus();
-    expect(reviewDialog).toHaveAttribute("aria-modal", "true");
-    expect(reviewDialog).not.toHaveAttribute("aria-hidden");
-    expect(reviewDialog).not.toHaveAttribute("inert");
-    expect(screen.getAllByRole("dialog")).toEqual([reviewDialog]);
-    expect(approveChangeset).toHaveBeenCalledWith("changeset_01", SHA_REVIEW);
+        fireEvent.click(queuedCancel);
+        await waitFor(() =>
+            expect(cancelJob).toHaveBeenCalledWith("queued-job"),
+        );
+        expect(
+            await screen.findByRole("article", {
+                name: "Headless simulation job queued-job",
+            }),
+        ).toHaveTextContent("Canceled");
 
-    await act(async () => {
-      resolveApproval?.(approvalResponse());
-      await Promise.resolve();
+        fireEvent.click(runningCancel);
+        await waitFor(() =>
+            expect(cancelJob).toHaveBeenCalledWith("running-job"),
+        );
+        expect(cancelJob).toHaveBeenCalledTimes(2);
     });
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Close changeset review" })).toHaveFocus(),
-    );
-  });
 
-  it("keeps legacy v1 exact diff unavailable and permits only confirmed rejection", async () => {
-    const rejectChangeset = vi.fn().mockResolvedValue(
-      namedResponse("changeset.reject", { changeset: { ...V1_STAGED, status: "rejected" } }),
-    );
-    const { api } = createApi({
-      listChangesets: vi.fn().mockResolvedValue(
-        legacyResponse("changeset.list", { changesets: [V1_STAGED] }),
-      ),
-      getChangeset: vi.fn().mockResolvedValue(
-        namedResponse("changeset.get", { changeset: V1_STAGED }),
-      ),
-      readChangesetDiff: vi.fn().mockResolvedValue(
-        namedResponse("changeset.diff", { diff: V1_DIFF }),
-      ),
-      rejectChangeset,
-    });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Open review" }));
-    expect(await screen.findByRole("heading", { name: "Exact diff unavailable" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Approve review" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Apply approved changeset" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Reject changeset" }));
-    expect(rejectChangeset).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Confirm rejection" }));
-    await waitFor(() => expect(rejectChangeset).toHaveBeenCalledWith("legacy_01", undefined));
-  });
+    it("rejects a mismatched Game cancel reply without exposing raw data", async () => {
+        const queued = gameJobRecord({ job_id: "queued-job" });
+        const cancelJob = vi.fn().mockResolvedValue(
+            jobCancelResponse(
+                gameJobRecord({
+                    job_id: "queued-job",
+                    workspace_id: "workspace_02",
+                    state: "canceled",
+                    updated_at: "2026-07-23T10:00:01Z",
+                }),
+            ),
+        );
+        const { api } = createApi({
+            listJobs: vi
+                .fn()
+                .mockResolvedValue(
+                    legacyResponse("job.list", { jobs: [queued] }),
+                ),
+            cancelJob,
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Game" }));
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: "Cancel Headless simulation job queued-job",
+            }),
+        );
 
-  it("surfaces staging failures without opening hidden review or write flows", async () => {
-    const { api, mocks } = createApi({
-      stageSourceDocument: vi.fn().mockResolvedValue({
-        ok: false,
-        error: { code: "service_unavailable", message: "Review service unavailable" },
-      }),
+        expect(
+            await screen.findByText(
+                "Forge Studio returned an invalid job cancellation response.",
+            ),
+        ).toHaveAttribute("role", "alert");
+        expect(cancelJob).toHaveBeenCalledOnce();
+        expect(
+            screen.getByRole("article", {
+                name: "Headless simulation job queued-job",
+            }),
+        ).toHaveTextContent("Queued");
+        expect(
+            screen.queryByText(/workspace_02|absolute_root|stderr/u),
+        ).not.toBeInTheDocument();
     });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.change(await screen.findByLabelText("In-memory source draft"), {
-      target: { value: UPDATED_WORLD_CONTENT },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Stage for review" }));
-    expect(await screen.findByText("Review service unavailable")).toBeInTheDocument();
-    expect(mocks.getChangeset).not.toHaveBeenCalled();
-    expect(mocks.readChangesetDiff).not.toHaveBeenCalled();
-    expect(mocks.approveChangeset).not.toHaveBeenCalled();
-    expect(mocks.applyChangeset).not.toHaveBeenCalled();
-  });
 
-  it("keeps reviewed evidence open when an action fails and never advances to apply", async () => {
-    const approveChangeset = vi.fn().mockResolvedValue({
-      ok: false,
-      error: { code: "invalid_request", message: "Approval review identity is stale" },
+    it("ignores a late Game cancel reply after the workspace generation changes", async () => {
+        const queued = gameJobRecord({ job_id: "queued-job" });
+        let resolveCancel:
+            ((value: ReturnType<typeof jobCancelResponse>) => void) | undefined;
+        const cancelJob = vi.fn().mockReturnValue(
+            new Promise<ReturnType<typeof jobCancelResponse>>((resolve) => {
+                resolveCancel = resolve;
+            }),
+        );
+        const { api } = createApi({
+            listWorkspaces: vi.fn().mockResolvedValue(
+                legacyResponse("workspace.list", {
+                    workspaces: [
+                        { workspace_id: "workspace_01" },
+                        { workspace_id: "workspace_02" },
+                    ],
+                }),
+            ),
+            listJobs: vi
+                .fn()
+                .mockImplementation(
+                    ({ workspace_id }: { workspace_id?: string }) =>
+                        Promise.resolve(
+                            legacyResponse("job.list", {
+                                jobs:
+                                    workspace_id === "workspace_01"
+                                        ? [queued]
+                                        : [],
+                            }),
+                        ),
+                ),
+            getWorkspaceOverview: vi
+                .fn()
+                .mockImplementation((workspaceId: string) =>
+                    Promise.resolve(
+                        namedResponse("workspace.overview", {
+                            overview: {
+                                ...OVERVIEW,
+                                workspace_id: workspaceId,
+                            },
+                        }),
+                    ),
+                ),
+            cancelJob,
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Game" }));
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: "Cancel Headless simulation job queued-job",
+            }),
+        );
+        await waitFor(() =>
+            expect(cancelJob).toHaveBeenCalledWith("queued-job"),
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: /workspace_02/u }));
+        resolveCancel?.(
+            jobCancelResponse(
+                gameJobRecord({
+                    job_id: "queued-job",
+                    state: "canceled",
+                    updated_at: "2026-07-23T10:00:01Z",
+                }),
+            ),
+        );
+        await act(async () => Promise.resolve());
+        expect(screen.queryByText("queued-job")).not.toBeInTheDocument();
+        expect(
+            screen.queryByText(
+                /invalid job cancellation response|could not be canceled/u,
+            ),
+        ).not.toBeInTheDocument();
     });
-    const { api, mocks } = createApi({
-      listChangesets: vi.fn().mockResolvedValue(
-        legacyResponse("changeset.list", { changesets: [V2_STAGED] }),
-      ),
-      approveChangeset,
+
+    it("reports JSON syntax and confirms dirty source navigation with focus restoration", async () => {
+        const { api, mocks } = createApi();
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        const editor = await screen.findByLabelText("In-memory source draft");
+        fireEvent.change(editor, { target: { value: '{"broken":' } });
+        expect(await screen.findByText(/JSON syntax:/u)).toBeInTheDocument();
+        expect(screen.getByText("Draft — not staged")).toBeInTheDocument();
+
+        const mapButton = screen.getByRole("button", { name: /garden\.json/u });
+        fireEvent.click(mapButton);
+        expect(
+            screen.getByRole("dialog", {
+                name: /Discard this in-memory draft/u,
+            }),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
+        await waitFor(() => expect(mapButton).toHaveFocus());
+        expect(screen.getByLabelText("In-memory source draft")).toHaveValue(
+            '{"broken":',
+        );
+
+        fireEvent.click(mapButton);
+        fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+        expect(
+            await screen.findByText(/Neutral garden: 3 × 2 cells/u),
+        ).toBeInTheDocument();
+        expect(mocks.readSourceDocument).toHaveBeenCalledWith(
+            "workspace_01",
+            "source/maps/garden.json",
+        );
+        expect(
+            screen.getByText("Draft preview — non-authoritative"),
+        ).toBeInTheDocument();
     });
-    installApi(api);
-    render(<App />);
-    fireEvent.click(await screen.findByRole("button", { name: /workspace_01/u }));
-    fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Open review" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Approve review" }));
-    fireEvent.click(screen.getByRole("button", { name: "Approve only" }));
-    expect(await screen.findAllByText("Approval review identity is stale")).not.toHaveLength(0);
-    expect(screen.getByRole("dialog", { name: "Changeset review" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Apply approved changeset" })).not.toBeInTheDocument();
-    expect(mocks.applyChangeset).not.toHaveBeenCalled();
-    expect(mocks.listSourceDocuments).toHaveBeenCalledTimes(1);
-  });
+
+    it("rejects a source read whose SHA no longer matches the authorized list", async () => {
+        const { api } = createApi({
+            readSourceDocument: vi.fn().mockResolvedValue(
+                namedResponse("source.read", {
+                    document: { ...WORLD_DOCUMENT, sha256: "c".repeat(64) },
+                }),
+            ),
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            /Source changed after listing/u,
+        );
+        expect(
+            screen.queryByLabelText("In-memory source draft"),
+        ).not.toBeInTheDocument();
+    });
+
+    it("polls each bounded dock category once per cycle", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const { api, mocks } = createApi();
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        await waitFor(() => {
+            expect(mocks.listEvents).toHaveBeenCalledTimes(1);
+            expect(mocks.listChangesets).toHaveBeenCalledTimes(1);
+            expect(mocks.listJobs).toHaveBeenCalledTimes(1);
+        });
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(15_000);
+        });
+        await waitFor(() => {
+            expect(mocks.listEvents).toHaveBeenCalledTimes(2);
+            expect(mocks.listChangesets).toHaveBeenCalledTimes(2);
+            expect(mocks.listJobs).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    it("retains named Codex bind, thread, turn, interrupt, and user-input controls", async () => {
+        let codexListener: ((event: CodexActivityEvent) => void) | undefined;
+        const { api, mocks } = createApi({
+            onCodexEvent: (listener) => {
+                codexListener = listener;
+                return vi.fn();
+            },
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        await screen.findByRole("heading", { name: "Neutral World" });
+        fireEvent.click(screen.getByRole("button", { name: "Assistant" }));
+        fireEvent.click(screen.getByRole("button", { name: "Bind Codex" }));
+        await waitFor(() =>
+            expect(mocks.bindCodexWorkspace).toHaveBeenCalledWith(
+                "workspace_01",
+            ),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "New thread" }));
+        await waitFor(() =>
+            expect(mocks.startCodexThread).toHaveBeenCalledOnce(),
+        );
+        fireEvent.change(screen.getByLabelText("Turn message"), {
+            target: { value: "Review this lore" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Send turn" }));
+        await waitFor(() =>
+            expect(mocks.startCodexTurn).toHaveBeenCalledWith(
+                "thread-1",
+                "Review this lore",
+            ),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Interrupt turn" }));
+        await waitFor(() =>
+            expect(mocks.interruptCodexTurn).toHaveBeenCalledWith(
+                "thread-1",
+                "turn-1",
+            ),
+        );
+
+        act(() => {
+            codexListener?.({
+                type: "codex-user-input",
+                token: "token-1",
+                threadId: "thread-1",
+                turnId: "turn-2",
+                questions: [
+                    {
+                        id: "tone",
+                        header: "Tone",
+                        question: "Choose a neutral tone",
+                        isOther: false,
+                        isSecret: false,
+                        options: [
+                            { label: "Quiet", description: "Restrained" },
+                        ],
+                    },
+                ],
+            });
+        });
+        fireEvent.change(screen.getByLabelText("Choose a neutral tone"), {
+            target: { value: "Quiet" },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Submit answers" }));
+        await waitFor(() =>
+            expect(mocks.answerCodexUserInput).toHaveBeenCalledWith("token-1", {
+                tone: ["Quiet"],
+            }),
+        );
+    });
+
+    it("summarizes service diagnostics without injecting raw stderr", () => {
+        let activityListener:
+            ((event: StudioActivityEvent) => void) | undefined;
+        const { api } = createApi({
+            onEvent: (listener) => {
+                activityListener = listener;
+                return vi.fn();
+            },
+        });
+        installApi(api);
+        render(<App />);
+        act(() =>
+            activityListener?.({
+                type: "service-stderr",
+                text: "SECRET absolute/path",
+            }),
+        );
+        expect(
+            screen.queryByText(/SECRET absolute\/path/u),
+        ).not.toBeInTheDocument();
+        expect(screen.getByText(/1 live updates/u)).toBeInTheDocument();
+    });
+
+    it("stages an exact draft, approves without applying, then separately applies and refreshes", async () => {
+        const appliedSha = "e".repeat(64);
+        const listSourceDocuments = vi
+            .fn()
+            .mockResolvedValueOnce(sourceListResponse(SHA_WORLD))
+            .mockResolvedValueOnce(sourceListResponse(appliedSha));
+        const readSourceDocument = vi
+            .fn()
+            .mockImplementation((_workspaceId: string, path: string) =>
+                Promise.resolve(
+                    namedResponse("source.read", {
+                        document:
+                            path === "source/maps/garden.json"
+                                ? MAP_DOCUMENT
+                                : listSourceDocuments.mock.calls.length > 1
+                                  ? {
+                                        ...WORLD_DOCUMENT,
+                                        sha256: appliedSha,
+                                        content: UPDATED_WORLD_CONTENT,
+                                    }
+                                  : WORLD_DOCUMENT,
+                    }),
+                ),
+            );
+        const { api, mocks } = createApi({
+            listSourceDocuments,
+            readSourceDocument,
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        const editor = await screen.findByLabelText("In-memory source draft");
+        fireEvent.change(editor, { target: { value: UPDATED_WORLD_CONTENT } });
+        expect(mocks.stageSourceDocument).not.toHaveBeenCalled();
+
+        fireEvent.click(
+            screen.getByRole("button", { name: "Stage for review" }),
+        );
+        await waitFor(() =>
+            expect(mocks.stageSourceDocument).toHaveBeenCalledWith(
+                "workspace_01",
+                "source/world.json",
+                SHA_WORLD,
+                UPDATED_WORLD_CONTENT,
+            ),
+        );
+        expect(
+            await screen.findByRole("dialog", { name: "Changeset review" }),
+        ).toBeInTheDocument();
+        await waitFor(() => {
+            expect(mocks.getChangeset).toHaveBeenCalledWith("changeset_01");
+            expect(mocks.readChangesetDiff).toHaveBeenCalledWith(
+                "changeset_01",
+            );
+        });
+        expect(screen.getByText(SHA_REVIEW)).toBeInTheDocument();
+        expect(screen.getByText("/title")).toBeInTheDocument();
+        expect(screen.getByText('"A quieter world"')).toBeInTheDocument();
+        expect(document.querySelector("pre")).not.toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole("button", { name: "Approve review" }));
+        expect(
+            screen.getByRole("dialog", {
+                name: /Approve this reviewed changeset/u,
+            }),
+        ).toBeInTheDocument();
+        expect(mocks.approveChangeset).not.toHaveBeenCalled();
+        expect(mocks.applyChangeset).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "Approve only" }));
+        await waitFor(() =>
+            expect(mocks.approveChangeset).toHaveBeenCalledWith(
+                "changeset_01",
+                SHA_REVIEW,
+            ),
+        );
+        expect(mocks.applyChangeset).not.toHaveBeenCalled();
+
+        fireEvent.click(
+            await screen.findByRole("button", {
+                name: "Apply approved changeset",
+            }),
+        );
+        expect(
+            screen.getByRole("dialog", {
+                name: /Apply this approved changeset/u,
+            }),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText(
+                /draft based on a changed source will no longer be active/u,
+            ),
+        ).toBeInTheDocument();
+        expect(mocks.applyChangeset).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole("button", { name: "Confirm apply" }));
+        await waitFor(() =>
+            expect(mocks.applyChangeset).toHaveBeenCalledWith(
+                "changeset_01",
+                SHA_REVIEW,
+            ),
+        );
+        await waitFor(() =>
+            expect(listSourceDocuments).toHaveBeenCalledTimes(2),
+        );
+        expect(
+            await screen.findByLabelText("In-memory source draft"),
+        ).toHaveValue(UPDATED_WORLD_CONTENT);
+        expect(
+            screen.queryByRole("dialog", { name: "Changeset review" }),
+        ).not.toBeInTheDocument();
+    });
+
+    it("opens a v2 dock proposal, confirms rejection, and restores focus", async () => {
+        const { api, mocks } = createApi({
+            listChangesets: vi
+                .fn()
+                .mockResolvedValue(
+                    legacyResponse("changeset.list", {
+                        changesets: [V2_STAGED],
+                    }),
+                ),
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
+        const openButton = await screen.findByRole("button", {
+            name: "Open review",
+        });
+        fireEvent.click(openButton);
+        expect(
+            await screen.findByRole("button", {
+                name: "Close changeset review",
+            }),
+        ).toHaveFocus();
+        const rejectButton = await screen.findByRole("button", {
+            name: "Reject changeset",
+        });
+        fireEvent.click(rejectButton);
+        fireEvent.click(
+            screen.getByRole("button", { name: "Return to review" }),
+        );
+        await waitFor(() => expect(rejectButton).toHaveFocus());
+        fireEvent.click(rejectButton);
+        expect(mocks.rejectChangeset).not.toHaveBeenCalled();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Confirm rejection" }),
+        );
+        await waitFor(() =>
+            expect(mocks.rejectChangeset).toHaveBeenCalledWith(
+                "changeset_01",
+                SHA_REVIEW,
+            ),
+        );
+        expect(mocks.applyChangeset).not.toHaveBeenCalled();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Close changeset review" }),
+        );
+        await waitFor(() => expect(openButton).toHaveFocus());
+    });
+
+    it("exposes only the top review dialog and focuses a stable pending action status", async () => {
+        let resolveApproval:
+            ((value: ReturnType<typeof approvalResponse>) => void) | undefined;
+        const approveChangeset = vi.fn().mockImplementation(
+            () =>
+                new Promise<ReturnType<typeof approvalResponse>>((resolve) => {
+                    resolveApproval = resolve;
+                }),
+        );
+        const { api } = createApi({
+            listChangesets: vi
+                .fn()
+                .mockResolvedValue(
+                    legacyResponse("changeset.list", {
+                        changesets: [V2_STAGED],
+                    }),
+                ),
+            approveChangeset,
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Open review" }),
+        );
+        const reviewDialog = await screen.findByRole("dialog", {
+            name: "Changeset review",
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Approve review" }));
+
+        const confirmation = screen.getByRole("dialog", {
+            name: /Approve this reviewed changeset/u,
+        });
+        expect(screen.getAllByRole("dialog")).toEqual([confirmation]);
+        expect(reviewDialog).toHaveAttribute("aria-hidden", "true");
+        expect(reviewDialog).not.toHaveAttribute("aria-modal");
+        expect(reviewDialog).toHaveAttribute("inert");
+        expect(document.querySelector(".studio-content")).toHaveAttribute(
+            "inert",
+        );
+        expect(
+            screen.getByRole("button", { name: "Return to review" }),
+        ).toHaveFocus();
+
+        fireEvent.click(screen.getByRole("button", { name: "Approve only" }));
+        const pending = await screen.findByText(
+            "Approval request pending. Source files remain unchanged.",
+        );
+        expect(pending).toHaveFocus();
+        expect(reviewDialog).toHaveAttribute("aria-modal", "true");
+        expect(reviewDialog).not.toHaveAttribute("aria-hidden");
+        expect(reviewDialog).not.toHaveAttribute("inert");
+        expect(screen.getAllByRole("dialog")).toEqual([reviewDialog]);
+        expect(approveChangeset).toHaveBeenCalledWith(
+            "changeset_01",
+            SHA_REVIEW,
+        );
+
+        await act(async () => {
+            resolveApproval?.(approvalResponse());
+            await Promise.resolve();
+        });
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: "Close changeset review" }),
+            ).toHaveFocus(),
+        );
+    });
+
+    it("keeps legacy v1 exact diff unavailable and permits only confirmed rejection", async () => {
+        const rejectChangeset = vi
+            .fn()
+            .mockResolvedValue(
+                namedResponse("changeset.reject", {
+                    changeset: { ...V1_STAGED, status: "rejected" },
+                }),
+            );
+        const { api } = createApi({
+            listChangesets: vi
+                .fn()
+                .mockResolvedValue(
+                    legacyResponse("changeset.list", {
+                        changesets: [V1_STAGED],
+                    }),
+                ),
+            getChangeset: vi
+                .fn()
+                .mockResolvedValue(
+                    namedResponse("changeset.get", { changeset: V1_STAGED }),
+                ),
+            readChangesetDiff: vi
+                .fn()
+                .mockResolvedValue(
+                    namedResponse("changeset.diff", { diff: V1_DIFF }),
+                ),
+            rejectChangeset,
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Open review" }),
+        );
+        expect(
+            await screen.findByRole("heading", {
+                name: "Exact diff unavailable",
+            }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Approve review" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Apply approved changeset" }),
+        ).not.toBeInTheDocument();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Reject changeset" }),
+        );
+        expect(rejectChangeset).not.toHaveBeenCalled();
+        fireEvent.click(
+            screen.getByRole("button", { name: "Confirm rejection" }),
+        );
+        await waitFor(() =>
+            expect(rejectChangeset).toHaveBeenCalledWith(
+                "legacy_01",
+                undefined,
+            ),
+        );
+    });
+
+    it("surfaces staging failures without opening hidden review or write flows", async () => {
+        const { api, mocks } = createApi({
+            stageSourceDocument: vi.fn().mockResolvedValue({
+                ok: false,
+                error: {
+                    code: "service_unavailable",
+                    message: "Review service unavailable",
+                },
+            }),
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.change(
+            await screen.findByLabelText("In-memory source draft"),
+            {
+                target: { value: UPDATED_WORLD_CONTENT },
+            },
+        );
+        fireEvent.click(
+            screen.getByRole("button", { name: "Stage for review" }),
+        );
+        expect(
+            await screen.findByText("Review service unavailable"),
+        ).toBeInTheDocument();
+        expect(mocks.getChangeset).not.toHaveBeenCalled();
+        expect(mocks.readChangesetDiff).not.toHaveBeenCalled();
+        expect(mocks.approveChangeset).not.toHaveBeenCalled();
+        expect(mocks.applyChangeset).not.toHaveBeenCalled();
+    });
+
+    it("keeps reviewed evidence open when an action fails and never advances to apply", async () => {
+        const approveChangeset = vi.fn().mockResolvedValue({
+            ok: false,
+            error: {
+                code: "invalid_request",
+                message: "Approval review identity is stale",
+            },
+        });
+        const { api, mocks } = createApi({
+            listChangesets: vi
+                .fn()
+                .mockResolvedValue(
+                    legacyResponse("changeset.list", {
+                        changesets: [V2_STAGED],
+                    }),
+                ),
+            approveChangeset,
+        });
+        installApi(api);
+        render(<App />);
+        fireEvent.click(
+            await screen.findByRole("button", { name: /workspace_01/u }),
+        );
+        fireEvent.click(screen.getByRole("tab", { name: "Changesets" }));
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Open review" }),
+        );
+        fireEvent.click(
+            await screen.findByRole("button", { name: "Approve review" }),
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Approve only" }));
+        expect(
+            await screen.findAllByText("Approval review identity is stale"),
+        ).not.toHaveLength(0);
+        expect(
+            screen.getByRole("dialog", { name: "Changeset review" }),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Apply approved changeset" }),
+        ).not.toBeInTheDocument();
+        expect(mocks.applyChangeset).not.toHaveBeenCalled();
+        expect(mocks.listSourceDocuments).toHaveBeenCalledTimes(1);
+    });
 });
 
 function createApi(overrides: Partial<ForgeStudioApi> = {}) {
-  const unavailable = vi.fn().mockResolvedValue({
-    ok: false,
-    error: { code: "service_unavailable", message: "Unavailable in fixture" },
-  });
-  const listEvents = vi.fn().mockResolvedValue(legacyResponse("events.list", { events: [] }));
-  const listChangesets = vi.fn().mockResolvedValue(
-    legacyResponse("changeset.list", { changesets: [] }),
-  );
-  const listJobs = vi.fn().mockResolvedValue(legacyResponse("job.list", { jobs: [] }));
-  const getWorkspaceOverview = vi.fn().mockResolvedValue(
-    namedResponse("workspace.overview", { overview: OVERVIEW }),
-  );
-  const listSourceDocuments = vi.fn().mockResolvedValue(
-    namedResponse("source.list", {
-      documents: [
-        { path: "source/world.json", kind: "world", size: 24, sha256: SHA_WORLD },
-        { path: "source/maps/garden.json", kind: "maps", size: 120, sha256: SHA_MAP },
-      ],
-    }),
-  );
-  const readSourceDocument = vi.fn().mockImplementation((_workspaceId: string, path: string) =>
-    Promise.resolve(
-      namedResponse("source.read", {
-        document: path === "source/maps/garden.json" ? MAP_DOCUMENT : WORLD_DOCUMENT,
-      }),
-    ),
-  );
-  const listAssetCatalog = vi.fn().mockResolvedValue(
-    assetCatalogListResponse({
-      entries: [assetEntry()],
-      nextOffset: 64,
-    }),
-  );
-  const inspectAssetCatalogEntry = vi.fn().mockResolvedValue(
-    assetCatalogInspectResponse({
-      inspection: {
-        kind: "png",
-        width: 64,
-        height: 32,
-        bit_depth: 8,
-        color_type: 6,
-        interlaced: false,
-      },
-    }),
-  );
-  const validateWorld = vi.fn().mockResolvedValue(
-    namedResponse("world.validate", { validation: VALIDATION }),
-  );
-  const analyzeWorld = vi.fn().mockResolvedValue(
-    namedResponse("world.analyze", {
-      validation: VALIDATION,
-      analysis: {
-        format: "rpg-world-forge.narrative_analysis",
-        format_version: 1,
-        world_id: "world_01",
-        summary: { finding_count: 1 },
-        findings: [
-          {
-            severity: "info",
-            code: "quiet_start",
-            path: "/lore",
-            message: "Opening is restrained",
-          },
+    const unavailable = vi.fn().mockResolvedValue({
+        ok: false,
+        error: {
+            code: "service_unavailable",
+            message: "Unavailable in fixture",
+        },
+    });
+    const listEvents = vi
+        .fn()
+        .mockResolvedValue(legacyResponse("events.list", { events: [] }));
+    const listChangesets = vi
+        .fn()
+        .mockResolvedValue(
+            legacyResponse("changeset.list", { changesets: [] }),
+        );
+    const listJobs = vi
+        .fn()
+        .mockResolvedValue(legacyResponse("job.list", { jobs: [] }));
+    const getWorkspaceOverview = vi
+        .fn()
+        .mockResolvedValue(
+            namedResponse("workspace.overview", { overview: OVERVIEW }),
+        );
+    const listSourceDocuments = vi.fn().mockResolvedValue(
+        namedResponse("source.list", {
+            documents: [
+                {
+                    path: "source/world.json",
+                    kind: "world",
+                    size: 24,
+                    sha256: SHA_WORLD,
+                },
+                {
+                    path: "source/maps/garden.json",
+                    kind: "maps",
+                    size: 120,
+                    sha256: SHA_MAP,
+                },
+            ],
+        }),
+    );
+    const readSourceDocument = vi
+        .fn()
+        .mockImplementation((_workspaceId: string, path: string) =>
+            Promise.resolve(
+                namedResponse("source.read", {
+                    document:
+                        path === "source/maps/garden.json"
+                            ? MAP_DOCUMENT
+                            : WORLD_DOCUMENT,
+                }),
+            ),
+        );
+    const listAssetCatalog = vi.fn().mockResolvedValue(
+        assetCatalogListResponse({
+            entries: [assetEntry()],
+            nextOffset: 64,
+        }),
+    );
+    const inspectAssetCatalogEntry = vi.fn().mockResolvedValue(
+        assetCatalogInspectResponse({
+            inspection: {
+                kind: "png",
+                width: 64,
+                height: 32,
+                bit_depth: 8,
+                color_type: 6,
+                interlaced: false,
+            },
+        }),
+    );
+    const validateWorld = vi
+        .fn()
+        .mockResolvedValue(
+            namedResponse("world.validate", { validation: VALIDATION }),
+        );
+    const analyzeWorld = vi.fn().mockResolvedValue(
+        namedResponse("world.analyze", {
+            validation: VALIDATION,
+            analysis: {
+                format: "rpg-world-forge.narrative_analysis",
+                format_version: 1,
+                world_id: "world_01",
+                summary: { finding_count: 1 },
+                findings: [
+                    {
+                        severity: "info",
+                        code: "quiet_start",
+                        path: "/lore",
+                        message: "Opening is restrained",
+                    },
+                ],
+            },
+        }),
+    );
+    const bindCodexWorkspace = vi.fn().mockResolvedValue({
+        ok: true,
+        value: {
+            state: "ready",
+            message: "Codex is bound",
+            pid: 456,
+            workspaceId: "workspace_01",
+        },
+    });
+    const startCodexThread = vi.fn().mockResolvedValue({
+        ok: true,
+        value: { threadId: "thread-1" },
+    });
+    const startCodexTurn = vi.fn().mockResolvedValue({
+        ok: true,
+        value: { turnId: "turn-1", status: "inProgress" },
+    });
+    const interruptCodexTurn = vi
+        .fn()
+        .mockResolvedValue({ ok: true, value: undefined });
+    const answerCodexUserInput = vi
+        .fn()
+        .mockResolvedValue({ ok: true, value: undefined });
+    const stageSourceDocument = vi
+        .fn()
+        .mockResolvedValue(
+            namedResponse("changeset.create", { changeset: V2_STAGED }),
+        );
+    const getChangeset = vi
+        .fn()
+        .mockResolvedValue(
+            namedResponse("changeset.get", { changeset: V2_STAGED }),
+        );
+    const readChangesetDiff = vi
+        .fn()
+        .mockResolvedValue(namedResponse("changeset.diff", { diff: V2_DIFF }));
+    const approveChangeset = vi
+        .fn()
+        .mockResolvedValue(
+            namedResponse("changeset.approve", {
+                changeset: { ...V2_STAGED, status: "approved" },
+            }),
+        );
+    const rejectChangeset = vi
+        .fn()
+        .mockResolvedValue(
+            namedResponse("changeset.reject", {
+                changeset: { ...V2_STAGED, status: "rejected" },
+            }),
+        );
+    const applyChangeset = vi
+        .fn()
+        .mockResolvedValue(
+            namedResponse("changeset.apply", {
+                changeset: { ...V2_STAGED, status: "applied" },
+            }),
+        );
+    const api: ForgeStudioApi = {
+        initialize: vi
+            .fn()
+            .mockResolvedValue(
+                legacyResponse("service.initialize", { service: "ready" }),
+            ),
+        getServiceStatus: vi.fn().mockResolvedValue({
+            ok: true,
+            value: {
+                state: "ready",
+                message: "Forge Studio service is ready",
+                pid: 123,
+            },
+        }),
+        listWorkspaces: vi
+            .fn()
+            .mockResolvedValue(
+                legacyResponse("workspace.list", {
+                    workspaces: [{ workspace_id: "workspace_01" }],
+                }),
+            ),
+        listCreationWorkspaces: vi
+            .fn()
+            .mockResolvedValue(
+                v3Response("creation_workspace.list", { workspaces: [] }),
+            ),
+        registerCreationProject: unavailable,
+        createCreationProject: unavailable,
+        openCreationWorkspace: unavailable,
+        listCreationDocuments: unavailable,
+        readCreationDocument: unavailable,
+        getCreationWorkflow: unavailable,
+        inspectCreationReadiness: unavailable,
+        listCreationArtifacts: unavailable,
+        inspectCreationArtifact: unavailable,
+        inspectCreationEvidence: unavailable,
+        openCreationPreview: unavailable,
+        readCreationPreviewChunk: unavailable,
+        closeCreationPreview: unavailable,
+        compileCreationProject: unavailable,
+        admitCreationArtifact: unavailable,
+        processCreationAsset: unavailable,
+        selectCreationAssetpackOutput: unavailable,
+        selectCreationRuntimeBundleOutput: unavailable,
+        selectCreationMaterializationBundleOutput: unavailable,
+        selectCreationStandaloneGameOutput: unavailable,
+        selectCreationGamePackageOutput: unavailable,
+        selectCreationGamePackageExtractionOutput: unavailable,
+        getCreationAssetpackOutput: unavailable,
+        listCreationOutputGrants: unavailable,
+        revokeCreationAssetpackOutput: unavailable,
+        sealCreationAssetRelease: unavailable,
+        composeCreationRuntime: unavailable,
+        buildCreationRuntimeBundle: unavailable,
+        buildCreationMaterializationBundle: unavailable,
+        materializeCreationGame: unavailable,
+        packageCreationGame: unavailable,
+        extractCreationGamePackage: unavailable,
+        reviewCreationAssetQa: unavailable,
+        authorizeCreationAssetRelease: unavailable,
+        selectCreationHeadlessEvidenceOutput: unavailable,
+        verifyCreationHeadless: unavailable,
+        requestCreationJobCancel: unavailable,
+        requestCreationJobRecovery: unavailable,
+        getCreationJob: unavailable,
+        listCreationJobs: unavailable,
+        cancelCreationJob: unavailable,
+        recoverCreationJob: unavailable,
+        listCreationEvents: unavailable,
+        stageCreationProfile: unavailable,
+        stageCreationModuleChange: unavailable,
+        reconcileCreationWorkflow: unavailable,
+        readCreationPhase: unavailable,
+        validateCreationPhase: unavailable,
+        completeCreationPhase: unavailable,
+        reopenCreationPhase: unavailable,
+        getCreationChangeset: unavailable,
+        diffCreationChangeset: unavailable,
+        approveCreationChangeset: unavailable,
+        applyCreationChangeset: unavailable,
+        recoverCreationChangeset: unavailable,
+        listEvents,
+        listChangesets,
+        listJobs,
+        getWorkspaceOverview,
+        listSourceDocuments,
+        readSourceDocument,
+        listAssetCatalog,
+        inspectAssetCatalogEntry,
+        openAssetPreview: unavailable,
+        readAssetPreviewChunk: unavailable,
+        closeAssetPreview: unavailable,
+        stageSourceDocument,
+        getChangeset,
+        readChangesetDiff,
+        approveChangeset,
+        rejectChangeset,
+        applyChangeset,
+        validateWorld,
+        analyzeWorld,
+        validateAssetReceipt: unavailable,
+        verifyAssetpack: unavailable,
+        runHeadless: unavailable,
+        runReplay: unavailable,
+        cancelJob: unavailable,
+        createExternalGrant: unavailable,
+        getExternalGrant: unavailable,
+        revokeExternalGrant: unavailable,
+        materializeGame: unavailable,
+        packageGame: unavailable,
+        extractGamePackage: unavailable,
+        getExternalJob: unavailable,
+        listExternalJobs: unavailable,
+        cancelExternalJob: unavailable,
+        recoverExternalJob: unavailable,
+        onEvent: () => vi.fn(),
+        getCodexStatus: vi.fn().mockResolvedValue({
+            ok: true,
+            value: {
+                state: "unbound",
+                message: "Not bound",
+                pid: null,
+                workspaceId: null,
+            },
+        }),
+        bindCodexWorkspace,
+        readCodexAccount: unavailable,
+        startCodexLogin: unavailable,
+        startCodexThread,
+        resumeCodexThread: unavailable,
+        forkCodexThread: unavailable,
+        startCodexTurn,
+        steerCodexTurn: unavailable,
+        interruptCodexTurn,
+        answerCodexUserInput,
+        onCodexEvent: () => vi.fn(),
+        ...overrides,
+    };
+    return {
+        api,
+        mocks: {
+            listEvents,
+            listChangesets,
+            listJobs,
+            getWorkspaceOverview,
+            listSourceDocuments,
+            readSourceDocument,
+            listAssetCatalog,
+            inspectAssetCatalogEntry,
+            validateWorld,
+            analyzeWorld,
+            bindCodexWorkspace,
+            startCodexThread,
+            startCodexTurn,
+            interruptCodexTurn,
+            answerCodexUserInput,
+            stageSourceDocument,
+            getChangeset,
+            readChangesetDiff,
+            approveChangeset,
+            rejectChangeset,
+            applyChangeset,
+        },
+    };
+}
+
+function appCreationApi() {
+    const sourceRevision = "1".repeat(64);
+    const fileSha256 = "2".repeat(64);
+    const workspace = {
+        format: "world-forge.studio_creation_workspace" as const,
+        format_version: 1 as const,
+        workspace_id: "creation_workspace",
+        project: {
+            format: "world-forge.project" as const,
+            format_version: 1 as const,
+            id: "neutral_universe",
+            content_hash: "3".repeat(64),
+        },
+        project_kind: "universe_library" as const,
+        source_revision: sourceRevision,
+        workflow_status_hash: null,
+        root_generation: 4,
+        created_at: "2026-08-01T00:00:00Z",
+        updated_at: "2026-08-01T00:00:00Z",
+    };
+    const profile = appCreationProfile();
+    const listCreationWorkspaces = vi
+        .fn()
+        .mockResolvedValue(
+            v3Response("creation_workspace.list", { workspaces: [workspace] }),
+        );
+    const openCreationWorkspace = vi.fn().mockResolvedValue(
+        v3Response("creation_workspace.open", {
+            workspace,
+            route: "generic",
+            project_kind: "universe_library",
+            source_revision: sourceRevision,
+            workflow_status_hash: null,
+            current_phase: "p01_experience",
+        }),
+    );
+    const listCreationDocuments = vi.fn().mockResolvedValue(
+        v3Response("creation_document.list", {
+            source_revision: sourceRevision,
+            documents: [
+                {
+                    path: "profile.json",
+                    format: "world-forge.creation_profile",
+                    format_version: 1,
+                    id: "neutral_profile",
+                    content_hash: profile.content_hash,
+                    file_sha256: fileSha256,
+                },
+            ],
+        }),
+    );
+    const readCreationDocument = vi.fn().mockResolvedValue(
+        v3Response("creation_document.read", {
+            source_revision: sourceRevision,
+            document: {
+                path: "profile.json",
+                format: "world-forge.creation_profile",
+                format_version: 1,
+                id: "neutral_profile",
+                content_hash: profile.content_hash,
+                file_sha256: fileSha256,
+                document: profile,
+            },
+        }),
+    );
+    const getCreationWorkflow = vi.fn().mockResolvedValue(
+        v3Response("creation_workflow.get", {
+            workflow: {
+                state: "active",
+                source_revision: sourceRevision,
+                status_hash: null,
+                current_phase: "p01_experience",
+                revision: 1,
+                status: {},
+            },
+        }),
+    );
+    const inspectCreationReadiness = vi.fn().mockResolvedValue(
+        v3Response("creation_readiness.inspect", {
+            readiness: {
+                state: "authoring_ready",
+                source_revision: sourceRevision,
+                workflow_status_hash: null,
+                current_phase: "p01_experience",
+                release: "blocked",
+                blocker_reason_codes: ["adapter_not_verified"],
+                report: {
+                    authoring: "valid",
+                    compilation: "not_requested",
+                    assets: "unplanned",
+                    adapter: "absent",
+                    execution: {},
+                    packaging: "unverified",
+                    release: "blocked",
+                },
+            },
+        }),
+    );
+    const stagedChangeset = appCreationChangeset();
+    const stageCreationProfile = vi
+        .fn()
+        .mockResolvedValue(
+            v3Response("creation_changeset.create", {
+                changeset: stagedChangeset,
+            }),
+        );
+    const getCreationChangeset = vi
+        .fn()
+        .mockResolvedValue(
+            v3Response("creation_changeset.get", {
+                changeset: stagedChangeset,
+            }),
+        );
+    const diffCreationChangeset = vi.fn().mockResolvedValue(
+        v3Response("creation_changeset.diff", {
+            diff: {
+                changeset_id: stagedChangeset.changeset_id,
+                workspace_id: stagedChangeset.workspace_id,
+                expected_source_revision:
+                    stagedChangeset.expected_source_revision,
+                proposed_source_revision:
+                    stagedChangeset.proposed_source_revision,
+                review_sha256: stagedChangeset.review_sha256,
+                operations: [
+                    {
+                        ...stagedChangeset.operations[0],
+                        size_delta: 10,
+                    },
+                ],
+            },
+        }),
+    );
+    return {
+        api: {
+            listCreationWorkspaces,
+            openCreationWorkspace,
+            listCreationDocuments,
+            readCreationDocument,
+            getCreationWorkflow,
+            inspectCreationReadiness,
+            stageCreationProfile,
+            getCreationChangeset,
+            diffCreationChangeset,
+        },
+        mocks: {
+            listCreationWorkspaces,
+            openCreationWorkspace,
+            listCreationDocuments,
+            readCreationDocument,
+            getCreationWorkflow,
+            inspectCreationReadiness,
+            stageCreationProfile,
+            getCreationChangeset,
+            diffCreationChangeset,
+        },
+    };
+}
+
+function appCreationChangeset() {
+    return {
+        format: "world-forge.studio_creation_changeset" as const,
+        format_version: 1 as const,
+        changeset_id: "creation_changeset",
+        workspace_id: "creation_workspace",
+        status: "staged" as const,
+        expected_root_generation: 4,
+        expected_source_revision: "1".repeat(64),
+        proposed_source_revision: "5".repeat(64),
+        expected_workflow_status_hash: null,
+        review_sha256: "7".repeat(64),
+        operations: [
+            {
+                operation: "replace" as const,
+                path: "profile.json",
+                expected_base_file_sha256: "2".repeat(64),
+                expected_base_size: 100,
+                proposed_file_sha256: "8".repeat(64),
+                proposed_size: 110,
+            },
         ],
-      },
-    }),
-  );
-  const bindCodexWorkspace = vi.fn().mockResolvedValue({
-    ok: true,
-    value: { state: "ready", message: "Codex is bound", pid: 456, workspaceId: "workspace_01" },
-  });
-  const startCodexThread = vi.fn().mockResolvedValue({
-    ok: true,
-    value: { threadId: "thread-1" },
-  });
-  const startCodexTurn = vi.fn().mockResolvedValue({
-    ok: true,
-    value: { turnId: "turn-1", status: "inProgress" },
-  });
-  const interruptCodexTurn = vi.fn().mockResolvedValue({ ok: true, value: undefined });
-  const answerCodexUserInput = vi.fn().mockResolvedValue({ ok: true, value: undefined });
-  const stageSourceDocument = vi.fn().mockResolvedValue(
-    namedResponse("changeset.create", { changeset: V2_STAGED }),
-  );
-  const getChangeset = vi.fn().mockResolvedValue(
-    namedResponse("changeset.get", { changeset: V2_STAGED }),
-  );
-  const readChangesetDiff = vi.fn().mockResolvedValue(
-    namedResponse("changeset.diff", { diff: V2_DIFF }),
-  );
-  const approveChangeset = vi.fn().mockResolvedValue(
-    namedResponse("changeset.approve", { changeset: { ...V2_STAGED, status: "approved" } }),
-  );
-  const rejectChangeset = vi.fn().mockResolvedValue(
-    namedResponse("changeset.reject", { changeset: { ...V2_STAGED, status: "rejected" } }),
-  );
-  const applyChangeset = vi.fn().mockResolvedValue(
-    namedResponse("changeset.apply", { changeset: { ...V2_STAGED, status: "applied" } }),
-  );
-  const api: ForgeStudioApi = {
-    initialize: vi.fn().mockResolvedValue(legacyResponse("service.initialize", { service: "ready" })),
-    getServiceStatus: vi.fn().mockResolvedValue({
-      ok: true,
-      value: { state: "ready", message: "Forge Studio service is ready", pid: 123 },
-    }),
-    listWorkspaces: vi.fn().mockResolvedValue(
-      legacyResponse("workspace.list", { workspaces: [{ workspace_id: "workspace_01" }] }),
-    ),
-    listEvents,
-    listChangesets,
-    listJobs,
-    getWorkspaceOverview,
-    listSourceDocuments,
-    readSourceDocument,
-    listAssetCatalog,
-    inspectAssetCatalogEntry,
-    openAssetPreview: unavailable,
-    readAssetPreviewChunk: unavailable,
-    closeAssetPreview: unavailable,
-    stageSourceDocument,
-    getChangeset,
-    readChangesetDiff,
-    approveChangeset,
-    rejectChangeset,
-    applyChangeset,
-    validateWorld,
-    analyzeWorld,
-    validateAssetReceipt: unavailable,
-    verifyAssetpack: unavailable,
-    runHeadless: unavailable,
-    runReplay: unavailable,
-    cancelJob: unavailable,
-    onEvent: () => vi.fn(),
-    getCodexStatus: vi.fn().mockResolvedValue({
-      ok: true,
-      value: { state: "unbound", message: "Not bound", pid: null, workspaceId: null },
-    }),
-    bindCodexWorkspace,
-    readCodexAccount: unavailable,
-    startCodexLogin: unavailable,
-    startCodexThread,
-    resumeCodexThread: unavailable,
-    forkCodexThread: unavailable,
-    startCodexTurn,
-    steerCodexTurn: unavailable,
-    interruptCodexTurn,
-    answerCodexUserInput,
-    onCodexEvent: () => vi.fn(),
-    ...overrides,
-  };
-  return {
-    api,
-    mocks: {
-      listEvents,
-      listChangesets,
-      listJobs,
-      getWorkspaceOverview,
-      listSourceDocuments,
-      readSourceDocument,
-      listAssetCatalog,
-      inspectAssetCatalogEntry,
-      validateWorld,
-      analyzeWorld,
-      bindCodexWorkspace,
-      startCodexThread,
-      startCodexTurn,
-      interruptCodexTurn,
-      answerCodexUserInput,
-      stageSourceDocument,
-      getChangeset,
-      readChangesetDiff,
-      approveChangeset,
-      rejectChangeset,
-      applyChangeset,
-    },
-  };
+        created_at: "2026-08-01T00:00:00Z",
+        updated_at: "2026-08-01T00:00:00Z",
+        record_hash: "6".repeat(64),
+    };
+}
+
+function appCreationProfile() {
+    return {
+        format: "world-forge.creation_profile" as const,
+        format_version: 1 as const,
+        profile_id: "neutral_profile",
+        project_id: "neutral_universe",
+        title: "Neutral universe",
+        experience: {
+            player_promise: "Explore a neutral universe library.",
+            audiences: ["creators"],
+            experience_goals: ["coherence"],
+        },
+        gameplay: {
+            primary_family: "puzzle",
+            secondary_families: [],
+            mechanic_tags: [],
+            player_role: "solver",
+            core_verbs: [{ id: "inspect", description: "Inspect state." }],
+            core_loop: ["inspect"],
+            rule_model: "deterministic",
+            goal_model: "complete",
+            challenge_model: "bounded",
+            failure_recovery: "restart",
+            progression: "finite",
+            teleology: "finite",
+            session_structure: "short",
+            social_topology: "single_player",
+            dependencies: { authored: [], systemic: [], procedural: [] },
+        },
+        world: {
+            presence: "none",
+            spatial_topology: "none",
+            scale: "none",
+            time_model: "none",
+            simulation_depth: "none",
+            simulated_domains: [],
+            persistence: "none",
+            spatial_structure: "none",
+        },
+        narrative: {
+            requirement: "none",
+            authorship_mode: "none",
+            topology: "none",
+            delivery_channels: [],
+            protagonist_model: "none",
+            agency: "none",
+            focalization: "none",
+            canon_variability: "none",
+            pacing: "none",
+            endings: "none",
+            information_model: "none",
+        },
+        fiction: { genres: [], tones: ["focused"], tags: [] },
+        presentation: {
+            mode: "2d",
+            camera: "fixed",
+            perspective: "orthographic",
+            visual_language: "neutral",
+            ui_density: "low",
+            audio_role: "feedback",
+            input_assumptions: ["input:keyboard"],
+            accessibility: {
+                remapping: true,
+                keyboard_only: true,
+                captions: true,
+                text_scaling: true,
+                high_contrast: true,
+                color_independence: true,
+                reduced_motion: true,
+                timing_alternatives: true,
+                screen_reader_structure: true,
+            },
+            localization: {
+                source_locale: "en",
+                supported_locales: ["en"],
+                externalized_text: true,
+            },
+        },
+        production: {
+            content_modes: {
+                gameplay: "authored",
+                world: "not_applicable",
+                narrative: "not_applicable",
+                assets: "authored",
+            },
+            seed_policy: "none",
+            reproducibility: "content addressed",
+            selection_policy: "reviewed",
+            human_review: true,
+            provenance_required: true,
+            licensing_required: true,
+            qa_required: true,
+        },
+        runtime_target: {
+            requested_adapter: "gamepack_raylib_2d_puzzle",
+            accepted_logic_formats: [
+                { format: "world-forge.gamepack", versions: [1] },
+            ],
+            required_features: ["logic:finite_state"],
+            optional_features: [],
+            presentation_mode: "2d",
+            platforms: ["platform:linux_x86_64"],
+            renderer: "raylib",
+            input_capabilities: ["input:keyboard"],
+            asset_formats: ["asset:png"],
+            save_expected: true,
+            replay_expected: true,
+            packaging_target: "standalone desktop directory",
+        },
+        extensions: [],
+        content_hash: "4".repeat(64),
+    };
+}
+
+function v3Response(method: string, result: Record<string, unknown>) {
+    return {
+        ok: true as const,
+        value: {
+            protocol: "rpg-world-forge.studio_protocol" as const,
+            protocol_version: 3 as const,
+            kind: "response" as const,
+            request_id: "fixture-request",
+            method,
+            result,
+        },
+    };
 }
 
 function legacyResponse(method: string, result: Record<string, unknown>) {
-  return {
-    ok: true as const,
-    value: {
-      protocol: "rpg-world-forge.studio_protocol" as const,
-      protocol_version: 1 as const,
-      kind: "response" as const,
-      request_id: "fixture-request",
-      method,
-      result,
-    },
-  };
+    return {
+        ok: true as const,
+        value: {
+            protocol: "rpg-world-forge.studio_protocol" as const,
+            protocol_version: 1 as const,
+            kind: "response" as const,
+            request_id: "fixture-request",
+            method,
+            result,
+        },
+    };
 }
 
 function namedResponse<M extends string, R>(method: M, result: R) {
-  return {
-    ok: true as const,
-    value: {
-      protocol: "rpg-world-forge.studio_protocol" as const,
-      protocol_version: 1 as const,
-      kind: "response" as const,
-      request_id: "fixture-request",
-      method,
-      result,
-    },
-  };
+    return {
+        ok: true as const,
+        value: {
+            protocol: "rpg-world-forge.studio_protocol" as const,
+            protocol_version: 1 as const,
+            kind: "response" as const,
+            request_id: "fixture-request",
+            method,
+            result,
+        },
+    };
 }
 
 function jobCreateResponse(
-  jobId: string,
-  workspaceId: string,
-  operation: "assetpack.verify" | "runtime.headless" | "runtime.replay",
-  input: object,
+    jobId: string,
+    workspaceId: string,
+    operation: "assetpack.verify" | "runtime.headless" | "runtime.replay",
+    input: object,
 ) {
-  return namedResponse("job.create", {
-    job: gameJobRecord({
-      job_id: jobId,
-      workspace_id: workspaceId,
-      operation,
-      input,
-    }),
-  });
+    return namedResponse("job.create", {
+        job: gameJobRecord({
+            job_id: jobId,
+            workspace_id: workspaceId,
+            operation,
+            input,
+        }),
+    });
 }
 
 function jobCancelResponse(job: ReturnType<typeof gameJobRecord>) {
-  return namedResponse("job.cancel", { job });
+    return namedResponse("job.cancel", { job });
 }
 
 function gameJobRecord(overrides: Record<string, unknown> = {}) {
-  return {
-    format: "rpg-world-forge.studio_job" as const,
-    format_version: 2 as const,
-    job_id: "headless-job",
-    workspace_id: "workspace_01",
-    operation: "runtime.headless" as const,
-    state: "queued" as const,
-    input: { worldpack: "build/worldpack.json", ticks: 0 },
-    result: null,
-    error: null,
-    created_at: "2026-07-23T10:00:00Z",
-    updated_at: "2026-07-23T10:00:00Z",
-    ...overrides,
-  };
+    return {
+        format: "rpg-world-forge.studio_job" as const,
+        format_version: 2 as const,
+        job_id: "headless-job",
+        workspace_id: "workspace_01",
+        operation: "runtime.headless" as const,
+        state: "queued" as const,
+        input: { worldpack: "build/worldpack.json", ticks: 0 },
+        result: null,
+        error: null,
+        created_at: "2026-07-23T10:00:00Z",
+        updated_at: "2026-07-23T10:00:00Z",
+        ...overrides,
+    };
 }
 
 function approvalResponse() {
-  return namedResponse("changeset.approve", {
-    changeset: { ...V2_STAGED, status: "approved" as const },
-  });
+    return namedResponse("changeset.approve", {
+        changeset: { ...V2_STAGED, status: "approved" as const },
+    });
 }
 
 function sourceListResponse(worldSha: string) {
-  return namedResponse("source.list", {
-    documents: [
-      { path: "source/world.json", kind: "world", size: 24, sha256: worldSha },
-      { path: "source/maps/garden.json", kind: "maps", size: 120, sha256: SHA_MAP },
-    ],
-  });
+    return namedResponse("source.list", {
+        documents: [
+            {
+                path: "source/world.json",
+                kind: "world",
+                size: 24,
+                sha256: worldSha,
+            },
+            {
+                path: "source/maps/garden.json",
+                kind: "maps",
+                size: 120,
+                sha256: SHA_MAP,
+            },
+        ],
+    });
 }
 
 function assetCatalogListResponse({
-  revision = ASSET_REVISION,
-  offset = 0,
-  entries = [assetEntry()],
-  nextOffset = null,
+    revision = ASSET_REVISION,
+    offset = 0,
+    entries = [assetEntry()],
+    nextOffset = null,
 }: {
-  revision?: string;
-  offset?: number;
-  entries?: ReturnType<typeof assetEntry>[];
-  nextOffset?: number | null;
+    revision?: string;
+    offset?: number;
+    entries?: ReturnType<typeof assetEntry>[];
+    nextOffset?: number | null;
 } = {}) {
-  return namedResponse("asset.catalog.list", {
-    manifest_revision: revision,
-    offset,
-    limit: 64,
-    entries,
-    next_offset: nextOffset,
-  });
+    return namedResponse("asset.catalog.list", {
+        manifest_revision: revision,
+        offset,
+        limit: 64,
+        entries,
+        next_offset: nextOffset,
+    });
 }
 
 function assetCatalogInspectResponse({
-  revision = ASSET_REVISION,
-  entry = assetEntry(),
-  inspection = {
-    kind: "unavailable" as const,
-    reason: "identity_only" as const,
-  },
+    revision = ASSET_REVISION,
+    entry = assetEntry(),
+    inspection = {
+        kind: "unavailable" as const,
+        reason: "identity_only" as const,
+    },
 }: {
-  revision?: string;
-  entry?: ReturnType<typeof assetEntry>;
-  inspection?: Record<string, unknown>;
+    revision?: string;
+    entry?: ReturnType<typeof assetEntry>;
+    inspection?: Record<string, unknown>;
 } = {}) {
-  return namedResponse("asset.catalog.inspect", {
-    manifest_revision: revision,
-    entry,
-    inspection,
-  });
+    return namedResponse("asset.catalog.inspect", {
+        manifest_revision: revision,
+        entry,
+        inspection,
+    });
 }
 
 function assetEntry(
-  overrides: Partial<{
-    entry_id: string;
-    asset_id: string | null;
-    category:
-      | "manifest"
-      | "target"
-      | "visual_bible"
-      | "audio_bible"
-      | "inventory"
-      | "specification"
-      | "production_receipt"
-      | "production_request"
-      | "production_output"
-      | "processing_receipt"
-      | "processing_recipe"
-      | "processing_output"
-      | "license"
-      | "qa"
-      | "runtime_output";
-    role: string | null;
-    path: string | null;
-    sha256: string;
-    media_type: string | null;
-    selected: boolean;
-    inspectable: boolean;
-  }> = {},
+    overrides: Partial<{
+        entry_id: string;
+        asset_id: string | null;
+        category:
+            | "manifest"
+            | "target"
+            | "visual_bible"
+            | "audio_bible"
+            | "inventory"
+            | "specification"
+            | "production_receipt"
+            | "production_request"
+            | "production_output"
+            | "processing_receipt"
+            | "processing_recipe"
+            | "processing_output"
+            | "license"
+            | "qa"
+            | "runtime_output";
+        role: string | null;
+        path: string | null;
+        sha256: string;
+        media_type: string | null;
+        selected: boolean;
+        inspectable: boolean;
+    }> = {},
 ) {
-  return {
-    entry_id: ASSET_ENTRY_ID,
-    asset_id: "asset_01",
-    category: "visual_bible" as const,
-    role: "concept",
-    path: "assets/concept.png",
-    sha256: "f".repeat(64),
-    media_type: "image/png",
-    selected: false,
-    inspectable: true,
-    ...overrides,
-  };
+    return {
+        entry_id: ASSET_ENTRY_ID,
+        asset_id: "asset_01",
+        category: "visual_bible" as const,
+        role: "concept",
+        path: "assets/concept.png",
+        sha256: "f".repeat(64),
+        media_type: "image/png",
+        selected: false,
+        inspectable: true,
+        ...overrides,
+    };
 }
 
 const OVERVIEW = {
-  workspace_id: "workspace_01",
-  project: { world_id: "world_01", title: "Neutral World", world_version: "1.0.0" },
-  status: { current_phase: "foundation", revision: 4, canon_locked: false, worldpack_hash: null },
-  repositories: { game_registered: false, bundle_registered: false },
-  capabilities: {
-    providers: false,
-    source_inspection: true,
-    world_validation: true,
-    narrative_analysis: true,
-    staged_changesets: true,
-    asset_catalog_inspection: true,
-  },
+    workspace_id: "workspace_01",
+    project: {
+        world_id: "world_01",
+        title: "Neutral World",
+        world_version: "1.0.0",
+    },
+    status: {
+        current_phase: "foundation",
+        revision: 4,
+        canon_locked: false,
+        worldpack_hash: null,
+    },
+    repositories: { game_registered: false, bundle_registered: false },
+    capabilities: {
+        providers: false,
+        source_inspection: true,
+        world_validation: true,
+        narrative_analysis: true,
+        staged_changesets: true,
+        asset_catalog_inspection: true,
+    },
 };
 
 const VALIDATION = {
-  valid: true,
-  profile: "release",
-  world_id: "world_01",
-  object_count: 7,
-  diagnostics: [],
-  diagnostics_truncated: false,
+    valid: true,
+    profile: "release",
+    world_id: "world_01",
+    object_count: 7,
+    diagnostics: [],
+    diagnostics_truncated: false,
 };
 
 const WORLD_DOCUMENT = {
-  path: "source/world.json",
-  kind: "world",
-  size: 24,
-  sha256: SHA_WORLD,
-  encoding: "utf-8",
-  content: '{"id":"world_01","title":"Neutral World"}',
-  json: { id: "world_01", title: "Neutral World" },
+    path: "source/world.json",
+    kind: "world",
+    size: 24,
+    sha256: SHA_WORLD,
+    encoding: "utf-8",
+    content: '{"id":"world_01","title":"Neutral World"}',
+    json: { id: "world_01", title: "Neutral World" },
 };
 
 const MAP_DOCUMENT = {
-  path: "source/maps/garden.json",
-  kind: "maps",
-  size: 120,
-  sha256: SHA_MAP,
-  encoding: "utf-8",
-  content: JSON.stringify({
-    id: "garden",
-    display_name: "Neutral garden",
-    width: 3,
-    height: 2,
-    legend: { ".": "ground", "#": "rock" },
-    rows: ["...", ".#."],
-  }),
-  json: {},
+    path: "source/maps/garden.json",
+    kind: "maps",
+    size: 120,
+    sha256: SHA_MAP,
+    encoding: "utf-8",
+    content: JSON.stringify({
+        id: "garden",
+        display_name: "Neutral garden",
+        width: 3,
+        height: 2,
+        legend: { ".": "ground", "#": "rock" },
+        rows: ["...", ".#."],
+    }),
+    json: {},
 };
 
 const V2_STAGED = {
-  format: "rpg-world-forge.studio_changeset" as const,
-  format_version: 2 as const,
-  changeset_id: "changeset_01",
-  workspace_id: "workspace_01",
-  status: "staged" as const,
-  operations: [
-    {
-      path: "source/world.json",
-      operation: "replace" as const,
-      base_sha256: SHA_WORLD,
-      base_size: 24,
-      proposed_sha256: SHA_PROPOSED,
-      size: new TextEncoder().encode(UPDATED_WORLD_CONTENT).byteLength,
-    },
-  ] as const,
-  review_sha256: SHA_REVIEW,
-  created_at: "2026-07-23T00:00:00Z",
-  updated_at: "2026-07-23T00:00:00Z",
+    format: "rpg-world-forge.studio_changeset" as const,
+    format_version: 2 as const,
+    changeset_id: "changeset_01",
+    workspace_id: "workspace_01",
+    status: "staged" as const,
+    operations: [
+        {
+            path: "source/world.json",
+            operation: "replace" as const,
+            base_sha256: SHA_WORLD,
+            base_size: 24,
+            proposed_sha256: SHA_PROPOSED,
+            size: new TextEncoder().encode(UPDATED_WORLD_CONTENT).byteLength,
+        },
+    ] as const,
+    review_sha256: SHA_REVIEW,
+    created_at: "2026-07-23T00:00:00Z",
+    updated_at: "2026-07-23T00:00:00Z",
 };
 
 const V2_DIFF = {
-  changeset_id: "changeset_01",
-  changeset_format_version: 2 as const,
-  available: true as const,
-  unavailable_reason: null,
-  review_sha256: SHA_REVIEW,
-  operations: [
-    {
-      path: "source/world.json",
-      operation: "replace" as const,
-      base_sha256: SHA_WORLD,
-      base_size: 24,
-      proposed_sha256: SHA_PROPOSED,
-      size: new TextEncoder().encode(UPDATED_WORLD_CONTENT).byteLength,
-      text_hunks: [
+    changeset_id: "changeset_01",
+    changeset_format_version: 2 as const,
+    available: true as const,
+    unavailable_reason: null,
+    review_sha256: SHA_REVIEW,
+    operations: [
         {
-          base_start: 1,
-          base_count: 1,
-          proposed_start: 1,
-          proposed_count: 1,
-          lines: [
-            { kind: "remove" as const, text: WORLD_DOCUMENT.content },
-            { kind: "add" as const, text: UPDATED_WORLD_CONTENT },
-          ],
+            path: "source/world.json",
+            operation: "replace" as const,
+            base_sha256: SHA_WORLD,
+            base_size: 24,
+            proposed_sha256: SHA_PROPOSED,
+            size: new TextEncoder().encode(UPDATED_WORLD_CONTENT).byteLength,
+            text_hunks: [
+                {
+                    base_start: 1,
+                    base_count: 1,
+                    proposed_start: 1,
+                    proposed_count: 1,
+                    lines: [
+                        {
+                            kind: "remove" as const,
+                            text: WORLD_DOCUMENT.content,
+                        },
+                        { kind: "add" as const, text: UPDATED_WORLD_CONTENT },
+                    ],
+                },
+            ],
+            json_pointer_changes: [
+                {
+                    operation: "replace" as const,
+                    pointer: "/title",
+                    old_value: "Neutral World",
+                    value: "A quieter world",
+                },
+            ],
         },
-      ],
-      json_pointer_changes: [
-        {
-          operation: "replace" as const,
-          pointer: "/title",
-          old_value: "Neutral World",
-          value: "A quieter world",
-        },
-      ],
-    },
-  ] as const,
+    ] as const,
 };
 
 const V1_STAGED = {
-  format: "rpg-world-forge.studio_changeset" as const,
-  format_version: 1 as const,
-  changeset_id: "legacy_01",
-  workspace_id: "workspace_01",
-  status: "staged" as const,
-  operations: [
-    {
-      path: "source/world.json",
-      operation: "replace" as const,
-      base_sha256: SHA_WORLD,
-      proposed_sha256: SHA_PROPOSED,
-      size: 24,
-    },
-  ] as const,
-  created_at: "2026-07-22T00:00:00Z",
-  updated_at: "2026-07-22T00:00:00Z",
+    format: "rpg-world-forge.studio_changeset" as const,
+    format_version: 1 as const,
+    changeset_id: "legacy_01",
+    workspace_id: "workspace_01",
+    status: "staged" as const,
+    operations: [
+        {
+            path: "source/world.json",
+            operation: "replace" as const,
+            base_sha256: SHA_WORLD,
+            proposed_sha256: SHA_PROPOSED,
+            size: 24,
+        },
+    ] as const,
+    created_at: "2026-07-22T00:00:00Z",
+    updated_at: "2026-07-22T00:00:00Z",
 };
 
 const V1_DIFF = {
-  changeset_id: "legacy_01",
-  changeset_format_version: 1 as const,
-  available: false as const,
-  unavailable_reason: "legacy_base_bytes_not_retained" as const,
-  review_sha256: null,
-  operations: [] as const,
+    changeset_id: "legacy_01",
+    changeset_format_version: 1 as const,
+    available: false as const,
+    unavailable_reason: "legacy_base_bytes_not_retained" as const,
+    review_sha256: null,
+    operations: [] as const,
 };
 
 function installMatchMedia(initialMatches: boolean): {
-  setMatches: (matches: boolean) => void;
-  removeEventListener: ReturnType<typeof vi.fn>;
-  readonly changeListener: EventListenerOrEventListenerObject | null;
+    setMatches: (matches: boolean) => void;
+    removeEventListener: ReturnType<typeof vi.fn>;
+    readonly changeListener: EventListenerOrEventListenerObject | null;
 } {
-  let matches = initialMatches;
-  let changeListener: EventListenerOrEventListenerObject | null = null;
-  const addEventListener = vi.fn(
-    (type: string, listener: EventListenerOrEventListenerObject): void => {
-      if (type === "change") changeListener = listener;
-    },
-  );
-  const removeEventListener = vi.fn();
-  const mediaQueryList = {
-    get matches() {
-      return matches;
-    },
-    media: COMPACT_DISCIPLINE_TABS_QUERY,
-    onchange: null,
-    addEventListener,
-    removeEventListener,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  } as unknown as MediaQueryList;
-  Object.defineProperty(window, "matchMedia", {
-    configurable: true,
-    value: vi.fn((query: string) => {
-      expect(query).toBe(COMPACT_DISCIPLINE_TABS_QUERY);
-      return mediaQueryList;
-    }),
-  });
-  return {
-    setMatches(nextMatches: boolean): void {
-      matches = nextMatches;
-      const event = Object.assign(new Event("change"), {
-        matches,
+    let matches = initialMatches;
+    let changeListener: EventListenerOrEventListenerObject | null = null;
+    const addEventListener = vi.fn(
+        (type: string, listener: EventListenerOrEventListenerObject): void => {
+            if (type === "change") changeListener = listener;
+        },
+    );
+    const removeEventListener = vi.fn();
+    const mediaQueryList = {
+        get matches() {
+            return matches;
+        },
         media: COMPACT_DISCIPLINE_TABS_QUERY,
-      }) as MediaQueryListEvent;
-      if (typeof changeListener === "function") {
-        changeListener(event);
-      } else {
-        changeListener?.handleEvent(event);
-      }
-    },
-    removeEventListener,
-    get changeListener() {
-      return changeListener;
-    },
-  };
+        onchange: null,
+        addEventListener,
+        removeEventListener,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+    } as unknown as MediaQueryList;
+    Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: vi.fn((query: string) => {
+            expect(query).toBe(COMPACT_DISCIPLINE_TABS_QUERY);
+            return mediaQueryList;
+        }),
+    });
+    return {
+        setMatches(nextMatches: boolean): void {
+            matches = nextMatches;
+            const event = Object.assign(new Event("change"), {
+                matches,
+                media: COMPACT_DISCIPLINE_TABS_QUERY,
+            }) as MediaQueryListEvent;
+            if (typeof changeListener === "function") {
+                changeListener(event);
+            } else {
+                changeListener?.handleEvent(event);
+            }
+        },
+        removeEventListener,
+        get changeListener() {
+            return changeListener;
+        },
+    };
 }
 
 function installApi(api: ForgeStudioApi): void {
-  Object.defineProperty(window, "forgeStudio", { configurable: true, value: api });
+    Object.defineProperty(window, "forgeStudio", {
+        configurable: true,
+        value: api,
+    });
 }
 
 function canvasContext(): CanvasRenderingContext2D {
-  return {
-    beginPath: vi.fn(),
-    clearRect: vi.fn(),
-    closePath: vi.fn(),
-    fill: vi.fn(),
-    fillRect: vi.fn(),
-    lineTo: vi.fn(),
-    moveTo: vi.fn(),
-    setTransform: vi.fn(),
-    stroke: vi.fn(),
-    fillStyle: "",
-    strokeStyle: "",
-    lineWidth: 1,
-  } as unknown as CanvasRenderingContext2D;
+    return {
+        beginPath: vi.fn(),
+        clearRect: vi.fn(),
+        closePath: vi.fn(),
+        fill: vi.fn(),
+        fillRect: vi.fn(),
+        lineTo: vi.fn(),
+        moveTo: vi.fn(),
+        setTransform: vi.fn(),
+        stroke: vi.fn(),
+        fillStyle: "",
+        strokeStyle: "",
+        lineWidth: 1,
+    } as unknown as CanvasRenderingContext2D;
 }

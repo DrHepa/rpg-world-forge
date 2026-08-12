@@ -1,0 +1,95 @@
+{
+  "analysis_id": "analysis_cadf114a3e2ed9a7",
+  "analyzer": {
+    "id": "worldforge.unsupported_profile",
+    "profile": "unsupported",
+    "version": 1
+  },
+  "assumptions": [
+    "The validated gamepack is the complete authoritative logic input.",
+    "Action parameter domains are finite and exactly declared by the gamepack.",
+    "Array order is authoritative and state equality uses compact canonical JSON."
+  ],
+  "checks": [
+    {
+      "id": "analysis_profile_supported",
+      "reason_codes": [
+        "analysis_profile_unsupported"
+      ],
+      "status": "not_applicable"
+    }
+  ],
+  "content_hash": "2f6fded3fdf5034706f5eaadd9ca8e9ca3c889adce0754c3ae44512ba73f00e7",
+  "false_negative_risks": [
+    "Any configured bound reached before frontier closure makes the result inconclusive."
+  ],
+  "false_positive_risks": [
+    "A modeled state may be reachable but unusable in an unmodeled presentation adapter."
+  ],
+  "findings": [],
+  "format": "world-forge.game_analysis",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "cadf114a3e2ed9a74d8664137c2a09888e5383468fbb98e9ded7bd79acbca506",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "action_framing"
+  },
+  "method": {
+    "bound_policy": "inconclusive_before_frontier_closure",
+    "evidence_kind": "exhaustive_within_declared_bounds",
+    "kind": "bounded_exhaustive_state_analysis",
+    "state_identity": "sha256_compact_canonical_json",
+    "traversal": "canonical_breadth_first_first_discovery"
+  },
+  "metrics": {
+    "candidate_evaluations": 0,
+    "endings_reached": 0,
+    "frontier_closed": false,
+    "goals_reached": 0,
+    "largest_state_bytes": 0,
+    "max_depth": 0,
+    "narrative_options_reached": 0,
+    "narrative_units_reached": 0,
+    "states": 0,
+    "total_state_bytes": 0,
+    "transitions": 0
+  },
+  "out_of_scope_claims": [
+    "asset_readability",
+    "native_adapter_execution",
+    "platform_performance",
+    "save_replay_serialization",
+    "timing_and_input_ux"
+  ],
+  "reason_codes": [
+    "analysis_profile_unsupported"
+  ],
+  "requirement": {
+    "analyzer_id": "worldforge.unsupported_profile",
+    "analyzer_version": 1,
+    "content_hash": "70f8d5bda649774eb4bcb543f9db7a430c7a74998577896bd9cdb9dd18844382",
+    "limits": {
+      "candidate_evaluations": 262144,
+      "depth": 512,
+      "parameter_combinations_per_action": 4096,
+      "state_bytes": 65536,
+      "states": 16384,
+      "total_state_bytes": 67108864,
+      "total_witness_steps": 4096,
+      "witness_traces": 128
+    },
+    "profile": "unsupported",
+    "reason_code": "analysis_profile_unsupported"
+  },
+  "status": "unsupported",
+  "summary": {
+    "checks": 1,
+    "failed": 0,
+    "findings": 0,
+    "inconclusive": 0,
+    "passed": 0,
+    "witnesses": 0
+  },
+  "witnesses": []
+}

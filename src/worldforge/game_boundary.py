@@ -7,6 +7,10 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from gamepack_runtime.distribution_names import (
+    normalize_distribution_name,
+    requirement_distribution_name,
+)
 from worldforge.game_boundary_policy import (
     DEFAULT_IGNORED_TOP_LEVEL,
     PUBLICATION_JOURNAL_PATHS,
@@ -105,6 +109,7 @@ FORBIDDEN_GAME_DISTRIBUTIONS = frozenset(
         "torch",
         "transformers",
         "vertexai",
+        "world-forge",
         "worldforge",
     }
 )
@@ -170,7 +175,6 @@ _AUTHORING_JSON_VALUE_KEYS = frozenset(
 )
 FORBIDDEN_GAME_WEIGHT_SUFFIXES = frozenset({".ckpt", ".gguf", ".pt", ".pth", ".safetensors"})
 
-_REQUIREMENT_NAME = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
 _NPM_ALIAS_NAME = re.compile(
     r"^npm:(?P<name>(?:@[A-Za-z0-9._-]+/)?[A-Za-z0-9][A-Za-z0-9._-]*)(?:@.*)?$",
     re.IGNORECASE,
@@ -237,11 +241,8 @@ def _normalized_distribution(requirement: str) -> str | None:
     stripped = requirement.strip()
     npm_alias = _NPM_ALIAS_NAME.fullmatch(stripped)
     if npm_alias is not None:
-        return re.sub(r"[-_.]+", "-", npm_alias.group("name")).lower()
-    match = _REQUIREMENT_NAME.match(stripped)
-    if match is None:
-        return None
-    return re.sub(r"[-_.]+", "-", match.group(1)).lower()
+        return normalize_distribution_name(npm_alias.group("name"))
+    return requirement_distribution_name(stripped)
 
 
 def _indirect_dependency(requirement: str) -> bool:

@@ -1,0 +1,109 @@
+{
+  "asset_subject": {
+    "content_hash": "6fd06c5f7cd165c24815dce3651b6d3c00a55af7b8b4cfe8cccf08880d81c436",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_efe08b26fd743010caa1e27f472b67300594df87e3b955da"
+  },
+  "assets": [
+    {
+      "asset_id": "narrative_ui_font",
+      "binding_ids": [
+        "choice_panel",
+        "ending_panel"
+      ],
+      "kind": "font",
+      "outputs": [
+        {
+          "media_type": "font/ttf",
+          "role": "font"
+        }
+      ],
+      "provenance_reason": "Reviewed target explicitly shares 2 compatible bindings in one reviewed group.",
+      "referencing_subjects": [
+        {
+          "id": "choose_left_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "choose_right_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "central_choice",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_left",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_right",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "choice_panel_hook",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "ending_panel_hook",
+          "kind": "presentation_hook"
+        }
+      ],
+      "representation": "2d",
+      "required": true,
+      "selected_format": "asset:font",
+      "sharing": {
+        "group_id": "narrative_ui",
+        "policy": "shared_exact"
+      },
+      "source_roles": [
+        "ending_ui",
+        "mechanic_feedback",
+        "narrative_ui",
+        "text_ui"
+      ],
+      "style": {
+        "content_hash": "eeeb3646e1d147a8d12dea84f4679a040e345f46515fa93549ae99c1c050f3ce",
+        "format": "world-forge.asset_style",
+        "format_version": 1,
+        "id": "asset_style_9af744600a9d03176b05b09be22a9de246854f8bed5d739a"
+      },
+      "target": {
+        "content_hash": "d09f6f717b61572dfa370fedab2e0a3ddb6b28cb2334f64da29c1adc58d25162",
+        "format": "world-forge.asset_target",
+        "format_version": 1,
+        "id": "asset_target_bcecafb47e27ced2a30ad4cffe40f990348fca66cd0df9f2"
+      },
+      "usage_contexts": [
+        "mechanic",
+        "mechanic:text",
+        "narrative",
+        "presentation:ending",
+        "presentation:text"
+      ]
+    }
+  ],
+  "content_hash": "30ce782cac942ca1388a6d588b337315b041255f6b19ece15de32660856411fb",
+  "format": "world-forge.asset_inventory",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "branching_narrative"
+  },
+  "inventory_id": "asset_inventory_aad1ff36087fa98580e94a50251becee8573446a82f94644",
+  "style": {
+    "content_hash": "eeeb3646e1d147a8d12dea84f4679a040e345f46515fa93549ae99c1c050f3ce",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_9af744600a9d03176b05b09be22a9de246854f8bed5d739a"
+  },
+  "target": {
+    "content_hash": "d09f6f717b61572dfa370fedab2e0a3ddb6b28cb2334f64da29c1adc58d25162",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_bcecafb47e27ced2a30ad4cffe40f990348fca66cd0df9f2"
+  }
+}

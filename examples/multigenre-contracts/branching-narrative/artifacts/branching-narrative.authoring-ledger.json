@@ -1,0 +1,119 @@
+{
+  "adapter": {
+    "adapter_id": "gamepack_raylib_2d_text",
+    "adapter_version": null,
+    "status": "declared"
+  },
+  "content_hash": "69d51f15515a994d1b18683ea1d9855faa26bc6e0b9d1babcff5367a104c6cb4",
+  "features": [
+    {
+      "extension": null,
+      "feature_id": "logic:branching_choice",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "extension": null,
+      "feature_id": "logic:persistent_variables",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    }
+  ],
+  "format": "world-forge.mechanic_capability_ledger",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "branching_narrative"
+  },
+  "ledger_id": "branching_narrative_authoring_capabilities",
+  "mechanics": [
+    {
+      "asset_binding_ids": [
+        "choice_panel"
+      ],
+      "authoritative_state_ids": [
+        "choice_state",
+        "knowledge"
+      ],
+      "condition_ids": [
+        "choice_available_left"
+      ],
+      "core_verb_id": "choose",
+      "effect_ids": [
+        "record_left",
+        "remember_left"
+      ],
+      "extension": null,
+      "mechanic_id": "choose_left_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "choice_panel_hook"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "choose_left_rule"
+      ],
+      "runtime_action_id": "choose_left",
+      "save_replay": {
+        "event_ids": [
+          "choice_left"
+        ],
+        "state_ids": [
+          "choice_state",
+          "knowledge"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "choice_panel"
+      ],
+      "authoritative_state_ids": [
+        "choice_state",
+        "knowledge"
+      ],
+      "condition_ids": [
+        "choice_available_right"
+      ],
+      "core_verb_id": "choose",
+      "effect_ids": [
+        "record_right",
+        "remember_right"
+      ],
+      "extension": null,
+      "mechanic_id": "choose_right_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "choice_panel_hook"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "choose_right_rule"
+      ],
+      "runtime_action_id": "choose_right",
+      "save_replay": {
+        "event_ids": [
+          "choice_right"
+        ],
+        "state_ids": [
+          "choice_state",
+          "knowledge"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    }
+  ]
+}

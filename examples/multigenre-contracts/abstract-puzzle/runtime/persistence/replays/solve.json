@@ -1,0 +1,64 @@
+{
+  "bindings": {
+    "execution_semantics": {
+      "content_hash": "f43fa43e4c54a2910ae8a99fbbfc0b2556359f95c1c88abef59a2508c9ea5983",
+      "version": 1
+    },
+    "gamepack": {
+      "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "abstract_puzzle"
+    },
+    "runtime_api": {
+      "id": "gamepack_runtime",
+      "version": "1.0.0"
+    },
+    "runtime_bundle": {
+      "content_hash": "a31c78621f8b824bce53faed5626d716e10a280c367449e811d62d0e359fb374",
+      "format": "world-forge.game_runtime_bundle",
+      "format_version": 1,
+      "id": "game_runtime_bundle_8e671ce34a653c62d12cb67dae47a73a7708fa3feca425b0"
+    },
+    "runtime_composition": {
+      "content_hash": "c1dfd0f58d00b245fcd68aee83f25c0bb7a0dfc4b38a5f3abddbe3c35b015451",
+      "format": "world-forge.game_runtime_composition",
+      "format_version": 1,
+      "id": "runtime_composition_a0b24f677435859d28937c9e97cf6af44c2d2b2b"
+    }
+  },
+  "classification": {
+    "ending_ids": [
+      "puzzle_complete"
+    ],
+    "ending_kind": "success",
+    "failure_ids": [],
+    "goal_ids": [
+      "solved"
+    ],
+    "recovery_action_ids": [],
+    "terminal": true
+  },
+  "content_hash": "678d0ec24cb172c11c124b005900799f1c5e76a2528bac3e1c86fa6633a3940a",
+  "final_state_hash": "aebcc840113a83fcdceafc2ddab957ecd42198d1cd5c76812065fe720aa906ca",
+  "format": "world-forge.game_replay",
+  "format_version": 1,
+  "initial_state_hash": "0e45dbe418fea6b992d47cc9099d83a733c57ea64ae2c994d2d1e225f9a14bad",
+  "replay_id": "game_replay_a0f4e885a13c58fd0deee3b50e48f7a24d5f9995bdbb5661",
+  "steps": [
+    {
+      "action_id": "swap_tiles",
+      "events": [
+        "tile_swapped"
+      ],
+      "index": 0,
+      "parameters": {
+        "first_index": 0,
+        "second_index": 1
+      },
+      "post_state_hash": "aebcc840113a83fcdceafc2ddab957ecd42198d1cd5c76812065fe720aa906ca",
+      "pre_state_hash": "0e45dbe418fea6b992d47cc9099d83a733c57ea64ae2c994d2d1e225f9a14bad"
+    }
+  ],
+  "trace_hash": "4171c062d4d56c69088dee8313747ccff7b33e1a61c2398d97adb9a42f3b3296"
+}

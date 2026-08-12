@@ -1,0 +1,781 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/studio-protocol-v2.schema.json",
+  "title": "Forge Studio external artifact application protocol v2",
+  "type": "object",
+  "required": [
+    "protocol",
+    "protocol_version",
+    "kind",
+    "request_id"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "rpg-world-forge.studio_protocol"
+    },
+    "protocol_version": {
+      "const": 2
+    },
+    "kind": {
+      "enum": [
+        "request",
+        "response",
+        "error"
+      ]
+    },
+    "request_id": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/entityId"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    },
+    {
+      "$ref": "#/$defs/errorEnvelope"
+    }
+  ],
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "method": {
+      "enum": [
+        "service.initialize",
+        "external_grant.create",
+        "external_grant.get",
+        "external_grant.revoke",
+        "job.create",
+        "job.get",
+        "job.list",
+        "job.cancel",
+        "job.recover"
+      ]
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "protocol",
+        "protocol_version",
+        "kind",
+        "request_id"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "rpg-world-forge.studio_protocol"
+        },
+        "protocol_version": {
+          "const": 2
+        },
+        "kind": {
+          "enum": [
+            "request",
+            "response",
+            "error"
+          ]
+        },
+        "request_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "grantCreateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "operation",
+        "role",
+        "artifact_kind",
+        "display_name",
+        "path",
+        "expected_content_hash"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "operation": {
+          "enum": [
+            "game.materialize",
+            "game.package",
+            "game.package.extract"
+          ]
+        },
+        "role": {
+          "enum": [
+            "source",
+            "target"
+          ]
+        },
+        "artifact_kind": {
+          "enum": [
+            "game_materialization_bundle",
+            "standalone_game",
+            "game_package"
+          ]
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32767
+        },
+        "expected_content_hash": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "operation",
+            "role",
+            "artifact_kind"
+          ],
+          "properties": {
+            "operation": {
+              "const": "game.materialize"
+            },
+            "role": {
+              "const": "source"
+            },
+            "artifact_kind": {
+              "const": "game_materialization_bundle"
+            }
+          }
+        },
+        {
+          "required": [
+            "operation",
+            "role",
+            "artifact_kind"
+          ],
+          "properties": {
+            "operation": {
+              "const": "game.materialize"
+            },
+            "role": {
+              "const": "target"
+            },
+            "artifact_kind": {
+              "const": "standalone_game"
+            }
+          }
+        },
+        {
+          "required": [
+            "operation",
+            "role",
+            "artifact_kind"
+          ],
+          "properties": {
+            "operation": {
+              "const": "game.package"
+            },
+            "role": {
+              "const": "source"
+            },
+            "artifact_kind": {
+              "const": "standalone_game"
+            }
+          }
+        },
+        {
+          "required": [
+            "operation",
+            "role",
+            "artifact_kind"
+          ],
+          "properties": {
+            "operation": {
+              "const": "game.package"
+            },
+            "role": {
+              "const": "target"
+            },
+            "artifact_kind": {
+              "const": "game_package"
+            }
+          }
+        },
+        {
+          "required": [
+            "operation",
+            "role",
+            "artifact_kind"
+          ],
+          "properties": {
+            "operation": {
+              "const": "game.package.extract"
+            },
+            "role": {
+              "const": "source"
+            },
+            "artifact_kind": {
+              "const": "game_package"
+            }
+          }
+        },
+        {
+          "required": [
+            "operation",
+            "role",
+            "artifact_kind"
+          ],
+          "properties": {
+            "operation": {
+              "const": "game.package.extract"
+            },
+            "role": {
+              "const": "target"
+            },
+            "artifact_kind": {
+              "const": "standalone_game"
+            }
+          }
+        }
+      ]
+    },
+    "grantIdParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_id"
+      ],
+      "properties": {
+        "grant_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "jobCreateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_id",
+        "operation",
+        "input"
+      ],
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "operation": {
+          "enum": [
+            "game.materialize",
+            "game.package",
+            "game.package.extract"
+          ]
+        },
+        "input": {
+          "oneOf": [
+            {
+              "$ref": "studio-job-v3.schema.json#/$defs/materializeInput"
+            },
+            {
+              "$ref": "studio-job-v3.schema.json#/$defs/packageInput"
+            },
+            {
+              "$ref": "studio-job-v3.schema.json#/$defs/extractInput"
+            }
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "operation",
+            "input"
+          ],
+          "properties": {
+            "operation": {
+              "const": "game.materialize"
+            },
+            "input": {
+              "$ref": "studio-job-v3.schema.json#/$defs/materializeInput"
+            }
+          }
+        },
+        {
+          "required": [
+            "operation",
+            "input"
+          ],
+          "properties": {
+            "operation": {
+              "const": "game.package"
+            },
+            "input": {
+              "$ref": "studio-job-v3.schema.json#/$defs/packageInput"
+            }
+          }
+        },
+        {
+          "required": [
+            "operation",
+            "input"
+          ],
+          "properties": {
+            "operation": {
+              "const": "game.package.extract"
+            },
+            "input": {
+              "$ref": "studio-job-v3.schema.json#/$defs/extractInput"
+            }
+          }
+        }
+      ]
+    },
+    "jobIdParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id"
+      ],
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "jobListParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workspace_id": {
+          "$ref": "#/$defs/workspaceId"
+        },
+        "state": {
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "canceled",
+            "orphaned"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      }
+    },
+    "jobRecoverParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "job_id",
+        "action"
+      ],
+      "properties": {
+        "job_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "action": {
+          "enum": [
+            "resume",
+            "rollback"
+          ]
+        }
+      }
+    },
+    "request": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "protocol",
+            "protocol_version",
+            "kind",
+            "request_id",
+            "method",
+            "params"
+          ],
+          "properties": {
+            "protocol": {
+              "const": "rpg-world-forge.studio_protocol"
+            },
+            "protocol_version": {
+              "const": 2
+            },
+            "kind": {
+              "const": "request"
+            },
+            "request_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "method": {
+              "$ref": "#/$defs/method"
+            },
+            "params": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "service.initialize"
+                },
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "external_grant.create"
+                },
+                "params": {
+                  "$ref": "#/$defs/grantCreateParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "external_grant.get",
+                    "external_grant.revoke"
+                  ]
+                },
+                "params": {
+                  "$ref": "#/$defs/grantIdParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "job.create"
+                },
+                "params": {
+                  "$ref": "#/$defs/jobCreateParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "job.get",
+                    "job.cancel"
+                  ]
+                },
+                "params": {
+                  "$ref": "#/$defs/jobIdParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "job.list"
+                },
+                "params": {
+                  "$ref": "#/$defs/jobListParams"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "params"
+              ],
+              "properties": {
+                "method": {
+                  "const": "job.recover"
+                },
+                "params": {
+                  "$ref": "#/$defs/jobRecoverParams"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "response": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "protocol",
+            "protocol_version",
+            "kind",
+            "request_id",
+            "method",
+            "result"
+          ],
+          "properties": {
+            "protocol": {
+              "const": "rpg-world-forge.studio_protocol"
+            },
+            "protocol_version": {
+              "const": 2
+            },
+            "kind": {
+              "const": "response"
+            },
+            "request_id": {
+              "$ref": "#/$defs/entityId"
+            },
+            "method": {
+              "$ref": "#/$defs/method"
+            },
+            "result": {
+              "type": "object"
+            }
+          }
+        },
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "service.initialize"
+                },
+                "result": {
+                  "type": "object"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "external_grant.create",
+                    "external_grant.get",
+                    "external_grant.revoke"
+                  ]
+                },
+                "result": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "grant"
+                  ],
+                  "properties": {
+                    "grant": {
+                      "$ref": "studio-external-grant.schema.json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "enum": [
+                    "job.create",
+                    "job.get",
+                    "job.cancel",
+                    "job.recover"
+                  ]
+                },
+                "result": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "job"
+                  ],
+                  "properties": {
+                    "job": {
+                      "$ref": "studio-job-v3.schema.json"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "method",
+                "result"
+              ],
+              "properties": {
+                "method": {
+                  "const": "job.list"
+                },
+                "result": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "jobs"
+                  ],
+                  "properties": {
+                    "jobs": {
+                      "type": "array",
+                      "maxItems": 1000,
+                      "items": {
+                        "$ref": "studio-job-v3.schema.json"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "errorEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "protocol_version",
+        "kind",
+        "request_id",
+        "error"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "rpg-world-forge.studio_protocol"
+        },
+        "protocol_version": {
+          "const": 2
+        },
+        "kind": {
+          "const": "error"
+        },
+        "request_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/entityId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "message",
+            "details"
+          ],
+          "properties": {
+            "code": {
+              "enum": [
+                "invalid_request",
+                "not_found",
+                "conflict",
+                "invalid_state",
+                "internal_error",
+                "recovery_ambiguous",
+                "recovery_failed"
+              ]
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "details": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    }
+  }
+}

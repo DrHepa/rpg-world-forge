@@ -1,0 +1,278 @@
+{
+  "analysis_id": "analysis_0510d69d0f78d3e8",
+  "analyzer": {
+    "id": "worldforge.abstract_puzzle_exhaustive",
+    "profile": "abstract_puzzle",
+    "version": 1
+  },
+  "assumptions": [
+    "The validated gamepack is the complete authoritative logic input.",
+    "Action parameter domains are finite and exactly declared by the gamepack.",
+    "Array order is authoritative and state equality uses compact canonical JSON."
+  ],
+  "checks": [
+    {
+      "id": "authored_endings_reachable",
+      "reason_codes": [],
+      "status": "passed"
+    },
+    {
+      "id": "authored_goals_reachable",
+      "reason_codes": [],
+      "status": "passed"
+    },
+    {
+      "id": "execution_integrity",
+      "reason_codes": [],
+      "status": "passed"
+    },
+    {
+      "id": "failure_recovery",
+      "reason_codes": [],
+      "status": "passed"
+    },
+    {
+      "id": "frontier_closed",
+      "reason_codes": [],
+      "status": "passed"
+    },
+    {
+      "id": "initial_solvable",
+      "reason_codes": [],
+      "status": "passed"
+    },
+    {
+      "id": "nonterminal_softlocks",
+      "reason_codes": [],
+      "status": "passed"
+    },
+    {
+      "id": "recovery_restoration",
+      "reason_codes": [],
+      "status": "passed"
+    },
+    {
+      "id": "terminal_reachability",
+      "reason_codes": [],
+      "status": "passed"
+    },
+    {
+      "id": "witness_evidence_complete",
+      "reason_codes": [],
+      "status": "passed"
+    }
+  ],
+  "content_hash": "e333c129c4fe2d401bab3609a3d341e7a40fe055d676495367b166e5a74a3c59",
+  "false_negative_risks": [
+    "Any configured bound reached before frontier closure makes the result inconclusive."
+  ],
+  "false_positive_risks": [
+    "A modeled state may be reachable but unusable in an unmodeled presentation adapter."
+  ],
+  "findings": [],
+  "format": "world-forge.game_analysis",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "abstract_puzzle"
+  },
+  "method": {
+    "bound_policy": "inconclusive_before_frontier_closure",
+    "evidence_kind": "exhaustive_within_declared_bounds",
+    "kind": "bounded_exhaustive_state_analysis",
+    "state_identity": "sha256_compact_canonical_json",
+    "traversal": "canonical_breadth_first_first_discovery"
+  },
+  "metrics": {
+    "candidate_evaluations": 190,
+    "endings_reached": 1,
+    "frontier_closed": true,
+    "goals_reached": 1,
+    "largest_state_bytes": 61,
+    "max_depth": 8,
+    "narrative_options_reached": 0,
+    "narrative_units_reached": 0,
+    "states": 23,
+    "total_state_bytes": 1403,
+    "transitions": 83
+  },
+  "out_of_scope_claims": [
+    "asset_readability",
+    "native_adapter_execution",
+    "platform_performance",
+    "save_replay_serialization",
+    "timing_and_input_ux"
+  ],
+  "reason_codes": [],
+  "requirement": {
+    "analyzer_id": "worldforge.abstract_puzzle_exhaustive",
+    "analyzer_version": 1,
+    "content_hash": "908ba6e2de05541d1f022077e592a0fdb9048ed4672638c9ecd13bfbe44cae19",
+    "limits": {
+      "candidate_evaluations": 262144,
+      "depth": 512,
+      "parameter_combinations_per_action": 4096,
+      "state_bytes": 65536,
+      "states": 16384,
+      "total_state_bytes": 67108864,
+      "total_witness_steps": 4096,
+      "witness_traces": 128
+    },
+    "profile": "abstract_puzzle",
+    "reason_code": null
+  },
+  "status": "passed",
+  "summary": {
+    "checks": 10,
+    "failed": 0,
+    "findings": 0,
+    "inconclusive": 0,
+    "passed": 10,
+    "witnesses": 3
+  },
+  "witnesses": [
+    {
+      "id": "witness_0001",
+      "kind": "ending",
+      "steps": [
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 0,
+            "second_index": 1
+          },
+          "post_state_hash": "aebcc840113a83fcdceafc2ddab957ecd42198d1cd5c76812065fe720aa906ca",
+          "pre_state_hash": "0e45dbe418fea6b992d47cc9099d83a733c57ea64ae2c994d2d1e225f9a14bad"
+        }
+      ],
+      "target_id": "puzzle_complete"
+    },
+    {
+      "id": "witness_0002",
+      "kind": "failure",
+      "steps": [
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 1,
+            "second_index": 2
+          },
+          "post_state_hash": "d9deb0f189811e2cf1d309ecd4f3f7301475b5864765ab148da23cd1f90d09d7",
+          "pre_state_hash": "0e45dbe418fea6b992d47cc9099d83a733c57ea64ae2c994d2d1e225f9a14bad"
+        },
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 0,
+            "second_index": 1
+          },
+          "post_state_hash": "10545f5ba726c3e94424519910ce1d7d68f38ce85ce2eb71454a922138ff0cdf",
+          "pre_state_hash": "d9deb0f189811e2cf1d309ecd4f3f7301475b5864765ab148da23cd1f90d09d7"
+        },
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 0,
+            "second_index": 1
+          },
+          "post_state_hash": "461e0bdb9a2214ccc509f1b62e65d68d291e809cb5b6650a20890124443ff86d",
+          "pre_state_hash": "10545f5ba726c3e94424519910ce1d7d68f38ce85ce2eb71454a922138ff0cdf"
+        },
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 0,
+            "second_index": 1
+          },
+          "post_state_hash": "3b16d2df45799b84d2bfccd967af587da8d3076c61d1ebd2e14752ef1b500f54",
+          "pre_state_hash": "461e0bdb9a2214ccc509f1b62e65d68d291e809cb5b6650a20890124443ff86d"
+        },
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 0,
+            "second_index": 1
+          },
+          "post_state_hash": "31883b983feb35c34a2ae64054fb85727cf8ccc1dbc83aab04ae22378c7573c9",
+          "pre_state_hash": "3b16d2df45799b84d2bfccd967af587da8d3076c61d1ebd2e14752ef1b500f54"
+        },
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 0,
+            "second_index": 1
+          },
+          "post_state_hash": "4d32143d6802dd199cc5b5580c5a4800806f6d153792eb23fa64c8eb4fe7901e",
+          "pre_state_hash": "31883b983feb35c34a2ae64054fb85727cf8ccc1dbc83aab04ae22378c7573c9"
+        },
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 0,
+            "second_index": 1
+          },
+          "post_state_hash": "4283fae8e72fdfebaea5f1a969853b4ac8b713d75fdb73ce529663812ee827b8",
+          "pre_state_hash": "4d32143d6802dd199cc5b5580c5a4800806f6d153792eb23fa64c8eb4fe7901e"
+        },
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 0,
+            "second_index": 1
+          },
+          "post_state_hash": "e2fce2cf7c9f61547bbdd6f8bb678ef35380c4ce080b1337b5097ff7384a7c4d",
+          "pre_state_hash": "4283fae8e72fdfebaea5f1a969853b4ac8b713d75fdb73ce529663812ee827b8"
+        }
+      ],
+      "target_id": "move_limit"
+    },
+    {
+      "id": "witness_0003",
+      "kind": "goal",
+      "steps": [
+        {
+          "action_id": "swap_tiles",
+          "events": [
+            "tile_swapped"
+          ],
+          "parameters": {
+            "first_index": 0,
+            "second_index": 1
+          },
+          "post_state_hash": "aebcc840113a83fcdceafc2ddab957ecd42198d1cd5c76812065fe720aa906ca",
+          "pre_state_hash": "0e45dbe418fea6b992d47cc9099d83a733c57ea64ae2c994d2d1e225f9a14bad"
+        }
+      ],
+      "target_id": "solved"
+    }
+  ]
+}

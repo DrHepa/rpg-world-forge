@@ -1,0 +1,96 @@
+{
+  "asset_subject": {
+    "content_hash": "09742eff54989a4cba753af413b320dbfabad30f874be38c6cd646f952f6b4c7",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_eaa36e78dc8661deddec17555aa8c2bb8d15e22e70d14656"
+  },
+  "bindings": [
+    {
+      "asset_id": "board_ui",
+      "binding_id": "board_texture",
+      "kind": "ui",
+      "outputs": [
+        {
+          "media_type": "image/png",
+          "role": "texture"
+        }
+      ],
+      "referencing_subjects": [
+        {
+          "id": "symbol_board",
+          "kind": "activity"
+        },
+        {
+          "id": "restart_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "swap_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "board_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "board_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "adjacent_swap",
+          "kind": "system"
+        }
+      ],
+      "representation": "2d",
+      "required": true,
+      "roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "system_feedback"
+      ],
+      "selected_format": "asset:png",
+      "sharing": {
+        "group_id": null,
+        "policy": "exclusive"
+      },
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "609fa138f16bc4bb402624a7fa3082b5b377e112f7f98633f2d9c0f3971a9d33",
+  "format": "world-forge.asset_target",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "abstract_puzzle"
+  },
+  "review": {
+    "evidence": [
+      {
+        "content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "evidence_id": "binding_review"
+      }
+    ],
+    "rationale": "The binding plan was reviewed against every compiled requirement.",
+    "reviewer_id": "asset_director"
+  },
+  "target_id": "asset_target_226e1b8d904d61fc8c631fef1a188b32300712752f903f02"
+}

@@ -1,0 +1,94 @@
+{
+  "asset": {
+    "asset_id": "season_dashboard",
+    "content_hash": "77c5f58115c7888e0cc11575cbdad0c22bdf8523317b8a4a7be5e65dc720e517"
+  },
+  "asset_subject": {
+    "content_hash": "0dd2f03aa2b3c4582d616d22507704445ddcf2c58691003c02f00a109b57d48d",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_9259c4cbd29829b3b6f9a90f269567bd757f86f0239d3292"
+  },
+  "content_hash": "9b8fa562f5498c2868fcfbd33938ef6818fc78393f87ceda71eba75cb9d5743a",
+  "executed_toolchain": {
+    "operation_id": "generate_png",
+    "production_class": "procedural_offline",
+    "seed": 189416871,
+    "tool_id": "world_forge_fixture_generator",
+    "tool_version": "1.1.0"
+  },
+  "execution_evidence": {
+    "completed_evidence_hash": "fcbf301c36345645a258ff0dfdf43065124374c8bd38e80901a46523f3a4c45e",
+    "sanitized_log_hashes": [
+      "c3fa97cddbcbcd466d9e57bc8f1c807f05ab81a66433078008d3868b5c3b7911"
+    ],
+    "started_evidence_hash": "379e91aa567d92160462136f0c5fe5c6b2e0c0b7932ccb2bd90bbbda49744827"
+  },
+  "failure_reasons": [],
+  "format": "world-forge.asset_production_receipt",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "sports_career"
+  },
+  "input_artifacts": [],
+  "inventory": {
+    "content_hash": "0a9fde3f496d850756e029acf56aa0a875109f7f831a921474d43e8f63115a6c",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_53dd128ca6758a57c68caf9beea84a9f1aea18a1e4a6577d"
+  },
+  "lineage_parents": [],
+  "outputs": [
+    {
+      "candidate_artifact_id": "season_dashboard_candidate",
+      "locator": "assets/production/season_dashboard/candidates/season-dashboard.png",
+      "media_type": "image/png",
+      "metadata": {
+        "height": 256,
+        "kind": "png",
+        "mode": "rgba8",
+        "width": 256
+      },
+      "role": "texture",
+      "runtime_path": "assets/ui/season-dashboard.png",
+      "sha256": "6ce813f1705c2c84b3578142cd68cec4c38a3d3c1183362a47a21176637833f6",
+      "size_bytes": 1193
+    }
+  ],
+  "production_class": "procedural_offline",
+  "receipt_id": "season_dashboard_receipt",
+  "request": {
+    "content_hash": "dc4893f3e33474480fc588a2b4542fc86caee285885e2e98f418a69d9d381311",
+    "format": "world-forge.asset_production_request",
+    "format_version": 1,
+    "id": "season_dashboard_production"
+  },
+  "rights_attestation": {
+    "basis": "fixture_public_domain",
+    "evidence_hashes": [
+      "ad2e96ed354a6022d8407cdcd5c8543e019e7e44d541703d7e7ef521db8cfad8"
+    ]
+  },
+  "specification": {
+    "content_hash": "7fc8bfa376b0970404591c18e6a8aae17019d6977a94090d62e308b4788497f4",
+    "format": "world-forge.asset_spec",
+    "format_version": 1,
+    "id": "asset_spec_15d864c0c10fb7ad1ee124cf26c75f496e62d8592b024c50"
+  },
+  "status": "completed",
+  "style": {
+    "content_hash": "6a33cb6231d5071d8c3d56e9f336738655d1e53fa56f066246f7f656b2faca64",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_6827ba36b8acb65b58aa6905c784297b839593fa9e5abf14"
+  },
+  "target": {
+    "content_hash": "afece1ac52756f93bc2ce0ecf34406b860a6400f77f9355a9a12bdf1e598d2d2",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_53adc0b6b9cbfff5a698a8d997726483c1b7f53760922ebe"
+  }
+}

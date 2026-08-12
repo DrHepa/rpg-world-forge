@@ -1,0 +1,67 @@
+{
+  "content_hash": "74a1e18bd214709a68c268c853e345b1711bc041e3df228eaf5ffdb02f5efacf",
+  "evidence": [
+    {
+      "claim": "The exact creation profile was reviewed.",
+      "evidence_id": "reviewed_profile",
+      "subject": {
+        "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "systemic_simulation_profile"
+      }
+    }
+  ],
+  "extensions": [],
+  "format": "world-forge.phase_report",
+  "format_version": 3,
+  "invalidation_dependencies": [
+    {
+      "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "systemic_simulation_profile"
+    },
+    {
+      "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "systemic_simulation"
+    },
+    {
+      "content_hash": "64a869bf5de72926c1cabceaf263d8460351e8e0f499e9290fe4eef3f7ccd373",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "systemic_simulation"
+    }
+  ],
+  "output_evidence": null,
+  "phase": "p12_asset_specs",
+  "profile": {
+    "content_hash": "16942ab9657681fe2bd70c9b3bdd390fc40f24c9de833a36292234a727e10062",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "systemic_simulation_profile"
+  },
+  "project": {
+    "content_hash": "64a869bf5de72926c1cabceaf263d8460351e8e0f499e9290fe4eef3f7ccd373",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "systemic_simulation"
+  },
+  "rationale": {
+    "code": "assets_not_applicable",
+    "message": "The exact reviewed profile and artifact evidence support this phase status."
+  },
+  "reviewer": {
+    "id": "lead_reviewer",
+    "role": "validation_analyst"
+  },
+  "source_manifest": {
+    "content_hash": "3e0399b17fd1e6638118466d7f728bbfecfb70f3d5a75e7921485970daf443ba",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "systemic_simulation"
+  },
+  "status": "not_applicable"
+}

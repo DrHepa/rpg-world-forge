@@ -1,9 +1,9 @@
 {
-  "name": "@rpg-world-forge/studio",
+  "name": "@world-forge/studio",
   "version": "0.1.0",
   "private": true,
-  "description": "Local desktop shell for the RPG World Forge Studio application service",
-  "author": "RPG World Forge contributors",
+  "description": "Local desktop shell for the World Forge Studio application service",
+  "author": "World Forge contributors",
   "license": "MIT",
   "type": "module",
   "main": "dist-electron/main/index.cjs",
@@ -15,14 +15,21 @@
   "scripts": {
     "generate:types": "node scripts/generate-types.mjs",
     "generate:codex-protocol": "node scripts/codex-protocol.mjs --generate",
-    "check:generated": "node scripts/generate-types.mjs --check && node scripts/codex-protocol.mjs --check",
+    "check:generated": "python3 ../../scripts/generate_creation_content_modes.py --check && node scripts/generate-types.mjs --check && node scripts/codex-protocol.mjs --check",
     "build:renderer": "vite build",
     "build:processes": "node scripts/build-processes.mjs",
     "build": "npm run generate:types && npm run build:renderer && npm run build:processes",
+    "verify:generic-asset-runtime": "node scripts/verify-generic-asset-runtime.mjs --module dist-electron/main/generic-asset-runtime.cjs",
+    "verify:game-package": "node scripts/verify-game-package.mjs --module dist-electron/main/generic-game-package.cjs",
+    "verify:game-runtime-bundle": "node scripts/verify-game-runtime-bundle.mjs --module dist-electron/main/generic-game-runtime-bundle.cjs",
+    "verify:game-persistence": "node scripts/verify-game-persistence.mjs --module dist-electron/main/generic-game-persistence.cjs",
+    "verify:generic-headless": "node scripts/verify-generic-headless.mjs --module dist-electron/main/generic-headless-evidence.cjs",
+    "verify:generic-materialization": "node scripts/verify-materialization-contracts.mjs --module dist-electron/main/generic-materialization-contracts.cjs",
+    "verify:generic-runtime": "node scripts/verify-generic-runtime.mjs --module dist-electron/main/generic-runtime-contracts.cjs",
     "start": "npm run build && electron .",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && vitest run",
+    "test": "npm run build && npm run verify:generic-asset-runtime && npm run verify:generic-runtime && npm run verify:generic-materialization && npm run verify:game-runtime-bundle && npm run verify:game-package && npm run verify:game-persistence && npm run verify:generic-headless && vitest run",
     "test:watch": "npm run build && vitest",
     "package:dir": "node scripts/package-shell.mjs",
     "package:verify": "node scripts/verify-shell-package.mjs",
@@ -61,15 +68,27 @@
   },
   "build": {
     "appId": "org.rpgworldforge.studio",
-    "productName": "RPG World Forge Studio",
+    "productName": "World Forge Studio",
     "asar": true,
     "npmRebuild": false,
     "files": [
+      "dist-electron/main/generic-asset-runtime.cjs",
+      "dist-electron/main/generic-game-package.cjs",
+      "dist-electron/main/generic-game-persistence.cjs",
+      "dist-electron/main/generic-game-runtime-bundle.cjs",
+      "dist-electron/main/generic-headless-evidence.cjs",
+      "dist-electron/main/generic-materialization-contracts.cjs",
+      "dist-electron/main/generic-runtime-contracts.cjs",
       "dist-electron/main/index.cjs",
+      "dist-electron/authority-modal/index.html",
+      "dist-electron/authority-modal/preload.cjs",
+      "dist-electron/authority-modal/renderer.js",
+      "dist-electron/authority-modal/style.css",
       "dist-electron/preload/index.cjs",
       "dist-renderer/index.html",
       "dist-renderer/assets/index.css",
       "dist-renderer/assets/index.js",
+      "dist-renderer/assets/vendor.js",
       "package.json",
       "!node_modules/**/*"
     ],
@@ -118,10 +137,10 @@
         "tar.gz"
       ],
       "category": "Development",
-      "executableName": "rpg-world-forge-studio"
+      "executableName": "world-forge-studio"
     },
     "directories": {
-      "output": "${env.RWF_STUDIO_PACKAGE_OUTPUT}"
+      "output": "${env.WORLD_FORGE_STUDIO_PACKAGE_OUTPUT}"
     }
   }
 }

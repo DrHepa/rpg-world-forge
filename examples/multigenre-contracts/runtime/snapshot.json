@@ -1,0 +1,172 @@
+{
+  "adapter_descriptors": [
+    {
+      "content_hash": "75d8480ada2c1f773f3c0e1d7f1427773b370beb212fb6a91aaad2875ed290e1",
+      "format": "world-forge.runtime_adapter",
+      "format_version": 1,
+      "id": "gamepack_raylib_2d_puzzle"
+    },
+    {
+      "content_hash": "4d0d0a8d9c17eccc2f040a2275e487cf0a21a5af63a8cbfda90811f2dbfc599b",
+      "format": "world-forge.runtime_adapter",
+      "format_version": 1,
+      "id": "gamepack_raylib_2d_text"
+    }
+  ],
+  "content_hash": "b1c94cac79ced1107f87174fcb367eec6ae832f089bb43e24d21dc618568b4bf",
+  "files": [
+    {
+      "path": "descriptors/gamepack_raylib_2d_puzzle@1.1.0.json",
+      "sha256": "3e3739700879ef055bd4ef7ad937b01ea01edd9f90605a79f82a88cddac55c8c",
+      "size_bytes": 3182
+    },
+    {
+      "path": "descriptors/gamepack_raylib_2d_text@1.1.0.json",
+      "sha256": "9b9bb4487245ca8ee6367ec18761e9a8c345262214f618d6ca2600b13cecc53b",
+      "size_bytes": 3301
+    },
+    {
+      "path": "gamepack_raylib_2d/__init__.py",
+      "sha256": "0da23e85991627372e0e2c142beb13777f7d4d0785eed1295c06db94b9198dda",
+      "size_bytes": 1904
+    },
+    {
+      "path": "gamepack_raylib_2d/app.py",
+      "sha256": "712a41f9419d0f59c15b50a4804e5e38a26e15ea8dd6bae447af37a4caef24df",
+      "size_bytes": 5601
+    },
+    {
+      "path": "gamepack_raylib_2d/audit.py",
+      "sha256": "6d4e60185a2e5d54b0c3c275f15d9a7237c8ac16e47c2418f4d6928cab5456ed",
+      "size_bytes": 4114
+    },
+    {
+      "path": "gamepack_raylib_2d/backend.py",
+      "sha256": "2faa1f5699d3c2af0f9edaefe9ebd552f0e4a10a491a236dc1f0e2975e7f2ac7",
+      "size_bytes": 9884
+    },
+    {
+      "path": "gamepack_raylib_2d/descriptor_policy.py",
+      "sha256": "adf47de8ba14a58f8cecbaa626ab87506fd145c250a460c3265d8606c1f04adf",
+      "size_bytes": 584
+    },
+    {
+      "path": "gamepack_raylib_2d/executable_shape.py",
+      "sha256": "800f37f9e43cef356ab8725a8050966f9c20be84282a2284dd2cba52fcf5ec32",
+      "size_bytes": 12887
+    },
+    {
+      "path": "gamepack_raylib_2d/fixed_step.py",
+      "sha256": "5849c94c8238184f0c2bfc52cf98e687533c2e2bd8d583561d7daeee8a09c9c6",
+      "size_bytes": 1833
+    },
+    {
+      "path": "gamepack_raylib_2d/input.py",
+      "sha256": "16fc8f84e6fbb2a3c811a5f7864361eab1a92c4337aa17eeab7a86198c229b5e",
+      "size_bytes": 3436
+    },
+    {
+      "path": "gamepack_raylib_2d/narrative_text.py",
+      "sha256": "4da6574db764c875311489ccb268bcaf88186a50750a4203c102723a47478435",
+      "size_bytes": 10979
+    },
+    {
+      "path": "gamepack_raylib_2d/native_smoke.py",
+      "sha256": "929ec7b9e6df03c6a9270becbd5c260e8172256938bf3c36812d800eededf6a2",
+      "size_bytes": 4341
+    },
+    {
+      "path": "gamepack_raylib_2d/puzzle.py",
+      "sha256": "ac2c724df38b4d27212d01f2488604baaf8f5616740462340e6506fa7355f380",
+      "size_bytes": 7338
+    },
+    {
+      "path": "gamepack_raylib_2d/registry.py",
+      "sha256": "ef3d9c27adf37320da1d0044c3371c3d08fd202592d75a9dc63bbe7436840381",
+      "size_bytes": 4935
+    },
+    {
+      "path": "gamepack_raylib_2d/resources.py",
+      "sha256": "c092edef283f5763ea235ab8843832e14644d987f1413d9531fe0f37e87343fc",
+      "size_bytes": 47441
+    },
+    {
+      "path": "gamepack_raylib_2d/types.py",
+      "sha256": "9252e9efdea7563d1cc97008ed0b987c9532f9d17139a13f1429f03878d8fe98",
+      "size_bytes": 2189
+    },
+    {
+      "path": "gamepack_runtime/__init__.py",
+      "sha256": "11768a8c1b2e4d711aede1dc66a7404d7dce5a87d1144fbad91eaae4d20c64e5",
+      "size_bytes": 6153
+    },
+    {
+      "path": "gamepack_runtime/contracts.py",
+      "sha256": "243c920401ec746fd0a2941f53082137b3b9cb54c1ac89208ed0b7197b921f74",
+      "size_bytes": 149311
+    },
+    {
+      "path": "gamepack_runtime/distribution.py",
+      "sha256": "984beca87f2bbaaa424fdeb91ade4f0a8bc19b817883eb5045e3bbf517db3058",
+      "size_bytes": 43901
+    },
+    {
+      "path": "gamepack_runtime/distribution_names.py",
+      "sha256": "9a30c3432eac217691d78b92484f8de5fc599b0c19f0c0892e336b0a9f92c885",
+      "size_bytes": 761
+    },
+    {
+      "path": "gamepack_runtime/file_stat.py",
+      "sha256": "eb9a3bf039353992f82e0238f70280c419b42baea9477d20a3bbe81b9da71fc3",
+      "size_bytes": 8250
+    },
+    {
+      "path": "gamepack_runtime/game_package.py",
+      "sha256": "dba98b90e39878a7eceb3418757aca52a1ab3f5c7b490e3acc4b54da0fc09f31",
+      "size_bytes": 23826
+    },
+    {
+      "path": "gamepack_runtime/headless.py",
+      "sha256": "07d938eb97d35088ade0d1cd1e7024abafc243aae97c3125c3e9bdfda37fc263",
+      "size_bytes": 54538
+    },
+    {
+      "path": "gamepack_runtime/persistence.py",
+      "sha256": "1b8bbc52b7ef5b3abdc791441661d517d29349ddc06eec24005af509c333231f",
+      "size_bytes": 43636
+    },
+    {
+      "path": "gamepack_runtime/persistence_generation.py",
+      "sha256": "cd5d2c141cffd2ab6a938fd5ef782b9a323d99f7c2b721e6e91aca31d703e534",
+      "size_bytes": 30784
+    },
+    {
+      "path": "gamepack_runtime/persistence_io.py",
+      "sha256": "45189acb9d0c5cd26b5ba0abb80851825bf95268360f647e5934f49c800fd7d3",
+      "size_bytes": 113482
+    },
+    {
+      "path": "gamepack_runtime/runtime_io.py",
+      "sha256": "873bce685733d53edfa6a191415f5ca3d79dcc4364bf83e73ac9da08b8558cba",
+      "size_bytes": 4004
+    },
+    {
+      "path": "gamepack_runtime/semantics_v1.py",
+      "sha256": "5bd05dadb095401d2e91d1490ab1f564cbf2aea91ddcd87a3c5d85fcab8feab1",
+      "size_bytes": 45282
+    },
+    {
+      "path": "gamepack_runtime/session.py",
+      "sha256": "6363ad9bd7ede88e9e2ff7d1a9391dfb60c9a38716a3775acf3f7ed84fe546e2",
+      "size_bytes": 2101
+    }
+  ],
+  "format": "world-forge.game_runtime_snapshot",
+  "format_version": 1,
+  "runtime_api": {
+    "id": "gamepack_runtime",
+    "version": "1.0.0"
+  },
+  "snapshot_id": "runtime_snapshot_002ec4f5a0da3b1f306eec02e163f28a72d628a0",
+  "tree_hash": "a24ccaa35dc17ef40de3434b954c92f303906fae140905e1e75f778e9748c596"
+}

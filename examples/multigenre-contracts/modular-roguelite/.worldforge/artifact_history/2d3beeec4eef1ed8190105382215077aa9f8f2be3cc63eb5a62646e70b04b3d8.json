@@ -1,0 +1,17 @@
+{
+  "content_hash": "2d3beeec4eef1ed8190105382215077aa9f8f2be3cc63eb5a62646e70b04b3d8",
+  "extensions": [],
+  "format": "world-forge.world_module",
+  "format_version": 1,
+  "module_id": "modular_roguelite_space",
+  "module_type": "space",
+  "project_id": "modular_roguelite",
+  "spaces": [
+    {
+      "id": "modular_roguelite_space",
+      "name": "Modular expedition route",
+      "topology": "symbolic"
+    }
+  ],
+  "title": "Modular expedition route"
+}

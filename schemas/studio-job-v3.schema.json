@@ -1,0 +1,567 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rpg-world-forge.local/schemas/studio-job-v3.schema.json",
+  "title": "Forge Studio external artifact job v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "job_id",
+    "workspace_id",
+    "operation",
+    "state",
+    "input",
+    "result",
+    "error",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "format": {
+      "const": "rpg-world-forge.studio_job"
+    },
+    "format_version": {
+      "const": 3
+    },
+    "job_id": {
+      "$ref": "#/$defs/entityId"
+    },
+    "workspace_id": {
+      "$ref": "#/$defs/workspaceId"
+    },
+    "operation": {
+      "$ref": "#/$defs/externalOperation"
+    },
+    "state": {
+      "$ref": "#/$defs/jobState"
+    },
+    "input": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/materializeInput"
+        },
+        {
+          "$ref": "#/$defs/packageInput"
+        },
+        {
+          "$ref": "#/$defs/extractInput"
+        }
+      ]
+    },
+    "result": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/materializeResult"
+        },
+        {
+          "$ref": "#/$defs/packageResult"
+        },
+        {
+          "$ref": "#/$defs/extractResult"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "error": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/jobError"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "created_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "updated_at": {
+      "$ref": "#/$defs/timestamp"
+    }
+  },
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/materializeOperation"
+        },
+        {
+          "$ref": "#/$defs/packageOperation"
+        },
+        {
+          "$ref": "#/$defs/extractOperation"
+        }
+      ]
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "not": {
+              "type": "null"
+            }
+          },
+          "error": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "if": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "enum": [
+                "failed",
+                "orphaned"
+              ]
+            }
+          },
+          "required": [
+            "state"
+          ]
+        },
+        "then": {
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "null"
+            },
+            "error": {
+              "$ref": "#/$defs/jobError"
+            }
+          }
+        },
+        "else": {
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "null"
+            },
+            "error": {
+              "type": "null"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "const": "orphaned"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "const": "recovery_required"
+              }
+            },
+            "required": [
+              "code"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "entityId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,127}$"
+    },
+    "workspaceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "externalOperation": {
+      "enum": [
+        "game.materialize",
+        "game.package",
+        "game.package.extract"
+      ]
+    },
+    "jobState": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "failed",
+        "canceled",
+        "orphaned"
+      ]
+    },
+    "grantInputCommon": {
+      "type": "object",
+      "properties": {
+        "source_grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "target_grant_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "materializeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_grant_id",
+        "target_grant_id",
+        "expected_materialization_hash"
+      ],
+      "properties": {
+        "source_grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "target_grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_materialization_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "packageInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_grant_id",
+        "target_grant_id",
+        "expected_game_hash"
+      ],
+      "properties": {
+        "source_grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "target_grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_game_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "extractInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_grant_id",
+        "target_grant_id",
+        "expected_package_hash"
+      ],
+      "properties": {
+        "source_grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "target_grant_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "expected_package_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "materializeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "game_id",
+        "standalone_hash",
+        "payload_lock_hash",
+        "runtime_bundle_hash",
+        "target_grant_id"
+      ],
+      "properties": {
+        "operation": {
+          "const": "game.materialize"
+        },
+        "game_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "standalone_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "payload_lock_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_bundle_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "target_grant_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "packageResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "package_id",
+        "content_hash",
+        "archive_sha256",
+        "game_id",
+        "game_hash",
+        "target_grant_id"
+      ],
+      "properties": {
+        "operation": {
+          "const": "game.package"
+        },
+        "package_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "archive_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "game_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "game_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "target_grant_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "extractResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "package_id",
+        "package_hash",
+        "archive_sha256",
+        "game_id",
+        "game_hash",
+        "payload_lock_hash",
+        "target_grant_id"
+      ],
+      "properties": {
+        "operation": {
+          "const": "game.package.extract"
+        },
+        "package_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "package_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "archive_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "game_id": {
+          "$ref": "#/$defs/entityId"
+        },
+        "game_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "payload_lock_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "target_grant_id": {
+          "$ref": "#/$defs/entityId"
+        }
+      }
+    },
+    "retainedEvidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locator",
+        "identity",
+        "retention"
+      ],
+      "properties": {
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^(?!\\.{1,2}$)[^/\\\\\\u0000]+$"
+        },
+        "identity": {
+          "oneOf": [
+            {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retention": {
+          "const": "active"
+        }
+      }
+    },
+    "recoveryEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "stage": {
+          "$ref": "#/$defs/retainedEvidenceItem"
+        },
+        "journal": {
+          "$ref": "#/$defs/retainedEvidenceItem"
+        }
+      }
+    },
+    "jobError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "enum": [
+            "execution_failed",
+            "invalid_workspace",
+            "timeout",
+            "worker_crashed",
+            "worker_protocol",
+            "recovery_ambiguous",
+            "recovery_failed",
+            "recovery_required",
+            "source_changed",
+            "target_changed"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "recovery_evidence": {
+          "$ref": "#/$defs/recoveryEvidence"
+        }
+      }
+    },
+    "materializeOperation": {
+      "type": "object",
+      "required": [
+        "operation",
+        "input",
+        "result"
+      ],
+      "properties": {
+        "operation": {
+          "const": "game.materialize"
+        },
+        "input": {
+          "$ref": "#/$defs/materializeInput"
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/materializeResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "packageOperation": {
+      "type": "object",
+      "required": [
+        "operation",
+        "input",
+        "result"
+      ],
+      "properties": {
+        "operation": {
+          "const": "game.package"
+        },
+        "input": {
+          "$ref": "#/$defs/packageInput"
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/packageResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "extractOperation": {
+      "type": "object",
+      "required": [
+        "operation",
+        "input",
+        "result"
+      ],
+      "properties": {
+        "operation": {
+          "const": "game.package.extract"
+        },
+        "input": {
+          "$ref": "#/$defs/extractInput"
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/extractResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

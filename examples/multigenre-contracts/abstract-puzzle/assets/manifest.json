@@ -1,0 +1,112 @@
+{
+  "asset_subject": {
+    "content_hash": "09742eff54989a4cba753af413b320dbfabad30f874be38c6cd646f952f6b4c7",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_eaa36e78dc8661deddec17555aa8c2bb8d15e22e70d14656"
+  },
+  "assets": [
+    {
+      "asset": {
+        "asset_id": "board_ui",
+        "content_hash": "c60401da521cff7fa3d6e08ac3c309f1a71d4b6b73b5e9c09d1985e90768ffe9"
+      },
+      "licenses": [
+        {
+          "content_hash": "2bc857cca2a376da2e55273bc188e8620d5e34a9711d724b8574ff22e4eddafe",
+          "format": "world-forge.asset_license_record",
+          "format_version": 1,
+          "id": "board_ui_license"
+        }
+      ],
+      "outputs": [
+        {
+          "locator": "assets/production/board_ui/processed/texture/board.png",
+          "media_type": "image/png",
+          "role": "texture",
+          "runtime_path": "assets/ui/board.png",
+          "sha256": "69801bb77d5a0ddd63b59700fb567ad003bceb23e303488167d2da14ecd56d8b",
+          "size_bytes": 1374
+        }
+      ],
+      "processing_receipt": {
+        "content_hash": "a8a08ca581a0b036a6df7b0e701e8d55a76db6263b3db67218ca13ad59ca923d",
+        "format": "world-forge.asset_processing_receipt",
+        "format_version": 1,
+        "id": "board_ui_processing_receipt"
+      },
+      "processing_recipe": {
+        "content_hash": "e89c0293f86e9c7fa434a1894bcf4503c4731297b3564801e8a5c3d319aa7bb1",
+        "format": "world-forge.asset_processing_recipe",
+        "format_version": 1,
+        "id": "board_ui_recipe"
+      },
+      "provenance": {
+        "content_hash": "4b48f9cc1341d5da110f3d4045db416d93685ea0752fa798512847ffc02cec5d",
+        "format": "world-forge.asset_provenance_record",
+        "format_version": 1,
+        "id": "board_ui_provenance"
+      },
+      "qa_report": {
+        "content_hash": "2861fd544ad02fc262c46765bc59642c85983ece75fedda0a436b072cfed4605",
+        "format": "world-forge.asset_qa_report",
+        "format_version": 1,
+        "id": "board_ui_qa"
+      },
+      "receipt": {
+        "content_hash": "e485f5d380e8fda4d15a5aeb2f198b3bb55b7133704e0991a528cce1e2aa450f",
+        "format": "world-forge.asset_production_receipt",
+        "format_version": 1,
+        "id": "board_ui_receipt"
+      },
+      "request": {
+        "content_hash": "00ae4bce2f6e68aefad25d05e1320f2ab4403849bf8bc15c2724426f0d5547d2",
+        "format": "world-forge.asset_production_request",
+        "format_version": 1,
+        "id": "board_ui_production"
+      },
+      "selection": {
+        "content_hash": "a3751275ae5261293f93be875bc20be6f8f70c45cf0cb395f036431f09aea0d8",
+        "format": "world-forge.asset_selection",
+        "format_version": 1,
+        "id": "board_ui_selection"
+      },
+      "specification": {
+        "content_hash": "046c7d15b317c290f2c3487a8e50853bc7fc961e1d815273acc086a06af1473a",
+        "format": "world-forge.asset_spec",
+        "format_version": 1,
+        "id": "asset_spec_327fa7c7303d4f06a0f86589cc971d3d4c3ed8d53ff5f8b2"
+      },
+      "state": "release_ready"
+    }
+  ],
+  "content_hash": "99e78d1b36fe2176fea1f2d60357065b6dc139817bc4fdf7d631d3e8d93c5de5",
+  "format": "world-forge.asset_manifest",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "0510d69d0f78d3e80810aa26dd4b76752416809f7733e731274ac8d7f35dac09",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "abstract_puzzle"
+  },
+  "inventory": {
+    "content_hash": "ef6496fd27a91fe4aa19c57390b09accd0a748eff1c6bdbc280b2dfc0302335c",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_db1e30fe4a098bf505b52989066137a1f34f4123b5ece765"
+  },
+  "manifest_id": "abstract_puzzle_asset_manifest",
+  "state": "release_ready",
+  "style": {
+    "content_hash": "8c6bc7d3654b7679921de0b9db2524abefbd5f83ca0f7f6ec45f306272fba563",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_1ed627dcb9cc101212f8c5b69dd218524a29610aaa8188cc"
+  },
+  "target": {
+    "content_hash": "609fa138f16bc4bb402624a7fa3082b5b377e112f7f98633f2d9c0f3971a9d33",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_226e1b8d904d61fc8c631fef1a188b32300712752f903f02"
+  }
+}

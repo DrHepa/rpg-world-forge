@@ -133,10 +133,7 @@ def _fsync_directory(path: Path) -> None:
     )
     invalid = ctypes.c_void_p(-1).value
     if handle in {None, invalid}:
-        error = ctypes.get_last_error()
-        raise StudioError(
-            "internal_error", f"Could not open Windows directory for durable flush: {error}"
-        )
+        raise StudioError("internal_error", "Could not open Windows directory for durable flush")
     flush = kernel32.FlushFileBuffers
     flush.argtypes = [ctypes.c_void_p]
     flush.restype = ctypes.c_int
@@ -145,10 +142,9 @@ def _fsync_directory(path: Path) -> None:
     close.restype = ctypes.c_int
     try:
         if not flush(ctypes.c_void_p(handle)):
-            error = ctypes.get_last_error()
             raise StudioError(
                 "internal_error",
-                f"Windows filesystem cannot durably flush directory metadata: {error}",
+                "Windows filesystem cannot durably flush directory metadata",
             )
     finally:
         close(ctypes.c_void_p(handle))
@@ -166,10 +162,7 @@ def _replace_durable(source: Path, destination: Path) -> None:
     move_file.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint32]
     move_file.restype = ctypes.c_int
     if not move_file(str(source), str(destination), 0x00000001 | 0x00000008):
-        error = ctypes.get_last_error()
-        raise StudioError(
-            "internal_error", f"Could not durably replace Windows apply journal: {error}"
-        )
+        raise StudioError("internal_error", "Could not durably replace Windows apply journal")
 
 
 def _safe_file_snapshot(
@@ -219,7 +212,11 @@ def _safe_file_snapshot(
         message = str(exc)
         if "hard link" in message:
             raise invalid_request(f"{context} cannot be a hard link") from exc
-        raise invalid_request(f"Could not read {context}: {exc}") from exc
+        if message == f"exceeds {limit} bytes":
+            raise invalid_request(f"{context} exceeds {limit} bytes") from exc
+        if message in {"file changed while reading", "path identity changed while reading"}:
+            raise invalid_request(f"{context} changed while reading") from exc
+        raise invalid_request(f"Could not read {context}") from exc
     finally:
         if descriptor is not None:
             os.close(descriptor)
@@ -231,7 +228,7 @@ def _path_info(path: Path) -> FileStat | None:
     except FileNotFoundError:
         return None
     except OSError as exc:
-        raise conflict(f"Could not inspect changeset target: {exc}") from exc
+        raise conflict("Could not inspect changeset target") from exc
 
 
 def _normalize_path(value: object) -> PurePosixPath:
@@ -245,9 +242,9 @@ def _safe_directory_info(path: Path, *, context: str) -> FileStat:
     try:
         info = path_file_stat(path)
     except OSError as exc:
-        raise conflict(f"Could not inspect {context}: {exc}") from exc
+        raise conflict("Could not inspect protected Studio directory") from exc
     if _is_link_or_reparse(info) or not stat.S_ISDIR(info.st_mode):
-        raise conflict(f"{context} is not a plain directory")
+        raise conflict("Protected Studio directory is not a plain directory")
     return info
 
 
@@ -278,8 +275,7 @@ def _windows_lock_directory(path: Path) -> int:
     )
     invalid = ctypes.c_void_p(-1).value
     if handle in {None, invalid}:
-        error = ctypes.get_last_error()
-        raise conflict(f"Could not pin Windows changeset directory: {error}")
+        raise conflict("Could not pin Windows changeset directory")
     return int(handle)
 
 
@@ -289,8 +285,7 @@ def _windows_close_handle(handle: int) -> None:
     close.argtypes = [ctypes.c_void_p]
     close.restype = ctypes.c_int
     if not close(ctypes.c_void_p(handle)):
-        error = ctypes.get_last_error()
-        raise StudioError("internal_error", f"Could not release Windows directory lock: {error}")
+        raise StudioError("internal_error", "Could not release Windows directory lock")
 
 
 @dataclass(slots=True)
@@ -306,11 +301,14 @@ class _PinnedParent:
         for path, expected in self.chain:
             info = _safe_directory_info(path, context=f"changeset directory {path}")
             if _identity(info) != expected:
-                raise conflict(f"Changeset directory identity changed: {path}")
+                raise conflict("Changeset directory identity changed")
         if self.descriptor is not None:
-            opened = os.fstat(self.descriptor)
+            try:
+                opened = os.fstat(self.descriptor)
+            except OSError as exc:
+                raise conflict("Could not inspect pinned Studio directory") from exc
             if not stat.S_ISDIR(opened.st_mode) or _identity(opened) != self.identity:
-                raise conflict(f"Pinned changeset directory identity changed: {self.path}")
+                raise conflict("Pinned changeset directory identity changed")
 
     def entry_info(self, name: str) -> FileStat | None:
         try:
@@ -320,12 +318,19 @@ class _PinnedParent:
             return path_file_stat(self.path / name)
         except FileNotFoundError:
             return None
+        except OSError as exc:
+            raise conflict("Could not inspect protected Studio entry") from exc
 
     def open_entry(self, name: str, flags: int, mode: int = 0o600) -> int:
-        if self.descriptor is not None:
-            return os.open(name, flags, mode, dir_fd=self.descriptor)
-        self.verify_visible()
-        descriptor = os.open(self.path / name, flags, mode)
+        try:
+            if self.descriptor is not None:
+                return os.open(name, flags, mode, dir_fd=self.descriptor)
+            self.verify_visible()
+            descriptor = os.open(self.path / name, flags, mode)
+        except StudioError:
+            raise
+        except OSError as exc:
+            raise conflict("Could not open protected Studio entry") from exc
         try:
             self.verify_visible()
         except BaseException:
@@ -374,7 +379,7 @@ def _reject_pinned_collision(parent: _PinnedParent, requested: str, *, context: 
         try:
             names = os.listdir(parent.descriptor)
         except OSError as exc:
-            raise conflict(f"Could not enumerate {context}: {exc}") from exc
+            raise conflict(f"Could not enumerate {context}") from exc
     else:
         parent.verify_visible()
         names = [entry.name for entry in parent.path.iterdir()]
@@ -435,13 +440,11 @@ def _open_pinned_parent(
                 )
                 child_identity = _identity(child_info)
                 if _identity(visible) != child_identity:
-                    raise conflict(
-                        f"Changeset directory changed while being pinned: {current_path}"
-                    )
+                    raise conflict("Changeset directory changed while being pinned")
                 chain.append((current_path, child_identity))
                 current_descriptor = child_descriptor
             if _identity(os.fstat(current_descriptor)) != parent_identity:
-                raise conflict(f"Changeset parent identity changed: {current_path}")
+                raise conflict("Changeset parent identity changed")
             pinned = _PinnedParent(
                 current_path,
                 parent_identity,
@@ -453,9 +456,21 @@ def _open_pinned_parent(
             _reject_pinned_collision(pinned, relative.name, context=f"changeset target {relative}")
             pinned.verify_visible()
             yield pinned
+        except StudioError:
+            raise
+        except OSError as exc:
+            raise conflict("Could not access protected Studio directory") from exc
         finally:
+            close_errors: list[OSError] = []
             for descriptor in reversed(descriptors):
-                os.close(descriptor)
+                try:
+                    os.close(descriptor)
+                except OSError as exc:
+                    close_errors.append(exc)
+            if close_errors:
+                raise StudioError(
+                    "internal_error", "Could not release pinned Studio directories"
+                ) from close_errors[0]
         return
     if platform != "nt":
         raise StudioError("internal_error", "Secure changeset directory I/O is unsupported")
@@ -489,11 +504,11 @@ def _open_pinned_parent(
             handles.append(child_handle)
             after = _safe_directory_info(child_path, context=f"changeset directory {child_path}")
             if _identity(before) != _identity(after):
-                raise conflict(f"Changeset directory changed while being pinned: {child_path}")
+                raise conflict("Changeset directory changed while being pinned")
             current_path = child_path
             chain.append((current_path, _identity(after)))
         if chain[-1][1] != parent_identity:
-            raise conflict(f"Changeset parent identity changed: {current_path}")
+            raise conflict("Changeset parent identity changed")
         pinned = _PinnedParent(
             current_path,
             parent_identity,
@@ -505,6 +520,10 @@ def _open_pinned_parent(
         _reject_pinned_collision(pinned, relative.name, context=f"changeset target {relative}")
         pinned.verify_visible()
         yield pinned
+    except StudioError:
+        raise
+    except (OSError, ValueError) as exc:
+        raise conflict("Could not access protected Studio directory") from exc
     finally:
         errors: list[BaseException] = []
         for handle in reversed(handles):
@@ -574,7 +593,11 @@ def _safe_entry_snapshot(
         message = str(exc)
         if "hard link" in message:
             raise invalid_request(f"{context} cannot be a hard link") from exc
-        raise invalid_request(f"Could not read {context}: {exc}") from exc
+        if message == f"exceeds {limit} bytes":
+            raise invalid_request(f"{context} exceeds {limit} bytes") from exc
+        if message in {"file changed while reading", "entry identity changed while reading"}:
+            raise invalid_request(f"{context} changed while reading") from exc
+        raise invalid_request(f"Could not read {context}") from exc
     finally:
         if descriptor is not None:
             os.close(descriptor)

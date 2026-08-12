@@ -87,15 +87,20 @@ Changing one byte requires a new release and catalog entry.
 
 ## Generated game boundary
 
-A generated game contains no Forge or authoring control plane: no `worldforge`
+A generated game contains only immutable logic, sealed runtime assets, the
+selected adapter implementation, game-local verification scripts, and required
+notices. It contains no Forge or authoring control plane: no `worldforge`
 dependency/import, `AGENTS.md`, `.agents/`, `.worldforge/`, editable canon,
-provider SDK, model client, prompt execution, or runtime network requirement.
-The legacy generated pyray path consumes only `isoworld.renderpack` v1. The
-additive M6 composed-release catalog may independently verify an immutable
-composed bundle, but native dispatch remains authorized only for the exact
-Linux x86_64 legacy 2.5D adapter. The bounded pyray GLB proof is incompatible
-without collision and must not be described as accepting or executing a
-playable 3D composition.
+provider SDK, model client, prompt execution, runtime AI, process escape, or
+runtime network requirement. The legacy generated pyray path consumes only
+`isoworld.renderpack` v1. Additive generic games consume exact generic
+gamepack/runtime bundle inputs through bounded 2D puzzle or 2D/text narrative
+adapters where their reviewed runtime support evidence authorizes them; the
+legacy `isoworld_raylib_2_5d` adapter remains separate. Raw QA cannot authorize
+execution, and unsupported required capabilities fail closed. The v10 review,
+v11 release, and v12 headless authority chain is retained before support can be
+claimed. The bounded pyray GLB proof is incompatible without collision and must
+not be described as accepting or executing a playable 3D composition.
 Its vendored `src/isoworld/` snapshot is verified against `runtime.lock.json`;
 game-owned code lives under `src/game/`. Snapshot updates replace the complete
 tree with an expected-current-hash check and precheck every installed bundle.
@@ -165,7 +170,10 @@ they do not include hashes for every requirement and are not a complete
 hash-locked supply-chain contract. Package metadata, requirement files, build
 requirements, platform locks, and notices must remain synchronized. Clean
 isolated wheel and sdist installations must pass `pip check`, installed contract
-auditing, and vulnerability auditing of the exact direct requirements.
+auditing, and vulnerability auditing of the exact direct requirements. The
+current dependency audit surface covers both pip and npm lock inputs, and the
+reviewed lock-audit snapshot has zero known vulnerabilities; that is a
+point-in-time result only, not a permanent guarantee for future lock changes.
 
 Third-party GitHub Actions are pinned by full commit SHA with checkout
 credentials disabled. Downloaded security executables must be matched against a

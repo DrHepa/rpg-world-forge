@@ -1,0 +1,104 @@
+{
+  "asset": {
+    "asset_id": "narrative_ui_font",
+    "content_hash": "6ccea45b94c41e7f34c12c3f428d61a0a281bbeba8db8a050e9e8e66027f3748"
+  },
+  "asset_subject": {
+    "content_hash": "6fd06c5f7cd165c24815dce3651b6d3c00a55af7b8b4cfe8cccf08880d81c436",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_efe08b26fd743010caa1e27f472b67300594df87e3b955da"
+  },
+  "content_hash": "455b34fa4730406269b9f3b535d1a2a9461d6eaac6ad72e36d4d769a34a45ca8",
+  "failure_reasons": [],
+  "format": "world-forge.asset_processing_receipt",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "branching_narrative"
+  },
+  "inventory": {
+    "content_hash": "30ce782cac942ca1388a6d588b337315b041255f6b19ece15de32660856411fb",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_aad1ff36087fa98580e94a50251becee8573446a82f94644"
+  },
+  "outputs": [
+    {
+      "candidate_artifact_id": "narrative_ui_font_candidate",
+      "locator": "assets/production/narrative_ui_font/processed/font/narrative-ui.ttf",
+      "media_type": "font/ttf",
+      "metadata": {
+        "container": "ttf",
+        "glyph_count": 95,
+        "glyph_ranges": [
+          "U+0020-007E"
+        ],
+        "kind": "font"
+      },
+      "role": "font",
+      "runtime_path": "assets/fonts/narrative-ui.ttf",
+      "sha256": "c7362ddaf3102b66b24e4ea5a566b9cd339b082b14165fc73ba04f76f8a2273e",
+      "size_bytes": 28748,
+      "source_sha256": "c7362ddaf3102b66b24e4ea5a566b9cd339b082b14165fc73ba04f76f8a2273e",
+      "step_id": "step_acf56b6c00f4a07af1bae5fcefba6b4b29ad16c9e949682f"
+    }
+  ],
+  "processing_receipt_id": "narrative_ui_font_processing_receipt",
+  "processor": {
+    "processor_id": "world_forge_generic_asset_processor",
+    "version": 1
+  },
+  "provenance": {
+    "content_hash": "46c6dbb770e84f595989e5902e9589d18bf9025727028e75d529b7055e1e5517",
+    "format": "world-forge.asset_provenance_record",
+    "format_version": 1,
+    "id": "narrative_ui_font_provenance"
+  },
+  "receipt": {
+    "content_hash": "302cd0ba724b01d2ed8333845f28042e93155750288959428567a33967432971",
+    "format": "world-forge.asset_production_receipt",
+    "format_version": 1,
+    "id": "narrative_ui_font_receipt"
+  },
+  "recipe": {
+    "content_hash": "692f522d9290b6c699d025dc37a84b40ea09bac8a62f58eecd5600dbf3ccef40",
+    "format": "world-forge.asset_processing_recipe",
+    "format_version": 1,
+    "id": "narrative_ui_font_recipe"
+  },
+  "recovery": null,
+  "request": {
+    "content_hash": "6ae7b43a97edadaf6488542fe9d37ad40cf9ca3f15a2b12e10435df1dabc6168",
+    "format": "world-forge.asset_production_request",
+    "format_version": 1,
+    "id": "narrative_ui_font_production"
+  },
+  "selection": {
+    "content_hash": "d3cf181977fbaae7a43b386bdebd2d2499781cd8efd9a06defd32447243c45bb",
+    "format": "world-forge.asset_selection",
+    "format_version": 1,
+    "id": "narrative_ui_font_selection"
+  },
+  "specification": {
+    "content_hash": "c4f43e0b3946a41d06acdb5d38592e46cd639ac7a4186131ef1a59581059e06c",
+    "format": "world-forge.asset_spec",
+    "format_version": 1,
+    "id": "asset_spec_33a7372ab32b16c2841f4319ca650431650f26b2eb864d96"
+  },
+  "status": "completed",
+  "style": {
+    "content_hash": "eeeb3646e1d147a8d12dea84f4679a040e345f46515fa93549ae99c1c050f3ce",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_9af744600a9d03176b05b09be22a9de246854f8bed5d739a"
+  },
+  "target": {
+    "content_hash": "d09f6f717b61572dfa370fedab2e0a3ddb6b28cb2334f64da29c1adc58d25162",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_bcecafb47e27ced2a30ad4cffe40f990348fca66cd0df9f2"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "content_hash": "4675a74458c29e1fa8e4b99acfa8e4ac501ea0e0e3bcec11c207e95644146c03",
+  "default_locale": "en",
+  "extensions": [],
+  "format": "world-forge.project",
+  "format_version": 1,
+  "profile": {
+    "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "branching_narrative_profile",
+    "path": "profile.json"
+  },
+  "project_id": "branching_narrative",
+  "project_kind": "game",
+  "project_version": "1.0.0",
+  "source_manifest": {
+    "content_hash": "3f3ed623c2f26208c60762888e8aa544f877bd198664c16e64ccbfd7f41226cf",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "branching_narrative",
+    "path": "source/manifest.json"
+  },
+  "title": "Branching Narrative"
+}

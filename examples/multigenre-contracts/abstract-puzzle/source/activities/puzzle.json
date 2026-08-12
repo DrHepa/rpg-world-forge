@@ -1,0 +1,47 @@
+{
+  "activities": [
+    {
+      "activity_type": "puzzle",
+      "asset_binding_ids": [
+        "board_texture"
+      ],
+      "effect_ids": [
+        "increment_moves",
+        "reset_board",
+        "reset_move_count",
+        "swap_tiles"
+      ],
+      "end_condition_ids": [
+        "board_solved"
+      ],
+      "event_ids": [
+        "restart_requested",
+        "tile_swapped"
+      ],
+      "failure_condition_ids": [],
+      "id": "symbol_board",
+      "participant_ids": [],
+      "presentation_hook_ids": [
+        "board_feedback",
+        "board_view"
+      ],
+      "provenance": "authored neutral fixture",
+      "spatial_context_ids": [],
+      "start_condition_ids": [
+        "board_ready"
+      ],
+      "success_condition_ids": [
+        "board_solved"
+      ],
+      "title": "Symbol board",
+      "validation_profile": "bounded_exhaustive"
+    }
+  ],
+  "content_hash": "150e167e7117227b1d0162fba631016314d127f83aeb18f2b72c41a66e479c51",
+  "extensions": [],
+  "format": "world-forge.activity_module",
+  "format_version": 1,
+  "module_id": "puzzle_activities",
+  "project_id": "abstract_puzzle",
+  "title": "Abstract puzzle activities"
+}

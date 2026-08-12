@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +35,7 @@ from worldforge.asset_io import (
     sha256_file,
     verify_artifact_reference,
     write_json_atomic,
+    write_json_cooperative_replace,
 )
 from worldforge.asset_production import (
     ProductionReceiptIndex,
@@ -164,7 +163,7 @@ def bind_asset_plan(
     inventory_path: str | Path,
     expected_manifest_hash: str,
 ) -> dict[str, Any]:
-    """Bind approved P11/P12 contracts and exact specs using optimistic locking."""
+    """Bind approved contracts using a cooperative optimistic-hash precondition."""
 
     manifest_file = Path(manifest_path)
     root = manifest_file.parent.resolve()
@@ -281,11 +280,10 @@ def bind_asset_plan(
         }
     )
     updated = bind_content_hash(updated)
-    write_json_atomic(
+    write_json_cooperative_replace(
         manifest_file,
         updated,
-        overwrite=True,
-        expected_content_hash=expected_manifest_hash,
+        expected_cooperative_content_hash=expected_manifest_hash,
     )
     return updated
 
@@ -297,7 +295,7 @@ def finalize_asset_release(
     *,
     expected_manifest_hash: str,
 ) -> dict[str, Any]:
-    """Seal a built renderpack/assetpack into manifest v3 with optimistic locking."""
+    """Seal a deliverable using a cooperative optimistic-hash precondition."""
 
     manifest_file = Path(manifest_path)
     root = manifest_file.parent.resolve()
@@ -353,30 +351,18 @@ def finalize_asset_release(
     }
     updated = bind_content_hash(updated)
 
-    descriptor, candidate_name = tempfile.mkstemp(
-        prefix=f".{manifest_file.name}.release-",
-        suffix=".json",
-        dir=root,
+    release_issues = validate_asset_manifest_v3_object(
+        updated,
+        root=root,
+        profile="release",
+        worldpack_path=worldpack_path,
     )
-    os.close(descriptor)
-    candidate = Path(candidate_name)
-    candidate.unlink()
-    try:
-        write_json_atomic(candidate, updated)
-        release_issues = validate_asset_manifest_v3(
-            candidate,
-            profile="release",
-            worldpack_path=worldpack_path,
-        )
-        if release_issues:
-            raise AssetContractError("; ".join(str(issue) for issue in release_issues))
-    finally:
-        candidate.unlink(missing_ok=True)
-    write_json_atomic(
+    if release_issues:
+        raise AssetContractError("; ".join(str(issue) for issue in release_issues))
+    write_json_cooperative_replace(
         manifest_file,
         updated,
-        overwrite=True,
-        expected_content_hash=expected_manifest_hash,
+        expected_cooperative_content_hash=expected_manifest_hash,
     )
     return updated
 

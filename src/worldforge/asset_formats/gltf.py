@@ -11,6 +11,7 @@ from isoworld.content.gltf import (
     METRIC_NAMES,
     GLBError,
     inspect_glb,
+    inspect_glb_bytes,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "METRIC_NAMES",
     "GLBError",
     "inspect_glb",
+    "inspect_glb_bytes",
 ]

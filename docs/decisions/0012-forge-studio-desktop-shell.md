@@ -128,3 +128,48 @@ could differ from the runtime audited for a release.
 
 Rejected because Codex, Modly, Ollama, Blender, credentials, network/cost
 approval, and output quarantine require their own contracts and threat models.
+
+## Additive amendment: generic creation controls
+
+The original sandbox, preload, and main-owned authority decisions remain in
+force. Generic creation now uses the separate closed Studio protocol v4 with
+exactly 17 transport methods. The renderer has fixed visible controls for
+compile, asset process/seal, bounded PNG/WAV preview, runtime compose/bundle,
+materialization bundle/standalone, package, and extraction. It still cannot
+name a generic operation, IPC channel, filesystem path, command, provider, or
+process configuration.
+
+The creation job/worker contracts advance additively through v9 across ten
+closed operations, and output grants advance through v5. This local
+implementation and its tests do not establish packaged-shell, native, hosted,
+or release evidence. `WORLD_FORGE_STUDIO_DEV_PYTHON` is the canonical
+development interpreter variable. The deprecated `RWF_STUDIO_DEV_PYTHON`
+reader alias remains compatible only when absent alone or equal to the
+canonical value; unequal dual values fail closed.
+
+## Additive amendment: Studio protocol v5 authority and package audit
+
+The original desktop-shell decision remains in force. The current closed Studio
+protocol is v5 and has exactly 18 transport methods. Electron main owns
+the native user gesture for every filesystem target; preload exposes typed,
+pathless calls; renderer controls select fixed main-owned operations and never
+raw paths. Output grants now support the private `create`, `get`, `list`, and
+`revoke` method surface. Persisted v6 grants are exposed to protocol v5 clients,
+while the legacy v4 listing keeps projecting only v1-v5 grants.
+
+The v5 handshake activates exactly four authority capabilities:
+`asset_authority_reviews`, `asset_release_authority`,
+`runtime_headless_authority`, and `creation_preview_pre_release`. Creation jobs
+advance through v12, output grants through v6, and previews remain published v1
+plus pre-release QA candidate v2. Local implementation and review prove the
+main/preload/renderer authority flow, but hosted native authority CI remains
+PENDING until the exact pushed workflow run succeeds.
+
+The shell package closure is now 17 clean source/build files plus the sanitized
+`package.json` (18 ASAR entries total before directories). The verifier derives
+that closure from the canonical build/package metadata, pins the source trees,
+and rejects extra, stale, linked, replaced, or hidden runtime/vendor ASAR
+entries. Snapshot publication retry and electron-builder EBUSY retry are
+distinct: snapshot retry handles only retryable backend sharing conflicts after
+backend reap, while electron-builder gets exactly one delayed retry after 1000 ms
+into `${canonicalOutput}.retry-2`.

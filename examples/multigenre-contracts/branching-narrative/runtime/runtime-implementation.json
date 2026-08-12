@@ -1,0 +1,235 @@
+{
+  "adapter": {
+    "adapter_id": "gamepack_raylib_2d_text",
+    "adapter_version": "1.1.0",
+    "content_hash": "4d0d0a8d9c17eccc2f040a2275e487cf0a21a5af63a8cbfda90811f2dbfc599b"
+  },
+  "content_hash": "fc2ba3a8ba4a3b66f71fd72a23c21d2f3cedfd1a6842cde2dfbf569d2dd3753d",
+  "entry_points": [
+    {
+      "module": "gamepack_raylib_2d.app",
+      "role": "application_factory",
+      "symbol": "RuntimeApp.from_bundle"
+    },
+    {
+      "module": "gamepack_raylib_2d.backend",
+      "role": "backend_factory",
+      "symbol": "PyrayBackend"
+    },
+    {
+      "module": "gamepack_raylib_2d.resources",
+      "role": "bundle_loader",
+      "symbol": "load_runtime_bundle"
+    },
+    {
+      "module": "gamepack_raylib_2d.native_smoke",
+      "role": "native_smoke",
+      "symbol": "native_smoke"
+    }
+  ],
+  "format": "world-forge.runtime_implementation",
+  "format_version": 1,
+  "implementation_id": "runtime_implementation_b1893fbdb91d28dcb72f3052a8a5ad2203850e92",
+  "materialization_policy": {
+    "immutable_runtime": true,
+    "runtime_ai": false,
+    "standalone_source_root": "src",
+    "version": 1
+  },
+  "packages": [
+    {
+      "classification": "immutable_runtime_source",
+      "destination_root": "src/gamepack_raylib_2d",
+      "files": [
+        {
+          "path": "__init__.py",
+          "sha256": "0da23e85991627372e0e2c142beb13777f7d4d0785eed1295c06db94b9198dda",
+          "size_bytes": 1904
+        },
+        {
+          "path": "app.py",
+          "sha256": "712a41f9419d0f59c15b50a4804e5e38a26e15ea8dd6bae447af37a4caef24df",
+          "size_bytes": 5601
+        },
+        {
+          "path": "audit.py",
+          "sha256": "6d4e60185a2e5d54b0c3c275f15d9a7237c8ac16e47c2418f4d6928cab5456ed",
+          "size_bytes": 4114
+        },
+        {
+          "path": "backend.py",
+          "sha256": "2faa1f5699d3c2af0f9edaefe9ebd552f0e4a10a491a236dc1f0e2975e7f2ac7",
+          "size_bytes": 9884
+        },
+        {
+          "path": "descriptor_policy.py",
+          "sha256": "adf47de8ba14a58f8cecbaa626ab87506fd145c250a460c3265d8606c1f04adf",
+          "size_bytes": 584
+        },
+        {
+          "path": "executable_shape.py",
+          "sha256": "800f37f9e43cef356ab8725a8050966f9c20be84282a2284dd2cba52fcf5ec32",
+          "size_bytes": 12887
+        },
+        {
+          "path": "fixed_step.py",
+          "sha256": "5849c94c8238184f0c2bfc52cf98e687533c2e2bd8d583561d7daeee8a09c9c6",
+          "size_bytes": 1833
+        },
+        {
+          "path": "input.py",
+          "sha256": "16fc8f84e6fbb2a3c811a5f7864361eab1a92c4337aa17eeab7a86198c229b5e",
+          "size_bytes": 3436
+        },
+        {
+          "path": "narrative_text.py",
+          "sha256": "4da6574db764c875311489ccb268bcaf88186a50750a4203c102723a47478435",
+          "size_bytes": 10979
+        },
+        {
+          "path": "native_smoke.py",
+          "sha256": "929ec7b9e6df03c6a9270becbd5c260e8172256938bf3c36812d800eededf6a2",
+          "size_bytes": 4341
+        },
+        {
+          "path": "puzzle.py",
+          "sha256": "ac2c724df38b4d27212d01f2488604baaf8f5616740462340e6506fa7355f380",
+          "size_bytes": 7338
+        },
+        {
+          "path": "registry.py",
+          "sha256": "ef3d9c27adf37320da1d0044c3371c3d08fd202592d75a9dc63bbe7436840381",
+          "size_bytes": 4935
+        },
+        {
+          "path": "resources.py",
+          "sha256": "c092edef283f5763ea235ab8843832e14644d987f1413d9531fe0f37e87343fc",
+          "size_bytes": 47441
+        },
+        {
+          "path": "types.py",
+          "sha256": "9252e9efdea7563d1cc97008ed0b987c9532f9d17139a13f1429f03878d8fe98",
+          "size_bytes": 2189
+        }
+      ],
+      "package": "gamepack_raylib_2d",
+      "role": "raylib_2d_adapter",
+      "source_prefix": "gamepack_raylib_2d",
+      "tree_hash": "12a84f115908308c20b37c8866f57e833d30bc3bc9b325be6ea76c4cdc4d9356"
+    },
+    {
+      "classification": "immutable_runtime_source",
+      "destination_root": "src/gamepack_runtime",
+      "files": [
+        {
+          "path": "__init__.py",
+          "sha256": "11768a8c1b2e4d711aede1dc66a7404d7dce5a87d1144fbad91eaae4d20c64e5",
+          "size_bytes": 6153
+        },
+        {
+          "path": "contracts.py",
+          "sha256": "243c920401ec746fd0a2941f53082137b3b9cb54c1ac89208ed0b7197b921f74",
+          "size_bytes": 149311
+        },
+        {
+          "path": "distribution.py",
+          "sha256": "984beca87f2bbaaa424fdeb91ade4f0a8bc19b817883eb5045e3bbf517db3058",
+          "size_bytes": 43901
+        },
+        {
+          "path": "distribution_names.py",
+          "sha256": "9a30c3432eac217691d78b92484f8de5fc599b0c19f0c0892e336b0a9f92c885",
+          "size_bytes": 761
+        },
+        {
+          "path": "file_stat.py",
+          "sha256": "eb9a3bf039353992f82e0238f70280c419b42baea9477d20a3bbe81b9da71fc3",
+          "size_bytes": 8250
+        },
+        {
+          "path": "game_package.py",
+          "sha256": "dba98b90e39878a7eceb3418757aca52a1ab3f5c7b490e3acc4b54da0fc09f31",
+          "size_bytes": 23826
+        },
+        {
+          "path": "headless.py",
+          "sha256": "07d938eb97d35088ade0d1cd1e7024abafc243aae97c3125c3e9bdfda37fc263",
+          "size_bytes": 54538
+        },
+        {
+          "path": "persistence.py",
+          "sha256": "1b8bbc52b7ef5b3abdc791441661d517d29349ddc06eec24005af509c333231f",
+          "size_bytes": 43636
+        },
+        {
+          "path": "persistence_generation.py",
+          "sha256": "cd5d2c141cffd2ab6a938fd5ef782b9a323d99f7c2b721e6e91aca31d703e534",
+          "size_bytes": 30784
+        },
+        {
+          "path": "persistence_io.py",
+          "sha256": "45189acb9d0c5cd26b5ba0abb80851825bf95268360f647e5934f49c800fd7d3",
+          "size_bytes": 113482
+        },
+        {
+          "path": "runtime_io.py",
+          "sha256": "873bce685733d53edfa6a191415f5ca3d79dcc4364bf83e73ac9da08b8558cba",
+          "size_bytes": 4004
+        },
+        {
+          "path": "semantics_v1.py",
+          "sha256": "5bd05dadb095401d2e91d1490ab1f564cbf2aea91ddcd87a3c5d85fcab8feab1",
+          "size_bytes": 45282
+        },
+        {
+          "path": "session.py",
+          "sha256": "6363ad9bd7ede88e9e2ff7d1a9391dfb60c9a38716a3775acf3f7ed84fe546e2",
+          "size_bytes": 2101
+        }
+      ],
+      "package": "gamepack_runtime",
+      "role": "deterministic_kernel",
+      "source_prefix": "gamepack_runtime",
+      "tree_hash": "62798f17fcb0e9b07883e4b9632e18bf828725119b658d4d7a0496fbe6edfb9c"
+    }
+  ],
+  "platform_locks": [
+    {
+      "abi": "cp312",
+      "content_hash": "0fb5497ec872afeae238441a0fd06d8a025de2950b5bb1c50f03b72d6cd1c25d",
+      "lock_id": "runtime_platform_lock_58fa72d2c53923bcaf61292799529209c310b435",
+      "os": "linux",
+      "python_minor": "3.12"
+    },
+    {
+      "abi": "cp311",
+      "content_hash": "e0489398cbb6a815b8cb72a54e8dc7bbf38adfe4bc0db0c6a9db8a70a2467b39",
+      "lock_id": "runtime_platform_lock_81596ec3acdfdafef473811996b0ac3381cc24df",
+      "os": "windows",
+      "python_minor": "3.11"
+    },
+    {
+      "abi": "cp312",
+      "content_hash": "b40a2b67d9051ffde33ea0eafeb4d38a1fa5b7cd1dcf6a32a2944a42cd08f7b1",
+      "lock_id": "runtime_platform_lock_c3f9a4ae7f6fb435e60039e201777a2444b7f4ac",
+      "os": "windows",
+      "python_minor": "3.12"
+    },
+    {
+      "abi": "cp311",
+      "content_hash": "c04258a531a0d96c1f5400ffd064897831039ed8e41fe0553ddbea89102829a1",
+      "lock_id": "runtime_platform_lock_cdcf772abbac162dec0de8a93894f92b85393e1d",
+      "os": "linux",
+      "python_minor": "3.11"
+    }
+  ],
+  "runtime_api": {
+    "id": "gamepack_runtime",
+    "version": "1.0.0"
+  },
+  "snapshot": {
+    "content_hash": "b1c94cac79ced1107f87174fcb367eec6ae832f089bb43e24d21dc618568b4bf",
+    "snapshot_id": "runtime_snapshot_002ec4f5a0da3b1f306eec02e163f28a72d628a0",
+    "tree_hash": "a24ccaa35dc17ef40de3434b954c92f303906fae140905e1e75f778e9748c596"
+  }
+}

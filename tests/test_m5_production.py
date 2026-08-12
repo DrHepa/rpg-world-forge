@@ -13,6 +13,7 @@ from worldforge.asset_io import (
     artifact_reference,
     bind_content_hash,
     write_json_atomic,
+    write_json_cooperative_replace,
 )
 from worldforge.asset_production import (
     create_production_request,
@@ -695,7 +696,7 @@ class M5ProductionTests(unittest.TestCase):
                 "openai_image",
                 "procedural",
             ]
-            write_json_atomic(spec_path, bind_content_hash(spec), overwrite=True)
+            write_json_cooperative_replace(spec_path, bind_content_hash(spec))
 
             request_path = root / "requests/font.json"
             create_production_request(
@@ -755,7 +756,7 @@ class M5ProductionTests(unittest.TestCase):
             spec_path = _spec(root)
             raw = json.loads(spec_path.read_text(encoding="utf-8"))
             raw["kind"] = "rig"
-            write_json_atomic(spec_path, bind_content_hash(raw), overwrite=True)
+            write_json_cooperative_replace(spec_path, bind_content_hash(raw))
             self.assertTrue(
                 any(
                     issue.path == "representation" and "require 3d" in issue.message
@@ -835,7 +836,7 @@ class M5ProductionTests(unittest.TestCase):
                 raw["expected_outputs"] = [
                     {"role": role, "media_type": media_type} for role, media_type in output_pairs
                 ]
-                write_json_atomic(spec_path, bind_content_hash(raw), overwrite=True)
+                write_json_cooperative_replace(spec_path, bind_content_hash(raw))
                 self.assertEqual([], validate_asset_spec(spec_path))
 
     def test_spec_rejects_nonruntime_outputs_wrong_3d_primary_and_nonportable_qa(self) -> None:
@@ -904,7 +905,7 @@ class M5ProductionTests(unittest.TestCase):
                 spec_path = _spec(root)
                 raw = json.loads(spec_path.read_text(encoding="utf-8"))
                 mutate(raw)
-                write_json_atomic(spec_path, bind_content_hash(raw), overwrite=True)
+                write_json_cooperative_replace(spec_path, bind_content_hash(raw))
                 self.assertTrue(validate_asset_spec(spec_path))
 
     def test_malformed_container_values_return_issues_instead_of_crashing(self) -> None:

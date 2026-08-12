@@ -1,0 +1,94 @@
+{
+  "asset": {
+    "asset_id": "storylet_cards",
+    "content_hash": "89b430dbf61d725383bab7e4b5728f1e55ca6a30ffeb85e0023086f62042e073"
+  },
+  "asset_subject": {
+    "content_hash": "fa8e5bb545f893541c940a1a7ad6fa5b4db38d98152d7e6f1412e5d102f2365c",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_c21508f8920df2f295b5f8d07748717f77de005a25205cc8"
+  },
+  "content_hash": "4c5453a8206b221754d583a35c01673a86d1e1dcd009032f1aef04e6b7c28866",
+  "executed_toolchain": {
+    "operation_id": "generate_png",
+    "production_class": "procedural_offline",
+    "seed": 498509177,
+    "tool_id": "world_forge_fixture_generator",
+    "tool_version": "1.1.0"
+  },
+  "execution_evidence": {
+    "completed_evidence_hash": "88477dde5b0e9b0ea593ef78629bd8c2be7018a2c294d3fdda66f1527b0102e0",
+    "sanitized_log_hashes": [
+      "0f8d2429aed7a0605ec8095838e6670a67e375335c5e99672f96a494842ce6c5"
+    ],
+    "started_evidence_hash": "6f8488c79dfbc27a61ea146a6b903e832f0285fdd7148d9b45538f3d649a38be"
+  },
+  "failure_reasons": [],
+  "format": "world-forge.asset_production_receipt",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "73a63d1dfc360893198abfdb1502f94595f08570aaead157d531f6cf80cfa8ea",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "modular_roguelite"
+  },
+  "input_artifacts": [],
+  "inventory": {
+    "content_hash": "e8ca31c8f8529ff69e7396dc9960283ae3c44cd75fd8405e4adc60d324775639",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_19ac3705d2d64796404b0f5a345e014dee7ac91c7adb90ea"
+  },
+  "lineage_parents": [],
+  "outputs": [
+    {
+      "candidate_artifact_id": "storylet_cards_candidate",
+      "locator": "assets/production/storylet_cards/candidates/storylet-cards.png",
+      "media_type": "image/png",
+      "metadata": {
+        "height": 256,
+        "kind": "png",
+        "mode": "rgba8",
+        "width": 256
+      },
+      "role": "texture",
+      "runtime_path": "assets/ui/storylet-cards.png",
+      "sha256": "db353596d401280d7ac6034dda345b067b39a80d99516d755256e48c7af0bdc8",
+      "size_bytes": 1493
+    }
+  ],
+  "production_class": "procedural_offline",
+  "receipt_id": "storylet_cards_receipt",
+  "request": {
+    "content_hash": "9eeec3dcd35e90a247185e54d9123b2fad4379c6eab6761adcc60f42d56fd20c",
+    "format": "world-forge.asset_production_request",
+    "format_version": 1,
+    "id": "storylet_cards_production"
+  },
+  "rights_attestation": {
+    "basis": "fixture_public_domain",
+    "evidence_hashes": [
+      "7d57cf747dd18855c7ba2050887a820315968c22fb0d5a00292ca918fe7c62e0"
+    ]
+  },
+  "specification": {
+    "content_hash": "913960f6ee892555cbbe3eb557da06a4fd982615808becd6daf3ccb3af24e349",
+    "format": "world-forge.asset_spec",
+    "format_version": 1,
+    "id": "asset_spec_b61cc6e31f2c155d8527ae72f3ae4b67ef8a7d4fd2ccc1f0"
+  },
+  "status": "completed",
+  "style": {
+    "content_hash": "ca183814d2f73473b33e18f92e105b434f39fdb624bd873ec42b00da48dcbc96",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_51e924716e99d44cd6c094fe1ced5e0123849599c1b668fc"
+  },
+  "target": {
+    "content_hash": "b0018b09f273f566c4d91cce6fbc766f889d2e70d4dc9b0113f7a3fb89d8a7da",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_1166b560821f52ddd413f521037e3abe62f0365ca1fa7cb8"
+  }
+}

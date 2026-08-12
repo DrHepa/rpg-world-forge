@@ -1,0 +1,492 @@
+{
+  "$id": "https://world-forge.local/schemas/generic-asset-style.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "asset_subject": {
+      "$ref": "#/$defs/assetSubjectIdentity"
+    },
+    "audio": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "rationale": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "status": {
+              "const": "not_applicable"
+            }
+          },
+          "required": [
+            "status",
+            "rationale"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "caption_direction": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "mix_direction": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "music_direction": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "role_direction": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "runtime_formats": {
+              "const": [
+                "asset:wav"
+              ]
+            },
+            "sfx_direction": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "status": {
+              "const": "defined"
+            },
+            "voice_direction": {
+              "$ref": "#/$defs/runtimeString"
+            }
+          },
+          "required": [
+            "status",
+            "role_direction",
+            "mix_direction",
+            "music_direction",
+            "sfx_direction",
+            "voice_direction",
+            "caption_direction",
+            "runtime_formats"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "world-forge.asset_style"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "gamepack": {
+      "$ref": "#/$defs/gamepackIdentity"
+    },
+    "review": {
+      "$ref": "#/$defs/review"
+    },
+    "style_id": {
+      "$ref": "#/$defs/id"
+    },
+    "target": {
+      "$ref": "#/$defs/targetIdentity"
+    },
+    "visual": {
+      "$ref": "#/$defs/visual"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "style_id",
+    "asset_subject",
+    "target",
+    "gamepack",
+    "review",
+    "visual",
+    "audio",
+    "content_hash"
+  ],
+  "title": "World Forge reviewed asset style v1",
+  "type": "object",
+  "$defs": {
+    "accessibility": {
+      "additionalProperties": false,
+      "properties": {
+        "captions": {
+          "type": "boolean"
+        },
+        "keyboard_only": {
+          "type": "boolean"
+        },
+        "screen_reader_structure": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "captions",
+        "screen_reader_structure",
+        "keyboard_only"
+      ],
+      "type": "object"
+    },
+    "assetSubjectIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_subject"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "dimensions": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "maximum": 16384,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "width": {
+          "maximum": 16384,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "gamepackIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.gamepack"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "review": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/evidence"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "rationale": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "reviewer_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "reviewer_id",
+        "rationale",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "runtimeShortString": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/runtimeString"
+        },
+        {
+          "maxLength": 256,
+          "type": "string"
+        }
+      ]
+    },
+    "runtimeString": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?!\\s*(?:[A-Za-z][A-Za-z0-9+.-]*://|[Ff][Ii][Ll][Ee]:[\\\\/]|[A-Za-z]:[\\\\/]|[\\\\/]{2}|/|@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:@[^\\s/\\\\]+)?\\s*$|(?:[Pp][Rr][Oo][Vv][Ii][Dd][Ee][Rr](?:_[Ii][Dd])?|[Mm][Oo][Dd][Ee][Ll](?:_[Ii][Dd])?|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Pp][Rr][Oo][Mm][Pp][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Ee][Nn][Dd][Pp][Oo][Ii][Nn][Tt])\\s*(?:=|:\\s*|\\s+[Ii][Ss]\\s+)|\\.{1,2}(?:[\\\\/]|\\s*$)))(?![\\s\\S]*[\\\\/]\\.{1,2}(?:[\\\\/]|\\s*$))(?!\\s*[^/\\\\\\r\\n]+(?:[\\\\/][^/\\\\\\r\\n]+)+\\.[A-Za-z0-9][A-Za-z0-9._-]*\\s*$)[\\s\\S]*$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "targetIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_target"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "visual": {
+      "additionalProperties": false,
+      "properties": {
+        "accessibility": {
+          "$ref": "#/$defs/accessibility"
+        },
+        "aspect_ratio": {
+          "additionalProperties": false,
+          "properties": {
+            "height": {
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "width": {
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "width",
+            "height"
+          ],
+          "type": "object"
+        },
+        "camera": {
+          "$ref": "#/$defs/runtimeShortString"
+        },
+        "coordinate_system": {
+          "enum": [
+            "text_flow",
+            "screen_2d",
+            "world_2_5d",
+            "world_3d",
+            "mixed"
+          ]
+        },
+        "localization": {
+          "additionalProperties": false,
+          "properties": {
+            "expansion_budget_percent": {
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "source_locale": {
+              "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+              "type": "string"
+            },
+            "supported_locales": {
+              "items": {
+                "pattern": "^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+                "type": "string"
+              },
+              "maxItems": 64,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "source_locale",
+            "supported_locales",
+            "expansion_budget_percent"
+          ],
+          "type": "object"
+        },
+        "motion": {
+          "additionalProperties": false,
+          "properties": {
+            "direction": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "reduced_motion": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "direction",
+            "reduced_motion"
+          ],
+          "type": "object"
+        },
+        "palette": {
+          "additionalProperties": false,
+          "properties": {
+            "color_independent": {
+              "type": "boolean"
+            },
+            "direction": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "minimum_contrast_ratio": {
+              "maximum": 21,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "direction",
+            "minimum_contrast_ratio",
+            "color_independent"
+          ],
+          "type": "object"
+        },
+        "presentation_mode": {
+          "enum": [
+            "text",
+            "2d",
+            "2_5d",
+            "3d",
+            "mixed",
+            "vr",
+            "ar"
+          ]
+        },
+        "readability": {
+          "additionalProperties": false,
+          "properties": {
+            "minimum_feature_pixels": {
+              "maximum": 1024,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "silhouette_direction": {
+              "$ref": "#/$defs/runtimeString"
+            }
+          },
+          "required": [
+            "silhouette_direction",
+            "minimum_feature_pixels"
+          ],
+          "type": "object"
+        },
+        "reference_resolution": {
+          "$ref": "#/$defs/dimensions"
+        },
+        "typography": {
+          "additionalProperties": false,
+          "properties": {
+            "direction": {
+              "$ref": "#/$defs/runtimeString"
+            },
+            "minimum_text_scale_percent": {
+              "maximum": 400,
+              "minimum": 100,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "direction",
+            "minimum_text_scale_percent"
+          ],
+          "type": "object"
+        },
+        "ui": {
+          "additionalProperties": false,
+          "properties": {
+            "density": {
+              "$ref": "#/$defs/runtimeShortString"
+            },
+            "hierarchy": {
+              "$ref": "#/$defs/runtimeString"
+            }
+          },
+          "required": [
+            "hierarchy",
+            "density"
+          ],
+          "type": "object"
+        },
+        "visual_language": {
+          "$ref": "#/$defs/runtimeString"
+        }
+      },
+      "required": [
+        "presentation_mode",
+        "visual_language",
+        "camera",
+        "coordinate_system",
+        "reference_resolution",
+        "aspect_ratio",
+        "palette",
+        "readability",
+        "typography",
+        "motion",
+        "ui",
+        "accessibility",
+        "localization"
+      ],
+      "type": "object"
+    }
+  }
+}

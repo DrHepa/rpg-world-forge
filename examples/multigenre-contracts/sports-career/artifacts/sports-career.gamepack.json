@@ -1,0 +1,3393 @@
+{
+  "analysis_requirements": {
+    "analyzer_id": "worldforge.unsupported_profile",
+    "analyzer_version": 1,
+    "content_hash": "70f8d5bda649774eb4bcb543f9db7a430c7a74998577896bd9cdb9dd18844382",
+    "limits": {
+      "candidate_evaluations": 262144,
+      "depth": 512,
+      "parameter_combinations_per_action": 4096,
+      "state_bytes": 65536,
+      "states": 16384,
+      "total_state_bytes": 67108864,
+      "total_witness_steps": 4096,
+      "witness_traces": 128
+    },
+    "profile": "unsupported",
+    "reason_code": "analysis_profile_unsupported"
+  },
+  "asset_requirements": [
+    {
+      "accepted_formats": [
+        "asset:png"
+      ],
+      "binding_id": "season_dashboard_visual",
+      "referencing_subjects": [
+        {
+          "id": "career_season",
+          "kind": "activity"
+        },
+        {
+          "id": "career_match",
+          "kind": "mechanic"
+        },
+        {
+          "id": "plan_aggressive_match_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "plan_balanced_match_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_1_draw_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_1_loss_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_2_draw_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_2_loss_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_2_win_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_3_draw_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_3_loss_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "record_round_3_win_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "restart_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "ending_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_feedback",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "progress_view",
+          "kind": "presentation_hook"
+        },
+        {
+          "id": "season_standings",
+          "kind": "system"
+        }
+      ],
+      "required": true,
+      "roles": [
+        "activity_visual",
+        "board_visual",
+        "ending_ui",
+        "interaction_feedback",
+        "mechanic_feedback",
+        "system_feedback"
+      ],
+      "usage_contexts": [
+        "activity",
+        "mechanic",
+        "mechanic:board",
+        "mechanic:feedback",
+        "presentation:board",
+        "presentation:ending",
+        "presentation:feedback",
+        "system"
+      ]
+    }
+  ],
+  "content_hash": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+  "format": "world-forge.gamepack",
+  "format_version": 1,
+  "game": {
+    "default_locale": "en",
+    "id": "sports_career",
+    "title": "Sports Career",
+    "version": "1.0.0"
+  },
+  "localization": {
+    "externalized_text": true,
+    "references": [
+      {
+        "field": "title",
+        "key": "activity.career_season.title",
+        "source_text": "one reviewed season within an authored sports career",
+        "subject_id": "career_season",
+        "subject_kind": "activity"
+      },
+      {
+        "field": "title",
+        "key": "activity_module.sports_career_activities.title",
+        "source_text": "Sports Career authored activity",
+        "subject_id": "sports_career_activities",
+        "subject_kind": "activity_module"
+      },
+      {
+        "field": "title",
+        "key": "game.sports_career.title",
+        "source_text": "Sports Career",
+        "subject_id": "sports_career",
+        "subject_kind": "game"
+      },
+      {
+        "field": "title",
+        "key": "system.season_standings.title",
+        "source_text": "reach the authored season points target",
+        "subject_id": "season_standings",
+        "subject_kind": "system"
+      },
+      {
+        "field": "title",
+        "key": "system_module.sports_career_systems.title",
+        "source_text": "Authored league season",
+        "subject_id": "sports_career_systems",
+        "subject_kind": "system_module"
+      },
+      {
+        "field": "title",
+        "key": "world_module.sports_career_space.title",
+        "source_text": "Authored league season",
+        "subject_id": "sports_career_space",
+        "subject_kind": "world_module"
+      }
+    ],
+    "source_locale": "en",
+    "supported_locales": [
+      "en"
+    ]
+  },
+  "logic": {
+    "actions": [
+      {
+        "core_verb_id": "plan",
+        "id": "plan_aggressive_match",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "plan_aggressive_match_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "plan",
+        "id": "plan_balanced_match",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "plan_balanced_match_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "compete",
+        "id": "record_round_1_draw",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_1_draw_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "compete",
+        "id": "record_round_1_loss",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_1_loss_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "compete",
+        "id": "record_round_1_win",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_1_win_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "compete",
+        "id": "record_round_2_draw",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_2_draw_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "compete",
+        "id": "record_round_2_loss",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_2_loss_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "compete",
+        "id": "record_round_2_win",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_2_win_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "compete",
+        "id": "record_round_3_draw",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_3_draw_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "compete",
+        "id": "record_round_3_loss",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_3_loss_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "compete",
+        "id": "record_round_3_win",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_3_win_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          },
+          {
+            "kind": "system",
+            "source_id": "season_standings"
+          }
+        ]
+      },
+      {
+        "core_verb_id": "restart",
+        "id": "restart_scenario",
+        "parameters": [],
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "restart_rule"
+        ],
+        "source_bindings": [
+          {
+            "kind": "activity",
+            "source_id": "career_season"
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "action_id": "plan_aggressive_match",
+        "comparison": "less_than",
+        "id": "match_remaining_for_plan_aggressive_match",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "plan_balanced_match",
+        "comparison": "less_than",
+        "id": "match_remaining_for_plan_balanced_match",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "plan_aggressive_match",
+        "comparison": "equal",
+        "id": "planning_phase_for_plan_aggressive_match",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "plan_balanced_match",
+        "comparison": "equal",
+        "id": "planning_phase_for_plan_balanced_match",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "comparison": "equal",
+        "id": "result_phase_for_record_round_1_draw",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "comparison": "equal",
+        "id": "result_phase_for_record_round_1_loss",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_win",
+        "comparison": "equal",
+        "id": "result_phase_for_record_round_1_win",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "comparison": "equal",
+        "id": "result_phase_for_record_round_2_draw",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "comparison": "equal",
+        "id": "result_phase_for_record_round_2_loss",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_win",
+        "comparison": "equal",
+        "id": "result_phase_for_record_round_2_win",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "comparison": "equal",
+        "id": "result_phase_for_record_round_3_draw",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "comparison": "equal",
+        "id": "result_phase_for_record_round_3_loss",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_win",
+        "comparison": "equal",
+        "id": "result_phase_for_record_round_3_win",
+        "left": {
+          "kind": "state",
+          "state_id": "match_phase"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "comparison": "equal",
+        "id": "round_ready_for_record_round_1_draw",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "comparison": "equal",
+        "id": "round_ready_for_record_round_1_loss",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "record_round_1_win",
+        "comparison": "equal",
+        "id": "round_ready_for_record_round_1_win",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "comparison": "equal",
+        "id": "round_ready_for_record_round_2_draw",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "comparison": "equal",
+        "id": "round_ready_for_record_round_2_loss",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "record_round_2_win",
+        "comparison": "equal",
+        "id": "round_ready_for_record_round_2_win",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "comparison": "equal",
+        "id": "round_ready_for_record_round_3_draw",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "comparison": "equal",
+        "id": "round_ready_for_record_round_3_loss",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "record_round_3_win",
+        "comparison": "equal",
+        "id": "round_ready_for_record_round_3_win",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": null,
+        "id": "scenario_ready",
+        "operator": "constant",
+        "value": true
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "array_state_id": "season_opponents",
+        "id": "schedule_valid_for_record_round_1_draw",
+        "index": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "array_state_id": "season_opponents",
+        "id": "schedule_valid_for_record_round_1_loss",
+        "index": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": "record_round_1_win",
+        "array_state_id": "season_opponents",
+        "id": "schedule_valid_for_record_round_1_win",
+        "index": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "array_state_id": "season_opponents",
+        "id": "schedule_valid_for_record_round_2_draw",
+        "index": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "array_state_id": "season_opponents",
+        "id": "schedule_valid_for_record_round_2_loss",
+        "index": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": "record_round_2_win",
+        "array_state_id": "season_opponents",
+        "id": "schedule_valid_for_record_round_2_win",
+        "index": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "array_state_id": "season_opponents",
+        "id": "schedule_valid_for_record_round_3_draw",
+        "index": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "array_state_id": "season_opponents",
+        "id": "schedule_valid_for_record_round_3_loss",
+        "index": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": "record_round_3_win",
+        "array_state_id": "season_opponents",
+        "id": "schedule_valid_for_record_round_3_win",
+        "index": {
+          "kind": "literal",
+          "value": 2,
+          "value_type": "integer"
+        },
+        "operator": "index_valid"
+      },
+      {
+        "action_id": null,
+        "comparison": "greater_or_equal",
+        "id": "season_ending_reached",
+        "left": {
+          "kind": "state",
+          "state_id": "season_round"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": null,
+        "comparison": "greater_or_equal",
+        "id": "season_points_target_reached",
+        "left": {
+          "kind": "state",
+          "state_id": "standings_points"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": 5,
+          "value_type": "integer"
+        }
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "comparison": "equal",
+        "id": "team_registered_for_record_round_1_draw",
+        "left": {
+          "kind": "state",
+          "state_id": "player_team"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "harbor_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "comparison": "equal",
+        "id": "team_registered_for_record_round_1_loss",
+        "left": {
+          "kind": "state",
+          "state_id": "player_team"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "harbor_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_win",
+        "comparison": "equal",
+        "id": "team_registered_for_record_round_1_win",
+        "left": {
+          "kind": "state",
+          "state_id": "player_team"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "harbor_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "comparison": "equal",
+        "id": "team_registered_for_record_round_2_draw",
+        "left": {
+          "kind": "state",
+          "state_id": "player_team"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "harbor_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "comparison": "equal",
+        "id": "team_registered_for_record_round_2_loss",
+        "left": {
+          "kind": "state",
+          "state_id": "player_team"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "harbor_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_win",
+        "comparison": "equal",
+        "id": "team_registered_for_record_round_2_win",
+        "left": {
+          "kind": "state",
+          "state_id": "player_team"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "harbor_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "comparison": "equal",
+        "id": "team_registered_for_record_round_3_draw",
+        "left": {
+          "kind": "state",
+          "state_id": "player_team"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "harbor_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "comparison": "equal",
+        "id": "team_registered_for_record_round_3_loss",
+        "left": {
+          "kind": "state",
+          "state_id": "player_team"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "harbor_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_win",
+        "comparison": "equal",
+        "id": "team_registered_for_record_round_3_win",
+        "left": {
+          "kind": "state",
+          "state_id": "player_team"
+        },
+        "operator": "compare",
+        "right": {
+          "kind": "literal",
+          "value": "harbor_fc",
+          "value_type": "string"
+        }
+      }
+    ],
+    "core_verbs": [
+      {
+        "description": "Advance the authored sports scenario.",
+        "id": "compete"
+      },
+      {
+        "description": "Commit the authored match plan before resolving a result.",
+        "id": "plan"
+      },
+      {
+        "description": "Restart the bounded authored scenario.",
+        "id": "restart"
+      }
+    ],
+    "effects": [
+      {
+        "action_id": "plan_aggressive_match",
+        "id": "plan_aggressive_match_record",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_plan",
+        "value": {
+          "kind": "literal",
+          "value": "aggressive",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "plan_aggressive_match",
+        "id": "plan_aggressive_match_request_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "plan_balanced_match",
+        "id": "plan_balanced_match_record",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_plan",
+        "value": {
+          "kind": "literal",
+          "value": "balanced",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "plan_balanced_match",
+        "id": "plan_balanced_match_request_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "result_pending",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_1_draw_advance_career",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "career_points"
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_1_draw_advance_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "id": "record_round_1_draw_record_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_opponent",
+        "value": {
+          "kind": "literal",
+          "value": "mountain_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "id": "record_round_1_draw_record_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_result",
+        "value": {
+          "kind": "literal",
+          "value": "draw",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "id": "record_round_1_draw_return_to_planning",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_1_draw_update_standings",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "standings_points"
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "amount": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        },
+        "id": "record_round_1_loss_advance_career",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "career_points"
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_1_loss_advance_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "id": "record_round_1_loss_record_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_opponent",
+        "value": {
+          "kind": "literal",
+          "value": "mountain_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "id": "record_round_1_loss_record_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_result",
+        "value": {
+          "kind": "literal",
+          "value": "loss",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "id": "record_round_1_loss_return_to_planning",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "amount": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        },
+        "id": "record_round_1_loss_update_standings",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "standings_points"
+      },
+      {
+        "action_id": "record_round_1_win",
+        "amount": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        },
+        "id": "record_round_1_win_advance_career",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "career_points"
+      },
+      {
+        "action_id": "record_round_1_win",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_1_win_advance_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "record_round_1_win",
+        "id": "record_round_1_win_record_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_opponent",
+        "value": {
+          "kind": "literal",
+          "value": "mountain_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_win",
+        "id": "record_round_1_win_record_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_result",
+        "value": {
+          "kind": "literal",
+          "value": "win",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_win",
+        "id": "record_round_1_win_return_to_planning",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_1_win",
+        "amount": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        },
+        "id": "record_round_1_win_update_standings",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "standings_points"
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_2_draw_advance_career",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "career_points"
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_2_draw_advance_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "id": "record_round_2_draw_record_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_opponent",
+        "value": {
+          "kind": "literal",
+          "value": "river_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "id": "record_round_2_draw_record_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_result",
+        "value": {
+          "kind": "literal",
+          "value": "draw",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "id": "record_round_2_draw_return_to_planning",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_2_draw_update_standings",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "standings_points"
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "amount": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        },
+        "id": "record_round_2_loss_advance_career",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "career_points"
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_2_loss_advance_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "id": "record_round_2_loss_record_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_opponent",
+        "value": {
+          "kind": "literal",
+          "value": "river_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "id": "record_round_2_loss_record_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_result",
+        "value": {
+          "kind": "literal",
+          "value": "loss",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "id": "record_round_2_loss_return_to_planning",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "amount": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        },
+        "id": "record_round_2_loss_update_standings",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "standings_points"
+      },
+      {
+        "action_id": "record_round_2_win",
+        "amount": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        },
+        "id": "record_round_2_win_advance_career",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "career_points"
+      },
+      {
+        "action_id": "record_round_2_win",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_2_win_advance_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "record_round_2_win",
+        "id": "record_round_2_win_record_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_opponent",
+        "value": {
+          "kind": "literal",
+          "value": "river_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_win",
+        "id": "record_round_2_win_record_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_result",
+        "value": {
+          "kind": "literal",
+          "value": "win",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_win",
+        "id": "record_round_2_win_return_to_planning",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_2_win",
+        "amount": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        },
+        "id": "record_round_2_win_update_standings",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "standings_points"
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_3_draw_advance_career",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "career_points"
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_3_draw_advance_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "id": "record_round_3_draw_record_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_opponent",
+        "value": {
+          "kind": "literal",
+          "value": "valley_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "id": "record_round_3_draw_record_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_result",
+        "value": {
+          "kind": "literal",
+          "value": "draw",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "id": "record_round_3_draw_return_to_planning",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_3_draw_update_standings",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "standings_points"
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "amount": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        },
+        "id": "record_round_3_loss_advance_career",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "career_points"
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_3_loss_advance_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "id": "record_round_3_loss_record_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_opponent",
+        "value": {
+          "kind": "literal",
+          "value": "valley_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "id": "record_round_3_loss_record_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_result",
+        "value": {
+          "kind": "literal",
+          "value": "loss",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "id": "record_round_3_loss_return_to_planning",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "amount": {
+          "kind": "literal",
+          "value": 0,
+          "value_type": "integer"
+        },
+        "id": "record_round_3_loss_update_standings",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "standings_points"
+      },
+      {
+        "action_id": "record_round_3_win",
+        "amount": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        },
+        "id": "record_round_3_win_advance_career",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "career_points"
+      },
+      {
+        "action_id": "record_round_3_win",
+        "amount": {
+          "kind": "literal",
+          "value": 1,
+          "value_type": "integer"
+        },
+        "id": "record_round_3_win_advance_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "record_round_3_win",
+        "id": "record_round_3_win_record_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_opponent",
+        "value": {
+          "kind": "literal",
+          "value": "valley_fc",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_win",
+        "id": "record_round_3_win_record_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "last_match_result",
+        "value": {
+          "kind": "literal",
+          "value": "win",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_win",
+        "id": "record_round_3_win_return_to_planning",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "set",
+        "state_id": "match_phase",
+        "value": {
+          "kind": "literal",
+          "value": "planning",
+          "value_type": "string"
+        }
+      },
+      {
+        "action_id": "record_round_3_win",
+        "amount": {
+          "kind": "literal",
+          "value": 3,
+          "value_type": "integer"
+        },
+        "id": "record_round_3_win_update_standings",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "increment",
+        "state_id": "standings_points"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_last_match_plan",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "last_match_plan"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_last_match_result",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "last_match_result"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_last_opponent",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "last_opponent"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_match_phase",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "match_phase"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_season_round",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "season_round"
+      },
+      {
+        "action_id": "restart_scenario",
+        "id": "reset_standings_points",
+        "invalid_transition_policy": "reject_transition",
+        "operation": "reset",
+        "state_id": "standings_points"
+      }
+    ],
+    "endings": [
+      {
+        "condition_ids": [
+          "season_ending_reached",
+          "season_points_target_reached"
+        ],
+        "event_ids": [],
+        "id": "season_complete",
+        "kind": "success",
+        "presentation_hook_ids": [
+          "ending_feedback"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "id": "match_planned"
+      },
+      {
+        "id": "match_resolved"
+      },
+      {
+        "id": "scenario_restarted"
+      }
+    ],
+    "execution_semantics": {
+      "active_failure_recovery": "intersection",
+      "condition_collections": "and",
+      "condition_snapshot": "pre_transition",
+      "effect_order": "rule_order_then_reference_order",
+      "effect_state_operands": "current_candidate_state",
+      "ending_match": "exactly_one",
+      "event_commit": "after_success_rule_reference_order",
+      "invalid_transition": "reject_without_mutation",
+      "narrative_transition": "source_effects_then_cursor_atomic",
+      "owned_action_rules": "all_required",
+      "semantics_version": 1,
+      "terminal_precedence": "endings_before_failures"
+    },
+    "failures": [],
+    "goals": [
+      {
+        "condition_ids": [
+          "season_ending_reached",
+          "season_points_target_reached"
+        ],
+        "id": "complete_authored_season",
+        "success_ending_id": "season_complete"
+      }
+    ],
+    "initial_state": {
+      "career_points": 0,
+      "last_match_plan": "pending",
+      "last_match_result": "pending",
+      "last_opponent": "none",
+      "match_phase": "planning",
+      "player_team": "harbor_fc",
+      "season_opponents": [
+        "mountain_fc",
+        "river_fc",
+        "valley_fc"
+      ],
+      "season_round": 0,
+      "standings_points": 0
+    },
+    "mechanics": [
+      {
+        "action_id": "record_round_1_win",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [
+          "result_phase_for_record_round_1_win",
+          "round_ready_for_record_round_1_win",
+          "schedule_valid_for_record_round_1_win",
+          "team_registered_for_record_round_1_win"
+        ],
+        "core_verb_id": "compete",
+        "effect_ids": [
+          "record_round_1_win_advance_career",
+          "record_round_1_win_advance_round",
+          "record_round_1_win_record_opponent",
+          "record_round_1_win_record_result",
+          "record_round_1_win_return_to_planning",
+          "record_round_1_win_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "career_match",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_1_win_rule"
+        ]
+      },
+      {
+        "action_id": "plan_aggressive_match",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "last_match_plan",
+          "match_phase",
+          "season_round"
+        ],
+        "condition_ids": [
+          "match_remaining_for_plan_aggressive_match",
+          "planning_phase_for_plan_aggressive_match"
+        ],
+        "core_verb_id": "plan",
+        "effect_ids": [
+          "plan_aggressive_match_record",
+          "plan_aggressive_match_request_result"
+        ],
+        "event_ids": [
+          "match_planned"
+        ],
+        "id": "plan_aggressive_match_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "plan_aggressive_match_rule"
+        ]
+      },
+      {
+        "action_id": "plan_balanced_match",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "last_match_plan",
+          "match_phase",
+          "season_round"
+        ],
+        "condition_ids": [
+          "match_remaining_for_plan_balanced_match",
+          "planning_phase_for_plan_balanced_match"
+        ],
+        "core_verb_id": "plan",
+        "effect_ids": [
+          "plan_balanced_match_record",
+          "plan_balanced_match_request_result"
+        ],
+        "event_ids": [
+          "match_planned"
+        ],
+        "id": "plan_balanced_match_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "plan_balanced_match_rule"
+        ]
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [
+          "result_phase_for_record_round_1_draw",
+          "round_ready_for_record_round_1_draw",
+          "schedule_valid_for_record_round_1_draw",
+          "team_registered_for_record_round_1_draw"
+        ],
+        "core_verb_id": "compete",
+        "effect_ids": [
+          "record_round_1_draw_advance_career",
+          "record_round_1_draw_advance_round",
+          "record_round_1_draw_record_opponent",
+          "record_round_1_draw_record_result",
+          "record_round_1_draw_return_to_planning",
+          "record_round_1_draw_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_1_draw_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_1_draw_rule"
+        ]
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [
+          "result_phase_for_record_round_1_loss",
+          "round_ready_for_record_round_1_loss",
+          "schedule_valid_for_record_round_1_loss",
+          "team_registered_for_record_round_1_loss"
+        ],
+        "core_verb_id": "compete",
+        "effect_ids": [
+          "record_round_1_loss_advance_career",
+          "record_round_1_loss_advance_round",
+          "record_round_1_loss_record_opponent",
+          "record_round_1_loss_record_result",
+          "record_round_1_loss_return_to_planning",
+          "record_round_1_loss_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_1_loss_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_1_loss_rule"
+        ]
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [
+          "result_phase_for_record_round_2_draw",
+          "round_ready_for_record_round_2_draw",
+          "schedule_valid_for_record_round_2_draw",
+          "team_registered_for_record_round_2_draw"
+        ],
+        "core_verb_id": "compete",
+        "effect_ids": [
+          "record_round_2_draw_advance_career",
+          "record_round_2_draw_advance_round",
+          "record_round_2_draw_record_opponent",
+          "record_round_2_draw_record_result",
+          "record_round_2_draw_return_to_planning",
+          "record_round_2_draw_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_2_draw_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_2_draw_rule"
+        ]
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [
+          "result_phase_for_record_round_2_loss",
+          "round_ready_for_record_round_2_loss",
+          "schedule_valid_for_record_round_2_loss",
+          "team_registered_for_record_round_2_loss"
+        ],
+        "core_verb_id": "compete",
+        "effect_ids": [
+          "record_round_2_loss_advance_career",
+          "record_round_2_loss_advance_round",
+          "record_round_2_loss_record_opponent",
+          "record_round_2_loss_record_result",
+          "record_round_2_loss_return_to_planning",
+          "record_round_2_loss_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_2_loss_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_2_loss_rule"
+        ]
+      },
+      {
+        "action_id": "record_round_2_win",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [
+          "result_phase_for_record_round_2_win",
+          "round_ready_for_record_round_2_win",
+          "schedule_valid_for_record_round_2_win",
+          "team_registered_for_record_round_2_win"
+        ],
+        "core_verb_id": "compete",
+        "effect_ids": [
+          "record_round_2_win_advance_career",
+          "record_round_2_win_advance_round",
+          "record_round_2_win_record_opponent",
+          "record_round_2_win_record_result",
+          "record_round_2_win_return_to_planning",
+          "record_round_2_win_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_2_win_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_2_win_rule"
+        ]
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [
+          "result_phase_for_record_round_3_draw",
+          "round_ready_for_record_round_3_draw",
+          "schedule_valid_for_record_round_3_draw",
+          "team_registered_for_record_round_3_draw"
+        ],
+        "core_verb_id": "compete",
+        "effect_ids": [
+          "record_round_3_draw_advance_career",
+          "record_round_3_draw_advance_round",
+          "record_round_3_draw_record_opponent",
+          "record_round_3_draw_record_result",
+          "record_round_3_draw_return_to_planning",
+          "record_round_3_draw_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_3_draw_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_3_draw_rule"
+        ]
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [
+          "result_phase_for_record_round_3_loss",
+          "round_ready_for_record_round_3_loss",
+          "schedule_valid_for_record_round_3_loss",
+          "team_registered_for_record_round_3_loss"
+        ],
+        "core_verb_id": "compete",
+        "effect_ids": [
+          "record_round_3_loss_advance_career",
+          "record_round_3_loss_advance_round",
+          "record_round_3_loss_record_opponent",
+          "record_round_3_loss_record_result",
+          "record_round_3_loss_return_to_planning",
+          "record_round_3_loss_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_3_loss_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_3_loss_rule"
+        ]
+      },
+      {
+        "action_id": "record_round_3_win",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [
+          "result_phase_for_record_round_3_win",
+          "round_ready_for_record_round_3_win",
+          "schedule_valid_for_record_round_3_win",
+          "team_registered_for_record_round_3_win"
+        ],
+        "core_verb_id": "compete",
+        "effect_ids": [
+          "record_round_3_win_advance_career",
+          "record_round_3_win_advance_round",
+          "record_round_3_win_record_opponent",
+          "record_round_3_win_record_result",
+          "record_round_3_win_return_to_planning",
+          "record_round_3_win_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_3_win_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback",
+          "progress_view"
+        ],
+        "required_feature_ids": [
+          "logic:deterministic_actions",
+          "logic:finite_state",
+          "sports:season"
+        ],
+        "rule_ids": [
+          "record_round_3_win_rule"
+        ]
+      },
+      {
+        "action_id": "restart_scenario",
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "authoritative_state_ids": [
+          "last_match_plan",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "season_round",
+          "standings_points"
+        ],
+        "condition_ids": [],
+        "core_verb_id": "restart",
+        "effect_ids": [
+          "reset_last_match_plan",
+          "reset_last_match_result",
+          "reset_last_opponent",
+          "reset_match_phase",
+          "reset_season_round",
+          "reset_standings_points"
+        ],
+        "event_ids": [
+          "scenario_restarted"
+        ],
+        "id": "restart_mechanic",
+        "presentation_hook_ids": [
+          "progress_feedback"
+        ],
+        "required_feature_ids": [
+          "logic:finite_state"
+        ],
+        "rule_ids": [
+          "restart_rule"
+        ]
+      }
+    ],
+    "narrative_cursor": null,
+    "narrative_transitions": [],
+    "presentation_hooks": [
+      {
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "id": "ending_feedback",
+        "kind": "ending"
+      },
+      {
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "id": "progress_feedback",
+        "kind": "feedback"
+      },
+      {
+        "asset_binding_ids": [
+          "season_dashboard_visual"
+        ],
+        "id": "progress_view",
+        "kind": "board"
+      }
+    ],
+    "rules": [
+      {
+        "action_id": "plan_aggressive_match",
+        "condition_ids": [
+          "match_remaining_for_plan_aggressive_match",
+          "planning_phase_for_plan_aggressive_match"
+        ],
+        "effect_ids": [
+          "plan_aggressive_match_record",
+          "plan_aggressive_match_request_result"
+        ],
+        "event_ids": [
+          "match_planned"
+        ],
+        "id": "plan_aggressive_match_rule",
+        "order": 0
+      },
+      {
+        "action_id": "plan_balanced_match",
+        "condition_ids": [
+          "match_remaining_for_plan_balanced_match",
+          "planning_phase_for_plan_balanced_match"
+        ],
+        "effect_ids": [
+          "plan_balanced_match_record",
+          "plan_balanced_match_request_result"
+        ],
+        "event_ids": [
+          "match_planned"
+        ],
+        "id": "plan_balanced_match_rule",
+        "order": 1
+      },
+      {
+        "action_id": "record_round_1_draw",
+        "condition_ids": [
+          "result_phase_for_record_round_1_draw",
+          "round_ready_for_record_round_1_draw",
+          "schedule_valid_for_record_round_1_draw",
+          "team_registered_for_record_round_1_draw"
+        ],
+        "effect_ids": [
+          "record_round_1_draw_advance_career",
+          "record_round_1_draw_advance_round",
+          "record_round_1_draw_record_opponent",
+          "record_round_1_draw_record_result",
+          "record_round_1_draw_return_to_planning",
+          "record_round_1_draw_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_1_draw_rule",
+        "order": 2
+      },
+      {
+        "action_id": "record_round_1_loss",
+        "condition_ids": [
+          "result_phase_for_record_round_1_loss",
+          "round_ready_for_record_round_1_loss",
+          "schedule_valid_for_record_round_1_loss",
+          "team_registered_for_record_round_1_loss"
+        ],
+        "effect_ids": [
+          "record_round_1_loss_advance_career",
+          "record_round_1_loss_advance_round",
+          "record_round_1_loss_record_opponent",
+          "record_round_1_loss_record_result",
+          "record_round_1_loss_return_to_planning",
+          "record_round_1_loss_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_1_loss_rule",
+        "order": 3
+      },
+      {
+        "action_id": "record_round_1_win",
+        "condition_ids": [
+          "result_phase_for_record_round_1_win",
+          "round_ready_for_record_round_1_win",
+          "schedule_valid_for_record_round_1_win",
+          "team_registered_for_record_round_1_win"
+        ],
+        "effect_ids": [
+          "record_round_1_win_advance_career",
+          "record_round_1_win_advance_round",
+          "record_round_1_win_record_opponent",
+          "record_round_1_win_record_result",
+          "record_round_1_win_return_to_planning",
+          "record_round_1_win_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_1_win_rule",
+        "order": 4
+      },
+      {
+        "action_id": "record_round_2_draw",
+        "condition_ids": [
+          "result_phase_for_record_round_2_draw",
+          "round_ready_for_record_round_2_draw",
+          "schedule_valid_for_record_round_2_draw",
+          "team_registered_for_record_round_2_draw"
+        ],
+        "effect_ids": [
+          "record_round_2_draw_advance_career",
+          "record_round_2_draw_advance_round",
+          "record_round_2_draw_record_opponent",
+          "record_round_2_draw_record_result",
+          "record_round_2_draw_return_to_planning",
+          "record_round_2_draw_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_2_draw_rule",
+        "order": 5
+      },
+      {
+        "action_id": "record_round_2_loss",
+        "condition_ids": [
+          "result_phase_for_record_round_2_loss",
+          "round_ready_for_record_round_2_loss",
+          "schedule_valid_for_record_round_2_loss",
+          "team_registered_for_record_round_2_loss"
+        ],
+        "effect_ids": [
+          "record_round_2_loss_advance_career",
+          "record_round_2_loss_advance_round",
+          "record_round_2_loss_record_opponent",
+          "record_round_2_loss_record_result",
+          "record_round_2_loss_return_to_planning",
+          "record_round_2_loss_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_2_loss_rule",
+        "order": 6
+      },
+      {
+        "action_id": "record_round_2_win",
+        "condition_ids": [
+          "result_phase_for_record_round_2_win",
+          "round_ready_for_record_round_2_win",
+          "schedule_valid_for_record_round_2_win",
+          "team_registered_for_record_round_2_win"
+        ],
+        "effect_ids": [
+          "record_round_2_win_advance_career",
+          "record_round_2_win_advance_round",
+          "record_round_2_win_record_opponent",
+          "record_round_2_win_record_result",
+          "record_round_2_win_return_to_planning",
+          "record_round_2_win_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_2_win_rule",
+        "order": 7
+      },
+      {
+        "action_id": "record_round_3_draw",
+        "condition_ids": [
+          "result_phase_for_record_round_3_draw",
+          "round_ready_for_record_round_3_draw",
+          "schedule_valid_for_record_round_3_draw",
+          "team_registered_for_record_round_3_draw"
+        ],
+        "effect_ids": [
+          "record_round_3_draw_advance_career",
+          "record_round_3_draw_advance_round",
+          "record_round_3_draw_record_opponent",
+          "record_round_3_draw_record_result",
+          "record_round_3_draw_return_to_planning",
+          "record_round_3_draw_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_3_draw_rule",
+        "order": 8
+      },
+      {
+        "action_id": "record_round_3_loss",
+        "condition_ids": [
+          "result_phase_for_record_round_3_loss",
+          "round_ready_for_record_round_3_loss",
+          "schedule_valid_for_record_round_3_loss",
+          "team_registered_for_record_round_3_loss"
+        ],
+        "effect_ids": [
+          "record_round_3_loss_advance_career",
+          "record_round_3_loss_advance_round",
+          "record_round_3_loss_record_opponent",
+          "record_round_3_loss_record_result",
+          "record_round_3_loss_return_to_planning",
+          "record_round_3_loss_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_3_loss_rule",
+        "order": 9
+      },
+      {
+        "action_id": "record_round_3_win",
+        "condition_ids": [
+          "result_phase_for_record_round_3_win",
+          "round_ready_for_record_round_3_win",
+          "schedule_valid_for_record_round_3_win",
+          "team_registered_for_record_round_3_win"
+        ],
+        "effect_ids": [
+          "record_round_3_win_advance_career",
+          "record_round_3_win_advance_round",
+          "record_round_3_win_record_opponent",
+          "record_round_3_win_record_result",
+          "record_round_3_win_return_to_planning",
+          "record_round_3_win_update_standings"
+        ],
+        "event_ids": [
+          "match_resolved"
+        ],
+        "id": "record_round_3_win_rule",
+        "order": 10
+      },
+      {
+        "action_id": "restart_scenario",
+        "condition_ids": [],
+        "effect_ids": [
+          "reset_last_match_plan",
+          "reset_last_match_result",
+          "reset_last_opponent",
+          "reset_match_phase",
+          "reset_season_round",
+          "reset_standings_points"
+        ],
+        "event_ids": [
+          "scenario_restarted"
+        ],
+        "id": "restart_rule",
+        "order": 11
+      }
+    ],
+    "source": {
+      "content_hash": "20093b878fc7ade90e426362770d3e346eded8ceb207cf864cb26a834feccf73",
+      "format": "world-forge.logic_module",
+      "format_version": 1,
+      "id": "sports_career_logic"
+    },
+    "state_schema": [
+      {
+        "id": "career_points",
+        "initial": 0,
+        "maximum": 999,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      },
+      {
+        "allowed_values": [
+          "aggressive",
+          "balanced",
+          "pending"
+        ],
+        "id": "last_match_plan",
+        "initial": "pending",
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "string"
+      },
+      {
+        "allowed_values": [
+          "draw",
+          "loss",
+          "pending",
+          "win"
+        ],
+        "id": "last_match_result",
+        "initial": "pending",
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "string"
+      },
+      {
+        "allowed_values": [
+          "mountain_fc",
+          "none",
+          "river_fc",
+          "valley_fc"
+        ],
+        "id": "last_opponent",
+        "initial": "none",
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "string"
+      },
+      {
+        "allowed_values": [
+          "planning",
+          "result_pending"
+        ],
+        "id": "match_phase",
+        "initial": "planning",
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "string"
+      },
+      {
+        "allowed_values": [
+          "harbor_fc"
+        ],
+        "id": "player_team",
+        "initial": "harbor_fc",
+        "mutability": "constant",
+        "persistence": "saved",
+        "type": "string"
+      },
+      {
+        "allowed_values": [
+          "mountain_fc",
+          "river_fc",
+          "valley_fc"
+        ],
+        "id": "season_opponents",
+        "initial": [
+          "mountain_fc",
+          "river_fc",
+          "valley_fc"
+        ],
+        "max_items": 3,
+        "min_items": 3,
+        "mutability": "constant",
+        "persistence": "saved",
+        "type": "string_array"
+      },
+      {
+        "id": "season_round",
+        "initial": 0,
+        "maximum": 3,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      },
+      {
+        "id": "standings_points",
+        "initial": 0,
+        "maximum": 9,
+        "minimum": 0,
+        "mutability": "mutable",
+        "persistence": "saved",
+        "type": "integer"
+      }
+    ],
+    "title": "Neutral authored sports logic"
+  },
+  "mechanic_requirements": [
+    {
+      "action_id": "record_round_1_win",
+      "core_verb_id": "compete",
+      "mechanic_id": "career_match",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "plan_aggressive_match",
+      "core_verb_id": "plan",
+      "mechanic_id": "plan_aggressive_match_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "plan_balanced_match",
+      "core_verb_id": "plan",
+      "mechanic_id": "plan_balanced_match_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "record_round_1_draw",
+      "core_verb_id": "compete",
+      "mechanic_id": "record_round_1_draw_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "record_round_1_loss",
+      "core_verb_id": "compete",
+      "mechanic_id": "record_round_1_loss_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "record_round_2_draw",
+      "core_verb_id": "compete",
+      "mechanic_id": "record_round_2_draw_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "record_round_2_loss",
+      "core_verb_id": "compete",
+      "mechanic_id": "record_round_2_loss_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "record_round_2_win",
+      "core_verb_id": "compete",
+      "mechanic_id": "record_round_2_win_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "record_round_3_draw",
+      "core_verb_id": "compete",
+      "mechanic_id": "record_round_3_draw_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "record_round_3_loss",
+      "core_verb_id": "compete",
+      "mechanic_id": "record_round_3_loss_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "record_round_3_win",
+      "core_verb_id": "compete",
+      "mechanic_id": "record_round_3_win_mechanic",
+      "required_feature_ids": [
+        "logic:deterministic_actions",
+        "logic:finite_state",
+        "sports:season"
+      ]
+    },
+    {
+      "action_id": "restart_scenario",
+      "core_verb_id": "restart",
+      "mechanic_id": "restart_mechanic",
+      "required_feature_ids": [
+        "logic:finite_state"
+      ]
+    }
+  ],
+  "modules": {
+    "activities": [
+      {
+        "activities": [
+          {
+            "activity_type": "scenario",
+            "asset_binding_ids": [
+              "season_dashboard_visual"
+            ],
+            "effect_ids": [
+              "plan_aggressive_match_record",
+              "plan_aggressive_match_request_result",
+              "plan_balanced_match_record",
+              "plan_balanced_match_request_result",
+              "record_round_1_draw_advance_career",
+              "record_round_1_draw_advance_round",
+              "record_round_1_draw_record_opponent",
+              "record_round_1_draw_record_result",
+              "record_round_1_draw_return_to_planning",
+              "record_round_1_draw_update_standings",
+              "record_round_1_loss_advance_career",
+              "record_round_1_loss_advance_round",
+              "record_round_1_loss_record_opponent",
+              "record_round_1_loss_record_result",
+              "record_round_1_loss_return_to_planning",
+              "record_round_1_loss_update_standings",
+              "record_round_1_win_advance_career",
+              "record_round_1_win_advance_round",
+              "record_round_1_win_record_opponent",
+              "record_round_1_win_record_result",
+              "record_round_1_win_return_to_planning",
+              "record_round_1_win_update_standings",
+              "record_round_2_draw_advance_career",
+              "record_round_2_draw_advance_round",
+              "record_round_2_draw_record_opponent",
+              "record_round_2_draw_record_result",
+              "record_round_2_draw_return_to_planning",
+              "record_round_2_draw_update_standings",
+              "record_round_2_loss_advance_career",
+              "record_round_2_loss_advance_round",
+              "record_round_2_loss_record_opponent",
+              "record_round_2_loss_record_result",
+              "record_round_2_loss_return_to_planning",
+              "record_round_2_loss_update_standings",
+              "record_round_2_win_advance_career",
+              "record_round_2_win_advance_round",
+              "record_round_2_win_record_opponent",
+              "record_round_2_win_record_result",
+              "record_round_2_win_return_to_planning",
+              "record_round_2_win_update_standings",
+              "record_round_3_draw_advance_career",
+              "record_round_3_draw_advance_round",
+              "record_round_3_draw_record_opponent",
+              "record_round_3_draw_record_result",
+              "record_round_3_draw_return_to_planning",
+              "record_round_3_draw_update_standings",
+              "record_round_3_loss_advance_career",
+              "record_round_3_loss_advance_round",
+              "record_round_3_loss_record_opponent",
+              "record_round_3_loss_record_result",
+              "record_round_3_loss_return_to_planning",
+              "record_round_3_loss_update_standings",
+              "record_round_3_win_advance_career",
+              "record_round_3_win_advance_round",
+              "record_round_3_win_record_opponent",
+              "record_round_3_win_record_result",
+              "record_round_3_win_return_to_planning",
+              "record_round_3_win_update_standings",
+              "reset_last_match_plan",
+              "reset_last_match_result",
+              "reset_last_opponent",
+              "reset_match_phase",
+              "reset_season_round",
+              "reset_standings_points"
+            ],
+            "end_condition_ids": [
+              "season_ending_reached",
+              "season_points_target_reached"
+            ],
+            "event_ids": [
+              "match_planned",
+              "match_resolved",
+              "scenario_restarted"
+            ],
+            "failure_condition_ids": [],
+            "id": "career_season",
+            "participant_ids": [],
+            "presentation_hook_ids": [
+              "progress_feedback",
+              "progress_view"
+            ],
+            "spatial_context_ids": [],
+            "start_condition_ids": [
+              "scenario_ready"
+            ],
+            "success_condition_ids": [
+              "season_ending_reached",
+              "season_points_target_reached"
+            ],
+            "title": "one reviewed season within an authored sports career"
+          }
+        ],
+        "source": {
+          "content_hash": "b5386bdedb687c1c5138ba5fc785407615cc89eff32888dd4d056de6f70a9b46",
+          "format": "world-forge.activity_module",
+          "format_version": 1,
+          "id": "sports_career_activities"
+        },
+        "title": "Sports Career authored activity"
+      }
+    ],
+    "narrative": [],
+    "systems": [
+      {
+        "source": {
+          "content_hash": "9c09b4e139525e21e91c2d4a5c8a7e7c062b84a20b0a649ed6b64f57c2f24c54",
+          "format": "world-forge.system_module",
+          "format_version": 1,
+          "id": "sports_career_systems"
+        },
+        "systems": [
+          {
+            "asset_binding_ids": [
+              "season_dashboard_visual"
+            ],
+            "effect_ids": [
+              "plan_aggressive_match_record",
+              "plan_aggressive_match_request_result",
+              "plan_balanced_match_record",
+              "plan_balanced_match_request_result",
+              "record_round_1_draw_advance_career",
+              "record_round_1_draw_advance_round",
+              "record_round_1_draw_record_opponent",
+              "record_round_1_draw_record_result",
+              "record_round_1_draw_return_to_planning",
+              "record_round_1_draw_update_standings",
+              "record_round_1_loss_advance_career",
+              "record_round_1_loss_advance_round",
+              "record_round_1_loss_record_opponent",
+              "record_round_1_loss_record_result",
+              "record_round_1_loss_return_to_planning",
+              "record_round_1_loss_update_standings",
+              "record_round_1_win_advance_career",
+              "record_round_1_win_advance_round",
+              "record_round_1_win_record_opponent",
+              "record_round_1_win_record_result",
+              "record_round_1_win_return_to_planning",
+              "record_round_1_win_update_standings",
+              "record_round_2_draw_advance_career",
+              "record_round_2_draw_advance_round",
+              "record_round_2_draw_record_opponent",
+              "record_round_2_draw_record_result",
+              "record_round_2_draw_return_to_planning",
+              "record_round_2_draw_update_standings",
+              "record_round_2_loss_advance_career",
+              "record_round_2_loss_advance_round",
+              "record_round_2_loss_record_opponent",
+              "record_round_2_loss_record_result",
+              "record_round_2_loss_return_to_planning",
+              "record_round_2_loss_update_standings",
+              "record_round_2_win_advance_career",
+              "record_round_2_win_advance_round",
+              "record_round_2_win_record_opponent",
+              "record_round_2_win_record_result",
+              "record_round_2_win_return_to_planning",
+              "record_round_2_win_update_standings",
+              "record_round_3_draw_advance_career",
+              "record_round_3_draw_advance_round",
+              "record_round_3_draw_record_opponent",
+              "record_round_3_draw_record_result",
+              "record_round_3_draw_return_to_planning",
+              "record_round_3_draw_update_standings",
+              "record_round_3_loss_advance_career",
+              "record_round_3_loss_advance_round",
+              "record_round_3_loss_record_opponent",
+              "record_round_3_loss_record_result",
+              "record_round_3_loss_return_to_planning",
+              "record_round_3_loss_update_standings",
+              "record_round_3_win_advance_career",
+              "record_round_3_win_advance_round",
+              "record_round_3_win_record_opponent",
+              "record_round_3_win_record_result",
+              "record_round_3_win_return_to_planning",
+              "record_round_3_win_update_standings"
+            ],
+            "event_ids": [
+              "match_planned",
+              "match_resolved"
+            ],
+            "id": "season_standings",
+            "precondition_ids": [
+              "match_remaining_for_plan_aggressive_match",
+              "match_remaining_for_plan_balanced_match",
+              "planning_phase_for_plan_aggressive_match",
+              "planning_phase_for_plan_balanced_match",
+              "result_phase_for_record_round_1_draw",
+              "result_phase_for_record_round_1_loss",
+              "result_phase_for_record_round_1_win",
+              "result_phase_for_record_round_2_draw",
+              "result_phase_for_record_round_2_loss",
+              "result_phase_for_record_round_2_win",
+              "result_phase_for_record_round_3_draw",
+              "result_phase_for_record_round_3_loss",
+              "result_phase_for_record_round_3_win",
+              "round_ready_for_record_round_1_draw",
+              "round_ready_for_record_round_1_loss",
+              "round_ready_for_record_round_1_win",
+              "round_ready_for_record_round_2_draw",
+              "round_ready_for_record_round_2_loss",
+              "round_ready_for_record_round_2_win",
+              "round_ready_for_record_round_3_draw",
+              "round_ready_for_record_round_3_loss",
+              "round_ready_for_record_round_3_win",
+              "schedule_valid_for_record_round_1_draw",
+              "schedule_valid_for_record_round_1_loss",
+              "schedule_valid_for_record_round_1_win",
+              "schedule_valid_for_record_round_2_draw",
+              "schedule_valid_for_record_round_2_loss",
+              "schedule_valid_for_record_round_2_win",
+              "schedule_valid_for_record_round_3_draw",
+              "schedule_valid_for_record_round_3_loss",
+              "schedule_valid_for_record_round_3_win",
+              "team_registered_for_record_round_1_draw",
+              "team_registered_for_record_round_1_loss",
+              "team_registered_for_record_round_1_win",
+              "team_registered_for_record_round_2_draw",
+              "team_registered_for_record_round_2_loss",
+              "team_registered_for_record_round_2_win",
+              "team_registered_for_record_round_3_draw",
+              "team_registered_for_record_round_3_loss",
+              "team_registered_for_record_round_3_win"
+            ],
+            "system_type": "season",
+            "title": "reach the authored season points target"
+          }
+        ],
+        "title": "Authored league season"
+      }
+    ],
+    "world": [
+      {
+        "module_type": "space",
+        "records": [
+          {
+            "id": "sports_career_space",
+            "name": "Authored league season",
+            "topology": "diegetic"
+          }
+        ],
+        "source": {
+          "content_hash": "8199c8fcedae14d1d3b53a84b68adc28dfb11de91274a6e0380a3c63309a0478",
+          "format": "world-forge.world_module",
+          "format_version": 1,
+          "id": "sports_career_space"
+        },
+        "title": "Authored league season"
+      }
+    ]
+  },
+  "presentation": {
+    "accessibility": {
+      "captions": true,
+      "color_independence": true,
+      "high_contrast": true,
+      "keyboard_only": true,
+      "reduced_motion": true,
+      "remapping": true,
+      "screen_reader_structure": true,
+      "text_scaling": true,
+      "timing_alternatives": true
+    },
+    "audio_role": "optional feedback",
+    "camera": "fixed",
+    "input_assumptions": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "localization": {
+      "externalized_text": true,
+      "source_locale": "en",
+      "supported_locales": [
+        "en"
+      ]
+    },
+    "mode": "2d",
+    "perspective": "orthographic board",
+    "ui_density": "low",
+    "visual_language": "high-contrast geometric symbols"
+  },
+  "provenance": [
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "b5386bdedb687c1c5138ba5fc785407615cc89eff32888dd4d056de6f70a9b46",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "sports_career_activities"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "43e124bc8ab3655b7d5cc19e5f096f57666481a39276501444d7892e2df2c2c3",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "sports_career_profile"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "7d195986ff3c23dbd2f73fc0cd29148721031c6914d786c8971b15e4d086804d",
+        "format": "world-forge.creation_source_manifest",
+        "format_version": 1,
+        "id": "sports_career"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "20093b878fc7ade90e426362770d3e346eded8ceb207cf864cb26a834feccf73",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "sports_career_logic"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "dbbe5bdbca0ef83485821890c9b2273af084fc0e6b63f85547611d9391de4742",
+        "format": "world-forge.project",
+        "format_version": 1,
+        "id": "sports_career"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "9c09b4e139525e21e91c2d4a5c8a7e7c062b84a20b0a649ed6b64f57c2f24c54",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "sports_career_systems"
+      }
+    },
+    {
+      "kind": "compiled_from",
+      "subject": {
+        "content_hash": "8199c8fcedae14d1d3b53a84b68adc28dfb11de91274a6e0380a3c63309a0478",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "sports_career_space"
+      }
+    }
+  ],
+  "registered_extensions": [],
+  "runtime_requirements": {
+    "accepted_logic_formats": [
+      {
+        "format": "world-forge.gamepack",
+        "versions": [
+          1
+        ]
+      }
+    ],
+    "asset_formats": [
+      "asset:png"
+    ],
+    "input_capabilities": [
+      "input:keyboard",
+      "input:pointer"
+    ],
+    "optional_features": [
+      "audio:sfx"
+    ],
+    "packaging_target": "standalone desktop directory",
+    "platform_matrix": [
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:linux",
+        "platform_id": "platform:linux_x86_64",
+        "renderer": "raylib"
+      },
+      {
+        "architecture": "architecture:x86_64",
+        "backend": "backend:unspecified",
+        "platform_family": "platform:windows",
+        "platform_id": "platform:windows_x86_64",
+        "renderer": "raylib"
+      }
+    ],
+    "presentation": {
+      "camera": "fixed",
+      "mode": "2d",
+      "perspective": "orthographic board",
+      "renderer": "raylib"
+    },
+    "replay_expected": true,
+    "requested_adapter": null,
+    "required_features": [
+      "logic:deterministic_actions",
+      "logic:finite_state",
+      "sports:season"
+    ],
+    "save_expected": true
+  },
+  "source": {
+    "logic_modules": [
+      {
+        "content_hash": "20093b878fc7ade90e426362770d3e346eded8ceb207cf864cb26a834feccf73",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "sports_career_logic"
+      }
+    ],
+    "profile": {
+      "content_hash": "43e124bc8ab3655b7d5cc19e5f096f57666481a39276501444d7892e2df2c2c3",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "sports_career_profile"
+    },
+    "project": {
+      "content_hash": "dbbe5bdbca0ef83485821890c9b2273af084fc0e6b63f85547611d9391de4742",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "sports_career"
+    },
+    "source_manifest": {
+      "content_hash": "7d195986ff3c23dbd2f73fc0cd29148721031c6914d786c8971b15e4d086804d",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "sports_career"
+    }
+  }
+}

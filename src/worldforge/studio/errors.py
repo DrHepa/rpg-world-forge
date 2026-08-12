@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-ERROR_CODES = frozenset(
+LEGACY_ERROR_CODES = frozenset(
     {"invalid_request", "not_found", "conflict", "invalid_state", "internal_error"}
 )
+ERROR_CODES = LEGACY_ERROR_CODES | frozenset({"recovery_ambiguous", "recovery_failed"})
 
 
 class StudioContractError(ValueError):

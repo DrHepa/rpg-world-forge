@@ -1,0 +1,513 @@
+{
+  "$defs": {
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "maximum": 33554432,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?![./])(?!.*/(?:\\.{1,2})(?:/|$))(?!(?:.*[/])?(?:aux|con|nul|prn|com[1-9]|lpt[1-9])(?:[./]|$))[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*(?:/[a-zA-Z0-9_.@ -]+)*$",
+      "type": "string"
+    },
+    "semver": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/game-materialization-bundle.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "properties": {
+          "missing_launcher_roles": {
+            "const": [
+              "game_launcher",
+              "game_packager",
+              "game_verifier",
+              "native_smoke_launcher"
+            ]
+          },
+          "state": {
+            "const": "contract_only"
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "materialization_ready": {
+            "const": true
+          }
+        },
+        "required": [
+          "materialization_ready"
+        ]
+      },
+      "then": {
+        "properties": {
+          "missing_launcher_roles": {
+            "const": []
+          },
+          "state": {
+            "const": "materialization_ready"
+          }
+        }
+      }
+    }
+  ],
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/file"
+      },
+      "maxItems": 512,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true,
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "path"
+        ],
+        "uniqueBy": [
+          [
+            "path"
+          ]
+        ]
+      }
+    },
+    "format": {
+      "const": "world-forge.game_materialization_bundle"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "launchers": {
+      "additionalProperties": false,
+      "properties": {
+        "inventory": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "output_path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "path": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "game_launcher",
+                  "game_package",
+                  "game_packager",
+                  "game_readme",
+                  "game_source",
+                  "game_test",
+                  "game_verifier",
+                  "gitignore",
+                  "materialization_policy",
+                  "native_smoke_launcher",
+                  "offline_smoke_launcher",
+                  "requirements",
+                  "third_party_notices"
+                ]
+              },
+              "sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "size_bytes": {
+                "maximum": 65536,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "path",
+              "output_path",
+              "role",
+              "sha256",
+              "size_bytes"
+            ],
+            "type": "object"
+          },
+          "maxItems": 14,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true,
+          "x-world-forge-canonical-object-array": {
+            "orderBy": [
+              "path"
+            ],
+            "uniqueBy": [
+              [
+                "path"
+              ]
+            ]
+          }
+        },
+        "policy_version": {
+          "const": 1
+        },
+        "required_roles": {
+          "const": [
+            "game_launcher",
+            "game_packager",
+            "game_verifier",
+            "native_smoke_launcher"
+          ],
+          "type": "array"
+        },
+        "root": {
+          "const": "launchers"
+        },
+        "tree_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "root",
+        "policy_version",
+        "required_roles",
+        "inventory",
+        "tree_hash"
+      ],
+      "type": "object"
+    },
+    "legal": {
+      "additionalProperties": false,
+      "properties": {
+        "bundle_license": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/file"
+            },
+            {
+              "properties": {
+                "path": {
+                  "const": "licenses/world-forge-mit.txt"
+                },
+                "sha256": {
+                  "const": "2e55c53ff294650e049d844f2544fec947c3516440aeffca4b2334cf94b13eeb"
+                },
+                "size_bytes": {
+                  "const": 1063
+                }
+              },
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "required": [
+        "bundle_license"
+      ],
+      "type": "object"
+    },
+    "lineage": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "assetpack_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "assetpack_inventory_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "assetpack_root_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "composition_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "gamepack_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "platform_lock_set_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "registry_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_bundle_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_bundle_tree_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_implementation_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_snapshot_tree_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "support_report_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "gamepack_hash",
+        "assetpack_hash",
+        "assetpack_root_hash",
+        "assetpack_inventory_hash",
+        "runtime_snapshot_hash",
+        "runtime_snapshot_tree_hash",
+        "adapter_hash",
+        "registry_hash",
+        "composition_hash",
+        "support_report_hash",
+        "runtime_bundle_hash",
+        "runtime_bundle_tree_hash",
+        "runtime_implementation_hash",
+        "platform_lock_set_hash"
+      ],
+      "type": "object"
+    },
+    "materialization_bundle_id": {
+      "pattern": "^game_materialization_bundle_[0-9a-f]{36}$",
+      "type": "string"
+    },
+    "materialization_ready": {
+      "type": "boolean"
+    },
+    "missing_launcher_roles": {
+      "items": {
+        "enum": [
+          "game_launcher",
+          "game_packager",
+          "game_verifier",
+          "native_smoke_launcher"
+        ]
+      },
+      "maxItems": 4,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "platform_locks": {
+      "additionalProperties": false,
+      "properties": {
+        "locks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "abi": {
+                "enum": [
+                  "cp311",
+                  "cp312"
+                ]
+              },
+              "content_hash": {
+                "$ref": "#/$defs/sha256"
+              },
+              "format": {
+                "const": "world-forge.runtime_platform_lock"
+              },
+              "format_version": {
+                "const": 1
+              },
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "os": {
+                "enum": [
+                  "linux",
+                  "windows"
+                ]
+              },
+              "path": {
+                "$ref": "#/$defs/path"
+              },
+              "python_minor": {
+                "enum": [
+                  "3.11",
+                  "3.12"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "format",
+              "format_version",
+              "id",
+              "content_hash",
+              "os",
+              "python_minor",
+              "abi"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array",
+          "uniqueItems": true,
+          "x-world-forge-canonical-object-array": {
+            "orderBy": [
+              "id"
+            ],
+            "uniqueBy": [
+              [
+                "id"
+              ]
+            ]
+          }
+        },
+        "root": {
+          "const": "contracts/platform-locks"
+        },
+        "set_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "root",
+        "set_hash",
+        "locks"
+      ],
+      "type": "object"
+    },
+    "runtime_bundle": {
+      "additionalProperties": false,
+      "properties": {
+        "manifest": {
+          "additionalProperties": false,
+          "properties": {
+            "content_hash": {
+              "$ref": "#/$defs/sha256"
+            },
+            "format": {
+              "const": "world-forge.game_runtime_bundle"
+            },
+            "format_version": {
+              "const": 1
+            },
+            "id": {
+              "pattern": "^game_runtime_bundle_[0-9a-f]{48}$",
+              "type": "string"
+            },
+            "path": {
+              "const": "runtime-bundle/game-runtime-bundle.json"
+            },
+            "tree_hash": {
+              "$ref": "#/$defs/sha256"
+            }
+          },
+          "required": [
+            "path",
+            "format",
+            "format_version",
+            "id",
+            "content_hash",
+            "tree_hash"
+          ],
+          "type": "object"
+        },
+        "root": {
+          "const": "runtime-bundle"
+        }
+      },
+      "required": [
+        "root",
+        "manifest"
+      ],
+      "type": "object"
+    },
+    "runtime_implementation": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.runtime_implementation"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "const": "contracts/runtime-implementation.json"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "state": {
+      "enum": [
+        "contract_only",
+        "materialization_ready"
+      ]
+    },
+    "tree_hash": {
+      "$ref": "#/$defs/sha256"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "materialization_bundle_id",
+    "state",
+    "materialization_ready",
+    "missing_launcher_roles",
+    "runtime_bundle",
+    "runtime_implementation",
+    "platform_locks",
+    "launchers",
+    "lineage",
+    "legal",
+    "files",
+    "tree_hash",
+    "content_hash"
+  ],
+  "title": "World Forge executable game materialization envelope v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-game-materialization-bundle-coherent": true
+}

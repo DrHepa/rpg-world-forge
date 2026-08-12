@@ -1,0 +1,180 @@
+{
+  "$id": "https://world-forge.local/schemas/activity-module.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "activities": {
+      "items": {
+        "$ref": "#/$defs/activity"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/extension"
+      },
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.activity_module"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "module_id": {
+      "$ref": "#/$defs/id"
+    },
+    "project_id": {
+      "$ref": "#/$defs/id"
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "module_id",
+    "project_id",
+    "title",
+    "activities",
+    "extensions",
+    "content_hash"
+  ],
+  "title": "World Forge typed activity module v1",
+  "type": "object",
+  "$defs": {
+    "activity": {
+      "additionalProperties": false,
+      "properties": {
+        "activity_type": {
+          "enum": [
+            "level",
+            "mission",
+            "quest",
+            "scenario",
+            "match",
+            "race",
+            "puzzle",
+            "encounter",
+            "contract",
+            "expedition",
+            "run",
+            "tutorial",
+            "challenge"
+          ]
+        },
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "end_condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "event_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "failure_condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "participant_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "presentation_hook_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "provenance": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "spatial_context_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "start_condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "success_condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "validation_profile": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "activity_type",
+        "title",
+        "participant_ids",
+        "spatial_context_ids",
+        "start_condition_ids",
+        "end_condition_ids",
+        "success_condition_ids",
+        "failure_condition_ids",
+        "effect_ids",
+        "event_ids",
+        "presentation_hook_ids",
+        "asset_binding_ids",
+        "validation_profile",
+        "provenance"
+      ],
+      "type": "object"
+    },
+    "extension": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$",
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "required",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "idArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  }
+}

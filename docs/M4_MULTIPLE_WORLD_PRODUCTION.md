@@ -9,8 +9,8 @@ later game are external products of this toolchain.
 
 M4 provides:
 
-- atomic v2 world-project creation, inspection, cloning, legacy upgrade, and
-  optimistic-lock SemVer versioning;
+- atomic v3 world-project creation, v2/v3 inspection, explicit v1 upgrade and
+  v2 identity migration, cloning, and optimistic-lock SemVer versioning;
 - deterministic worldpack v5 with localization, personal campaigns, and an
   explicit runtime compatibility contract;
 - runtime-only bundle export, strict verification, atomic game import, and a
@@ -33,7 +33,7 @@ Forge tools/skills
       |
       | explicit external path
       v
-world-authoring project v2
+world-authoring project v2 or v3
       |
       | validate + compile + approve
       v
@@ -58,10 +58,11 @@ Every new world project uses:
 ```json
 {
   "format": "rpg-world-forge.project",
-  "format_version": 2,
+  "format_version": 3,
   "project_kind": "world",
   "world_id": "my_world",
-  "world_version": "0.1.0"
+  "world_version": "0.1.0",
+  "tool_repository": "world-forge"
 }
 ```
 
@@ -101,6 +102,45 @@ The expected version is an optimistic lock. A bump updates project/source
 identity, appends the version log, unlocks canon, and invalidates release-bound
 metadata. Legacy v1 projects require the explicit `upgrade-world` command; an
 inspection or clone never upgrades implicitly and never accepts a game project.
+
+Version 2 remains readable only with `tool_repository="rpg-world-forge"`;
+version 3 requires `tool_repository="world-forge"`. New projects and clones
+write version 3. `bump-world-version` preserves whichever valid pair it reads
+and does not rewrite `source/manifest.json`.
+
+The identity bridge is explicit and raw-byte compare-and-swap protected:
+
+```bash
+worldforge migrate-world-project ../legacy-world \
+  --expected-source-hash <sha256-of-exact-project-json-bytes> --mode dry-run
+worldforge migrate-world-project ../legacy-world \
+  --expected-source-hash <same-sha256> --mode apply
+```
+
+Dry-run creates no lock, backup, journal, or evidence. Apply holds the lifecycle
+lock, retains an identity/hash-bound backup and append-only journal, durably
+replaces only the expected project bytes, verifies the complete project, and
+keeps terminal migration evidence. Interrupted matching operations recover;
+divergent artifacts fail closed. Those recovery records use the cataloged
+`world-forge.world_project_migration_backup`,
+`world-forge.world_project_migration_journal`, and
+`world-forge.world_project_migration_evidence` version 1 contracts; only the
+terminal evidence remains after a successful operation.
+
+A clean dry-run exposes `apply_supported` plus an exact capability reason. If
+an immutable backup or journal is already present, dry-run validates the
+read-only recovery boundary and reports recovery required instead of claiming a
+new migration can start. Linux requires retained ancestry and
+`RENAME_EXCHANGE`. Windows requires build 20348 or newer and a local NTFS volume
+with 128-bit `FileIdInfo`, hard links, POSIX rename/unlink support, flushable
+directory handles, `FileRenameInfoEx`, and `FileDispositionInfoEx`. Its
+transaction seals the original file, retains it under an operation-bound hard
+link, and commits forward after the single target replacement; it never guesses
+a rollback from an ambiguous namespace. The previously green committed legacy
+baseline exercised Windows Server 2022 migration/read compatibility for that
+M4 contract. The new multi-genre/identity overlay has not inherited that proof:
+its exact hosted Windows/native rows remain PENDING until pushed and run on the
+reviewed revision.
 
 World lifecycle operations reject symlinks, credential-like inputs, unsafe
 targets, and partial writes. Creation and cloning stage beside the destination

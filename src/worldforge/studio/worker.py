@@ -13,11 +13,17 @@ from isoworld.persistence import load_replay, state_digest
 from worldforge.asset_production import validate_production_receipt
 from worldforge.assetpack import verify_assetpack
 from worldforge.studio.contracts import (
+    EXTERNAL_JOB_ERROR_CODES,
+    EXTERNAL_JOB_OPERATIONS,
     MANAGED_JOB_OPERATIONS,
     StudioContractError,
     studio_job_path,
     validate_job_create_params,
+    validate_studio_recovery_evidence,
 )
+from worldforge.studio.errors import StudioError
+from worldforge.studio.external_grants import _pin_directory, _plain_source
+from worldforge.studio.external_jobs import ExternalJobExecutionError, execute_external_operation
 from worldforge.studio.job_paths import (
     JobFileProof,
     JobPathError,
@@ -26,6 +32,7 @@ from worldforge.studio.job_paths import (
     verify_workspace_file,
 )
 from worldforge.studio.job_protocol import (
+    LEGACY_WORKER_VERSION,
     MAX_WORKER_REQUEST_BYTES,
     MAX_WORKER_RESPONSE_BYTES,
     WORKER_PROTOCOL,
@@ -68,6 +75,20 @@ def _root(value: object) -> Path:
     if not root.is_absolute() or str(root) != os.path.abspath(root):
         raise WorkerProtocolError("world root must be an absolute normalized path")
     return root
+
+
+def _external_path(value: object, *, context: str) -> Path:
+    if (
+        not isinstance(value, str)
+        or not value
+        or "\x00" in value
+        or unicodedata.normalize("NFC", value) != value
+    ):
+        raise WorkerProtocolError(f"{context} is invalid")
+    path = Path(value)
+    if not path.is_absolute() or str(path) != os.path.abspath(path):
+        raise WorkerProtocolError(f"{context} must be absolute and normalized")
+    return path
 
 
 def _operation_paths(operation: str, job_input: dict[str, Any]) -> dict[str, PurePosixPath]:
@@ -177,7 +198,7 @@ def _replay_result(worldpack_path: Path, replay_path: Path) -> dict[str, Any]:
     }
 
 
-def execute(request: object) -> dict[str, Any]:
+def _execute_v1(request: object) -> dict[str, Any]:
     payload = _closed(
         request,
         {
@@ -191,7 +212,10 @@ def execute(request: object) -> dict[str, Any]:
         },
         "worker request",
     )
-    if payload["protocol"] != WORKER_PROTOCOL or payload["protocol_version"] != WORKER_VERSION:
+    if (
+        payload["protocol"] != WORKER_PROTOCOL
+        or payload["protocol_version"] != LEGACY_WORKER_VERSION
+    ):
         raise WorkerProtocolError("worker protocol is unsupported")
     operation = payload["operation"]
     if not isinstance(operation, str) or operation not in MANAGED_JOB_OPERATIONS:
@@ -219,6 +243,113 @@ def execute(request: object) -> dict[str, Any]:
         result = _replay_result(absolute["worldpack"], absolute["replay"])
     _verify_files(root, root_identity, paths, payload["files"])
     return result
+
+
+def _execute_v2(request: object) -> dict[str, Any]:
+    payload = _closed(
+        request,
+        {
+            "protocol",
+            "protocol_version",
+            "operation",
+            "input",
+            "source",
+            "target",
+        },
+        "worker request",
+    )
+    if payload["protocol"] != WORKER_PROTOCOL or payload["protocol_version"] != WORKER_VERSION:
+        raise WorkerProtocolError("worker protocol is unsupported")
+    operation = payload["operation"]
+    if not isinstance(operation, str) or operation not in EXTERNAL_JOB_OPERATIONS:
+        raise WorkerProtocolError("worker operation is not allowed")
+    try:
+        validated = validate_job_create_params(
+            {"workspace_id": "worker_01", "operation": operation, "input": payload["input"]}
+        )
+    except StudioContractError as exc:
+        raise WorkerProtocolError("worker operation input is invalid") from exc
+    job_input = validated["input"]
+    source = _closed(
+        payload["source"],
+        {"path", "identity", "artifact_kind"},
+        "worker source",
+    )
+    target = _closed(
+        payload["target"],
+        {
+            "path",
+            "parent_identity",
+            "leaf",
+            "artifact_kind",
+            "grant_id",
+            "generation",
+        },
+        "worker target",
+    )
+    source_path = _external_path(source["path"], context="worker source path")
+    target_path = _external_path(target["path"], context="worker target path")
+    source_identity = _identity(source["identity"])
+    parent_identity = _identity(target["parent_identity"])
+    expected_kinds = {
+        "game.materialize": ("game_materialization_bundle", "standalone_game"),
+        "game.package": ("standalone_game", "game_package"),
+        "game.package.extract": ("game_package", "standalone_game"),
+    }[operation]
+    if source["artifact_kind"] != expected_kinds[0] or target["artifact_kind"] != expected_kinds[1]:
+        raise WorkerProtocolError("worker artifact kinds are invalid")
+    if (
+        not isinstance(target["leaf"], str)
+        or target_path.name != target["leaf"]
+        or not isinstance(target["grant_id"], str)
+        or not target["grant_id"]
+        or isinstance(target["generation"], bool)
+        or not isinstance(target["generation"], int)
+        or target["generation"] < 1
+    ):
+        raise WorkerProtocolError("worker target authority is invalid")
+    try:
+        before_source = _plain_source(source_path, source["artifact_kind"])
+        before_parent = _pin_directory(target_path.parent, context="External target parent")
+    except StudioError as exc:
+        raise WorkerProtocolError("worker external authority changed") from exc
+    if before_source != source_identity or before_parent != parent_identity:
+        raise WorkerProtocolError("worker external authority changed")
+    if target_path.exists() or target_path.is_symlink():
+        raise WorkerProtocolError("worker external target is no longer absent")
+    hash_field = {
+        "game.materialize": "expected_materialization_hash",
+        "game.package": "expected_game_hash",
+        "game.package.extract": "expected_package_hash",
+    }[operation]
+    result = execute_external_operation(
+        operation=operation,
+        source=source_path,
+        target=target_path,
+        expected_hash=job_input[hash_field],
+        target_grant_id=target["grant_id"],
+        expected_source_identity=source_identity,
+        expected_parent_identity=parent_identity,
+    )
+    try:
+        after_source = _plain_source(source_path, source["artifact_kind"])
+        after_parent = _pin_directory(target_path.parent, context="External target parent")
+    except StudioError as exc:
+        raise WorkerProtocolError("worker external authority changed") from exc
+    if after_source != source_identity or after_parent != parent_identity:
+        raise WorkerProtocolError("worker external authority changed")
+    return result
+
+
+def execute(request: object) -> dict[str, Any]:
+    if not isinstance(request, dict):
+        raise WorkerProtocolError("worker request has an invalid shape")
+    version = request.get("protocol_version")
+    if version == LEGACY_WORKER_VERSION:
+        return _execute_v1(request)
+    if version == WORKER_VERSION:
+        return _execute_v2(request)
+    raise WorkerProtocolError("worker protocol is unsupported")
 
 
 def _response(value: dict[str, Any]) -> bytes:
@@ -249,6 +380,25 @@ def main() -> int:
                 "ok": False,
                 "error": {"code": "worker_protocol", "message": "Worker request is invalid"},
             }
+        except ExternalJobExecutionError as exc:
+            try:
+                if exc.code not in EXTERNAL_JOB_ERROR_CODES or not 1 <= len(exc.message) <= 512:
+                    raise StudioContractError("external worker error is invalid")
+                error: dict[str, object] = {"code": exc.code, "message": exc.message}
+                if exc.recovery_evidence:
+                    error["recovery_evidence"] = validate_studio_recovery_evidence(
+                        exc.recovery_evidence,
+                        "external worker recovery evidence",
+                    )
+                response = {"ok": False, "error": error}
+            except StudioContractError:
+                response = {
+                    "ok": False,
+                    "error": {
+                        "code": "execution_failed",
+                        "message": "Managed job execution failed",
+                    },
+                }
         except Exception:
             response = {
                 "ok": False,

@@ -1,0 +1,348 @@
+{
+  "$defs": {
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "maximum": 33554432,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?![./])(?!.*/(?:\\.{1,2})(?:/|$))(?!(?:.*[/])?(?:aux|con|nul|prn|com[1-9]|lpt[1-9])(?:[./]|$))[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*(?:/[a-zA-Z0-9_.@ -]+)*$",
+      "type": "string"
+    },
+    "semver": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/runtime-implementation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adapter": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": {
+          "$ref": "#/$defs/id"
+        },
+        "adapter_version": {
+          "$ref": "#/$defs/semver"
+        },
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "adapter_id",
+        "adapter_version",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "entry_points": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "module": {
+            "enum": [
+              "gamepack_raylib_2d.app",
+              "gamepack_raylib_2d.backend",
+              "gamepack_raylib_2d.native_smoke",
+              "gamepack_raylib_2d.resources"
+            ]
+          },
+          "role": {
+            "enum": [
+              "application_factory",
+              "backend_factory",
+              "bundle_loader",
+              "native_smoke"
+            ]
+          },
+          "symbol": {
+            "enum": [
+              "PyrayBackend",
+              "RuntimeApp.from_bundle",
+              "load_runtime_bundle",
+              "native_smoke"
+            ]
+          }
+        },
+        "required": [
+          "role",
+          "module",
+          "symbol"
+        ],
+        "type": "object"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array",
+      "uniqueItems": true,
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "role"
+        ],
+        "uniqueBy": [
+          [
+            "role"
+          ]
+        ]
+      }
+    },
+    "format": {
+      "const": "world-forge.runtime_implementation"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "implementation_id": {
+      "pattern": "^runtime_implementation_[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "materialization_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "immutable_runtime": {
+          "const": true
+        },
+        "runtime_ai": {
+          "const": false
+        },
+        "standalone_source_root": {
+          "const": "src"
+        },
+        "version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "version",
+        "standalone_source_root",
+        "immutable_runtime",
+        "runtime_ai"
+      ],
+      "type": "object"
+    },
+    "packages": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "const": "immutable_runtime_source"
+          },
+          "destination_root": {
+            "enum": [
+              "src/gamepack_raylib_2d",
+              "src/gamepack_runtime"
+            ]
+          },
+          "files": {
+            "items": {
+              "$ref": "#/$defs/file"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true,
+            "x-world-forge-canonical-object-array": {
+              "orderBy": [
+                "path"
+              ],
+              "uniqueBy": [
+                [
+                  "path"
+                ]
+              ]
+            }
+          },
+          "package": {
+            "enum": [
+              "gamepack_raylib_2d",
+              "gamepack_runtime"
+            ]
+          },
+          "role": {
+            "enum": [
+              "raylib_2d_adapter",
+              "deterministic_kernel"
+            ]
+          },
+          "source_prefix": {
+            "enum": [
+              "gamepack_raylib_2d",
+              "gamepack_runtime"
+            ]
+          },
+          "tree_hash": {
+            "$ref": "#/$defs/sha256"
+          }
+        },
+        "required": [
+          "package",
+          "source_prefix",
+          "destination_root",
+          "role",
+          "classification",
+          "files",
+          "tree_hash"
+        ],
+        "type": "object"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array",
+      "uniqueItems": true,
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "package"
+        ],
+        "uniqueBy": [
+          [
+            "package"
+          ],
+          [
+            "destination_root"
+          ]
+        ]
+      }
+    },
+    "platform_locks": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "abi": {
+            "enum": [
+              "cp311",
+              "cp312"
+            ]
+          },
+          "content_hash": {
+            "$ref": "#/$defs/sha256"
+          },
+          "lock_id": {
+            "$ref": "#/$defs/id"
+          },
+          "os": {
+            "enum": [
+              "linux",
+              "windows"
+            ]
+          },
+          "python_minor": {
+            "enum": [
+              "3.11",
+              "3.12"
+            ]
+          }
+        },
+        "required": [
+          "lock_id",
+          "content_hash",
+          "os",
+          "python_minor",
+          "abi"
+        ],
+        "type": "object"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array",
+      "uniqueItems": true,
+      "x-world-forge-canonical-object-array": {
+        "orderBy": [
+          "lock_id"
+        ],
+        "uniqueBy": [
+          [
+            "lock_id"
+          ]
+        ]
+      }
+    },
+    "runtime_api": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "const": "gamepack_runtime"
+        },
+        "version": {
+          "const": "1.0.0"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "snapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "snapshot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "tree_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "content_hash",
+        "tree_hash"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "implementation_id",
+    "adapter",
+    "snapshot",
+    "runtime_api",
+    "packages",
+    "entry_points",
+    "platform_locks",
+    "materialization_policy",
+    "content_hash"
+  ],
+  "title": "World Forge executable runtime implementation identity v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-runtime-implementation-coherent": true
+}

@@ -1,0 +1,576 @@
+{
+  "$id": "https://world-forge.local/schemas/mechanic-capability-ledger.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adapter": {
+      "$ref": "#/$defs/adapter"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "features": {
+      "items": {
+        "$ref": "#/$defs/feature"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.mechanic_capability_ledger"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "gamepack": {
+      "$ref": "#/$defs/gamepackIdentity"
+    },
+    "ledger_id": {
+      "$ref": "#/$defs/id"
+    },
+    "mechanics": {
+      "items": {
+        "$ref": "#/$defs/mechanic"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "ledger_id",
+    "gamepack",
+    "adapter",
+    "mechanics",
+    "features",
+    "content_hash"
+  ],
+  "title": "World Forge mechanic capability ledger v1",
+  "type": "object",
+  "allOf": [
+    {
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "mechanics": {
+                "contains": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "supported_current",
+                        "game_extension_verified"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "mechanics"
+            ]
+          },
+          {
+            "properties": {
+              "features": {
+                "contains": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "supported_current",
+                        "game_extension_verified"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "features"
+            ]
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "adapter": {
+            "properties": {
+              "adapter_id": {
+                "$ref": "#/$defs/id"
+              },
+              "adapter_version": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              "status": {
+                "const": "verified"
+              }
+            },
+            "required": [
+              "adapter_id",
+              "adapter_version",
+              "status"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "adapter": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "adapter_id": {
+              "type": "null"
+            },
+            "adapter_version": {
+              "type": "null"
+            },
+            "status": {
+              "const": "absent"
+            }
+          },
+          "required": [
+            "adapter_id",
+            "adapter_version",
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "adapter_id": {
+              "$ref": "#/$defs/id"
+            },
+            "adapter_version": {
+              "type": "null"
+            },
+            "status": {
+              "const": "declared"
+            }
+          },
+          "required": [
+            "adapter_id",
+            "adapter_version",
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "adapter_id": {
+              "$ref": "#/$defs/id"
+            },
+            "adapter_version": {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            "status": {
+              "const": "verified"
+            }
+          },
+          "required": [
+            "adapter_id",
+            "adapter_version",
+            "status"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "evidenceArray": {
+      "items": {
+        "$ref": "#/$defs/evidence"
+      },
+      "maxItems": 64,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "capabilityClaim": {
+      "oneOf": [
+        {
+          "properties": {
+            "extension": {
+              "type": "null"
+            },
+            "missing_feature_ids": {
+              "maxItems": 0,
+              "type": "array"
+            },
+            "native_evidence": {
+              "maxItems": 0,
+              "type": "array"
+            },
+            "reason_code": {
+              "const": "adapter_not_evaluated"
+            },
+            "status": {
+              "const": "authoring_only"
+            },
+            "test_evidence": {
+              "maxItems": 0,
+              "type": "array"
+            }
+          },
+          "required": [
+            "status",
+            "reason_code",
+            "missing_feature_ids",
+            "extension",
+            "test_evidence",
+            "native_evidence"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "extension": {
+              "type": "null"
+            },
+            "missing_feature_ids": {
+              "minItems": 1,
+              "type": "array"
+            },
+            "native_evidence": {
+              "maxItems": 0,
+              "type": "array"
+            },
+            "reason_code": {
+              "const": "missing_required_capability"
+            },
+            "status": {
+              "const": "blocked"
+            },
+            "test_evidence": {
+              "maxItems": 0,
+              "type": "array"
+            }
+          },
+          "required": [
+            "status",
+            "reason_code",
+            "missing_feature_ids",
+            "extension",
+            "test_evidence",
+            "native_evidence"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "extension": {
+              "type": "null"
+            },
+            "missing_feature_ids": {
+              "maxItems": 0,
+              "type": "array"
+            },
+            "native_evidence": {
+              "minItems": 1,
+              "type": "array"
+            },
+            "reason_code": {
+              "const": "adapter_verified"
+            },
+            "status": {
+              "const": "supported_current"
+            },
+            "test_evidence": {
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "status",
+            "reason_code",
+            "missing_feature_ids",
+            "extension",
+            "test_evidence",
+            "native_evidence"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "extension": {
+              "$ref": "creation-profile.schema.json#/$defs/extension"
+            },
+            "missing_feature_ids": {
+              "maxItems": 0,
+              "type": "array"
+            },
+            "native_evidence": {
+              "minItems": 1,
+              "type": "array"
+            },
+            "reason_code": {
+              "const": "game_extension_verified"
+            },
+            "status": {
+              "const": "game_extension_verified"
+            },
+            "test_evidence": {
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "status",
+            "reason_code",
+            "missing_feature_ids",
+            "extension",
+            "test_evidence",
+            "native_evidence"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "feature": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$ref": "#/$defs/capabilityClaim"
+        }
+      ],
+      "properties": {
+        "extension": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "creation-profile.schema.json#/$defs/extension"
+            }
+          ]
+        },
+        "feature_id": {
+          "$ref": "#/$defs/token"
+        },
+        "native_evidence": {
+          "$ref": "#/$defs/evidenceArray"
+        },
+        "missing_feature_ids": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "test_evidence": {
+          "$ref": "#/$defs/evidenceArray"
+        }
+      },
+      "required": [
+        "feature_id",
+        "status",
+        "reason_code",
+        "test_evidence",
+        "native_evidence"
+        ,
+        "missing_feature_ids",
+        "extension"
+      ],
+      "type": "object"
+    },
+    "gamepackIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.gamepack"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "idArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "maxItems": 256,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "mechanic": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$ref": "#/$defs/capabilityClaim"
+        }
+      ],
+      "properties": {
+        "asset_binding_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "authoritative_state_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "condition_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "core_verb_id": {
+          "$ref": "#/$defs/id"
+        },
+        "effect_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "extension": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "creation-profile.schema.json#/$defs/extension"
+            }
+          ]
+        },
+        "mechanic_id": {
+          "$ref": "#/$defs/id"
+        },
+        "native_evidence": {
+          "$ref": "#/$defs/evidenceArray"
+        },
+        "missing_feature_ids": {
+          "$ref": "#/$defs/tokenArray"
+        },
+        "presentation_hook_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/id"
+        },
+        "rule_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "runtime_action_id": {
+          "$ref": "#/$defs/id"
+        },
+        "save_replay": {
+          "$ref": "#/$defs/saveReplay"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "test_evidence": {
+          "$ref": "#/$defs/evidenceArray"
+        }
+      },
+      "required": [
+        "mechanic_id",
+        "core_verb_id",
+        "runtime_action_id",
+        "authoritative_state_ids",
+        "condition_ids",
+        "rule_ids",
+        "effect_ids",
+        "presentation_hook_ids",
+        "asset_binding_ids",
+        "save_replay",
+        "test_evidence",
+        "native_evidence",
+        "status",
+        "reason_code"
+        ,
+        "missing_feature_ids",
+        "extension"
+      ],
+      "type": "object"
+    },
+    "saveReplay": {
+      "additionalProperties": false,
+      "properties": {
+        "event_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "state_ids": {
+          "$ref": "#/$defs/idArray"
+        }
+      },
+      "required": [
+        "state_ids",
+        "event_ids"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "supported_current",
+        "game_extension_verified",
+        "authoring_only",
+        "blocked"
+      ]
+    },
+    "token": {
+      "pattern": "^[a-z][a-z0-9_]*(?::[a-z][a-z0-9_.-]*)?$",
+      "type": "string"
+    },
+    "tokenArray": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 256,
+      "type": "array",
+      "uniqueItems": true
+    }
+  }
+}

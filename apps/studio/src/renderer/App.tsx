@@ -12,6 +12,8 @@ import type {
   StudioChangesetGetResponse,
   StudioChangesetRejectResponse,
   StudioClientResult,
+  StudioCreationAuthorityCapabilities,
+  StudioCreationWorkspace,
   StudioErrorEnvelope,
   StudioJobCreateReply,
   StudioSourceListResult,
@@ -22,6 +24,8 @@ import type {
 } from "../shared/studio-api";
 import { AssetsCockpit } from "./AssetsCockpit";
 import { ChangesetReviewPanel } from "./ChangesetReviewPanel";
+import { CreationProjectEntry } from "./CreationProjectEntry";
+import { CreationWorkspace } from "./CreationWorkspace";
 import { GameCockpit } from "./GameCockpit";
 import { NeutralMapCanvas } from "./NeutralMapCanvas";
 import {
@@ -46,6 +50,7 @@ import {
   sourceVersionKey,
   type SourceSummary,
 } from "./authoring-state";
+import type { CreationNavigationState } from "./creation-state";
 import {
   actionCompletionError,
   changesetReviewReducer,
@@ -91,13 +96,31 @@ const INITIAL_CODEX_STATUS: CodexBridgeStatus = {
 const DOCK_POLL_INTERVAL_MS = 15_000;
 const MAX_VISIBLE_ERRORS = 6;
 const COMPACT_DISCIPLINE_TABS_QUERY = "(max-width: 860px)";
+const CLEAN_CREATION_NAVIGATION: CreationNavigationState = {
+  blocksNavigation: false,
+  kind: "clean",
+};
 
 type DockTab = "activity" | "changesets" | "jobs";
 type WorkbenchTab = "world" | "assets" | "game";
 type GameOperationState<T> = Record<GameOperation, T>;
+type SelectedRoute =
+  | { kind: "legacy"; workspaceId: string; generation: number }
+  | { kind: "creation"; workspaceId: string; generation: number };
 type PendingNavigation =
   | { kind: "workspace"; workspaceId: string }
+  | { kind: "creation-workspace"; workspaceId: string }
   | { kind: "source"; document: SourceSummary };
+
+function creationProjectKindLabel(kind: StudioCreationWorkspace["project_kind"]): string {
+  if (kind === "game") {
+    return "Game project";
+  }
+  if (kind === "asset_library") {
+    return "Asset library";
+  }
+  return "Universe library";
+}
 
 function useMediaQuery(query: string, fallback: boolean): boolean {
   const [matches, setMatches] = useState(() => {
@@ -123,7 +146,14 @@ function useMediaQuery(query: string, fallback: boolean): boolean {
 
 export function App() {
   const [status, setStatus] = useState<ForgeServiceStatus>(INITIAL_STATUS);
+  const [creationAuthorityCapabilities, setCreationAuthorityCapabilities] =
+    useState<StudioCreationAuthorityCapabilities | null>(null);
   const [workspaces, setWorkspaces] = useState<string[]>([]);
+  const [creationWorkspaces, setCreationWorkspaces] = useState<StudioCreationWorkspace[]>([]);
+  const [selectedRoute, setSelectedRoute] = useState<SelectedRoute | null>(null);
+  const [creationNavigation, setCreationNavigation] = useState<CreationNavigationState>(
+    CLEAN_CREATION_NAVIGATION,
+  );
   const [registryPending, setRegistryPending] = useState(true);
   const [authoring, dispatch] = useReducer(authoringReducer, undefined, createInitialAuthoringState);
   const [review, reviewDispatch] = useReducer(
@@ -187,9 +217,9 @@ export function App() {
   } | null>(null);
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
 
-  function recordError(message: string): void {
+  const recordError = useCallback((message: string): void => {
     setErrors((current) => [...current.slice(-(MAX_VISIBLE_ERRORS - 1)), boundedMessage(message)]);
-  }
+  }, []);
 
   const commitAssetCatalog = useCallback(
     (update: (current: AssetCatalogState) => AssetCatalogState): AssetCatalogState => {
@@ -264,17 +294,25 @@ export function App() {
     [commitAssetCatalog],
   );
 
-  async function loadWorkspaceRegistry(): Promise<void> {
+  const loadWorkspaceRegistry = useCallback(async (): Promise<void> => {
     setRegistryPending(true);
-    const result = await limiterRef.current.run(() => window.forgeStudio.listWorkspaces());
-    const decoded = decodeLegacyList(result, "workspace.list", "workspaces", 100);
-    setRegistryPending(false);
-    if (decoded.error) {
-      recordError(decoded.error);
-      return;
+    try {
+      const [legacyResult, creationResult] = await Promise.all([
+        limiterRef.current.run(() => window.forgeStudio.listWorkspaces()),
+        limiterRef.current.run(() => window.forgeStudio.listCreationWorkspaces()),
+      ]);
+      const decoded = decodeLegacyList(legacyResult, "workspace.list", "workspaces", 100);
+      if (decoded.error) recordError(decoded.error);
+      else setWorkspaces(workspaceIds(decoded.records));
+      const generic = decodeCreationWorkspaceList(creationResult);
+      if (generic.error) recordError(generic.error);
+      else setCreationWorkspaces(generic.workspaces);
+    } catch (error) {
+      recordError(describeError(error));
+    } finally {
+      setRegistryPending(false);
     }
-    setWorkspaces(workspaceIds(decoded.records));
-  }
+  }, [recordError]);
 
   useEffect(() => {
     const unsubscribe = window.forgeStudio.onEvent((activity) => {
@@ -302,13 +340,16 @@ export function App() {
     void window.forgeStudio.initialize().then((result) => {
       if (!result.ok) recordError(result.error.message);
       else if (result.value.kind === "error") recordError(result.value.error.message);
-      setRegistryPending(true);
-      void limiterRef.current.run(() => window.forgeStudio.listWorkspaces()).then((listed) => {
-        const decoded = decodeLegacyList(listed, "workspace.list", "workspaces", 100);
-        setRegistryPending(false);
-        if (decoded.error) recordError(decoded.error);
-        else setWorkspaces(workspaceIds(decoded.records));
-      });
+      else {
+        void window.forgeStudio.getCreationAuthorityCapabilities?.().then(
+          (capabilityResult) => {
+            setCreationAuthorityCapabilities(
+              capabilityResult.ok ? capabilityResult.value : null,
+            );
+          },
+        );
+      }
+      void loadWorkspaceRegistry();
     });
     void window.forgeStudio.getCodexStatus().then((result) => {
       if (result.ok) setCodexStatus(result.value);
@@ -318,7 +359,7 @@ export function App() {
       unsubscribe();
       unsubscribeCodex();
     };
-  }, []);
+  }, [loadWorkspaceRegistry, recordError]);
 
   useEffect(() => {
     if (pendingNavigation) stayButtonRef.current?.focus();
@@ -344,7 +385,12 @@ export function App() {
 
   useEffect(() => {
     const workspaceId = authoring.workspaceId;
-    if (activeWorkbench !== "assets" || !workspaceId) return;
+    if (
+      selectedRoute?.kind !== "legacy" ||
+      selectedRoute.workspaceId !== workspaceId ||
+      activeWorkbench !== "assets" ||
+      !workspaceId
+    ) return;
     const context = `${workspaceId}\u0000${String(authoring.generation)}`;
     if (assetCatalogLazyContextRef.current === context) return;
     assetCatalogLazyContextRef.current = context;
@@ -354,11 +400,16 @@ export function App() {
     authoring.generation,
     authoring.workspaceId,
     requestAssetCatalogList,
+    selectedRoute,
   ]);
 
   useEffect(() => {
     const workspaceId = authoring.workspaceId;
-    if (typeof workspaceId !== "string") return undefined;
+    if (
+      typeof workspaceId !== "string" ||
+      selectedRoute?.kind !== "legacy" ||
+      selectedRoute.workspaceId !== workspaceId
+    ) return undefined;
     const generation = authoring.generation;
     let active = true;
     let inFlight = false;
@@ -404,7 +455,7 @@ export function App() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [authoring.generation, authoring.workspaceId, dockRefresh]);
+  }, [authoring.generation, authoring.workspaceId, dockRefresh, recordError, selectedRoute]);
 
   function moveWorkbenchTab(
     event: React.KeyboardEvent<HTMLButtonElement>,
@@ -440,8 +491,8 @@ export function App() {
     workspaceId: string,
     trigger: HTMLButtonElement,
   ): void {
-    if (workspaceId === authoring.workspaceId) return;
-    if (selectedDraft(authoring)?.dirty) {
+    if (selectedRoute?.kind === "legacy" && workspaceId === selectedRoute.workspaceId) return;
+    if (hasSelectedDirtyDraft()) {
       navigationTriggerRef.current = trigger;
       setPendingNavigation({ kind: "workspace", workspaceId });
       return;
@@ -449,9 +500,57 @@ export function App() {
     void loadWorkspace(workspaceId);
   }
 
+  function requestCreationWorkspaceSelection(
+    workspaceId: string,
+    trigger: HTMLButtonElement,
+  ): void {
+    if (selectedRoute?.kind === "creation" && workspaceId === selectedRoute.workspaceId) return;
+    if (hasSelectedDirtyDraft()) {
+      navigationTriggerRef.current = trigger;
+      setPendingNavigation({ kind: "creation-workspace", workspaceId });
+      return;
+    }
+    loadCreationWorkspace(workspaceId);
+  }
+
+  function hasSelectedDirtyDraft(): boolean {
+    return selectedRoute?.kind === "creation"
+      ? creationNavigation.blocksNavigation
+      : Boolean(selectedDraft(authoring)?.dirty);
+  }
+
+  function loadCreationWorkspace(workspaceId: string): void {
+    const generation = generationRef.current + 1;
+    generationRef.current = generation;
+    invalidateGameRequests();
+    assetCatalogLazyContextRef.current = null;
+    commitAssetCatalog(() => createInitialAssetCatalogState());
+    reviewRequestRef.current += 1;
+    reviewMutationRef.current = null;
+    reviewDispatch({ type: "workspace-changed", workspaceId, generation });
+    setPendingReviewAction(null);
+    setDockEvents([]);
+    setDockChangesets([]);
+    setDockJobs([]);
+    setGameImmediateJobs([]);
+    setAssistantOpen(false);
+    setCreationNavigation(CLEAN_CREATION_NAVIGATION);
+    setSelectedRoute({ kind: "creation", workspaceId, generation });
+  }
+
+  function creationWorkspaceReady(workspace: StudioCreationWorkspace): void {
+    setCreationWorkspaces((current) => [
+      workspace,
+      ...current.filter((candidate) => candidate.workspace_id !== workspace.workspace_id),
+    ]);
+    if (!hasSelectedDirtyDraft()) loadCreationWorkspace(workspace.workspace_id);
+  }
+
   async function loadWorkspace(workspaceId: string): Promise<void> {
     const generation = generationRef.current + 1;
     generationRef.current = generation;
+    setSelectedRoute({ kind: "legacy", workspaceId, generation });
+    setCreationNavigation(CLEAN_CREATION_NAVIGATION);
     invalidateGameRequests();
     assetCatalogLazyContextRef.current = null;
     commitAssetCatalog((current) =>
@@ -848,12 +947,15 @@ export function App() {
 
   function discardAndNavigate(): void {
     const navigation = pendingNavigation;
-    dispatch({ type: "draft-discarded" });
+    if (selectedRoute?.kind === "legacy") dispatch({ type: "draft-discarded" });
+    else setCreationNavigation(CLEAN_CREATION_NAVIGATION);
     setPendingNavigation(null);
     window.requestAnimationFrame(() => navigationTriggerRef.current?.focus());
     if (!navigation) return;
     if (navigation.kind === "workspace") {
       void loadWorkspace(navigation.workspaceId);
+    } else if (navigation.kind === "creation-workspace") {
+      loadCreationWorkspace(navigation.workspaceId);
     } else if (authoring.workspaceId) {
       selectSourceNow(authoring.workspaceId, authoring.generation, navigation.document);
     }
@@ -1159,14 +1261,18 @@ export function App() {
     () => mergeGameJobRecords(dockJobs, gameImmediateJobs),
     [dockJobs, gameImmediateJobs],
   );
-  const activeWorkbenchTarget = `#${activeWorkbench}-workbench`;
-  const activeWorkbenchLabel = titleCase(activeWorkbench);
+  const activeWorkbenchTarget = selectedRoute?.kind === "creation"
+    ? "#creation-workbench"
+    : `#${activeWorkbench}-workbench`;
+  const activeWorkbenchLabel = selectedRoute?.kind === "creation"
+    ? "Creation"
+    : titleCase(activeWorkbench);
   const isMapDraft = Boolean(
     draft && draft.jsonSyntaxError === null && selectedSummary?.path.includes("/maps/"),
   );
 
   return (
-    <div className="studio-shell">
+    <div className={`studio-shell${selectedRoute?.kind === "creation" ? " creation-route" : ""}`}>
       <div
         className="studio-content"
         aria-hidden={review.selectedChangesetId ? true : undefined}
@@ -1183,20 +1289,22 @@ export function App() {
           <span className="forge-mark" aria-hidden="true">◆</span>
           <div>
             <p className="eyebrow">Local authoring control plane</p>
-            <h1>RPG World Forge Studio</h1>
+            <h1>World Forge Studio</h1>
           </div>
         </div>
         <div className="header-actions">
           <ServiceBadge status={status} />
-          <button
-            type="button"
-            className="secondary"
-            aria-expanded={assistantOpen}
-            aria-controls="assistant-drawer"
-            onClick={() => setAssistantOpen((open) => !open)}
-          >
-            Assistant
-          </button>
+          {selectedRoute?.kind !== "creation" ? (
+            <button
+              type="button"
+              className="secondary"
+              aria-expanded={assistantOpen}
+              aria-controls="assistant-drawer"
+              onClick={() => setAssistantOpen((open) => !open)}
+            >
+              Assistant
+            </button>
+          ) : null}
         </div>
         </header>
 
@@ -1228,73 +1336,131 @@ export function App() {
           </div>
           <nav aria-label="Registered workspaces">
             {registryPending ? <p role="status">Loading workspaces…</p> : null}
-            {workspaces.length === 0 && !registryPending ? (
+            {workspaces.length === 0 && creationWorkspaces.length === 0 && !registryPending ? (
               <p className="empty-state">No registered workspaces.</p>
             ) : (
               <ul className="workspace-list">
                 {workspaces.map((workspaceId) => (
-                  <li key={workspaceId}>
+                  <li key={`legacy:${workspaceId}`}>
                     <button
                       type="button"
-                      className={workspaceId === authoring.workspaceId ? "active" : ""}
-                      aria-current={workspaceId === authoring.workspaceId ? "page" : undefined}
+                      className={
+                        selectedRoute?.kind === "legacy" &&
+                        workspaceId === selectedRoute.workspaceId
+                          ? "active"
+                          : ""
+                      }
+                      aria-current={
+                        selectedRoute?.kind === "legacy" &&
+                        workspaceId === selectedRoute.workspaceId
+                          ? "page"
+                          : undefined
+                      }
                       onClick={(event) => requestWorkspaceSelection(workspaceId, event.currentTarget)}
                     >
                       <span className="workspace-avatar" aria-hidden="true">
                         {workspaceId.slice(0, 2).toUpperCase()}
                       </span>
-                      <span>{workspaceId}</span>
+                      <span className="workspace-label">
+                        <strong>{workspaceId}</strong>
+                        <small>Legacy RPG</small>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+                {creationWorkspaces.map((workspace) => (
+                  <li key={`creation:${workspace.workspace_id}`}>
+                    <button
+                      type="button"
+                      className={
+                        selectedRoute?.kind === "creation" &&
+                        workspace.workspace_id === selectedRoute.workspaceId
+                          ? "active"
+                          : ""
+                      }
+                      aria-current={
+                        selectedRoute?.kind === "creation" &&
+                        workspace.workspace_id === selectedRoute.workspaceId
+                          ? "page"
+                          : undefined
+                      }
+                      onClick={(event) =>
+                        requestCreationWorkspaceSelection(
+                          workspace.workspace_id,
+                          event.currentTarget,
+                        )
+                      }
+                    >
+                      <span className="workspace-avatar creation" aria-hidden="true">
+                        {workspace.project.id.slice(0, 2).toUpperCase()}
+                      </span>
+                      <span className="workspace-label">
+                        <strong>{workspace.workspace_id}</strong>
+                        <small>{creationProjectKindLabel(workspace.project_kind)}</small>
+                      </span>
                     </button>
                   </li>
                 ))}
               </ul>
             )}
           </nav>
-          <div
-            className="discipline-nav"
-            role="tablist"
-            aria-label="Forge disciplines"
-            aria-orientation={compactDisciplineTabs ? "horizontal" : "vertical"}
-          >
-            <button
-              id="discipline-world"
-              type="button"
-              role="tab"
-              aria-selected={activeWorkbench === "world"}
-              aria-controls="world-workbench"
-              tabIndex={activeWorkbench === "world" ? 0 : -1}
-              onClick={() => setActiveWorkbench("world")}
-              onKeyDown={(event) => moveWorkbenchTab(event, "world")}
+          <CreationProjectEntry onWorkspaceReady={creationWorkspaceReady} />
+          {selectedRoute?.kind !== "creation" ? (
+            <div
+              className="discipline-nav"
+              role="tablist"
+              aria-label="Forge disciplines"
+              aria-orientation={compactDisciplineTabs ? "horizontal" : "vertical"}
             >
-              World
-            </button>
-            <button
-              id="discipline-assets"
-              type="button"
-              role="tab"
-              aria-selected={activeWorkbench === "assets"}
-              aria-controls="assets-workbench"
-              tabIndex={activeWorkbench === "assets" ? 0 : -1}
-              onClick={() => setActiveWorkbench("assets")}
-              onKeyDown={(event) => moveWorkbenchTab(event, "assets")}
-            >
-              Assets
-            </button>
-            <button
-              id="discipline-game"
-              type="button"
-              role="tab"
-              aria-selected={activeWorkbench === "game"}
-              aria-controls="game-workbench"
-              tabIndex={activeWorkbench === "game" ? 0 : -1}
-              onClick={() => setActiveWorkbench("game")}
-              onKeyDown={(event) => moveWorkbenchTab(event, "game")}
-            >
-              Game
-            </button>
-          </div>
+              <button
+                id="discipline-world"
+                type="button"
+                role="tab"
+                aria-selected={activeWorkbench === "world"}
+                aria-controls="world-workbench"
+                tabIndex={activeWorkbench === "world" ? 0 : -1}
+                onClick={() => setActiveWorkbench("world")}
+                onKeyDown={(event) => moveWorkbenchTab(event, "world")}
+              >
+                World
+              </button>
+              <button
+                id="discipline-assets"
+                type="button"
+                role="tab"
+                aria-selected={activeWorkbench === "assets"}
+                aria-controls="assets-workbench"
+                tabIndex={activeWorkbench === "assets" ? 0 : -1}
+                onClick={() => setActiveWorkbench("assets")}
+                onKeyDown={(event) => moveWorkbenchTab(event, "assets")}
+              >
+                Assets
+              </button>
+              <button
+                id="discipline-game"
+                type="button"
+                role="tab"
+                aria-selected={activeWorkbench === "game"}
+                aria-controls="game-workbench"
+                tabIndex={activeWorkbench === "game" ? 0 : -1}
+                onClick={() => setActiveWorkbench("game")}
+                onKeyDown={(event) => moveWorkbenchTab(event, "game")}
+              >
+                Game
+              </button>
+            </div>
+          ) : null}
         </aside>
 
+        {selectedRoute?.kind === "creation" ? (
+          <CreationWorkspace
+            workspaceId={selectedRoute.workspaceId}
+            generation={selectedRoute.generation}
+            authorityCapabilities={creationAuthorityCapabilities}
+            onNavigationStateChange={setCreationNavigation}
+          />
+        ) : (
+          <>
         <main
           id="world-workbench"
           className="world-area"
@@ -1476,9 +1642,11 @@ export function App() {
             onCancel={(job) => void cancelGameJob(job)}
           />
         </main>
+          </>
+        )}
       </div>
 
-      <BottomDock
+      {selectedRoute?.kind !== "creation" ? <BottomDock
         tab={dockTab}
         pending={dockPending}
         rows={activeDockRows}
@@ -1486,9 +1654,9 @@ export function App() {
         onTab={setDockTab}
         onCancel={(jobId) => void cancelJob(jobId)}
         onOpenChangeset={requestChangesetReview}
-      />
+      /> : null}
 
-        <AssistantDrawer
+      {selectedRoute?.kind !== "creation" ? <AssistantDrawer
         open={assistantOpen}
         workspaceId={authoring.workspaceId}
         status={codexStatus}
@@ -1507,7 +1675,7 @@ export function App() {
         onInterrupt={() => void interruptTurn()}
         onAnswer={(id, answer) => setUserAnswers((current) => ({ ...current, [id]: answer }))}
         onSubmitAnswers={(event) => void answerUserInput(event)}
-        />
+      /> : null}
 
       {pendingNavigation ? (
         <div className="modal-backdrop">
@@ -1518,23 +1686,47 @@ export function App() {
             aria-labelledby="discard-heading"
             aria-describedby="discard-description"
           >
-            <p className="eyebrow">Unstaged work</p>
-            <h2 id="discard-heading">Discard this in-memory draft?</h2>
+            <p className="eyebrow">
+              {isCreationRequestPending(selectedRoute, creationNavigation)
+                ? "Creation request in progress"
+                : isCreationOutputGrant(selectedRoute, creationNavigation)
+                  ? "Selected output authority"
+                : isPersistentCreationReview(selectedRoute, creationNavigation)
+                  ? "Reviewed change in progress"
+                  : "Local work"}
+            </p>
+            <h2 id="discard-heading">
+              {creationNavigationHeading(selectedRoute, creationNavigation)}
+            </h2>
             <p id="discard-description">
-              The current draft has not been staged or written to the repository.
+              {creationNavigationDescription(selectedRoute, creationNavigation)}
             </p>
             <div className="actions">
-              <button ref={stayButtonRef} type="button" onClick={stayOnDraft}>Stay here</button>
-              <button type="button" className="danger" onClick={discardAndNavigate}>
-                Discard draft
+              <button ref={stayButtonRef} type="button" onClick={stayOnDraft}>
+                {isCreationRequestPending(selectedRoute, creationNavigation)
+                  ? "Return to current request"
+                  : isCreationOutputGrant(selectedRoute, creationNavigation)
+                    ? "Return to asset output"
+                  : isPersistentCreationReview(selectedRoute, creationNavigation)
+                    ? "Return to profile review"
+                    : "Stay here"}
               </button>
+              {!isPersistentCreationReview(selectedRoute, creationNavigation) &&
+              !isCreationRequestPending(selectedRoute, creationNavigation) &&
+              !isCreationOutputGrant(selectedRoute, creationNavigation) ? (
+                <button type="button" className="danger" onClick={discardAndNavigate}>
+                  Discard draft
+                </button>
+              ) : null}
             </div>
           </section>
         </div>
       ) : null}
 
       <p className="sr-only" role="status" aria-live="polite">
-        {authoring.loadingWorkspace
+        {selectedRoute?.kind === "creation"
+          ? `Creation workspace ${selectedRoute.workspaceId} selected`
+          : authoring.loadingWorkspace
           ? "Loading selected workspace"
           : authoring.workspaceId
             ? `Workspace ${authoring.workspaceId} ready`
@@ -1542,7 +1734,7 @@ export function App() {
       </p>
       </div>
 
-      {review.selectedChangesetId ? (
+      {selectedRoute?.kind !== "creation" && review.selectedChangesetId ? (
         <ChangesetReviewPanel
           state={review}
           closeButtonRef={reviewCloseButtonRef}
@@ -1553,7 +1745,7 @@ export function App() {
         />
       ) : null}
 
-      {pendingReviewAction ? (
+      {selectedRoute?.kind !== "creation" && pendingReviewAction ? (
         <ReviewActionConfirmation
           action={pendingReviewAction}
           legacy={review.record?.format_version === 1}
@@ -1921,6 +2113,77 @@ type NamedResponse<M extends string, R> = {
   result: R;
 };
 
+function decodeCreationWorkspaceList(
+  result: StudioClientResult<unknown>,
+): { workspaces: StudioCreationWorkspace[]; error: string | null } {
+  if (!result.ok) {
+    return { workspaces: [], error: boundedMessage(result.error.message) };
+  }
+  if (!isRecord(result.value)) {
+    return { workspaces: [], error: "Forge Studio returned an invalid creation workspace list." };
+  }
+  if (result.value.kind === "error") {
+    const error = result.value.error;
+    return {
+      workspaces: [],
+      error: isRecord(error) && typeof error.message === "string"
+        ? boundedMessage(error.message)
+        : "Forge Studio rejected the creation workspace list.",
+    };
+  }
+  if (
+    result.value.protocol !== "rpg-world-forge.studio_protocol" ||
+    result.value.protocol_version !== 3 ||
+    result.value.kind !== "response" ||
+    result.value.method !== "creation_workspace.list" ||
+    !isRecord(result.value.result) ||
+    !Array.isArray(result.value.result.workspaces) ||
+    result.value.result.workspaces.length > 1_000
+  ) {
+    return { workspaces: [], error: "Forge Studio returned an invalid creation workspace list." };
+  }
+  const workspaces: StudioCreationWorkspace[] = [];
+  const seen = new Set<string>();
+  for (const candidate of result.value.result.workspaces) {
+    if (!isCreationWorkspace(candidate) || seen.has(candidate.workspace_id)) {
+      return { workspaces: [], error: "Forge Studio returned an invalid creation workspace record." };
+    }
+    seen.add(candidate.workspace_id);
+    workspaces.push(candidate);
+  }
+  return { workspaces, error: null };
+}
+
+function isCreationWorkspace(value: unknown): value is StudioCreationWorkspace {
+  if (!isRecord(value) || !isRecord(value.project)) return false;
+  return (
+    value.format === "world-forge.studio_creation_workspace" &&
+    value.format_version === 1 &&
+    typeof value.workspace_id === "string" &&
+    value.workspace_id.length > 0 &&
+    value.workspace_id.length <= 128 &&
+    value.project.format === "world-forge.project" &&
+    value.project.format_version === 1 &&
+    typeof value.project.id === "string" &&
+    typeof value.project.content_hash === "string" &&
+    /^[a-f0-9]{64}$/u.test(value.project.content_hash) &&
+    ["game", "asset_library", "universe_library"].includes(value.project_kind as string) &&
+    typeof value.source_revision === "string" &&
+    /^[a-f0-9]{64}$/u.test(value.source_revision) &&
+    (value.workflow_status_hash === null ||
+      (typeof value.workflow_status_hash === "string" &&
+        /^[a-f0-9]{64}$/u.test(value.workflow_status_hash))) &&
+    Number.isSafeInteger(value.root_generation) &&
+    Number(value.root_generation) >= 0 &&
+    typeof value.created_at === "string" &&
+    typeof value.updated_at === "string"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function responseResult<M extends string, R>(
   result: StudioClientResult<NamedResponse<M, R> | StudioErrorEnvelope>,
   method: M,
@@ -2082,6 +2345,72 @@ function fileName(path: string): string {
 
 function titleCase(value: string): string {
   return value.length === 0 ? value : `${value[0].toUpperCase()}${value.slice(1)}`;
+}
+
+function isPersistentCreationReview(
+  route: SelectedRoute | null,
+  state: CreationNavigationState,
+): boolean {
+  return (
+    route?.kind === "creation" &&
+    (state.kind === "staged" ||
+      state.kind === "approved" ||
+      state.kind === "recovery_required")
+  );
+}
+
+function isCreationRequestPending(
+  route: SelectedRoute | null,
+  state: CreationNavigationState,
+): boolean {
+  return route?.kind === "creation" && state.kind === "request_pending";
+}
+
+function isCreationOutputGrant(
+  route: SelectedRoute | null,
+  state: CreationNavigationState,
+): boolean {
+  return route?.kind === "creation" && state.kind === "output_grant";
+}
+
+function creationNavigationHeading(
+  route: SelectedRoute | null,
+  state: CreationNavigationState,
+): string {
+  if (route?.kind !== "creation") return "Discard this in-memory draft?";
+  if (isCreationRequestPending(route, state)) {
+    return "Wait for the current creation request";
+  }
+  if (isCreationOutputGrant(route, state)) {
+    return "Resolve the selected asset output before leaving";
+  }
+  if (isPersistentCreationReview(route, state)) {
+    return "Finish this reviewed changeset before leaving";
+  }
+  return state.kind === "facet_buffer"
+    ? "Discard typed facet edits?"
+    : "Discard this in-memory profile draft?";
+}
+
+function creationNavigationDescription(
+  route: SelectedRoute | null,
+  state: CreationNavigationState,
+): string {
+  if (route?.kind !== "creation") {
+    return "The current draft has not been staged or written to the repository.";
+  }
+  if (isCreationRequestPending(route, state)) {
+    return "The fixed Studio request must resolve before this workspace can be left safely.";
+  }
+  if (isCreationOutputGrant(route, state)) {
+    return "Revoke the ready output authority or finish and recover its asset release before leaving this workspace.";
+  }
+  if (isPersistentCreationReview(route, state)) {
+    return "This persisted changeset must reach an applied, rejected, or recovered terminal state before this Studio can leave the workspace.";
+  }
+  return state.kind === "facet_buffer"
+    ? "The typed facet text has not been committed to the in-memory profile draft."
+    : "The profile draft has not been staged or written to the project.";
 }
 
 function slug(value: string): string {

@@ -1,6 +1,28 @@
 {
   "contracts": [
     {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/source/activities/puzzle.json"
+      ],
+      "format": "world-forge.activity_module",
+      "id": "activity-module",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_contracts:validate_creation_document"
+      ],
+      "schema": "schemas/activity-module.schema.json",
+      "tests": [
+        "tests/test_multigenre_contracts.py"
+      ],
+      "title": "World Forge typed activity module v1",
+      "version": 1
+    },
+    {
       "cli_commands": [
         "derive-asset-inventory"
       ],
@@ -391,6 +413,1320 @@
       "version": 1
     },
     {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0017-immutable-composed-runtime-bundle.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.composed_runtime_bundle",
+      "id": "composed-runtime-bundle",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.composed_bundle:build_composed_runtime_bundle",
+        "worldforge.composed_bundle:load_composed_runtime_bundle",
+        "worldforge.composed_bundle:verify_composed_runtime_bundle"
+      ],
+      "schema": "schemas/composed-runtime-bundle.schema.json",
+      "tests": [
+        "tests/test_m6_composed_bundle.py"
+      ],
+      "title": "RPG World Forge immutable composed runtime bundle v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "import-composed-bundle"
+      ],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/ROADMAP.md",
+        "docs/decisions/0020-composed-release-game-consumer.md"
+      ],
+      "fixtures": [
+        "src/worldforge/templates/pyray_game/compositions.lock.json.tmpl"
+      ],
+      "format": "isoworld.composed_runtime_catalog",
+      "id": "composed-runtime-catalog",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "isoworld.content.composed_catalog:load_composed_catalog",
+        "isoworld.content.composed_catalog:verify_composed_release",
+        "worldforge.composed_game:import_composed_bundle"
+      ],
+      "schema": "schemas/composed-runtime-catalog.schema.json",
+      "tests": [
+        "tests/test_m6_game_consumer.py"
+      ],
+      "title": "IsoWorld composed runtime catalog",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "audit-contracts"
+      ],
+      "docs": [
+        "contracts/README.md",
+        "README.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.contract_catalog",
+      "id": "contract-catalog",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M5"
+      ],
+      "python_symbols": [
+        "worldforge.contract_catalog:audit_contracts",
+        "worldforge.contract_catalog:load_contract_catalog"
+      ],
+      "schema": "schemas/contract-catalog.schema.json",
+      "tests": [
+        "tests/test_contract_catalog.py"
+      ],
+      "title": "RPG World Forge machine-readable contract catalog v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/systemic-simulation/artifacts/systemic-simulation.handoff.json"
+      ],
+      "format": "world-forge.creation_handoff",
+      "id": "creation-handoff",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_readiness:build_creation_handoff",
+        "worldforge.creation_readiness:validate_creation_handoff"
+      ],
+      "schema": "schemas/creation-handoff.schema.json",
+      "tests": [
+        "tests/test_generic_creation_workflow.py"
+      ],
+      "title": "World Forge creation handoff v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/profile.json",
+        "examples/multigenre-contracts/branching-narrative/profile.json"
+      ],
+      "format": "world-forge.creation_profile",
+      "id": "creation-profile",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_contracts:validate_creation_document"
+      ],
+      "schema": "schemas/creation-profile.schema.json",
+      "tests": [
+        "tests/test_multigenre_contracts.py"
+      ],
+      "title": "World Forge creation profile v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "new-creation"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/project.json",
+        "examples/multigenre-contracts/branching-narrative/project.json"
+      ],
+      "format": "world-forge.project",
+      "id": "creation-project",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_contracts:load_creation_project",
+        "worldforge.creation_contracts:validate_creation_documents",
+        "worldforge.creation_scaffold:create_creation_project"
+      ],
+      "schema": "schemas/creation-project.schema.json",
+      "tests": [
+        "tests/test_generic_creation_workflow.py",
+        "tests/test_multigenre_contracts.py"
+      ],
+      "title": "World Forge creation project v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/systemic-simulation/artifacts/systemic-simulation.readiness.json"
+      ],
+      "format": "world-forge.creation_readiness",
+      "id": "creation-readiness",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_readiness:build_creation_readiness",
+        "worldforge.creation_readiness:validate_creation_readiness"
+      ],
+      "schema": "schemas/creation-readiness.schema.json",
+      "tests": [
+        "tests/test_generic_creation_workflow.py"
+      ],
+      "title": "World Forge creation readiness v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/source/manifest.json",
+        "examples/multigenre-contracts/branching-narrative/source/manifest.json"
+      ],
+      "format": "world-forge.creation_source_manifest",
+      "id": "creation-source-manifest",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_contracts:validate_creation_document"
+      ],
+      "schema": "schemas/creation-source-manifest.schema.json",
+      "tests": [
+        "tests/test_multigenre_contracts.py"
+      ],
+      "title": "World Forge creation source manifest v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "complete-phase",
+        "phase-status",
+        "reopen-phase"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/systemic-simulation/.worldforge/status.json"
+      ],
+      "format": "world-forge.creation_workflow_status",
+      "id": "creation-workflow-status",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_workflow:complete_creation_phase",
+        "worldforge.creation_workflow:initial_creation_workflow_status",
+        "worldforge.creation_workflow:load_creation_workflow_status",
+        "worldforge.creation_workflow:reconcile_creation_workflow",
+        "worldforge.creation_workflow:reopen_creation_phase"
+      ],
+      "schema": "schemas/creation-workflow-status.schema.json",
+      "tests": [
+        "tests/test_generic_creation_workflow.py"
+      ],
+      "title": "World Forge creation workflow status v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0011-forge-studio-application-service.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.forge_workspace",
+      "id": "forge-workspace",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_forge_workspace"
+      ],
+      "schema": "schemas/forge-workspace.schema.json",
+      "tests": [
+        "tests/test_studio_contracts.py",
+        "tests/test_studio_workspaces_jobs.py"
+      ],
+      "title": "Forge Studio workspace registry record v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "analyze-game"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/artifacts/abstract-puzzle.game-analysis.json",
+        "examples/multigenre-contracts/branching-narrative/artifacts/branching-narrative.game-analysis.json"
+      ],
+      "format": "world-forge.game_analysis",
+      "id": "game-analysis",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.game_analysis:analyze_gamepack",
+        "worldforge.game_analysis:load_game_analysis",
+        "worldforge.game_analysis:validate_game_analysis"
+      ],
+      "schema": "schemas/game-analysis.schema.json",
+      "tests": [
+        "tests/test_multigenre_game_analysis.py"
+      ],
+      "title": "World Forge deterministic game analysis v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "verify-game-headless"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/runtime/headless/execution-script.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/headless/execution-script.json"
+      ],
+      "format": "world-forge.game_execution_script",
+      "id": "game-execution-script",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "gamepack_runtime.headless:build_game_execution_script",
+        "gamepack_runtime.headless:serialize_game_execution_script",
+        "gamepack_runtime.headless:validate_game_execution_script"
+      ],
+      "schema": "schemas/game-execution-script.schema.json",
+      "tests": [
+        "tests/test_multigenre_generic_headless.py"
+      ],
+      "title": "World Forge deterministic game execution script v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "build-game-materialization-bundle",
+        "verify-game-materialization-bundle"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md",
+        "docs/ROADMAP.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.game_materialization_bundle",
+      "id": "game-materialization-bundle",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.game_materialization_bundle:build_game_materialization_bundle",
+        "worldforge.game_materialization_bundle:build_game_materialization_bundle_manifest",
+        "worldforge.game_materialization_bundle:recover_game_materialization_bundle",
+        "worldforge.game_materialization_bundle:require_game_materialization_bundle",
+        "worldforge.game_materialization_bundle:rollback_game_materialization_bundle",
+        "worldforge.game_materialization_bundle:serialize_game_materialization_bundle",
+        "worldforge.game_materialization_bundle:validate_game_materialization_bundle_document",
+        "worldforge.game_materialization_bundle:verify_game_materialization_bundle"
+      ],
+      "schema": "schemas/game-materialization-bundle.schema.json",
+      "tests": [
+        "tests/test_multigenre_materialization_contracts.py",
+        "tests/test_multigenre_materialization_publication.py",
+        "tests/test_multigenre_standalone_materialization.py",
+        "tests/test_studio_creation_materialization_bundle_v4.py"
+      ],
+      "title": "World Forge executable game materialization envelope v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "extract-game-package",
+        "package-game",
+        "recover-game-package-extraction",
+        "rollback-game-package-extraction",
+        "verify-game-package"
+      ],
+      "docs": [
+        "README.md",
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md",
+        "docs/ROADMAP.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.game_package",
+      "id": "game-package",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "gamepack_runtime.game_package:build_game_package_from_standalone",
+        "gamepack_runtime.game_package:validate_game_package_document",
+        "gamepack_runtime.game_package:verify_game_package_bytes",
+        "gamepack_runtime.game_package:verify_game_package_file",
+        "worldforge.game_package:extract_game_package",
+        "worldforge.game_package:package_game",
+        "worldforge.game_package:recover_game_package_extraction",
+        "worldforge.game_package:rollback_game_package_extraction",
+        "worldforge.game_package:verify_game_package"
+      ],
+      "schema": "schemas/game-package.schema.json",
+      "tests": [
+        "tests/test_multigenre_game_package.py"
+      ],
+      "title": "World Forge deterministic standalone game package manifest v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.game_package_extraction",
+      "id": "game-package-extraction",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.game_package_extraction:build_game_package_extraction_evidence",
+        "worldforge.game_package_extraction:validate_game_package_extraction_evidence"
+      ],
+      "schema": "schemas/game-package-extraction.schema.json",
+      "tests": [
+        "tests/test_studio_creation_game_package_extract_v4.py"
+      ],
+      "title": "World Forge game package extraction evidence v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "verify-game-replay"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/runtime/persistence/replays/solve.json",
+        "examples/multigenre-contracts/abstract-puzzle/runtime/persistence/replays/zero-step.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/persistence/replays/left.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/persistence/replays/right.json"
+      ],
+      "format": "world-forge.game_replay",
+      "id": "game-replay",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "gamepack_runtime.persistence:build_game_replay",
+        "gamepack_runtime.persistence:play_game_replay",
+        "gamepack_runtime.persistence:validate_game_replay_document",
+        "worldforge.game_persistence:verify_game_replay"
+      ],
+      "schema": "schemas/game-replay.schema.json",
+      "tests": [
+        "tests/test_multigenre_game_persistence.py"
+      ],
+      "title": "World Forge deterministic accepted-action replay v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "build-game-runtime-bundle",
+        "recover-game-runtime-bundle",
+        "rollback-game-runtime-bundle",
+        "verify-game-runtime-bundle"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md",
+        "docs/ROADMAP.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.game_runtime_bundle",
+      "id": "game-runtime-bundle",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.game_runtime_bundle:build_game_runtime_bundle",
+        "worldforge.game_runtime_bundle:build_game_runtime_bundle_manifest",
+        "worldforge.game_runtime_bundle:recover_game_runtime_bundle",
+        "worldforge.game_runtime_bundle:rollback_game_runtime_bundle",
+        "worldforge.game_runtime_bundle:serialize_game_runtime_bundle",
+        "worldforge.game_runtime_bundle:validate_game_runtime_bundle_document",
+        "worldforge.game_runtime_bundle:verify_game_runtime_bundle"
+      ],
+      "schema": "schemas/game-runtime-bundle.schema.json",
+      "tests": [
+        "tests/test_multigenre_game_runtime_bundle.py"
+      ],
+      "title": "World Forge pre-execution game runtime bundle v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "inspect-game-runtime"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/runtime/composition.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/composition.json"
+      ],
+      "format": "world-forge.game_runtime_composition",
+      "id": "game-runtime-composition",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_runtime:build_game_runtime_composition",
+        "worldforge.generic_runtime:load_game_runtime_composition",
+        "worldforge.generic_runtime:serialize_game_runtime_composition",
+        "worldforge.generic_runtime:validate_game_runtime_composition",
+        "worldforge.generic_runtime:validate_game_runtime_composition_document"
+      ],
+      "schema": "schemas/game-runtime-composition.schema.json",
+      "tests": [
+        "tests/test_multigenre_runtime_contracts.py"
+      ],
+      "title": "World Forge exact game-runtime composition v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "inspect-game-runtime"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/runtime/snapshot.json"
+      ],
+      "format": "world-forge.game_runtime_snapshot",
+      "id": "game-runtime-snapshot",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_runtime:build_game_runtime_snapshot",
+        "worldforge.generic_runtime:load_runtime_snapshot",
+        "worldforge.generic_runtime:serialize_runtime_snapshot",
+        "worldforge.generic_runtime:validate_runtime_snapshot_document"
+      ],
+      "schema": "schemas/game-runtime-snapshot.schema.json",
+      "tests": [
+        "tests/test_multigenre_runtime_contracts.py"
+      ],
+      "title": "World Forge deterministic game-runtime snapshot v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "verify-game-save"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/runtime/persistence/saves/initial.json",
+        "examples/multigenre-contracts/abstract-puzzle/runtime/persistence/saves/solved.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/persistence/saves/left.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/persistence/saves/right.json"
+      ],
+      "format": "world-forge.game_save",
+      "id": "game-save",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "gamepack_runtime.persistence:build_game_save",
+        "gamepack_runtime.persistence:restore_game_save",
+        "gamepack_runtime.persistence:validate_game_save_document",
+        "worldforge.game_persistence:verify_game_save"
+      ],
+      "schema": "schemas/game-save.schema.json",
+      "tests": [
+        "tests/test_multigenre_game_persistence.py"
+      ],
+      "title": "World Forge deterministic game save v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "compile-game"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/artifacts/abstract-puzzle.gamepack.json",
+        "examples/multigenre-contracts/action-framing/artifacts/action-framing.gamepack.json",
+        "examples/multigenre-contracts/branching-narrative/artifacts/branching-narrative.gamepack.json",
+        "examples/multigenre-contracts/faction-strategy/artifacts/faction-strategy.gamepack.json",
+        "examples/multigenre-contracts/modular-roguelite/artifacts/modular-roguelite.gamepack.json",
+        "examples/multigenre-contracts/sports-career/artifacts/sports-career.gamepack.json"
+      ],
+      "format": "world-forge.gamepack",
+      "id": "gamepack",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.gamepack:build_gamepack",
+        "worldforge.gamepack:compile_game_project",
+        "worldforge.gamepack:load_gamepack",
+        "worldforge.gamepack:validate_gamepack"
+      ],
+      "schema": "schemas/gamepack.schema.json",
+      "tests": [
+        "tests/test_authoring_only_multigenre_fixtures.py",
+        "tests/test_multigenre_gamepack.py"
+      ],
+      "title": "World Forge deterministic gamepack v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/inventory.json",
+        "examples/multigenre-contracts/branching-narrative/assets/inventory.json"
+      ],
+      "format": "world-forge.asset_inventory",
+      "id": "generic-asset-inventory",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_assets:build_asset_inventory",
+        "worldforge.generic_assets:load_asset_inventory",
+        "worldforge.generic_assets:validate_asset_inventory",
+        "worldforge.generic_assets:validate_asset_inventory_document"
+      ],
+      "schema": "schemas/generic-asset-inventory.schema.json",
+      "tests": [
+        "tests/test_multigenre_assets.py"
+      ],
+      "title": "World Forge deterministic asset inventory v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/production/board_ui/license.json",
+        "examples/multigenre-contracts/branching-narrative/assets/production/narrative_ui_font/license.json"
+      ],
+      "format": "world-forge.asset_license_record",
+      "id": "generic-asset-license-record",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_production:build_asset_license_record",
+        "worldforge.generic_asset_production:load_asset_license_record",
+        "worldforge.generic_asset_production:validate_asset_license_record",
+        "worldforge.generic_asset_production:validate_asset_license_record_document"
+      ],
+      "schema": "schemas/generic-asset-license-record.schema.json",
+      "tests": [
+        "tests/test_multigenre_asset_production.py"
+      ],
+      "title": "World Forge runtime-safe asset license record v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate-generic-asset-contract"
+      ],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/manifest.json",
+        "examples/multigenre-contracts/branching-narrative/assets/manifest.json"
+      ],
+      "format": "world-forge.asset_manifest",
+      "id": "generic-asset-manifest",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_processing:build_asset_manifest",
+        "worldforge.generic_asset_processing:load_asset_manifest",
+        "worldforge.generic_asset_processing:publish_asset_manifest",
+        "worldforge.generic_asset_processing:validate_asset_manifest",
+        "worldforge.generic_asset_processing:validate_asset_manifest_document"
+      ],
+      "schema": "schemas/generic-asset-manifest.schema.json",
+      "tests": [
+        "tests/test_multigenre_asset_processing.py"
+      ],
+      "title": "World Forge generic asset release manifest v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate-generic-asset-contract"
+      ],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/production/board_ui/processing-receipt.json",
+        "examples/multigenre-contracts/branching-narrative/assets/production/narrative_ui_font/processing-receipt.json"
+      ],
+      "format": "world-forge.asset_processing_receipt",
+      "id": "generic-asset-processing-receipt",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_processing:build_asset_processing_receipt",
+        "worldforge.generic_asset_processing:load_asset_processing_receipt",
+        "worldforge.generic_asset_processing:publish_asset_processing_receipt",
+        "worldforge.generic_asset_processing:validate_asset_processing_receipt",
+        "worldforge.generic_asset_processing:validate_asset_processing_receipt_document"
+      ],
+      "schema": "schemas/generic-asset-processing-receipt.schema.json",
+      "tests": [
+        "tests/test_multigenre_asset_processing.py"
+      ],
+      "title": "World Forge deterministic asset processing receipt v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate-generic-asset-contract"
+      ],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/production/board_ui/recipe.json",
+        "examples/multigenre-contracts/branching-narrative/assets/production/narrative_ui_font/recipe.json"
+      ],
+      "format": "world-forge.asset_processing_recipe",
+      "id": "generic-asset-processing-recipe",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_processing:build_asset_processing_recipe",
+        "worldforge.generic_asset_processing:load_asset_processing_recipe",
+        "worldforge.generic_asset_processing:publish_asset_processing_recipe",
+        "worldforge.generic_asset_processing:validate_asset_processing_recipe",
+        "worldforge.generic_asset_processing:validate_asset_processing_recipe_document"
+      ],
+      "schema": "schemas/generic-asset-processing-recipe.schema.json",
+      "tests": [
+        "tests/test_multigenre_asset_processing.py"
+      ],
+      "title": "World Forge deterministic asset processing recipe v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/production/board_ui/receipt.json",
+        "examples/multigenre-contracts/branching-narrative/assets/production/narrative_ui_font/receipt.json"
+      ],
+      "format": "world-forge.asset_production_receipt",
+      "id": "generic-asset-production-receipt",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_production:build_asset_production_receipt",
+        "worldforge.generic_asset_production:load_asset_production_receipt",
+        "worldforge.generic_asset_production:validate_asset_production_receipt",
+        "worldforge.generic_asset_production:validate_asset_production_receipt_document"
+      ],
+      "schema": "schemas/generic-asset-production-receipt.schema.json",
+      "tests": [
+        "tests/test_multigenre_asset_production.py"
+      ],
+      "title": "World Forge asset production receipt v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/production/board_ui/request.json",
+        "examples/multigenre-contracts/branching-narrative/assets/production/narrative_ui_font/request.json"
+      ],
+      "format": "world-forge.asset_production_request",
+      "id": "generic-asset-production-request",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_production:build_asset_production_request",
+        "worldforge.generic_asset_production:load_asset_production_request",
+        "worldforge.generic_asset_production:validate_asset_production_request",
+        "worldforge.generic_asset_production:validate_asset_production_request_document"
+      ],
+      "schema": "schemas/generic-asset-production-request.schema.json",
+      "tests": [
+        "tests/test_multigenre_asset_production.py"
+      ],
+      "title": "World Forge asset production request v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/production/board_ui/provenance.json",
+        "examples/multigenre-contracts/branching-narrative/assets/production/narrative_ui_font/provenance.json"
+      ],
+      "format": "world-forge.asset_provenance_record",
+      "id": "generic-asset-provenance-record",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_production:build_asset_provenance_record",
+        "worldforge.generic_asset_production:load_asset_provenance_record",
+        "worldforge.generic_asset_production:validate_asset_provenance_record",
+        "worldforge.generic_asset_production:validate_asset_provenance_record_document"
+      ],
+      "schema": "schemas/generic-asset-provenance-record.schema.json",
+      "tests": [
+        "tests/test_multigenre_asset_production.py"
+      ],
+      "title": "World Forge selected asset provenance record v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "validate-generic-asset-contract"
+      ],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/production/board_ui/qa-report.json",
+        "examples/multigenre-contracts/branching-narrative/assets/production/narrative_ui_font/qa-report.json"
+      ],
+      "format": "world-forge.asset_qa_report",
+      "id": "generic-asset-qa-report",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_processing:build_asset_qa_report",
+        "worldforge.generic_asset_processing:load_asset_qa_report",
+        "worldforge.generic_asset_processing:publish_asset_qa_report",
+        "worldforge.generic_asset_processing:validate_asset_qa_report",
+        "worldforge.generic_asset_processing:validate_asset_qa_report_document"
+      ],
+      "schema": "schemas/generic-asset-qa-report.schema.json",
+      "tests": [
+        "tests/test_multigenre_asset_processing.py"
+      ],
+      "title": "World Forge retained-byte asset QA report v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/production/board_ui/qa-review-texture.json",
+        "examples/multigenre-contracts/action-framing/assets/production/action_hud/qa-review-texture.json",
+        "examples/multigenre-contracts/branching-narrative/assets/production/narrative_ui_font/qa-review-font.json",
+        "examples/multigenre-contracts/faction-strategy/assets/production/strategy_map/qa-review-texture.json",
+        "examples/multigenre-contracts/modular-roguelite/assets/production/storylet_cards/qa-review-texture.json",
+        "examples/multigenre-contracts/sports-career/assets/production/season_dashboard/qa-review-texture.json"
+      ],
+      "format": "world-forge.asset_qa_review_receipt",
+      "id": "generic-asset-qa-review-receipt",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_authority:build_asset_qa_review_receipt",
+        "worldforge.generic_asset_authority:load_asset_qa_review_receipt",
+        "worldforge.generic_asset_authority:serialize_asset_qa_review_receipt",
+        "worldforge.generic_asset_authority:validate_asset_qa_review_receipt_document",
+        "worldforge.generic_asset_authority:verify_asset_qa_review"
+      ],
+      "schema": "schemas/generic-asset-qa-review-receipt.schema.json",
+      "tests": [
+        "tests/test_generic_asset_authority.py"
+      ],
+      "title": "World Forge retained asset QA review receipt v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/release-authority.json",
+        "examples/multigenre-contracts/action-framing/assets/release-authority.json",
+        "examples/multigenre-contracts/branching-narrative/assets/release-authority.json",
+        "examples/multigenre-contracts/faction-strategy/assets/release-authority.json",
+        "examples/multigenre-contracts/modular-roguelite/assets/release-authority.json",
+        "examples/multigenre-contracts/sports-career/assets/release-authority.json"
+      ],
+      "format": "world-forge.asset_release_authority",
+      "id": "generic-asset-release-authority",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_authority:build_asset_release_authority",
+        "worldforge.generic_asset_authority:load_asset_release_authority",
+        "worldforge.generic_asset_authority:serialize_asset_release_authority",
+        "worldforge.generic_asset_authority:validate_asset_release_authority_document",
+        "worldforge.generic_asset_authority:verify_asset_release_authority"
+      ],
+      "schema": "schemas/generic-asset-release-authority.schema.json",
+      "tests": [
+        "tests/test_generic_asset_authority.py"
+      ],
+      "title": "World Forge asset release authority companion v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/production/board_ui/selection.json",
+        "examples/multigenre-contracts/branching-narrative/assets/production/narrative_ui_font/selection.json"
+      ],
+      "format": "world-forge.asset_selection",
+      "id": "generic-asset-selection",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_asset_production:build_asset_selection",
+        "worldforge.generic_asset_production:load_asset_selection",
+        "worldforge.generic_asset_production:validate_asset_selection",
+        "worldforge.generic_asset_production:validate_asset_selection_document"
+      ],
+      "schema": "schemas/generic-asset-selection.schema.json",
+      "tests": [
+        "tests/test_multigenre_asset_production.py"
+      ],
+      "title": "World Forge reviewed asset selection v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/specs/board_ui.json",
+        "examples/multigenre-contracts/branching-narrative/assets/specs/narrative_ui_font.json"
+      ],
+      "format": "world-forge.asset_spec",
+      "id": "generic-asset-spec",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_assets:build_asset_specification",
+        "worldforge.generic_assets:load_asset_specification",
+        "worldforge.generic_assets:validate_asset_specification",
+        "worldforge.generic_assets:validate_asset_specification_document",
+        "worldforge.generic_assets:validate_asset_specification_set"
+      ],
+      "schema": "schemas/generic-asset-spec.schema.json",
+      "tests": [
+        "tests/test_multigenre_assets.py"
+      ],
+      "title": "World Forge asset specification v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/style.json",
+        "examples/multigenre-contracts/branching-narrative/assets/style.json"
+      ],
+      "format": "world-forge.asset_style",
+      "id": "generic-asset-style",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_assets:build_asset_style",
+        "worldforge.generic_assets:load_asset_style",
+        "worldforge.generic_assets:validate_asset_style",
+        "worldforge.generic_assets:validate_asset_style_document"
+      ],
+      "schema": "schemas/generic-asset-style.schema.json",
+      "tests": [
+        "tests/test_multigenre_assets.py"
+      ],
+      "title": "World Forge reviewed asset style v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/subject.json",
+        "examples/multigenre-contracts/branching-narrative/assets/subject.json"
+      ],
+      "format": "world-forge.asset_subject",
+      "id": "generic-asset-subject",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_assets:build_asset_subject",
+        "worldforge.generic_assets:load_asset_subject",
+        "worldforge.generic_assets:validate_asset_subject",
+        "worldforge.generic_assets:validate_asset_subject_document"
+      ],
+      "schema": "schemas/generic-asset-subject.schema.json",
+      "tests": [
+        "tests/test_multigenre_assets.py"
+      ],
+      "title": "World Forge asset subject v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/assets/target.json",
+        "examples/multigenre-contracts/branching-narrative/assets/target.json"
+      ],
+      "format": "world-forge.asset_target",
+      "id": "generic-asset-target",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_assets:build_asset_target",
+        "worldforge.generic_assets:load_asset_target",
+        "worldforge.generic_assets:validate_asset_target",
+        "worldforge.generic_assets:validate_asset_target_document"
+      ],
+      "schema": "schemas/generic-asset-target.schema.json",
+      "tests": [
+        "tests/test_multigenre_assets.py"
+      ],
+      "title": "World Forge reviewed asset target v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "recover-generic-assetpack",
+        "rollback-generic-assetpack",
+        "seal-generic-assetpack",
+        "verify-generic-assetpack"
+      ],
+      "docs": [
+        "README.md",
+        "docs/ASSET_PIPELINE.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.assetpack",
+      "id": "generic-assetpack",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_assetpack:build_generic_assetpack_manifest",
+        "worldforge.generic_assetpack:recover_generic_assetpack",
+        "worldforge.generic_assetpack:rollback_generic_assetpack",
+        "worldforge.generic_assetpack:seal_generic_assetpack",
+        "worldforge.generic_assetpack:validate_generic_assetpack_document",
+        "worldforge.generic_assetpack:verify_generic_assetpack"
+      ],
+      "schema": "schemas/generic-assetpack.schema.json",
+      "tests": [
+        "tests/test_multigenre_assetpack.py"
+      ],
+      "title": "World Forge sealed generic assetpack v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "inspect-game-runtime"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/runtime/adapters/gamepack_raylib_2d_puzzle.json",
+        "examples/multigenre-contracts/runtime/adapters/gamepack_raylib_2d_text.json"
+      ],
+      "format": "world-forge.runtime_adapter",
+      "id": "generic-runtime-adapter",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_runtime:build_builtin_runtime_adapters",
+        "worldforge.generic_runtime:load_runtime_adapter",
+        "worldforge.generic_runtime:serialize_runtime_adapter",
+        "worldforge.generic_runtime:validate_runtime_adapter_document"
+      ],
+      "schema": "schemas/generic-runtime-adapter.schema.json",
+      "tests": [
+        "tests/test_multigenre_runtime_contracts.py"
+      ],
+      "title": "World Forge declarative runtime adapter v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "inspect-game-runtime"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/runtime/registry.json"
+      ],
+      "format": "world-forge.runtime_adapter_registry",
+      "id": "generic-runtime-adapter-registry",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_runtime:build_runtime_adapter_registry",
+        "worldforge.generic_runtime:load_runtime_adapter_registry",
+        "worldforge.generic_runtime:serialize_runtime_adapter_registry",
+        "worldforge.generic_runtime:validate_runtime_adapter_registry_document"
+      ],
+      "schema": "schemas/generic-runtime-adapter-registry.schema.json",
+      "tests": [
+        "tests/test_multigenre_runtime_contracts.py"
+      ],
+      "title": "World Forge trusted runtime-adapter registry v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "inspect-game-runtime"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.runtime_evidence",
+      "id": "generic-runtime-evidence",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_runtime:build_runtime_evidence",
+        "worldforge.generic_runtime:load_runtime_evidence",
+        "worldforge.generic_runtime:serialize_runtime_evidence",
+        "worldforge.generic_runtime:validate_runtime_evidence_document"
+      ],
+      "schema": "schemas/generic-runtime-evidence.schema.json",
+      "tests": [
+        "tests/test_multigenre_runtime_contracts.py"
+      ],
+      "title": "World Forge external runtime evidence claim v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "inspect-game-runtime"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/runtime/support-report.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/support-report.json"
+      ],
+      "format": "world-forge.runtime_support_report",
+      "id": "generic-runtime-support-report",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_runtime:build_runtime_support_report",
+        "worldforge.generic_runtime:load_runtime_support_report",
+        "worldforge.generic_runtime:resolve_runtime_compatibility",
+        "worldforge.generic_runtime:serialize_runtime_support_report",
+        "worldforge.generic_runtime:validate_runtime_support_report",
+        "worldforge.generic_runtime:validate_runtime_support_report_document"
+      ],
+      "schema": "schemas/generic-runtime-support-report.schema.json",
+      "tests": [
+        "tests/test_multigenre_runtime_contracts.py"
+      ],
+      "title": "World Forge multidimensional runtime support report v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "verify-game-headless",
+        "verify-game-headless-evidence"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.headless_evidence_set",
+      "id": "headless-evidence-set",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.generic_headless:build_headless_evidence_set",
+        "worldforge.generic_headless:recover_headless_evidence_set",
+        "worldforge.generic_headless:validate_headless_evidence_set_document",
+        "worldforge.generic_headless:verify_headless_evidence_set"
+      ],
+      "schema": "schemas/headless-evidence-set.schema.json",
+      "tests": [
+        "tests/test_multigenre_generic_headless.py"
+      ],
+      "title": "World Forge immutable external headless evidence set v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "verify-game-headless"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.headless_execution_receipt",
+      "id": "headless-execution-receipt",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "gamepack_runtime.headless:execute_game_execution_script",
+        "gamepack_runtime.headless:serialize_headless_execution_receipt",
+        "gamepack_runtime.headless:validate_headless_execution_receipt"
+      ],
+      "schema": "schemas/headless-execution-receipt.schema.json",
+      "tests": [
+        "tests/test_multigenre_generic_headless.py"
+      ],
+      "title": "World Forge bounded headless execution receipt v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/SUPPORT_MATRIX.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.hosted_native_release_attestation_receipt",
+      "id": "hosted-native-release-attestation-receipt",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.hosted_native_release_authority:build_hosted_native_attestation_receipt_document",
+        "worldforge.hosted_native_release_authority:serialize_hosted_native_attestation_receipt",
+        "worldforge.hosted_native_release_authority:validate_hosted_native_attestation_receipt_document",
+        "worldforge.hosted_native_release_authority:write_hosted_native_attestation_receipt"
+      ],
+      "schema": "schemas/hosted-native-release-attestation-receipt.schema.json",
+      "tests": [
+        "tests/test_hosted_native_release_authority.py"
+      ],
+      "title": "World Forge hosted native release attestation receipt v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/SUPPORT_MATRIX.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.hosted_native_release_authority",
+      "id": "hosted-native-release-authority",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.hosted_native_release_authority:validate_hosted_native_release_authority_document",
+        "worldforge.hosted_native_release_authority:verify_attested_hosted_native_release_authority_file",
+        "worldforge.hosted_native_release_authority:verify_hosted_native_release_authority_file"
+      ],
+      "schema": "schemas/hosted-native-release-authority.schema.json",
+      "tests": [
+        "tests/test_hosted_native_release_authority.py"
+      ],
+      "title": "World Forge hosted native release authority v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "audit-identities"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "contracts/legacy-identity-allowlist.json"
+      ],
+      "format": "world-forge.legacy_identity_allowlist",
+      "id": "legacy-identity-allowlist",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.identity_audit:audit_identities"
+      ],
+      "schema": "schemas/legacy-identity-allowlist.schema.json",
+      "tests": [
+        "tests/test_identity_audit.py"
+      ],
+      "title": "World Forge legacy identity allowlist v1",
+      "version": 1
+    },
+    {
       "cli_commands": [
         "validate",
         "compile"
@@ -415,6 +1751,54 @@
       "version": 1
     },
     {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/source/logic/puzzle.json",
+        "examples/multigenre-contracts/branching-narrative/source/logic/branching.json"
+      ],
+      "format": "world-forge.logic_module",
+      "id": "logic-module",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_contracts:validate_creation_document",
+        "worldforge.creation_contracts:validate_creation_documents"
+      ],
+      "schema": "schemas/logic-module.schema.json",
+      "tests": [
+        "tests/test_multigenre_logic_module.py"
+      ],
+      "title": "World Forge declarative logic module v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/branching-narrative/artifacts/branching-narrative.lorepack.json"
+      ],
+      "format": "world-forge.lorepack",
+      "id": "lorepack",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.lorepack:build_lorepack",
+        "worldforge.lorepack:load_lorepack",
+        "worldforge.lorepack:validate_lorepack"
+      ],
+      "schema": "schemas/lorepack.schema.json",
+      "tests": [
+        "tests/test_multigenre_phase_lorepack.py"
+      ],
+      "title": "World Forge lorepack v1",
+      "version": 1
+    },
+    {
       "cli_commands": [
         "import-map"
       ],
@@ -435,6 +1819,37 @@
         "tests/test_map_import.py"
       ],
       "title": "Internal isometric map source",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "compile-game"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/artifacts/abstract-puzzle.authoring-ledger.json",
+        "examples/multigenre-contracts/action-framing/artifacts/action-framing.authoring-ledger.json",
+        "examples/multigenre-contracts/branching-narrative/artifacts/branching-narrative.authoring-ledger.json",
+        "examples/multigenre-contracts/faction-strategy/artifacts/faction-strategy.authoring-ledger.json",
+        "examples/multigenre-contracts/modular-roguelite/artifacts/modular-roguelite.authoring-ledger.json",
+        "examples/multigenre-contracts/sports-career/artifacts/sports-career.authoring-ledger.json"
+      ],
+      "format": "world-forge.mechanic_capability_ledger",
+      "id": "mechanic-capability-ledger",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.gamepack:build_authoring_capability_ledger",
+        "worldforge.gamepack:validate_capability_ledger_document"
+      ],
+      "schema": "schemas/mechanic-capability-ledger.schema.json",
+      "tests": [
+        "tests/test_authoring_only_multigenre_fixtures.py",
+        "tests/test_multigenre_gamepack.py"
+      ],
+      "title": "World Forge mechanic capability ledger v1",
       "version": 1
     },
     {
@@ -510,6 +1925,64 @@
       "version": 1
     },
     {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/branching-narrative/source/narrative/branching.json"
+      ],
+      "format": "world-forge.narrative_module",
+      "id": "narrative-module",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_contracts:validate_creation_document"
+      ],
+      "schema": "schemas/narrative-module.schema.json",
+      "tests": [
+        "tests/test_multigenre_contracts.py"
+      ],
+      "title": "World Forge typed narrative module v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "verify-persistence-generation"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/runtime/persistence/generations/replays/solve.json",
+        "examples/multigenre-contracts/abstract-puzzle/runtime/persistence/generations/replays/zero-step.json",
+        "examples/multigenre-contracts/abstract-puzzle/runtime/persistence/generations/saves/initial.json",
+        "examples/multigenre-contracts/abstract-puzzle/runtime/persistence/generations/saves/solved.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/persistence/generations/replays/left.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/persistence/generations/replays/right.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/persistence/generations/saves/left.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/persistence/generations/saves/right.json"
+      ],
+      "format": "world-forge.persistence_generation",
+      "id": "persistence-generation",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "gamepack_runtime.persistence_generation:build_persistence_generation",
+        "gamepack_runtime.persistence_generation:load_persistence_generation_bytes",
+        "gamepack_runtime.persistence_generation:serialize_persistence_generation",
+        "gamepack_runtime.persistence_generation:validate_persistence_generation_document",
+        "worldforge.persistence_generation:verify_persistence_generation"
+      ],
+      "schema": "schemas/persistence-generation.schema.json",
+      "tests": [
+        "tests/test_multigenre_game_persistence.py"
+      ],
+      "title": "World Forge immutable persistence generation v1",
+      "version": 1
+    },
+    {
       "cli_commands": [
         "complete-phase",
         "reopen-phase",
@@ -533,6 +2006,64 @@
       ],
       "title": "RPG World Forge phase report",
       "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/phase-reports/p03_geography.json",
+        "examples/multigenre-contracts/abstract-puzzle/phase-reports/p04_timeline.json",
+        "examples/multigenre-contracts/abstract-puzzle/phase-reports/p05_societies.json",
+        "examples/multigenre-contracts/abstract-puzzle/phase-reports/p06_characters.json",
+        "examples/multigenre-contracts/branching-narrative/phase-reports/p00_brief.json",
+        "examples/multigenre-contracts/branching-narrative/phase-reports/p08_world_arcs.json"
+      ],
+      "format": "world-forge.phase_report",
+      "id": "phase-report-v2",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.phase_report_v2:build_phase_output_evidence",
+        "worldforge.phase_report_v2:build_phase_report_v2",
+        "worldforge.phase_report_v2:load_phase_report_v2",
+        "worldforge.phase_report_v2:validate_phase_report_v2"
+      ],
+      "schema": "schemas/phase-report-v2.schema.json",
+      "tests": [
+        "tests/test_multigenre_phase_lorepack.py"
+      ],
+      "title": "World Forge phase report v2",
+      "version": 2
+    },
+    {
+      "cli_commands": [
+        "complete-phase"
+      ],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/systemic-simulation/phase-reports/p13_asset_production.json",
+        "examples/multigenre-contracts/systemic-simulation/phase-reports/p14_handoff.json"
+      ],
+      "format": "world-forge.phase_report",
+      "id": "phase-report-v3",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.phase_report_v3:build_phase_output_evidence_v2",
+        "worldforge.phase_report_v3:build_phase_report_v3",
+        "worldforge.phase_report_v3:load_phase_report_v3",
+        "worldforge.phase_report_v3:validate_phase_report_v3"
+      ],
+      "schema": "schemas/phase-report-v3.schema.json",
+      "tests": [
+        "tests/test_generic_creation_workflow.py"
+      ],
+      "title": "World Forge phase report v3",
+      "version": 3
     },
     {
       "cli_commands": [
@@ -585,6 +2116,41 @@
       "version": 3
     },
     {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/PYRAY_RUNTIME_GUIDE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md",
+        "docs/decisions/0018-bounded-pyray-3d-proof.md",
+        "docs/decisions/0019-legacy-pyray-2-5d-adapter.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/adapter.declared.json",
+        "examples/m6-contracts/adapters/isoworld_raylib_2_5d.json",
+        "examples/m6-contracts/adapters/pyray_3d_v1.json"
+      ],
+      "format": "rpg-world-forge.runtime_adapter",
+      "id": "runtime-adapter",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "isoworld.render.pyray_2_5d:PYRAY_2_5D_REGISTRY",
+        "isoworld.render.pyray_3d:PYRAY_3D_V1_REGISTRY",
+        "worldforge.runtime_composition:validate_runtime_adapter"
+      ],
+      "schema": "schemas/runtime-adapter.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py",
+        "tests/test_m6_pyray_2_5d.py",
+        "tests/test_m6_pyray_3d.py"
+      ],
+      "title": "RPG World Forge runtime adapter declaration v1",
+      "version": 1
+    },
+    {
       "cli_commands": [
         "export-bundle",
         "verify-bundle",
@@ -613,6 +2179,209 @@
         "tests/test_m4_bundle.py"
       ],
       "title": "Immutable IsoWorld runtime bundle manifest",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/capability-catalog.json"
+      ],
+      "format": "rpg-world-forge.runtime_capability_catalog",
+      "id": "runtime-capability-catalog",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.runtime_composition:validate_runtime_capability_catalog"
+      ],
+      "schema": "schemas/runtime-capability-catalog.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py"
+      ],
+      "title": "RPG World Forge runtime capability catalog v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/compatibility-report.json"
+      ],
+      "format": "rpg-world-forge.runtime_compatibility_report",
+      "id": "runtime-compatibility-report",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.runtime_composition:validate_runtime_compatibility_report"
+      ],
+      "schema": "schemas/runtime-compatibility-report.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py"
+      ],
+      "title": "RPG World Forge runtime compatibility report v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/composition.json"
+      ],
+      "format": "rpg-world-forge.runtime_composition",
+      "id": "runtime-composition",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.runtime_composition:validate_runtime_composition",
+        "worldforge.runtime_composition:verify_runtime_composition"
+      ],
+      "schema": "schemas/runtime-composition.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py"
+      ],
+      "title": "RPG World Forge runtime composition v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "inspect-runtime-implementation"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md",
+        "docs/ROADMAP.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/runtime/runtime-implementation.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/runtime-implementation.json"
+      ],
+      "format": "world-forge.runtime_implementation",
+      "id": "runtime-implementation",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.runtime_implementation:build_runtime_implementation",
+        "worldforge.runtime_implementation:load_runtime_implementation",
+        "worldforge.runtime_implementation:serialize_runtime_implementation",
+        "worldforge.runtime_implementation:validate_runtime_implementation_document"
+      ],
+      "schema": "schemas/runtime-implementation.schema.json",
+      "tests": [
+        "tests/test_multigenre_materialization_contracts.py"
+      ],
+      "title": "World Forge executable runtime implementation identity v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "inspect-runtime-platform-lock"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md",
+        "docs/ROADMAP.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/runtime/platform-locks/runtime_platform_lock_58fa72d2c53923bcaf61292799529209c310b435.json",
+        "examples/multigenre-contracts/runtime/platform-locks/runtime_platform_lock_81596ec3acdfdafef473811996b0ac3381cc24df.json",
+        "examples/multigenre-contracts/runtime/platform-locks/runtime_platform_lock_c3f9a4ae7f6fb435e60039e201777a2444b7f4ac.json",
+        "examples/multigenre-contracts/runtime/platform-locks/runtime_platform_lock_cdcf772abbac162dec0de8a93894f92b85393e1d.json"
+      ],
+      "format": "world-forge.runtime_platform_lock",
+      "id": "runtime-platform-lock",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.runtime_platform_lock:build_builtin_runtime_platform_locks",
+        "worldforge.runtime_platform_lock:load_runtime_platform_lock",
+        "worldforge.runtime_platform_lock:serialize_runtime_platform_lock",
+        "worldforge.runtime_platform_lock:validate_runtime_platform_lock_document"
+      ],
+      "schema": "schemas/runtime-platform-lock.schema.json",
+      "tests": [
+        "tests/test_multigenre_materialization_contracts.py"
+      ],
+      "title": "World Forge audited runtime platform lock v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "contracts/README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0016-runtime-composition-contracts.md"
+      ],
+      "fixtures": [
+        "examples/m6-contracts/profiles/profile_2_5d.json",
+        "examples/m6-contracts/profiles/profile_2_5d_over_3d.json",
+        "examples/m6-contracts/profiles/profile_2d.json",
+        "examples/m6-contracts/profiles/profile_2d_over_2_5d.json",
+        "examples/m6-contracts/profiles/profile_2d_over_3d.json",
+        "examples/m6-contracts/profiles/profile_3d.json"
+      ],
+      "format": "rpg-world-forge.runtime_presentation_profile",
+      "id": "runtime-presentation-profile",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.runtime_composition:validate_runtime_presentation_profile"
+      ],
+      "schema": "schemas/runtime-presentation-profile.schema.json",
+      "tests": [
+        "tests/test_m6_runtime_composition_contracts.py"
+      ],
+      "title": "RPG World Forge runtime presentation profile v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/runtime/support-authority.json",
+        "examples/multigenre-contracts/branching-narrative/runtime/support-authority.json"
+      ],
+      "format": "world-forge.runtime_support_authority",
+      "id": "runtime-support-authority",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.runtime_support_authority:attach_native_evidence",
+        "worldforge.runtime_support_authority:attach_verified_game_package",
+        "worldforge.runtime_support_authority:attach_verified_headless_evidence",
+        "worldforge.runtime_support_authority:derive_runtime_evidence",
+        "worldforge.runtime_support_authority:derive_runtime_support_report",
+        "worldforge.runtime_support_authority:initialize_runtime_support_authority",
+        "worldforge.runtime_support_authority:load_runtime_support_authority",
+        "worldforge.runtime_support_authority:serialize_runtime_support_authority",
+        "worldforge.runtime_support_authority:validate_runtime_support_authority_document"
+      ],
+      "schema": "schemas/runtime-support-authority.schema.json",
+      "tests": [
+        "tests/test_runtime_support_authority.py"
+      ],
+      "title": "World Forge trusted runtime support authority v1",
       "version": 1
     },
     {
@@ -687,6 +2456,616 @@
         "tests/test_content_pipeline.py"
       ],
       "title": "RPG World Forge source manifest",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "audit-game",
+        "materialize-game",
+        "recover-game-materialization",
+        "rollback-game-materialization"
+      ],
+      "docs": [
+        "README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md",
+        "docs/ROADMAP.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.standalone_game",
+      "id": "standalone-game",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "gamepack_runtime.distribution:validate_standalone_game_document",
+        "gamepack_runtime.distribution:verify_standalone_distribution",
+        "worldforge.standalone_game:materialize_game",
+        "worldforge.standalone_game:recover_standalone_game",
+        "worldforge.standalone_game:rollback_standalone_game",
+        "worldforge.standalone_game:verify_standalone_game"
+      ],
+      "schema": "schemas/standalone-game.schema.json",
+      "tests": [
+        "tests/test_multigenre_standalone_materialization.py"
+      ],
+      "title": "World Forge standalone game manifest v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.standalone_game_lock",
+      "id": "standalone-game-lock",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "gamepack_runtime.distribution:validate_standalone_game_lock_document",
+        "worldforge.standalone_game:validate_standalone_game_lock_document"
+      ],
+      "schema": "schemas/standalone-game-lock.schema.json",
+      "tests": [
+        "tests/test_multigenre_standalone_materialization.py"
+      ],
+      "title": "World Forge standalone payload lock v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.standalone_platform",
+      "id": "standalone-platform",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "gamepack_runtime.distribution:validate_standalone_platform_document",
+        "worldforge.standalone_game:validate_standalone_platform_document"
+      ],
+      "schema": "schemas/standalone-platform.schema.json",
+      "tests": [
+        "tests/test_multigenre_standalone_materialization.py"
+      ],
+      "title": "World Forge standalone runtime platform set v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0011-forge-studio-application-service.md",
+        "docs/decisions/0015-studio-reviewable-changesets.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_changeset",
+      "id": "studio-changeset",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.changeset_review:build_changeset_diff",
+        "worldforge.studio.contracts:validate_studio_changeset"
+      ],
+      "schema": "schemas/studio-changeset.schema.json",
+      "tests": [
+        "tests/test_studio_changeset_review.py",
+        "tests/test_studio_contracts.py",
+        "tests/test_studio_changesets.py",
+        "tests/test_studio_changesets_v2.py"
+      ],
+      "title": "Forge Studio reviewable file changeset v2",
+      "version": 2
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_artifact",
+      "id": "studio-creation-artifact",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_artifact",
+        "worldforge.studio.creation_evidence:CreationEvidenceManager"
+      ],
+      "schema": "schemas/studio-creation-artifact.schema.json",
+      "tests": [
+        "tests/test_studio_creation_evidence_v4.py"
+      ],
+      "title": "World Forge Studio creation artifact evidence v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_changeset",
+      "id": "studio-creation-changeset",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_changeset",
+        "worldforge.studio.creation_authoring:CreationAuthoringManager"
+      ],
+      "schema": "schemas/studio-creation-changeset.schema.json",
+      "tests": [
+        "tests/test_studio_creation_authoring_v3.py"
+      ],
+      "title": "World Forge Studio creation changeset v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_evidence",
+      "id": "studio-creation-evidence",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_evidence",
+        "worldforge.studio.creation_evidence:CreationEvidenceManager"
+      ],
+      "schema": "schemas/studio-creation-evidence.schema.json",
+      "tests": [
+        "tests/test_studio_creation_evidence_v4.py"
+      ],
+      "title": "World Forge Studio creation evidence projection v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_job",
+      "id": "studio-creation-job",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_job"
+      ],
+      "schema": "schemas/studio-creation-job.schema.json",
+      "tests": [
+        "tests/test_studio_creation_asset_jobs_v4.py",
+        "tests/test_studio_creation_asset_seal_v4.py",
+        "tests/test_studio_creation_game_materialize_v4.py",
+        "tests/test_studio_creation_game_package_extract_v4.py",
+        "tests/test_studio_creation_game_package_v4.py",
+        "tests/test_studio_creation_jobs_v4.py",
+        "tests/test_studio_creation_materialization_bundle_v4.py",
+        "tests/test_studio_creation_runtime_bundle_v4.py",
+        "tests/test_studio_creation_runtime_compose_v4.py"
+      ],
+      "title": "World Forge Studio creation job v9",
+      "version": 9
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_job",
+      "id": "studio-creation-job-v12",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_job"
+      ],
+      "schema": "schemas/studio-creation-job-v12.schema.json",
+      "tests": [
+        "tests/test_studio_protocol_v5.py"
+      ],
+      "title": "World Forge Studio creation job v12",
+      "version": 12
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_output_grant",
+      "id": "studio-creation-output-grant",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_output_grant",
+        "worldforge.studio.creation_output_grants:CreationOutputGrantManager"
+      ],
+      "schema": "schemas/studio-creation-output-grant.schema.json",
+      "tests": [
+        "tests/test_studio_creation_asset_seal_v4.py",
+        "tests/test_studio_creation_game_package_extract_v4.py",
+        "tests/test_studio_creation_game_materialize_v4.py",
+        "tests/test_studio_creation_game_package_v4.py",
+        "tests/test_studio_creation_materialization_bundle_v4.py",
+        "tests/test_studio_creation_runtime_bundle_v4.py"
+      ],
+      "title": "World Forge Studio creation output grant v5",
+      "version": 5
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_output_grant",
+      "id": "studio-creation-output-grant-v6",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_output_grant_v6"
+      ],
+      "schema": "schemas/studio-creation-output-grant-v6.schema.json",
+      "tests": [
+        "tests/test_studio_protocol_v5.py"
+      ],
+      "title": "World Forge Studio creation output grant v6",
+      "version": 6
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_preview",
+      "id": "studio-creation-preview",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_preview",
+        "worldforge.studio.creation_previews:CreationPreviewManager"
+      ],
+      "schema": "schemas/studio-creation-preview.schema.json",
+      "tests": [
+        "tests/test_studio_creation_previews_v4.py"
+      ],
+      "title": "World Forge Studio creation preview v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_preview",
+      "id": "studio-creation-preview-v2",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_preview_v2",
+        "worldforge.studio.creation_previews:CreationPreviewManager"
+      ],
+      "schema": "schemas/studio-creation-preview-v2.schema.json",
+      "tests": [
+        "tests/test_studio_creation_previews_v5.py"
+      ],
+      "title": "World Forge Studio QA review candidate preview v2",
+      "version": 2
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_root_grant",
+      "id": "studio-creation-root-grant",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_root_grant",
+        "worldforge.studio.creation_grants:CreationRootGrantManager"
+      ],
+      "schema": "schemas/studio-creation-root-grant.schema.json",
+      "tests": [
+        "tests/test_studio_creation_v3.py"
+      ],
+      "title": "World Forge Studio creation root grant v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_worker",
+      "id": "studio-creation-worker",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_worker_envelope"
+      ],
+      "schema": "schemas/studio-creation-worker.schema.json",
+      "tests": [
+        "tests/test_studio_creation_asset_jobs_v4.py",
+        "tests/test_studio_creation_asset_release_v11.py",
+        "tests/test_studio_creation_asset_review_v10.py",
+        "tests/test_studio_creation_asset_seal_v4.py",
+        "tests/test_studio_creation_game_materialize_v4.py",
+        "tests/test_studio_creation_game_package_extract_v4.py",
+        "tests/test_studio_creation_game_package_v4.py",
+        "tests/test_studio_creation_jobs_v4.py",
+        "tests/test_studio_creation_materialization_bundle_v4.py",
+        "tests/test_studio_creation_runtime_bundle_v4.py",
+        "tests/test_studio_creation_runtime_compose_v4.py"
+      ],
+      "title": "World Forge Studio isolated creation worker envelope v11",
+      "version": 11
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.studio_creation_workspace",
+      "id": "studio-creation-workspace",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_creation_workspace",
+        "worldforge.studio.creation_workspaces:CreationWorkspaceManager"
+      ],
+      "schema": "schemas/studio-creation-workspace.schema.json",
+      "tests": [
+        "tests/test_studio_creation_v3.py"
+      ],
+      "title": "World Forge Studio creation workspace v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0014-studio-read-only-job-executor.md",
+        "docs/decisions/0022-studio-external-artifact-jobs.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_external_grant",
+      "id": "studio-external-grant",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_external_grant",
+        "worldforge.studio.external_grants:ExternalGrantManager"
+      ],
+      "schema": "schemas/studio-external-grant.schema.json",
+      "tests": [
+        "tests/test_studio_external_jobs.py"
+      ],
+      "title": "Forge Studio external artifact grant v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0011-forge-studio-application-service.md",
+        "docs/decisions/0014-studio-read-only-job-executor.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_job",
+      "id": "studio-job",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_job_create_params",
+        "worldforge.studio.contracts:validate_studio_job",
+        "worldforge.studio.executor:JobScheduler"
+      ],
+      "schema": "schemas/studio-job.schema.json",
+      "tests": [
+        "tests/test_studio_contracts.py",
+        "tests/test_studio_executor.py",
+        "tests/test_studio_storage.py",
+        "tests/test_studio_workspaces_jobs.py"
+      ],
+      "title": "Forge Studio durable job record v2 with v1 read compatibility",
+      "version": 2
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0014-studio-read-only-job-executor.md",
+        "docs/decisions/0022-studio-external-artifact-jobs.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_job",
+      "id": "studio-job-v3",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_job_create_params",
+        "worldforge.studio.contracts:validate_studio_job",
+        "worldforge.studio.executor:JobScheduler"
+      ],
+      "schema": "schemas/studio-job-v3.schema.json",
+      "tests": [
+        "tests/test_studio_external_jobs.py"
+      ],
+      "title": "Forge Studio external artifact job v3",
+      "version": 3
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0011-forge-studio-application-service.md",
+        "docs/decisions/0014-studio-read-only-job-executor.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_protocol",
+      "id": "studio-protocol",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_protocol_envelope",
+        "worldforge.studio.service:serve"
+      ],
+      "schema": "schemas/studio-protocol.schema.json",
+      "tests": [
+        "tests/test_studio_contracts.py",
+        "tests/test_studio_executor.py",
+        "tests/test_studio_service.py"
+      ],
+      "title": "Forge Studio NDJSON application protocol v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/decisions/0011-forge-studio-application-service.md",
+        "docs/decisions/0014-studio-read-only-job-executor.md",
+        "docs/decisions/0022-studio-external-artifact-jobs.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_protocol",
+      "id": "studio-protocol-v2",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_protocol_envelope",
+        "worldforge.studio.service:serve"
+      ],
+      "schema": "schemas/studio-protocol-v2.schema.json",
+      "tests": [
+        "tests/test_studio_external_jobs.py",
+        "tests/test_studio_service.py"
+      ],
+      "title": "Forge Studio external artifact application protocol v2",
+      "version": 2
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_protocol",
+      "id": "studio-protocol-v3",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_protocol_envelope",
+        "worldforge.studio.service:serve"
+      ],
+      "schema": "schemas/studio-protocol-v3.schema.json",
+      "tests": [
+        "tests/test_studio_creation_v3.py",
+        "tests/test_studio_service.py"
+      ],
+      "title": "World Forge Studio generic creation protocol v3",
+      "version": 3
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_protocol",
+      "id": "studio-protocol-v4",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_protocol_envelope",
+        "worldforge.studio.service:serve"
+      ],
+      "schema": "schemas/studio-protocol-v4.schema.json",
+      "tests": [
+        "tests/test_studio_contracts.py",
+        "tests/test_studio_creation_asset_jobs_v4.py",
+        "tests/test_studio_creation_asset_seal_v4.py",
+        "tests/test_studio_creation_evidence_v4.py",
+        "tests/test_studio_creation_game_materialize_v4.py",
+        "tests/test_studio_creation_game_package_extract_v4.py",
+        "tests/test_studio_creation_game_package_v4.py",
+        "tests/test_studio_creation_materialization_bundle_v4.py",
+        "tests/test_studio_creation_runtime_bundle_v4.py",
+        "tests/test_studio_creation_runtime_compose_v4.py"
+      ],
+      "title": "World Forge Studio creation evidence protocol v4",
+      "version": 4
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "apps/studio/README.md",
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [],
+      "format": "rpg-world-forge.studio_protocol",
+      "id": "studio-protocol-v5",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.studio.contracts:validate_studio_protocol_envelope"
+      ],
+      "schema": "schemas/studio-protocol-v5.schema.json",
+      "tests": [
+        "tests/test_studio_protocol_v5.py"
+      ],
+      "title": "World Forge Studio authority protocol v5",
+      "version": 5
+    },
+    {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/abstract-puzzle/source/systems/rules.json"
+      ],
+      "format": "world-forge.system_module",
+      "id": "system-module",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_contracts:validate_creation_document"
+      ],
+      "schema": "schemas/system-module.schema.json",
+      "tests": [
+        "tests/test_multigenre_contracts.py"
+      ],
+      "title": "World Forge typed system module v1",
       "version": 1
     },
     {
@@ -771,12 +3150,35 @@
       "version": 1
     },
     {
+      "cli_commands": [],
+      "docs": [
+        "docs/MULTI_GENRE_ARCHITECTURE.md"
+      ],
+      "fixtures": [
+        "examples/multigenre-contracts/universe-library/source/world/canon.json"
+      ],
+      "format": "world-forge.world_module",
+      "id": "world-module",
+      "kind": "json-schema",
+      "m5_phases": [],
+      "python_symbols": [
+        "worldforge.creation_contracts:validate_creation_document"
+      ],
+      "schema": "schemas/world-module.schema.json",
+      "tests": [
+        "tests/test_multigenre_contracts.py"
+      ],
+      "title": "World Forge typed world module v1",
+      "version": 1
+    },
+    {
       "cli_commands": [
         "new-world",
         "world-status",
         "upgrade-world",
         "clone-world",
-        "bump-world-version"
+        "bump-world-version",
+        "migrate-world-project"
       ],
       "docs": [
         "README.md",
@@ -794,14 +3196,88 @@
       ],
       "python_symbols": [
         "worldforge.scaffold:create_world_project",
-        "worldforge.world_lifecycle:inspect_world_project"
+        "worldforge.world_lifecycle:inspect_world_project",
+        "worldforge.world_lifecycle:migrate_world_project"
       ],
       "schema": "schemas/world-project.schema.json",
       "tests": [
-        "tests/test_m4_world_lifecycle.py"
+        "tests/test_m4_world_lifecycle.py",
+        "tests/test_world_project_migration.py"
       ],
-      "title": "RPG World Forge world-authoring project",
-      "version": 2
+      "title": "World Forge retained world-authoring project",
+      "version": 3
+    },
+    {
+      "cli_commands": [
+        "migrate-world-project"
+      ],
+      "docs": [
+        "docs/M4_MULTIPLE_WORLD_PRODUCTION.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.world_project_migration_backup",
+      "id": "world-project-migration-backup",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.world_lifecycle:migrate_world_project"
+      ],
+      "schema": "schemas/world-project-migration-backup.schema.json",
+      "tests": [
+        "tests/test_world_project_migration.py"
+      ],
+      "title": "World Forge world-project migration backup v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "migrate-world-project"
+      ],
+      "docs": [
+        "docs/M4_MULTIPLE_WORLD_PRODUCTION.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.world_project_migration_evidence",
+      "id": "world-project-migration-evidence",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.world_lifecycle:migrate_world_project"
+      ],
+      "schema": "schemas/world-project-migration-evidence.schema.json",
+      "tests": [
+        "tests/test_world_project_migration.py"
+      ],
+      "title": "World Forge world-project migration evidence v1",
+      "version": 1
+    },
+    {
+      "cli_commands": [
+        "migrate-world-project"
+      ],
+      "docs": [
+        "docs/M4_MULTIPLE_WORLD_PRODUCTION.md"
+      ],
+      "fixtures": [],
+      "format": "world-forge.world_project_migration_journal",
+      "id": "world-project-migration-journal",
+      "kind": "json-schema",
+      "m5_phases": [
+        "M6"
+      ],
+      "python_symbols": [
+        "worldforge.world_lifecycle:migrate_world_project"
+      ],
+      "schema": "schemas/world-project-migration-journal.schema.json",
+      "tests": [
+        "tests/test_world_project_migration.py"
+      ],
+      "title": "World Forge world-project migration journal record v1",
+      "version": 1
     },
     {
       "cli_commands": [
@@ -828,339 +3304,6 @@
       ],
       "title": "Compiled IsoWorld worldpack",
       "version": 5
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/decisions/0011-forge-studio-application-service.md"
-      ],
-      "fixtures": [],
-      "format": "rpg-world-forge.forge_workspace",
-      "id": "forge-workspace",
-      "kind": "json-schema",
-      "m5_phases": [],
-      "python_symbols": [
-        "worldforge.studio.contracts:validate_forge_workspace"
-      ],
-      "schema": "schemas/forge-workspace.schema.json",
-      "tests": [
-        "tests/test_studio_contracts.py",
-        "tests/test_studio_workspaces_jobs.py"
-      ],
-      "title": "Forge Studio workspace registry record v1",
-      "version": 1
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/decisions/0011-forge-studio-application-service.md",
-        "docs/decisions/0015-studio-reviewable-changesets.md"
-      ],
-      "fixtures": [],
-      "format": "rpg-world-forge.studio_changeset",
-      "id": "studio-changeset",
-      "kind": "json-schema",
-      "m5_phases": [],
-      "python_symbols": [
-        "worldforge.studio.changeset_review:build_changeset_diff",
-        "worldforge.studio.contracts:validate_studio_changeset"
-      ],
-      "schema": "schemas/studio-changeset.schema.json",
-      "tests": [
-        "tests/test_studio_changeset_review.py",
-        "tests/test_studio_contracts.py",
-        "tests/test_studio_changesets.py",
-        "tests/test_studio_changesets_v2.py"
-      ],
-      "title": "Forge Studio reviewable file changeset v2",
-      "version": 2
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/decisions/0011-forge-studio-application-service.md",
-        "docs/decisions/0014-studio-read-only-job-executor.md"
-      ],
-      "fixtures": [],
-      "format": "rpg-world-forge.studio_job",
-      "id": "studio-job",
-      "kind": "json-schema",
-      "m5_phases": [],
-      "python_symbols": [
-        "worldforge.studio.contracts:validate_job_create_params",
-        "worldforge.studio.contracts:validate_studio_job",
-        "worldforge.studio.executor:JobScheduler"
-      ],
-      "schema": "schemas/studio-job.schema.json",
-      "tests": [
-        "tests/test_studio_contracts.py",
-        "tests/test_studio_executor.py",
-        "tests/test_studio_storage.py",
-        "tests/test_studio_workspaces_jobs.py"
-      ],
-      "title": "Forge Studio durable job record v2 with v1 read compatibility",
-      "version": 2
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/decisions/0011-forge-studio-application-service.md",
-        "docs/decisions/0014-studio-read-only-job-executor.md"
-      ],
-      "fixtures": [],
-      "format": "rpg-world-forge.studio_protocol",
-      "id": "studio-protocol",
-      "kind": "json-schema",
-      "m5_phases": [],
-      "python_symbols": [
-        "worldforge.studio.contracts:validate_studio_protocol_envelope",
-        "worldforge.studio.service:serve"
-      ],
-      "schema": "schemas/studio-protocol.schema.json",
-      "tests": [
-        "tests/test_studio_contracts.py",
-        "tests/test_studio_executor.py",
-        "tests/test_studio_service.py"
-      ],
-      "title": "Forge Studio NDJSON application protocol v1",
-      "version": 1
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "contracts/README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/PYRAY_RUNTIME_GUIDE.md",
-        "docs/decisions/0016-runtime-composition-contracts.md",
-        "docs/decisions/0018-bounded-pyray-3d-proof.md",
-        "docs/decisions/0019-legacy-pyray-2-5d-adapter.md"
-      ],
-      "fixtures": [
-        "examples/m6-contracts/adapter.declared.json",
-        "examples/m6-contracts/adapters/isoworld_raylib_2_5d.json",
-        "examples/m6-contracts/adapters/pyray_3d_v1.json"
-      ],
-      "format": "rpg-world-forge.runtime_adapter",
-      "id": "runtime-adapter",
-      "kind": "json-schema",
-      "m5_phases": [
-        "M6"
-      ],
-      "python_symbols": [
-        "isoworld.render.pyray_2_5d:PYRAY_2_5D_REGISTRY",
-        "isoworld.render.pyray_3d:PYRAY_3D_V1_REGISTRY",
-        "worldforge.runtime_composition:validate_runtime_adapter"
-      ],
-      "schema": "schemas/runtime-adapter.schema.json",
-      "tests": [
-        "tests/test_m6_runtime_composition_contracts.py",
-        "tests/test_m6_pyray_2_5d.py",
-        "tests/test_m6_pyray_3d.py"
-      ],
-      "title": "RPG World Forge runtime adapter declaration v1",
-      "version": 1
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "contracts/README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/decisions/0016-runtime-composition-contracts.md"
-      ],
-      "fixtures": [
-        "examples/m6-contracts/capability-catalog.json"
-      ],
-      "format": "rpg-world-forge.runtime_capability_catalog",
-      "id": "runtime-capability-catalog",
-      "kind": "json-schema",
-      "m5_phases": [
-        "M6"
-      ],
-      "python_symbols": [
-        "worldforge.runtime_composition:validate_runtime_capability_catalog"
-      ],
-      "schema": "schemas/runtime-capability-catalog.schema.json",
-      "tests": [
-        "tests/test_m6_runtime_composition_contracts.py"
-      ],
-      "title": "RPG World Forge runtime capability catalog v1",
-      "version": 1
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "contracts/README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/decisions/0016-runtime-composition-contracts.md"
-      ],
-      "fixtures": [
-        "examples/m6-contracts/compatibility-report.json"
-      ],
-      "format": "rpg-world-forge.runtime_compatibility_report",
-      "id": "runtime-compatibility-report",
-      "kind": "json-schema",
-      "m5_phases": [
-        "M6"
-      ],
-      "python_symbols": [
-        "worldforge.runtime_composition:validate_runtime_compatibility_report"
-      ],
-      "schema": "schemas/runtime-compatibility-report.schema.json",
-      "tests": [
-        "tests/test_m6_runtime_composition_contracts.py"
-      ],
-      "title": "RPG World Forge runtime compatibility report v1",
-      "version": 1
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "contracts/README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/decisions/0016-runtime-composition-contracts.md"
-      ],
-      "fixtures": [
-        "examples/m6-contracts/composition.json"
-      ],
-      "format": "rpg-world-forge.runtime_composition",
-      "id": "runtime-composition",
-      "kind": "json-schema",
-      "m5_phases": [
-        "M6"
-      ],
-      "python_symbols": [
-        "worldforge.runtime_composition:validate_runtime_composition",
-        "worldforge.runtime_composition:verify_runtime_composition"
-      ],
-      "schema": "schemas/runtime-composition.schema.json",
-      "tests": [
-        "tests/test_m6_runtime_composition_contracts.py"
-      ],
-      "title": "RPG World Forge runtime composition v1",
-      "version": 1
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "contracts/README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/decisions/0016-runtime-composition-contracts.md"
-      ],
-      "fixtures": [
-        "examples/m6-contracts/profiles/profile_2_5d.json",
-        "examples/m6-contracts/profiles/profile_2_5d_over_3d.json",
-        "examples/m6-contracts/profiles/profile_2d.json",
-        "examples/m6-contracts/profiles/profile_2d_over_2_5d.json",
-        "examples/m6-contracts/profiles/profile_2d_over_3d.json",
-        "examples/m6-contracts/profiles/profile_3d.json"
-      ],
-      "format": "rpg-world-forge.runtime_presentation_profile",
-      "id": "runtime-presentation-profile",
-      "kind": "json-schema",
-      "m5_phases": [
-        "M6"
-      ],
-      "python_symbols": [
-        "worldforge.runtime_composition:validate_runtime_presentation_profile"
-      ],
-      "schema": "schemas/runtime-presentation-profile.schema.json",
-      "tests": [
-        "tests/test_m6_runtime_composition_contracts.py"
-      ],
-      "title": "RPG World Forge runtime presentation profile v1",
-      "version": 1
-    },
-    {
-      "cli_commands": [],
-      "docs": [
-        "contracts/README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/ROADMAP.md",
-        "docs/decisions/0017-immutable-composed-runtime-bundle.md"
-      ],
-      "fixtures": [],
-      "format": "rpg-world-forge.composed_runtime_bundle",
-      "id": "composed-runtime-bundle",
-      "kind": "json-schema",
-      "m5_phases": [
-        "M6"
-      ],
-      "python_symbols": [
-        "worldforge.composed_bundle:build_composed_runtime_bundle",
-        "worldforge.composed_bundle:load_composed_runtime_bundle",
-        "worldforge.composed_bundle:verify_composed_runtime_bundle"
-      ],
-      "schema": "schemas/composed-runtime-bundle.schema.json",
-      "tests": [
-        "tests/test_m6_composed_bundle.py"
-      ],
-      "title": "RPG World Forge immutable composed runtime bundle v1",
-      "version": 1
-    },
-    {
-      "cli_commands": [
-        "import-composed-bundle"
-      ],
-      "docs": [
-        "contracts/README.md",
-        "docs/ARCHITECTURE.md",
-        "docs/ROADMAP.md",
-        "docs/decisions/0020-composed-release-game-consumer.md"
-      ],
-      "fixtures": [
-        "src/worldforge/templates/pyray_game/compositions.lock.json.tmpl"
-      ],
-      "format": "isoworld.composed_runtime_catalog",
-      "id": "composed-runtime-catalog",
-      "kind": "json-schema",
-      "m5_phases": [
-        "M6"
-      ],
-      "python_symbols": [
-        "isoworld.content.composed_catalog:load_composed_catalog",
-        "isoworld.content.composed_catalog:verify_composed_release",
-        "worldforge.composed_game:import_composed_bundle"
-      ],
-      "schema": "schemas/composed-runtime-catalog.schema.json",
-      "tests": [
-        "tests/test_m6_game_consumer.py"
-      ],
-      "title": "IsoWorld composed runtime catalog",
-      "version": 1
-    },
-    {
-      "cli_commands": [
-        "audit-contracts"
-      ],
-      "docs": [
-        "contracts/README.md",
-        "README.md"
-      ],
-      "fixtures": [],
-      "format": "rpg-world-forge.contract_catalog",
-      "id": "contract-catalog",
-      "kind": "json-schema",
-      "m5_phases": [
-        "M5"
-      ],
-      "python_symbols": [
-        "worldforge.contract_catalog:audit_contracts",
-        "worldforge.contract_catalog:load_contract_catalog"
-      ],
-      "schema": "schemas/contract-catalog.schema.json",
-      "tests": [
-        "tests/test_contract_catalog.py"
-      ],
-      "title": "RPG World Forge machine-readable contract catalog v1",
-      "version": 1
     }
   ],
   "format": "rpg-world-forge.contract_catalog",

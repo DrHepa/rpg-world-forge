@@ -1,5 +1,9 @@
 # Session: world foundation
 
+> **Retained legacy-world prompt.** Use only for an applicable diegetic RPG
+> world in the published worldpack lane. Do not apply it to a no-world,
+> abstract, or generic game project.
+
 ## Required human inputs
 
 - Premise and central player fantasy.

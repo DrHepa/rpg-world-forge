@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { resolveStudioEnvironmentValue } from "../../scripts/studio-environment.mjs";
 import type { CodexLaunchSpec } from "../../src/main/codex-config";
 import {
   CodexProtocolError,
@@ -47,7 +48,10 @@ function create(mode = "normal", options: ConstructorParameters<typeof CodexSupe
 }
 
 function findTestPython(): string {
-  const configured = process.env.RWF_STUDIO_TEST_PYTHON;
+  const configured = resolveStudioEnvironmentValue(
+    process.env,
+    "TEST_PYTHON",
+  );
   if (configured && path.isAbsolute(configured) && existsSync(configured)) return configured;
   if (process.platform !== "win32") {
     for (const candidate of ["/usr/bin/python3", "/usr/local/bin/python3"]) {

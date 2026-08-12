@@ -1,0 +1,848 @@
+{
+  "$defs": {
+    "adapterIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.runtime_adapter"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "compositionIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.game_runtime_composition"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "evidenceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "execution_status": {
+          "enum": [
+            "headless_verified",
+            "native_verified",
+            "failed"
+          ]
+        },
+        "format": {
+          "const": "world-forge.runtime_evidence"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "packaging_status": {
+          "enum": [
+            "unverified",
+            "verified",
+            "failed"
+          ]
+        },
+        "passed_check_kinds": {
+          "items": {
+            "enum": [
+              "headless",
+              "native",
+              "packaging",
+              "save_replay"
+            ]
+          },
+          "maxItems": 4,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash",
+        "platform",
+        "execution_status",
+        "packaging_status",
+        "passed_check_kinds"
+      ],
+      "type": "object"
+    },
+    "execution": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 0,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "platform": {
+              "$ref": "#/$defs/platform"
+            },
+            "status": {
+              "const": "untested"
+            }
+          },
+          "required": [
+            "platform",
+            "status",
+            "evidence_ids"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 1,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "platform": {
+              "$ref": "#/$defs/platform"
+            },
+            "status": {
+              "enum": [
+                "headless_verified",
+                "native_verified",
+                "failed"
+              ]
+            }
+          },
+          "required": [
+            "platform",
+            "status",
+            "evidence_ids"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "feature": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "feature_id": {
+              "$ref": "#/$defs/token"
+            },
+            "reason_codes": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 0,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "status": {
+              "enum": [
+                "supported_current",
+                "game_extension_verified"
+              ]
+            }
+          },
+          "required": [
+            "feature_id",
+            "status",
+            "reason_codes",
+            "evidence_ids"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "evidence_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 0,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "feature_id": {
+              "$ref": "#/$defs/token"
+            },
+            "reason_codes": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "status": {
+              "enum": [
+                "authoring_only",
+                "blocked"
+              ]
+            }
+          },
+          "required": [
+            "feature_id",
+            "status",
+            "reason_codes",
+            "evidence_ids"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "gamepackIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.gamepack"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "mechanic": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "asset_binding_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "authoritative_state_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "condition_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "core_verb_id": {
+              "$ref": "#/$defs/id"
+            },
+            "effect_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "mechanic_id": {
+              "$ref": "#/$defs/id"
+            },
+            "native_evidence": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "presentation_hook_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "reason_codes": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 0,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "required_feature_ids": {
+              "items": {
+                "$ref": "#/$defs/token"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "rule_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "runtime_action_id": {
+              "$ref": "#/$defs/id"
+            },
+            "save_replay": {
+              "$ref": "#/$defs/saveReplay"
+            },
+            "status": {
+              "enum": [
+                "supported_current",
+                "game_extension_verified"
+              ]
+            },
+            "test_evidence": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "mechanic_id",
+            "core_verb_id",
+            "runtime_action_id",
+            "authoritative_state_ids",
+            "condition_ids",
+            "rule_ids",
+            "effect_ids",
+            "presentation_hook_ids",
+            "asset_binding_ids",
+            "required_feature_ids",
+            "save_replay",
+            "status",
+            "reason_codes",
+            "test_evidence",
+            "native_evidence"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "asset_binding_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "authoritative_state_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "condition_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "core_verb_id": {
+              "$ref": "#/$defs/id"
+            },
+            "effect_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "mechanic_id": {
+              "$ref": "#/$defs/id"
+            },
+            "native_evidence": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 0,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "presentation_hook_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "reason_codes": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "required_feature_ids": {
+              "items": {
+                "$ref": "#/$defs/token"
+              },
+              "maxItems": 256,
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "rule_ids": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 256,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "runtime_action_id": {
+              "$ref": "#/$defs/id"
+            },
+            "save_replay": {
+              "$ref": "#/$defs/saveReplay"
+            },
+            "status": {
+              "enum": [
+                "authoring_only",
+                "blocked"
+              ]
+            },
+            "test_evidence": {
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "maxItems": 0,
+              "minItems": 0,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "mechanic_id",
+            "core_verb_id",
+            "runtime_action_id",
+            "authoritative_state_ids",
+            "condition_ids",
+            "rule_ids",
+            "effect_ids",
+            "presentation_hook_ids",
+            "asset_binding_ids",
+            "required_feature_ids",
+            "save_replay",
+            "status",
+            "reason_codes",
+            "test_evidence",
+            "native_evidence"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?![./])(?!.*/(?:\\.{1,2})(?:/|$))(?!(?:.*[/])?(?:aux|con|nul|prn|com[1-9]|lpt[1-9])(?:[./]|$))[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*(?:/[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*)*$",
+      "type": "string"
+    },
+    "platform": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "architecture": {
+              "const": "architecture:x86_64"
+            },
+            "backend": {
+              "const": "backend:raylib"
+            },
+            "platform_family": {
+              "const": "platform:linux"
+            },
+            "platform_id": {
+              "const": "platform:linux_x86_64"
+            },
+            "renderer": {
+              "const": "raylib"
+            }
+          },
+          "required": [
+            "platform_id",
+            "platform_family",
+            "architecture",
+            "backend",
+            "renderer"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "architecture": {
+              "const": "architecture:x86_64"
+            },
+            "backend": {
+              "const": "backend:raylib"
+            },
+            "platform_family": {
+              "const": "platform:windows"
+            },
+            "platform_id": {
+              "const": "platform:windows_x86_64"
+            },
+            "renderer": {
+              "const": "raylib"
+            }
+          },
+          "required": [
+            "platform_id",
+            "platform_family",
+            "architecture",
+            "backend",
+            "renderer"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "runtimeApi": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "saveReplay": {
+      "additionalProperties": false,
+      "properties": {
+        "event_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "state_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "state_ids",
+        "event_ids"
+      ],
+      "type": "object"
+    },
+    "semver": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "text": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+    },
+    "token": {
+      "maxLength": 128,
+      "minLength": 3,
+      "pattern": "^[a-z][a-z0-9_-]*:[a-z][a-z0-9_.-]*$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/generic-runtime-support-report.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adapter": {
+      "$ref": "#/$defs/adapterIdentity"
+    },
+    "compatibility_status": {
+      "enum": [
+        "supported",
+        "partially_supported",
+        "unsupported"
+      ]
+    },
+    "composition": {
+      "$ref": "#/$defs/compositionIdentity"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "dimensions": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "enum": [
+            "absent",
+            "declared",
+            "verified"
+          ]
+        },
+        "assets": {
+          "enum": [
+            "unplanned",
+            "planned",
+            "produced",
+            "processed",
+            "sealed",
+            "failed"
+          ]
+        },
+        "authoring": {
+          "enum": [
+            "valid",
+            "invalid"
+          ]
+        },
+        "compilation": {
+          "enum": [
+            "not_requested",
+            "compiled",
+            "unsupported",
+            "failed"
+          ]
+        },
+        "execution": {
+          "items": {
+            "$ref": "#/$defs/execution"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "packaging": {
+          "enum": [
+            "unverified",
+            "verified",
+            "failed"
+          ]
+        },
+        "release": {
+          "enum": [
+            "blocked",
+            "ready"
+          ]
+        }
+      },
+      "required": [
+        "authoring",
+        "compilation",
+        "assets",
+        "adapter",
+        "execution",
+        "packaging",
+        "release"
+      ],
+      "type": "object"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/evidenceReference"
+      },
+      "maxItems": 64,
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "features": {
+      "items": {
+        "$ref": "#/$defs/feature"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "format": {
+      "const": "world-forge.runtime_support_report"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "gamepack": {
+      "$ref": "#/$defs/gamepackIdentity"
+    },
+    "mechanics": {
+      "items": {
+        "$ref": "#/$defs/mechanic"
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "missing_capabilities": {
+      "items": {
+        "$ref": "#/$defs/token"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "reason_codes": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "report_id": {
+      "$ref": "#/$defs/id"
+    },
+    "supported": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "report_id",
+    "gamepack",
+    "composition",
+    "adapter",
+    "evidence",
+    "dimensions",
+    "compatibility_status",
+    "mechanics",
+    "features",
+    "missing_capabilities",
+    "reason_codes",
+    "supported",
+    "content_hash"
+  ],
+  "title": "World Forge multidimensional runtime support report v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-generic-runtime-coherent": "generic-runtime-support-report"
+}

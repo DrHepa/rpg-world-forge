@@ -1,0 +1,65 @@
+{
+  "blocker_reason_codes": [
+    "assets_not_sealed",
+    "native_evidence_missing",
+    "packaging_evidence_missing",
+    "runtime_adapter_not_requested"
+  ],
+  "content_hash": "2b151d6daa597dc0dc67b528134e01fc60887db3331b8cfa61f65ba1aa8ece73",
+  "dimensions": {
+    "adapter": "absent",
+    "assets": "unplanned",
+    "authoring": "valid",
+    "compilation": "compiled",
+    "execution": [
+      {
+        "evidence_ids": [],
+        "platform": "platform:linux_x86_64",
+        "status": "untested"
+      },
+      {
+        "evidence_ids": [],
+        "platform": "platform:windows_x86_64",
+        "status": "untested"
+      }
+    ],
+    "packaging": "unverified",
+    "release": "blocked"
+  },
+  "evidence": [
+    {
+      "content_hash": "76ffe116b9d8dfc840aea2978a7d804ea8b2d61f92baafabf20bf228390368d9",
+      "format": "world-forge.game_analysis",
+      "format_version": 1,
+      "id": "analysis_3a1d776f9d6404fb"
+    },
+    {
+      "content_hash": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+      "format": "world-forge.gamepack",
+      "format_version": 1,
+      "id": "sports_career"
+    }
+  ],
+  "format": "world-forge.creation_readiness",
+  "format_version": 1,
+  "profile": {
+    "content_hash": "43e124bc8ab3655b7d5cc19e5f096f57666481a39276501444d7892e2df2c2c3",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "sports_career_profile"
+  },
+  "project": {
+    "content_hash": "dbbe5bdbca0ef83485821890c9b2273af084fc0e6b63f85547611d9391de4742",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "sports_career"
+  },
+  "readiness_id": "readiness_ec87cb398f14fc09a0737dc3",
+  "release_ready": false,
+  "source_manifest": {
+    "content_hash": "7d195986ff3c23dbd2f73fc0cd29148721031c6914d786c8971b15e4d086804d",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "sports_career"
+  }
+}

@@ -1,0 +1,277 @@
+{
+  "$id": "https://world-forge.local/schemas/generic-asset-inventory.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "asset_subject": {
+      "$ref": "#/$defs/assetSubjectIdentity"
+    },
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/asset"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "type": "array"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "format": {
+      "const": "world-forge.asset_inventory"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "gamepack": {
+      "$ref": "#/$defs/gamepackIdentity"
+    },
+    "inventory_id": {
+      "$ref": "#/$defs/id"
+    },
+    "style": {
+      "$ref": "#/$defs/styleIdentity"
+    },
+    "target": {
+      "$ref": "#/$defs/targetIdentity"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "inventory_id",
+    "asset_subject",
+    "target",
+    "style",
+    "gamepack",
+    "assets",
+    "content_hash"
+  ],
+  "title": "World Forge deterministic asset inventory v1",
+  "type": "object",
+  "$defs": {
+    "asset": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "$ref": "generic-asset-target.schema.json#/$defs/physicalChoice"
+        }
+      ],
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/id"
+        },
+        "binding_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "kind": {
+          "$ref": "#/$defs/id"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "generic-asset-target.schema.json#/$defs/output"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "type": "array"
+        },
+        "provenance_reason": {
+          "$ref": "#/$defs/runtimeString"
+        },
+        "referencing_subjects": {
+          "items": {
+            "$ref": "generic-asset-target.schema.json#/$defs/referencingSubject"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array"
+        },
+        "representation": {
+          "enum": [
+            "text",
+            "2d",
+            "2_5d",
+            "3d",
+            "audio"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "selected_format": {
+          "enum": [
+            "asset:font",
+            "asset:glb",
+            "asset:glsl",
+            "asset:json",
+            "asset:png",
+            "asset:wav"
+          ]
+        },
+        "sharing": {
+          "$ref": "generic-asset-target.schema.json#/$defs/sharing"
+        },
+        "source_roles": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "style": {
+          "$ref": "#/$defs/styleIdentity"
+        },
+        "target": {
+          "$ref": "#/$defs/targetIdentity"
+        },
+        "usage_contexts": {
+          "items": {
+            "$ref": "#/$defs/runtimeString"
+          },
+          "maxItems": 1024,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "asset_id",
+        "required",
+        "kind",
+        "representation",
+        "selected_format",
+        "outputs",
+        "binding_ids",
+        "source_roles",
+        "usage_contexts",
+        "referencing_subjects",
+        "sharing",
+        "target",
+        "style",
+        "provenance_reason"
+      ],
+      "type": "object"
+    },
+    "assetSubjectIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_subject"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "gamepackIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.gamepack"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "runtimeString": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?!\\s*(?:[A-Za-z][A-Za-z0-9+.-]*://|[Ff][Ii][Ll][Ee]:[\\\\/]|[A-Za-z]:[\\\\/]|[\\\\/]{2}|/|@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:@[^\\s/\\\\]+)?\\s*$|(?:[Pp][Rr][Oo][Vv][Ii][Dd][Ee][Rr](?:_[Ii][Dd])?|[Mm][Oo][Dd][Ee][Ll](?:_[Ii][Dd])?|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]?|[Pp][Rr][Oo][Mm][Pp][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Ee][Nn][Dd][Pp][Oo][Ii][Nn][Tt])\\s*(?:=|:\\s*|\\s+[Ii][Ss]\\s+)|\\.{1,2}(?:[\\\\/]|\\s*$)))(?![\\s\\S]*[\\\\/]\\.{1,2}(?:[\\\\/]|\\s*$))(?!\\s*[^/\\\\\\r\\n]+(?:[\\\\/][^/\\\\\\r\\n]+)+\\.[A-Za-z0-9][A-Za-z0-9._-]*\\s*$)[\\s\\S]*$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "styleIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_style"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "targetIdentity": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/identity"
+        },
+        {
+          "properties": {
+            "format": {
+              "const": "world-forge.asset_target"
+            }
+          },
+          "required": [
+            "format"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  }
+}

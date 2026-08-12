@@ -1,0 +1,87 @@
+{
+  "content_hash": "ad0b809fe6979c950dc52dec5f7fac05de68daeda0b511e6dc80ef7455bafed2",
+  "evidence": [
+    {
+      "claim": "The exact creation profile was validated.",
+      "evidence_id": "creation_profile",
+      "subject": {
+        "content_hash": "5184f408db69b0ee4543ad86885a8373fdfe9f4c7aebfd36d0c7a6d62a984774",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "abstract_puzzle_profile"
+      }
+    },
+    {
+      "claim": "The exact creation project was validated.",
+      "evidence_id": "creation_project",
+      "subject": {
+        "content_hash": "30a6b456b00225cf9d8804349b95d4722d7d4277d27daeb69db8f55767fc2232",
+        "format": "world-forge.project",
+        "format_version": 1,
+        "id": "abstract_puzzle"
+      }
+    },
+    {
+      "claim": "The exact typed source manifest was validated.",
+      "evidence_id": "source_manifest",
+      "subject": {
+        "content_hash": "e0edb5879591acca1cf3a24a60f280ec1fd2b18054fe0ebfb80045f37b3fbb37",
+        "format": "world-forge.creation_source_manifest",
+        "format_version": 1,
+        "id": "abstract_puzzle"
+      }
+    }
+  ],
+  "extensions": [],
+  "format": "world-forge.phase_report",
+  "format_version": 2,
+  "invalidation_dependencies": [
+    {
+      "content_hash": "5184f408db69b0ee4543ad86885a8373fdfe9f4c7aebfd36d0c7a6d62a984774",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "abstract_puzzle_profile"
+    },
+    {
+      "content_hash": "e0edb5879591acca1cf3a24a60f280ec1fd2b18054fe0ebfb80045f37b3fbb37",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "abstract_puzzle"
+    },
+    {
+      "content_hash": "30a6b456b00225cf9d8804349b95d4722d7d4277d27daeb69db8f55767fc2232",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "abstract_puzzle"
+    }
+  ],
+  "output_evidence": null,
+  "phase": "p05_societies",
+  "profile": {
+    "content_hash": "5184f408db69b0ee4543ad86885a8373fdfe9f4c7aebfd36d0c7a6d62a984774",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "abstract_puzzle_profile"
+  },
+  "project": {
+    "content_hash": "30a6b456b00225cf9d8804349b95d4722d7d4277d27daeb69db8f55767fc2232",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "abstract_puzzle"
+  },
+  "rationale": {
+    "code": "group_structures_absent",
+    "message": "The validated profile and source manifest prove that no societies or groups exist."
+  },
+  "reviewer": {
+    "id": "lead_reviewer",
+    "role": "validation_analyst"
+  },
+  "source_manifest": {
+    "content_hash": "e0edb5879591acca1cf3a24a60f280ec1fd2b18054fe0ebfb80045f37b3fbb37",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "abstract_puzzle"
+  },
+  "status": "not_applicable"
+}

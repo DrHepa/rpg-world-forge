@@ -1,0 +1,58 @@
+{
+  "acceptance_criteria": [
+    "Expedition depth remains legible throughout the bounded run.",
+    "Modular storylet state remains distinguishable without color."
+  ],
+  "asset": {
+    "asset_id": "storylet_cards",
+    "content_hash": "89b430dbf61d725383bab7e4b5728f1e55ca6a30ffeb85e0023086f62042e073"
+  },
+  "asset_subject": {
+    "content_hash": "fa8e5bb545f893541c940a1a7ad6fa5b4db38d98152d7e6f1412e5d102f2365c",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_c21508f8920df2f295b5f8d07748717f77de005a25205cc8"
+  },
+  "content_hash": "913960f6ee892555cbbe3eb557da06a4fd982615808becd6daf3ccb3af24e349",
+  "format": "world-forge.asset_spec",
+  "format_version": 1,
+  "inventory": {
+    "content_hash": "e8ca31c8f8529ff69e7396dc9960283ae3c44cd75fd8405e4adc60d324775639",
+    "format": "world-forge.asset_inventory",
+    "format_version": 1,
+    "id": "asset_inventory_19ac3705d2d64796404b0f5a345e014dee7ac91c7adb90ea"
+  },
+  "outputs": [
+    {
+      "expectations": {
+        "color_type": "rgba8",
+        "height": 256,
+        "kind": "png",
+        "max_bytes": 262144,
+        "width": 256
+      },
+      "media_type": "image/png",
+      "role": "texture",
+      "runtime_path": "assets/ui/storylet-cards.png"
+    }
+  ],
+  "production_class": "procedural_offline",
+  "review_requirements": {
+    "evidence_required": true,
+    "human_review_required": true,
+    "qa_profile": "storylet_sequence_readability"
+  },
+  "spec_id": "asset_spec_b61cc6e31f2c155d8527ae72f3ae4b67ef8a7d4fd2ccc1f0",
+  "style": {
+    "content_hash": "ca183814d2f73473b33e18f92e105b434f39fdb624bd873ec42b00da48dcbc96",
+    "format": "world-forge.asset_style",
+    "format_version": 1,
+    "id": "asset_style_51e924716e99d44cd6c094fe1ced5e0123849599c1b668fc"
+  },
+  "target": {
+    "content_hash": "b0018b09f273f566c4d91cce6fbc766f889d2e70d4dc9b0113f7a3fb89d8a7da",
+    "format": "world-forge.asset_target",
+    "format_version": 1,
+    "id": "asset_target_1166b560821f52ddd413f521037e3abe62f0365ca1fa7cb8"
+  }
+}

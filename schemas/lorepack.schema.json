@@ -1,0 +1,983 @@
+{
+  "$id": "https://world-forge.local/schemas/lorepack.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "properties": {
+        "world_projections": {
+          "minItems": 1,
+          "type": "array"
+        }
+      }
+    },
+    {
+      "properties": {
+        "narrative_projections": {
+          "minItems": 1,
+          "type": "array"
+        }
+      }
+    }
+  ],
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "dependencies": {
+      "items": {
+        "$ref": "#/$defs/lorepackIdentity"
+      },
+      "maxItems": 15,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/extension"
+      },
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.lorepack"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "localization": {
+      "$ref": "#/$defs/localization"
+    },
+    "lorepack_id": {
+      "$ref": "#/$defs/id"
+    },
+    "narrative_projections": {
+      "items": {
+        "$ref": "#/$defs/narrativeProjection"
+      },
+      "type": "array"
+    },
+    "profile": {
+      "$ref": "#/$defs/profileIdentity"
+    },
+    "project": {
+      "$ref": "#/$defs/projectIdentity"
+    },
+    "provenance": {
+      "items": {
+        "$ref": "#/$defs/provenance"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "source_manifest": {
+      "$ref": "#/$defs/sourceManifestIdentity"
+    },
+    "world_projections": {
+      "items": {
+        "$ref": "#/$defs/worldProjection"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "lorepack_id",
+    "project",
+    "profile",
+    "source_manifest",
+    "dependencies",
+    "world_projections",
+    "narrative_projections",
+    "localization",
+    "provenance",
+    "extensions",
+    "content_hash"
+  ],
+  "title": "World Forge lorepack v1",
+  "type": "object",
+  "$defs": {
+    "choiceOption": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "label": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "next_unit_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "next_unit_id"
+      ],
+      "type": "object"
+    },
+    "dependencyLorepackProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "dependency_lorepack"
+        },
+        "provenance_id": {
+          "$ref": "#/$defs/id"
+        },
+        "subject": {
+          "$ref": "#/$defs/lorepackIdentity"
+        }
+      },
+      "required": [
+        "provenance_id",
+        "kind",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "extension": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "$ref": "#/$defs/extensionId"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "required",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "extensionId": {
+      "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "idArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "localization": {
+      "additionalProperties": false,
+      "properties": {
+        "references": {
+          "items": {
+            "$ref": "#/$defs/localizationReference"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "source_locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "supported_locales": {
+          "items": {
+            "$ref": "#/$defs/locale"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "source_locale",
+        "supported_locales",
+        "references"
+      ],
+      "type": "object"
+    },
+    "localizationReference": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "title",
+            "statement",
+            "summary",
+            "name",
+            "role",
+            "group_type",
+            "label"
+          ]
+        },
+        "key": {
+          "pattern": "^[a-z][a-z0-9_.]{1,255}$",
+          "type": "string"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "module_id": {
+          "$ref": "#/$defs/id"
+        },
+        "parent_id": {
+          "$ref": "#/$defs/id"
+        },
+        "subject_id": {
+          "$ref": "#/$defs/id"
+        },
+        "subject_kind": {
+          "enum": [
+            "module",
+            "world_record",
+            "narrative_unit",
+            "choice_option"
+          ]
+        }
+      },
+      "required": [
+        "key",
+        "locale",
+        "module_id",
+        "subject_kind",
+        "subject_id",
+        "parent_id",
+        "field"
+      ],
+      "type": "object"
+    },
+    "locale": {
+      "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$",
+      "type": "string"
+    },
+    "loreNarrativeUnit": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "unit_type": {
+                "const": "choice"
+              }
+            },
+            "required": [
+              "unit_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "options": {}
+            },
+            "propertyNames": {
+              "not": {
+                "const": "ending_kind"
+              }
+            },
+            "required": [
+              "options"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "unit_type": {
+                "const": "ending"
+              }
+            },
+            "required": [
+              "unit_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ending_kind": {},
+              "next_unit_ids": {
+                "maxItems": 0,
+                "type": "array"
+              }
+            },
+            "propertyNames": {
+              "not": {
+                "const": "options"
+              }
+            },
+            "required": [
+              "ending_kind"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "unit_type": {
+                "enum": [
+                  "choice",
+                  "ending"
+                ]
+              }
+            },
+            "required": [
+              "unit_type"
+            ]
+          },
+          "else": {
+            "propertyNames": {
+              "not": {
+                "enum": [
+                  "options",
+                  "ending_kind"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "ending_kind": {
+          "enum": [
+            "success",
+            "failure",
+            "neutral"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "next_unit_ids": {
+          "$ref": "#/$defs/idArray"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/$defs/choiceOption"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "unit_type": {
+          "enum": [
+            "arc",
+            "beat",
+            "scene",
+            "dialogue",
+            "storylet",
+            "clue",
+            "reveal",
+            "memory",
+            "episode",
+            "choice",
+            "ending"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "unit_type",
+        "title",
+        "next_unit_ids"
+      ],
+      "type": "object"
+    },
+    "lorepackIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.lorepack"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "narrativeProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "entry_unit_ids": {
+          "$ref": "#/$defs/nonEmptyIdArray"
+        },
+        "format": {
+          "const": "world-forge.lore_narrative_projection"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "projection_id": {
+          "$ref": "#/$defs/id"
+        },
+        "source": {
+          "$ref": "#/$defs/narrativeModuleIdentity"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "units": {
+          "items": {
+            "$ref": "#/$defs/loreNarrativeUnit"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "projection_id",
+        "source",
+        "title",
+        "entry_unit_ids",
+        "units",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "narrativeModuleIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.narrative_module"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "nonEmptyIdArray": {
+      "items": {
+        "$ref": "#/$defs/id"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "profileIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_profile"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "projectIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.project"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "provenance": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sourceContractProvenance"
+        },
+        {
+          "$ref": "#/$defs/dependencyLorepackProvenance"
+        }
+      ]
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "sourceContractIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "enum": [
+            "world-forge.project",
+            "world-forge.creation_profile",
+            "world-forge.creation_source_manifest",
+            "world-forge.world_module",
+            "world-forge.narrative_module"
+          ]
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "sourceContractProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "source_contract"
+        },
+        "provenance_id": {
+          "$ref": "#/$defs/id"
+        },
+        "subject": {
+          "$ref": "#/$defs/sourceContractIdentity"
+        }
+      },
+      "required": [
+        "provenance_id",
+        "kind",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "sourceManifestIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_source_manifest"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "worldCharacterRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "role"
+      ],
+      "type": "object"
+    },
+    "worldEventRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "sequence": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "sequence",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "worldFactRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "statement": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "canon",
+            "provisional"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "status"
+      ],
+      "type": "object"
+    },
+    "worldGroupRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "group_type": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "group_type"
+      ],
+      "type": "object"
+    },
+    "worldKnowledgeRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "enum": [
+            "public",
+            "restricted",
+            "secret"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "statement": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "access"
+      ],
+      "type": "object"
+    },
+    "worldModuleIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.world_module"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "worldProjection": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "canon"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldFactRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "chronology"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldEventRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "space"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldSpaceRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "group"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldGroupRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "character"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldCharacterRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module_type": {
+                "const": "knowledge"
+              }
+            },
+            "required": [
+              "module_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "records": {
+                "items": {
+                  "$ref": "#/$defs/worldKnowledgeRecord"
+                },
+                "type": "array"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.lore_world_projection"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "module_type": {
+          "enum": [
+            "canon",
+            "chronology",
+            "space",
+            "group",
+            "character",
+            "knowledge"
+          ]
+        },
+        "projection_id": {
+          "$ref": "#/$defs/id"
+        },
+        "records": {
+          "minItems": 1,
+          "type": "array"
+        },
+        "source": {
+          "$ref": "#/$defs/worldModuleIdentity"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "projection_id",
+        "source",
+        "module_type",
+        "title",
+        "records",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "worldSpaceRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "topology": {
+          "enum": [
+            "abstract",
+            "symbolic",
+            "diegetic"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "topology"
+      ],
+      "type": "object"
+    }
+  }
+}

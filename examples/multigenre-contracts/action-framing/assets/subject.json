@@ -1,0 +1,13 @@
+{
+  "content_hash": "95c24c228facc0f49fdbf67c0c09af0604a1e20c37da43b7461d7605315466e4",
+  "format": "world-forge.asset_subject",
+  "format_version": 1,
+  "subject": {
+    "content_hash": "cadf114a3e2ed9a74d8664137c2a09888e5383468fbb98e9ded7bd79acbca506",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "action_framing",
+    "kind": "gamepack"
+  },
+  "subject_id": "asset_subject_b5515b8b15c591d03ee19f0b9ad83d3a4047552bf70f5fd9"
+}

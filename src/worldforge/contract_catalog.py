@@ -9,13 +9,23 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from isoworld.runtime_io import RuntimeIOError, decode_json_object
 from worldforge.asset_io import AssetContractError, read_json_object
 from worldforge.integrity import canonical_json_bytes
+from worldforge.retained_tree import (
+    RetainedTreeError,
+    RetainedTreeHook,
+    RetainedTreeSnapshot,
+    capture_retained_named_child_trees,
+)
 
 CATALOG_FORMAT = "rpg-world-forge.contract_catalog"
 CATALOG_VERSION = 1
 CATALOG_RELATIVE_PATH = PurePosixPath("contracts/catalog.json")
-SHARE_DIRECTORY = PurePosixPath("share/rpg-world-forge")
+CANONICAL_SHARE_DIRECTORY = PurePosixPath("share/world-forge")
+LEGACY_SHARE_DIRECTORY = PurePosixPath("share/rpg-world-forge")
+SHARE_DIRECTORY = CANONICAL_SHARE_DIRECTORY
+_PUBLIC_DATA_DIRECTORIES = ("contracts", "schemas")
 _ENTRY_KEYS = frozenset(
     {
         "id",
@@ -39,7 +49,7 @@ _PORTABLE_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _CATALOG_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 _CLI_COMMAND_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-_ALLOWED_SYMBOL_ROOTS = frozenset({"worldforge", "isoworld"})
+_ALLOWED_SYMBOL_ROOTS = frozenset({"worldforge", "isoworld", "gamepack_runtime"})
 
 
 @dataclass(frozen=True)
@@ -47,6 +57,14 @@ class ContractAuditResult:
     catalog_path: Path
     mode: str
     contracts: int
+
+
+@dataclass(frozen=True)
+class _InstalledPublicData:
+    catalog_path: Path
+    directories: tuple[str, ...]
+    inventory: dict[str, bytes]
+    root: Path
 
 
 class ContractCatalogError(ValueError):
@@ -127,17 +145,28 @@ def _safe_regular_file(root: Path, relative: str, *, context: str) -> Path:
     return target
 
 
-def _read_canonical_catalog(catalog_path: Path) -> dict[str, Any]:
-    try:
-        raw = catalog_path.read_bytes()
-    except OSError as exc:
-        raise ContractCatalogError(
-            _issue("catalog", f"could not read catalog bytes: {exc}")
-        ) from exc
-    try:
-        catalog = read_json_object(catalog_path)
-    except AssetContractError as exc:
-        raise ContractCatalogError(str(exc)) from exc
+def _read_canonical_catalog(
+    catalog_path: Path,
+    *,
+    retained_bytes: bytes | None = None,
+) -> dict[str, Any]:
+    if retained_bytes is None:
+        try:
+            raw = catalog_path.read_bytes()
+        except OSError as exc:
+            raise ContractCatalogError(
+                _issue("catalog", f"could not read catalog bytes: {exc}")
+            ) from exc
+        try:
+            catalog = read_json_object(catalog_path)
+        except AssetContractError as exc:
+            raise ContractCatalogError(str(exc)) from exc
+    else:
+        raw = retained_bytes
+        try:
+            catalog = decode_json_object(raw, source=catalog_path)
+        except RuntimeIOError as exc:
+            raise ContractCatalogError(str(exc)) from exc
     canonical = canonical_json_bytes(catalog)
     if raw != canonical:
         raise ContractCatalogError(_issue("catalog", "must use canonical sorted JSON bytes"))
@@ -277,8 +306,35 @@ def _validate_fixture_identity(
         )
 
 
+def _read_catalog_json(
+    path: Path,
+    relative: str,
+    *,
+    retained_inventory: dict[str, bytes] | None,
+) -> dict[str, Any]:
+    if retained_inventory is None:
+        try:
+            return read_json_object(path)
+        except AssetContractError as exc:
+            raise ContractCatalogError(str(exc)) from exc
+    try:
+        payload = retained_inventory[relative]
+    except KeyError as exc:
+        raise ContractCatalogError(
+            _issue("installed", f"missing public data file {relative}")
+        ) from exc
+    try:
+        return decode_json_object(payload, source=path)
+    except RuntimeIOError as exc:
+        raise ContractCatalogError(str(exc)) from exc
+
+
 def _validate_schema_formats(
-    entries: list[dict[str, Any]], root: Path, *, full_source: bool
+    entries: list[dict[str, Any]],
+    root: Path,
+    *,
+    full_source: bool,
+    retained_inventory: dict[str, bytes] | None = None,
 ) -> None:
     catalog_schemas = {entry["schema"] for entry in entries}
     if full_source:
@@ -296,8 +352,16 @@ def _validate_schema_formats(
             raise ContractCatalogError(_issue("contracts", "; ".join(details)))
     for index, entry in enumerate(entries):
         context = f"contracts/{index}"
-        schema_path = _safe_regular_file(root, entry["schema"], context=f"{context}/schema")
-        schema = read_json_object(schema_path)
+        schema_path = (
+            root / entry["schema"]
+            if retained_inventory is not None
+            else _safe_regular_file(root, entry["schema"], context=f"{context}/schema")
+        )
+        schema = _read_catalog_json(
+            schema_path,
+            entry["schema"],
+            retained_inventory=retained_inventory,
+        )
         if schema.get("title") != entry["title"]:
             raise ContractCatalogError(_issue(context, "title does not match schema title"))
         props = schema.get("properties")
@@ -374,43 +438,227 @@ def _validate_cli_commands(entries: list[dict[str, Any]]) -> None:
                 )
 
 
-def _candidate_install_roots() -> list[Path]:
+def _candidate_install_prefixes() -> list[Path]:
     candidates: list[Path] = []
     data_path = sysconfig.get_paths().get("data")
     if data_path:
-        candidates.append(Path(data_path) / SHARE_DIRECTORY)
+        candidates.append(Path(data_path))
     prefix = sysconfig.get_config_var("prefix") or sysconfig.get_path("data")
-    candidates.append(Path(prefix) / SHARE_DIRECTORY)
-    return candidates
+    candidates.append(Path(prefix))
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key not in seen:
+            seen.add(key)
+            unique.append(candidate)
+    return unique
 
 
-def _catalog_path(source_root: str | Path | None) -> tuple[Path, Path, str, bool]:
+def _capture_public_data_snapshot(
+    root: Path,
+    snapshot: RetainedTreeSnapshot,
+) -> _InstalledPublicData:
+    for relative in (*snapshot.directories, *snapshot.files):
+        if relative:
+            _portable_relative_path(relative, context="installed")
+    actual_directories = set(snapshot.directories)
+    for directory_name in _PUBLIC_DATA_DIRECTORIES:
+        if directory_name not in actual_directories:
+            raise ContractCatalogError(
+                _issue(
+                    "installed",
+                    f"partial installed public data tree: missing directory {directory_name}",
+                )
+            )
+    catalog_relative = CATALOG_RELATIVE_PATH.as_posix()
+    if catalog_relative not in snapshot.files:
+        raise ContractCatalogError(
+            _issue("installed", "partial installed public data tree: catalog is missing")
+        )
+    return _InstalledPublicData(
+        catalog_path=root / CATALOG_RELATIVE_PATH,
+        directories=snapshot.directories,
+        inventory=snapshot.files,
+        root=root,
+    )
+
+
+def _installed_roots(
+    prefixes: list[Path],
+    *,
+    verification_hook: RetainedTreeHook | None = None,
+) -> _InstalledPublicData | None:
+    canonical: list[_InstalledPublicData] = []
+    legacy: list[_InstalledPublicData] = []
+    for prefix in prefixes:
+        try:
+            snapshots = capture_retained_named_child_trees(
+                prefix,
+                container_name=CANONICAL_SHARE_DIRECTORY.parts[0],
+                child_names=(
+                    CANONICAL_SHARE_DIRECTORY.name,
+                    LEGACY_SHARE_DIRECTORY.name,
+                ),
+                verification_hook=verification_hook,
+            )
+        except RetainedTreeError as exc:
+            boundary = (
+                "unsafe installed public data root"
+                if str(exc).startswith("named child is not")
+                else "unsafe installed public data tree"
+            )
+            raise ContractCatalogError(_issue("installed", f"{boundary}: {exc}")) from exc
+        canonical_snapshot = snapshots[CANONICAL_SHARE_DIRECTORY.name]
+        legacy_snapshot = snapshots[LEGACY_SHARE_DIRECTORY.name]
+        if canonical_snapshot is not None:
+            canonical.append(
+                _capture_public_data_snapshot(
+                    prefix / CANONICAL_SHARE_DIRECTORY,
+                    canonical_snapshot,
+                )
+            )
+        if legacy_snapshot is not None:
+            legacy.append(
+                _capture_public_data_snapshot(
+                    prefix / LEGACY_SHARE_DIRECTORY,
+                    legacy_snapshot,
+                )
+            )
+    discovered = [*canonical, *legacy]
+    if discovered:
+        reference = discovered[0]
+        for candidate in discovered[1:]:
+            if (
+                candidate.directories != reference.directories
+                or candidate.inventory != reference.inventory
+            ):
+                raise ContractCatalogError(
+                    _issue(
+                        "installed",
+                        "canonical and legacy installed public data trees diverge globally",
+                    )
+                )
+    if canonical:
+        return canonical[0]
+    if legacy:
+        return legacy[0]
+    return None
+
+
+def _expected_installed_public_paths(entries: list[dict[str, Any]]) -> set[str]:
+    expected = {CATALOG_RELATIVE_PATH.as_posix()}
+    for entry in entries:
+        expected.add(entry["schema"])
+        for field in _PATH_LIST_FIELDS:
+            expected.update(
+                relative
+                for relative in entry[field]
+                if relative.startswith(("contracts/", "schemas/"))
+            )
+    return expected
+
+
+def _expected_installed_public_directories(files: set[str]) -> set[str]:
+    expected = {""}
+    for relative in files:
+        parts = PurePosixPath(relative).parts[:-1]
+        for length in range(1, len(parts) + 1):
+            expected.add(PurePosixPath(*parts[:length]).as_posix())
+    return expected
+
+
+def _validate_installed_inventory(
+    entries: list[dict[str, Any]],
+    inventory: dict[str, bytes],
+    directories: tuple[str, ...],
+) -> None:
+    expected = _expected_installed_public_paths(entries)
+    actual = set(inventory)
+    missing = expected - actual
+    extra = actual - expected
+    if missing:
+        raise ContractCatalogError(
+            _issue("installed", f"missing public data file {sorted(missing)[0]}")
+        )
+    if extra:
+        raise ContractCatalogError(
+            _issue("installed", f"unexpected public data file {sorted(extra)[0]}")
+        )
+    expected_directories = _expected_installed_public_directories(expected)
+    actual_directories = set(directories)
+    missing_directories = expected_directories - actual_directories
+    extra_directories = actual_directories - expected_directories
+    if missing_directories:
+        raise ContractCatalogError(
+            _issue(
+                "installed",
+                f"missing public data directory {sorted(missing_directories)[0]}",
+            )
+        )
+    if extra_directories:
+        raise ContractCatalogError(
+            _issue(
+                "installed",
+                f"unexpected public data directory {sorted(extra_directories)[0]}",
+            )
+        )
+
+
+def _catalog_path(
+    source_root: str | Path | None,
+) -> tuple[
+    Path,
+    Path,
+    str,
+    bool,
+    dict[str, bytes] | None,
+    tuple[str, ...] | None,
+]:
     if source_root is not None:
         root = Path(source_root).resolve()
         catalog_path = _safe_regular_file(root, CATALOG_RELATIVE_PATH.as_posix(), context="catalog")
-        return catalog_path, root, "source", True
-    for root in _candidate_install_roots():
-        try:
-            path = _safe_regular_file(root, CATALOG_RELATIVE_PATH.as_posix(), context="catalog")
-        except ContractCatalogError:
-            continue
-        else:
-            full_source = (root / "docs").exists() and (root / "tests").exists()
-            return path, root.resolve(), "installed", full_source
+        return catalog_path, root, "source", True, None, None
+    installed = _installed_roots(_candidate_install_prefixes())
+    if installed is not None:
+        return (
+            installed.catalog_path,
+            installed.root,
+            "installed",
+            False,
+            installed.inventory,
+            installed.directories,
+        )
     raise ContractCatalogError("contracts/catalog.json could not be found")
 
 
 def load_contract_catalog(source_root: str | Path | None = None) -> dict[str, Any]:
-    path, _root, _mode, _full_source = _catalog_path(source_root)
-    return _read_canonical_catalog(path)
+    path, _root, _mode, _full_source, inventory, directories = _catalog_path(source_root)
+    retained = None if inventory is None else inventory[CATALOG_RELATIVE_PATH.as_posix()]
+    catalog = _read_canonical_catalog(path, retained_bytes=retained)
+    if inventory is not None:
+        entries = _validate_catalog_shape(catalog)
+        _validate_entries(entries)
+        assert directories is not None
+        _validate_installed_inventory(entries, inventory, directories)
+    return catalog
 
 
 def audit_contracts(source_root: str | Path | None = None) -> ContractAuditResult:
-    catalog_path, root, mode, full_source = _catalog_path(source_root)
-    catalog = _read_canonical_catalog(catalog_path)
+    catalog_path, root, mode, full_source, inventory, directories = _catalog_path(source_root)
+    retained = None if inventory is None else inventory[CATALOG_RELATIVE_PATH.as_posix()]
+    catalog = _read_canonical_catalog(catalog_path, retained_bytes=retained)
     entries = _validate_catalog_shape(catalog)
     _validate_entries(entries)
-    _validate_schema_formats(entries, root, full_source=full_source)
+    if inventory is not None:
+        assert directories is not None
+        _validate_installed_inventory(entries, inventory, directories)
+    _validate_schema_formats(
+        entries,
+        root,
+        full_source=full_source,
+        retained_inventory=inventory,
+    )
     _validate_python_symbols(entries)
     _validate_cli_commands(entries)
     return ContractAuditResult(catalog_path=catalog_path, mode=mode, contracts=len(entries))

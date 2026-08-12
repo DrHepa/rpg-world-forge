@@ -3,9 +3,9 @@ requires = ["setuptools==83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rpg-world-forge"
+name = "world-forge"
 version = "0.7.0"
-description = "World-agnostic GPT-led RPG authoring forge with a deterministic Python/raylib runtime"
+description = "Deterministic multi-genre game authoring, asset, packaging, and runtime forge"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 license = "MIT"
@@ -17,7 +17,7 @@ classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
-  "Topic :: Games/Entertainment :: Role-Playing",
+  "Topic :: Games/Entertainment",
 ]
 
 [project.urls]
@@ -49,6 +49,8 @@ where = ["src"]
 worldforge = ["templates/pyray_game/*.tmpl"]
 
 [tool.setuptools.data-files]
+"share/world-forge/contracts" = ["contracts/*"]
+"share/world-forge/schemas" = ["schemas/*.json"]
 "share/rpg-world-forge/contracts" = ["contracts/*"]
 "share/rpg-world-forge/schemas" = ["schemas/*.json"]
 

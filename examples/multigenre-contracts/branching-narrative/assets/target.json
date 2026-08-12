@@ -1,0 +1,117 @@
+{
+  "asset_subject": {
+    "content_hash": "6fd06c5f7cd165c24815dce3651b6d3c00a55af7b8b4cfe8cccf08880d81c436",
+    "format": "world-forge.asset_subject",
+    "format_version": 1,
+    "id": "asset_subject_efe08b26fd743010caa1e27f472b67300594df87e3b955da"
+  },
+  "bindings": [
+    {
+      "asset_id": "narrative_ui_font",
+      "binding_id": "choice_panel",
+      "kind": "font",
+      "outputs": [
+        {
+          "media_type": "font/ttf",
+          "role": "font"
+        }
+      ],
+      "referencing_subjects": [
+        {
+          "id": "choose_left_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "choose_right_mechanic",
+          "kind": "mechanic"
+        },
+        {
+          "id": "central_choice",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "choice_panel_hook",
+          "kind": "presentation_hook"
+        }
+      ],
+      "representation": "2d",
+      "required": true,
+      "roles": [
+        "mechanic_feedback",
+        "narrative_ui",
+        "text_ui"
+      ],
+      "selected_format": "asset:font",
+      "sharing": {
+        "group_id": "narrative_ui",
+        "policy": "shared_exact"
+      },
+      "usage_contexts": [
+        "mechanic",
+        "mechanic:text",
+        "narrative",
+        "presentation:text"
+      ]
+    },
+    {
+      "asset_id": "narrative_ui_font",
+      "binding_id": "ending_panel",
+      "kind": "font",
+      "outputs": [
+        {
+          "media_type": "font/ttf",
+          "role": "font"
+        }
+      ],
+      "referencing_subjects": [
+        {
+          "id": "ending_left",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_right",
+          "kind": "narrative_unit"
+        },
+        {
+          "id": "ending_panel_hook",
+          "kind": "presentation_hook"
+        }
+      ],
+      "representation": "2d",
+      "required": true,
+      "roles": [
+        "ending_ui",
+        "narrative_ui"
+      ],
+      "selected_format": "asset:font",
+      "sharing": {
+        "group_id": "narrative_ui",
+        "policy": "shared_exact"
+      },
+      "usage_contexts": [
+        "narrative",
+        "presentation:ending"
+      ]
+    }
+  ],
+  "content_hash": "d09f6f717b61572dfa370fedab2e0a3ddb6b28cb2334f64da29c1adc58d25162",
+  "format": "world-forge.asset_target",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "56b8a5393615603ca3a6bbc1a55cf557cadee2e05cf03a8b4714b4536e6cb7b7",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "branching_narrative"
+  },
+  "review": {
+    "evidence": [
+      {
+        "content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "evidence_id": "binding_review"
+      }
+    ],
+    "rationale": "The binding plan was reviewed against every compiled requirement.",
+    "reviewer_id": "asset_director"
+  },
+  "target_id": "asset_target_bcecafb47e27ced2a30ad4cffe40f990348fca66cd0df9f2"
+}

@@ -1,0 +1,399 @@
+{
+  "actions": [
+    {
+      "core_verb_id": "choose",
+      "id": "choose_left",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "choice_panel_hook"
+      ],
+      "required_feature_ids": [
+        "logic:branching_choice",
+        "logic:persistent_variables"
+      ],
+      "rule_ids": [
+        "choose_left_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "narrative_option",
+          "option_id": "choose_left",
+          "source_id": "central_choice"
+        }
+      ]
+    },
+    {
+      "core_verb_id": "choose",
+      "id": "choose_right",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "choice_panel_hook"
+      ],
+      "required_feature_ids": [
+        "logic:branching_choice",
+        "logic:persistent_variables"
+      ],
+      "rule_ids": [
+        "choose_right_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "narrative_option",
+          "option_id": "choose_right",
+          "source_id": "central_choice"
+        }
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "action_id": "choose_left",
+      "comparison": "equal",
+      "id": "choice_available_left",
+      "left": {
+        "kind": "state",
+        "state_id": "choice_state"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": "unchosen",
+        "value_type": "string"
+      }
+    },
+    {
+      "action_id": "choose_right",
+      "comparison": "equal",
+      "id": "choice_available_right",
+      "left": {
+        "kind": "state",
+        "state_id": "choice_state"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": "unchosen",
+        "value_type": "string"
+      }
+    },
+    {
+      "action_id": null,
+      "comparison": "equal",
+      "id": "ending_left",
+      "left": {
+        "kind": "state",
+        "state_id": "choice_state"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": "left",
+        "value_type": "string"
+      }
+    },
+    {
+      "action_id": null,
+      "comparison": "equal",
+      "id": "ending_right",
+      "left": {
+        "kind": "state",
+        "state_id": "choice_state"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": "right",
+        "value_type": "string"
+      }
+    },
+    {
+      "action_id": null,
+      "comparison": "equal",
+      "id": "remember_left",
+      "left": {
+        "kind": "state",
+        "state_id": "knowledge"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": [
+          "learned_left"
+        ],
+        "value_type": "string_array"
+      }
+    },
+    {
+      "action_id": null,
+      "comparison": "equal",
+      "id": "remember_right",
+      "left": {
+        "kind": "state",
+        "state_id": "knowledge"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": [
+          "learned_right"
+        ],
+        "value_type": "string_array"
+      }
+    }
+  ],
+  "content_hash": "a877d9b2701b45f761c03554df04a23791b9151e68383d7f03907d7b93aff75e",
+  "effects": [
+    {
+      "action_id": "choose_left",
+      "array_state_id": "knowledge",
+      "id": "record_left",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "append_unique",
+      "value": {
+        "kind": "literal",
+        "value": "learned_left",
+        "value_type": "string"
+      }
+    },
+    {
+      "action_id": "choose_right",
+      "array_state_id": "knowledge",
+      "id": "record_right",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "append_unique",
+      "value": {
+        "kind": "literal",
+        "value": "learned_right",
+        "value_type": "string"
+      }
+    },
+    {
+      "action_id": "choose_left",
+      "id": "remember_left",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "set",
+      "state_id": "choice_state",
+      "value": {
+        "kind": "literal",
+        "value": "left",
+        "value_type": "string"
+      }
+    },
+    {
+      "action_id": "choose_right",
+      "id": "remember_right",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "set",
+      "state_id": "choice_state",
+      "value": {
+        "kind": "literal",
+        "value": "right",
+        "value_type": "string"
+      }
+    }
+  ],
+  "endings": [
+    {
+      "condition_ids": [
+        "ending_left",
+        "remember_left"
+      ],
+      "event_ids": [
+        "choice_left"
+      ],
+      "id": "ending_left",
+      "kind": "success",
+      "presentation_hook_ids": [
+        "ending_panel_hook"
+      ]
+    },
+    {
+      "condition_ids": [
+        "ending_right",
+        "remember_right"
+      ],
+      "event_ids": [
+        "choice_right"
+      ],
+      "id": "ending_right",
+      "kind": "success",
+      "presentation_hook_ids": [
+        "ending_panel_hook"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "choice_left"
+    },
+    {
+      "id": "choice_right"
+    }
+  ],
+  "extensions": [],
+  "failures": [],
+  "format": "world-forge.logic_module",
+  "format_version": 1,
+  "goals": [
+    {
+      "condition_ids": [
+        "ending_left",
+        "remember_left"
+      ],
+      "id": "reach_left",
+      "success_ending_id": "ending_left"
+    },
+    {
+      "condition_ids": [
+        "ending_right",
+        "remember_right"
+      ],
+      "id": "reach_right",
+      "success_ending_id": "ending_right"
+    }
+  ],
+  "mechanics": [
+    {
+      "action_id": "choose_left",
+      "asset_binding_ids": [
+        "choice_panel"
+      ],
+      "authoritative_state_ids": [
+        "choice_state",
+        "knowledge"
+      ],
+      "condition_ids": [
+        "choice_available_left"
+      ],
+      "core_verb_id": "choose",
+      "effect_ids": [
+        "record_left",
+        "remember_left"
+      ],
+      "event_ids": [
+        "choice_left"
+      ],
+      "id": "choose_left_mechanic",
+      "presentation_hook_ids": [
+        "choice_panel_hook"
+      ],
+      "required_feature_ids": [
+        "logic:branching_choice",
+        "logic:persistent_variables"
+      ],
+      "rule_ids": [
+        "choose_left_rule"
+      ]
+    },
+    {
+      "action_id": "choose_right",
+      "asset_binding_ids": [
+        "choice_panel"
+      ],
+      "authoritative_state_ids": [
+        "choice_state",
+        "knowledge"
+      ],
+      "condition_ids": [
+        "choice_available_right"
+      ],
+      "core_verb_id": "choose",
+      "effect_ids": [
+        "record_right",
+        "remember_right"
+      ],
+      "event_ids": [
+        "choice_right"
+      ],
+      "id": "choose_right_mechanic",
+      "presentation_hook_ids": [
+        "choice_panel_hook"
+      ],
+      "required_feature_ids": [
+        "logic:branching_choice",
+        "logic:persistent_variables"
+      ],
+      "rule_ids": [
+        "choose_right_rule"
+      ]
+    }
+  ],
+  "module_id": "branching_logic",
+  "presentation_hooks": [
+    {
+      "asset_binding_ids": [
+        "choice_panel"
+      ],
+      "id": "choice_panel_hook",
+      "kind": "text"
+    },
+    {
+      "asset_binding_ids": [
+        "ending_panel"
+      ],
+      "id": "ending_panel_hook",
+      "kind": "ending"
+    }
+  ],
+  "project_id": "branching_narrative",
+  "rules": [
+    {
+      "action_id": "choose_left",
+      "condition_ids": [
+        "choice_available_left"
+      ],
+      "effect_ids": [
+        "record_left",
+        "remember_left"
+      ],
+      "event_ids": [
+        "choice_left"
+      ],
+      "id": "choose_left_rule",
+      "order": 0
+    },
+    {
+      "action_id": "choose_right",
+      "condition_ids": [
+        "choice_available_right"
+      ],
+      "effect_ids": [
+        "record_right",
+        "remember_right"
+      ],
+      "event_ids": [
+        "choice_right"
+      ],
+      "id": "choose_right_rule",
+      "order": 1
+    }
+  ],
+  "state_variables": [
+    {
+      "allowed_values": [
+        "left",
+        "right",
+        "unchosen"
+      ],
+      "id": "choice_state",
+      "initial": "unchosen",
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "string"
+    },
+    {
+      "allowed_values": [
+        "learned_left",
+        "learned_right"
+      ],
+      "id": "knowledge",
+      "initial": [],
+      "max_items": 1,
+      "min_items": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "string_array"
+    }
+  ],
+  "title": "Neutral authored branching-choice logic"
+}

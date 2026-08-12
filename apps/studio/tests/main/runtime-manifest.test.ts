@@ -73,15 +73,19 @@ describe("runtime manifest", () => {
       dataDir: path.join(os.tmpdir(), "rwf-data"),
       environment: {},
     };
-    await expect(resolveForgeServiceLaunch(options)).rejects.toThrow(/RWF_STUDIO_DEV_PYTHON/u);
-    await expect(resolveCodexRuntime(options)).rejects.toThrow(/RWF_STUDIO_DEV_CODEX/u);
+    await expect(resolveForgeServiceLaunch(options)).rejects.toThrow(
+      /WORLD_FORGE_STUDIO_DEV_PYTHON/u,
+    );
+    await expect(resolveCodexRuntime(options)).rejects.toThrow(
+      /WORLD_FORGE_STUDIO_DEV_CODEX/u,
+    );
   });
 
   it("builds fixed isolated service arguments and resolves canonical Codex binaries", async () => {
     const dataDir = path.join(os.tmpdir(), "rwf-data");
     const environment = {
-      RWF_STUDIO_DEV_PYTHON: process.execPath,
-      RWF_STUDIO_DEV_CODEX: process.execPath,
+      WORLD_FORGE_STUDIO_DEV_PYTHON: process.execPath,
+      WORLD_FORGE_STUDIO_DEV_CODEX: process.execPath,
       NODE_OPTIONS: "--inspect",
       PYTHONPATH: "/attacker",
       HOME: os.homedir(),
@@ -109,6 +113,28 @@ describe("runtime manifest", () => {
       pythonExecutable: process.execPath,
       version: CODEX_VERSION,
     });
+  });
+
+  it("rejects conflicting canonical and deprecated runtime aliases before path resolution", async () => {
+    const environment = {
+      WORLD_FORGE_STUDIO_DEV_PYTHON: "/canonical/python",
+      RWF_STUDIO_DEV_PYTHON: "/legacy/python",
+      WORLD_FORGE_STUDIO_DEV_CODEX: "/canonical/codex",
+      RWF_STUDIO_DEV_CODEX: "/legacy/codex",
+    };
+    const options = {
+      packaged: false,
+      resourcesPath: "/unused",
+      dataDir: path.join(os.tmpdir(), "rwf-data"),
+      environment,
+    };
+
+    await expect(resolveForgeServiceLaunch(options)).rejects.toThrow(
+      /conflicting Studio environment variables/u,
+    );
+    await expect(resolveCodexRuntime(options)).rejects.toThrow(
+      /conflicting Studio environment variables/u,
+    );
   });
 
   it("resolves packaged Python and Codex only from a closed manifest under resources", async () => {

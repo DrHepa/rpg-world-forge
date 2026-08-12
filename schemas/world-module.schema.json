@@ -1,0 +1,384 @@
+{
+  "$id": "https://world-forge.local/schemas/world-module.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "facts": {},
+            "module_type": {
+              "const": "canon"
+            }
+          },
+          "required": [
+            "facts"
+          ],
+          "propertyNames": {
+            "not": {
+              "enum": ["events", "spaces", "groups", "characters", "knowledge_items"]
+            }
+          }
+        },
+        {
+          "properties": {
+            "events": {},
+            "module_type": {
+              "const": "chronology"
+            }
+          },
+          "required": [
+            "events"
+          ],
+          "propertyNames": {
+            "not": {
+              "enum": ["facts", "spaces", "groups", "characters", "knowledge_items"]
+            }
+          }
+        },
+        {
+          "properties": {
+            "module_type": {
+              "const": "space"
+            },
+            "spaces": {}
+          },
+          "required": [
+            "spaces"
+          ],
+          "propertyNames": {
+            "not": {
+              "enum": ["facts", "events", "groups", "characters", "knowledge_items"]
+            }
+          }
+        },
+        {
+          "properties": {
+            "groups": {},
+            "module_type": {
+              "const": "group"
+            }
+          },
+          "required": [
+            "groups"
+          ],
+          "propertyNames": {
+            "not": {
+              "enum": ["facts", "events", "spaces", "characters", "knowledge_items"]
+            }
+          }
+        },
+        {
+          "properties": {
+            "characters": {},
+            "module_type": {
+              "const": "character"
+            }
+          },
+          "required": [
+            "characters"
+          ],
+          "propertyNames": {
+            "not": {
+              "enum": ["facts", "events", "spaces", "groups", "knowledge_items"]
+            }
+          }
+        },
+        {
+          "properties": {
+            "knowledge_items": {},
+            "module_type": {
+              "const": "knowledge"
+            }
+          },
+          "required": [
+            "knowledge_items"
+          ],
+          "propertyNames": {
+            "not": {
+              "enum": ["facts", "events", "spaces", "groups", "characters"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "characters": {
+      "items": {
+        "$ref": "#/$defs/character"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/$defs/event"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/extension"
+      },
+      "type": "array"
+    },
+    "facts": {
+      "items": {
+        "$ref": "#/$defs/fact"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "format": {
+      "const": "world-forge.world_module"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "groups": {
+      "items": {
+        "$ref": "#/$defs/group"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "knowledge_items": {
+      "items": {
+        "$ref": "#/$defs/knowledge"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "module_id": {
+      "$ref": "#/$defs/id"
+    },
+    "module_type": {
+      "enum": [
+        "canon",
+        "chronology",
+        "space",
+        "group",
+        "character",
+        "knowledge"
+      ]
+    },
+    "project_id": {
+      "$ref": "#/$defs/id"
+    },
+    "spaces": {
+      "items": {
+        "$ref": "#/$defs/space"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "module_id",
+    "project_id",
+    "module_type",
+    "title",
+    "extensions",
+    "content_hash"
+  ],
+  "title": "World Forge typed world module v1",
+  "type": "object",
+  "$defs": {
+    "character": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "role"
+      ],
+      "type": "object"
+    },
+    "event": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "sequence": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "summary": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "sequence",
+        "summary"
+      ],
+      "type": "object"
+    },
+    "extension": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z][a-z0-9-]*)+$",
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "version": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "required",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "fact": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "sources": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "statement": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "canon",
+            "provisional"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "status",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "group": {
+      "additionalProperties": false,
+      "properties": {
+        "group_type": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "group_type"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "knowledge": {
+      "additionalProperties": false,
+      "properties": {
+        "access": {
+          "enum": [
+            "public",
+            "restricted",
+            "secret"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "statement": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "access"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "space": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "topology": {
+          "enum": [
+            "abstract",
+            "symbolic",
+            "diegetic"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "topology"
+      ],
+      "type": "object"
+    }
+  }
+}

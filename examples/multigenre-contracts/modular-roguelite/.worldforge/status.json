@@ -1,0 +1,29 @@
+{
+  "completed_phases": [],
+  "content_hash": "4b28a8dd55fc403351721123270eb9d875a87ae154ef4c483fe1faabd6dbd5b0",
+  "current_phase": "p00_brief",
+  "format": "world-forge.creation_workflow_status",
+  "format_version": 1,
+  "invalidated_reports": [],
+  "profile": {
+    "content_hash": "63745ee45c0bb39730938ffc13bfb51334eae5bc00b94024097ebad894429391",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "modular_roguelite_profile"
+  },
+  "project": {
+    "content_hash": "29528ed740130535366b3716a23f8b1ee0b72daadb952f24cb64885be237de43",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "modular_roguelite"
+  },
+  "reports": [],
+  "revision": 0,
+  "source_manifest": {
+    "content_hash": "86d839fb5634bc658c6fd803e5f0ebbe7dd43cad00dad0b3156b0038fe7ae14c",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "modular_roguelite"
+  },
+  "workflow_id": "modular_roguelite_workflow"
+}

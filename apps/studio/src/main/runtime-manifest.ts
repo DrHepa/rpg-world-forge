@@ -5,6 +5,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import type { FixedSpawnSpec } from "./ndjson-supervisor";
+import { resolveStudioEnvironment } from "../../scripts/studio-environment.mjs";
 
 const MANIFEST_FORMAT = "rpg-world-forge.studio_runtime_manifest";
 const MANIFEST_FILE = "runtime-manifest.json";
@@ -237,11 +238,12 @@ export interface CodexRuntime {
 export async function resolveForgeServiceLaunch(options: ForgeLaunchOptions): Promise<FixedSpawnSpec> {
   assertAbsoluteSafePath(options.dataDir, "Studio data directory");
   const environment = options.environment ?? process.env;
+  const studioEnvironment = resolveStudioEnvironment(environment);
   if (!options.packaged) {
-    const configured = environment.RWF_STUDIO_DEV_PYTHON;
+    const configured = studioEnvironment.DEV_PYTHON;
     if (!configured) {
       throw new Error(
-        "Development service is not configured. Set RWF_STUDIO_DEV_PYTHON to an absolute Python 3.11/3.12 interpreter path.",
+        "Development service is not configured. Set WORLD_FORGE_STUDIO_DEV_PYTHON (or deprecated RWF_STUDIO_DEV_PYTHON) to an absolute Python 3.11/3.12 interpreter path.",
       );
     }
     assertAbsoluteSafePath(configured, "Development Python interpreter");
@@ -272,12 +274,13 @@ export async function resolveCodexRuntime(
   options: ForgeLaunchOptions,
 ): Promise<CodexRuntime> {
   const environment = options.environment ?? process.env;
+  const studioEnvironment = resolveStudioEnvironment(environment);
   if (!options.packaged) {
-    const codex = environment.RWF_STUDIO_DEV_CODEX;
-    const python = environment.RWF_STUDIO_DEV_PYTHON;
+    const codex = studioEnvironment.DEV_CODEX;
+    const python = studioEnvironment.DEV_PYTHON;
     if (!codex || !python) {
       throw new Error(
-        "Development Codex bridge requires absolute RWF_STUDIO_DEV_CODEX and RWF_STUDIO_DEV_PYTHON paths.",
+        "Development Codex bridge requires absolute WORLD_FORGE_STUDIO_DEV_CODEX and WORLD_FORGE_STUDIO_DEV_PYTHON paths (deprecated RWF_STUDIO_* aliases remain accepted).",
       );
     }
     assertAbsoluteSafePath(codex, "Development Codex executable");

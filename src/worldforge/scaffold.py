@@ -250,7 +250,7 @@ def _populate_world_project(
         root / ".worldforge/project.json",
         {
             "format": "rpg-world-forge.project",
-            "format_version": 2,
+            "format_version": 3,
             "project_kind": "world",
             "world_id": world_id,
             "title": title.strip(),
@@ -264,7 +264,7 @@ def _populate_world_project(
                 "local_model_route": "modly",
                 "runtime_inference": False,
             },
-            "tool_repository": "rpg-world-forge",
+            "tool_repository": "world-forge",
         },
     )
     status = initial_status(world_id)
@@ -331,7 +331,7 @@ def _populate_world_project(
     )
     (root / "README.md").write_text(
         f"# {title.strip()}\n\n"
-        "World-authoring project created with RPG World Forge. Editable canon "
+        "World-authoring project created with World Forge. Editable canon "
         "and production sources live in `source/`; they are not game runtime "
         "inputs. The world content language is declared in `world.json`; tooling "
         "documentation remains in English.\n\n"
@@ -378,7 +378,7 @@ def create_world_project(
     actor_name: str | None = None,
     version: str = "0.1.0",
 ) -> Path:
-    """Atomically scaffold an independent v2 world-authoring project."""
+    """Atomically scaffold an independent v3 world-authoring project."""
 
     try:
         destination = assert_new_repository_target(

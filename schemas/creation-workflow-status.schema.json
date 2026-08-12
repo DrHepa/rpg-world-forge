@@ -1,0 +1,348 @@
+{
+  "$defs": {
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "format": {
+                "const": "world-forge.game_runtime_bundle"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^game_runtime_bundle_[0-9a-f]{48}$",
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "invalidatedReport": {
+      "additionalProperties": false,
+      "properties": {
+        "phase": {
+          "enum": [
+            "p00_brief",
+            "p01_genre_style",
+            "p02_world_laws",
+            "p03_geography",
+            "p04_timeline",
+            "p05_societies",
+            "p06_characters",
+            "p07_systems",
+            "p08_world_arcs",
+            "p09_narrative_content",
+            "p10_canon_lock",
+            "p11_art_audio",
+            "p12_asset_specs",
+            "p13_asset_production",
+            "p14_handoff"
+          ]
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "report_content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "revision": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "phase",
+        "report_content_hash",
+        "reason",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "manifestIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_source_manifest"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "profileIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.creation_profile"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "projectIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.project"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "reportReference": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "invalidation_dependencies": {
+          "items": {
+            "$ref": "#/$defs/identity"
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "type": "array"
+        },
+        "path": {
+          "pattern": "^\\.worldforge/phase_reports/p[0-9]{2}_[a-z0-9_]+-[0-9a-f]{64}\\.json$",
+          "type": "string"
+        },
+        "phase": {
+          "enum": [
+            "p00_brief",
+            "p01_genre_style",
+            "p02_world_laws",
+            "p03_geography",
+            "p04_timeline",
+            "p05_societies",
+            "p06_characters",
+            "p07_systems",
+            "p08_world_arcs",
+            "p09_narrative_content",
+            "p10_canon_lock",
+            "p11_art_audio",
+            "p12_asset_specs",
+            "p13_asset_production",
+            "p14_handoff"
+          ]
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "not_applicable"
+          ]
+        }
+      },
+      "required": [
+        "phase",
+        "status",
+        "path",
+        "content_hash",
+        "invalidation_dependencies"
+      ],
+      "type": "object"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/creation-workflow-status.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "completed_phases": {
+      "items": {
+        "enum": [
+          "p00_brief",
+          "p01_genre_style",
+          "p02_world_laws",
+          "p03_geography",
+          "p04_timeline",
+          "p05_societies",
+          "p06_characters",
+          "p07_systems",
+          "p08_world_arcs",
+          "p09_narrative_content",
+          "p10_canon_lock",
+          "p11_art_audio",
+          "p12_asset_specs",
+          "p13_asset_production",
+          "p14_handoff"
+        ]
+      },
+      "maxItems": 15,
+      "minItems": 0,
+      "type": "array"
+    },
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "current_phase": {
+      "oneOf": [
+        {
+          "enum": [
+            "p00_brief",
+            "p01_genre_style",
+            "p02_world_laws",
+            "p03_geography",
+            "p04_timeline",
+            "p05_societies",
+            "p06_characters",
+            "p07_systems",
+            "p08_world_arcs",
+            "p09_narrative_content",
+            "p10_canon_lock",
+            "p11_art_audio",
+            "p12_asset_specs",
+            "p13_asset_production",
+            "p14_handoff"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "format": {
+      "const": "world-forge.creation_workflow_status"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "invalidated_reports": {
+      "items": {
+        "$ref": "#/$defs/invalidatedReport"
+      },
+      "maxItems": 256,
+      "minItems": 0,
+      "type": "array"
+    },
+    "profile": {
+      "$ref": "#/$defs/profileIdentity"
+    },
+    "project": {
+      "$ref": "#/$defs/projectIdentity"
+    },
+    "reports": {
+      "items": {
+        "$ref": "#/$defs/reportReference"
+      },
+      "maxItems": 15,
+      "minItems": 0,
+      "type": "array"
+    },
+    "revision": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "source_manifest": {
+      "$ref": "#/$defs/manifestIdentity"
+    },
+    "workflow_id": {
+      "$ref": "#/$defs/id"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "workflow_id",
+    "project",
+    "profile",
+    "source_manifest",
+    "current_phase",
+    "completed_phases",
+    "reports",
+    "invalidated_reports",
+    "revision",
+    "content_hash"
+  ],
+  "title": "World Forge creation workflow status v1",
+  "type": "object"
+}

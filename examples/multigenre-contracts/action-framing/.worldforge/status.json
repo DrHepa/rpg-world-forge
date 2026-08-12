@@ -1,0 +1,29 @@
+{
+  "completed_phases": [],
+  "content_hash": "de8a821885b4b27b8a80795f7eba5d77ee0b2d91bff2c18728988fa7e930c712",
+  "current_phase": "p00_brief",
+  "format": "world-forge.creation_workflow_status",
+  "format_version": 1,
+  "invalidated_reports": [],
+  "profile": {
+    "content_hash": "de17d92a8781a925ee26586d07c7f14f72a80b8153e517aaf3ebde67a97349b3",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "action_framing_profile"
+  },
+  "project": {
+    "content_hash": "b6ab5caff4927c6cbe7bdb9d7a867463e542aae407443cc10c25d362fba9f568",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "action_framing"
+  },
+  "reports": [],
+  "revision": 0,
+  "source_manifest": {
+    "content_hash": "942f0078f72362503e7ac65c4622e8660e81ba47e15173a304c5b7d6848fec38",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "action_framing"
+  },
+  "workflow_id": "action_framing_workflow"
+}

@@ -340,7 +340,7 @@ class StudioContractTests(unittest.TestCase):
         }
         self.assertEqual(legacy_managed_name, validate_studio_job(legacy_managed_name))
         with self.assertRaisesRegex(StudioContractError, "format_version"):
-            validate_studio_job({**legacy, "format_version": 3})
+            validate_studio_job({**legacy, "format_version": 4})
 
     def test_protocol_validator_rejects_unknown_methods(self) -> None:
 

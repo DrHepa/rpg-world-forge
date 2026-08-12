@@ -1,0 +1,45 @@
+{
+  "activities": [
+    {
+      "activity_type": "scenario",
+      "asset_binding_ids": [
+        "strategy_map_visual"
+      ],
+      "effect_ids": [
+        "advance_progress",
+        "reset_progress"
+      ],
+      "end_condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [
+        "progress_advanced",
+        "scenario_restarted"
+      ],
+      "failure_condition_ids": [],
+      "id": "faction_campaign",
+      "participant_ids": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "provenance": "authored neutral strategy fixture",
+      "spatial_context_ids": [],
+      "start_condition_ids": [
+        "scenario_ready"
+      ],
+      "success_condition_ids": [
+        "victory_condition"
+      ],
+      "title": "authored turns toward a declared faction victory",
+      "validation_profile": "authoring_only"
+    }
+  ],
+  "content_hash": "7c1ee35736bc6acb175a55248a23c4578b35401b7dac4c7b6e892647354e3d45",
+  "extensions": [],
+  "format": "world-forge.activity_module",
+  "format_version": 1,
+  "module_id": "faction_strategy_activities",
+  "project_id": "faction_strategy",
+  "title": "Faction Strategy authored activity"
+}

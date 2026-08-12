@@ -1,6 +1,34 @@
 # Architecture
 
-## Primary boundary
+The canonical design is `docs/MULTI_GENRE_ARCHITECTURE.md`; current proof levels
+are `docs/SUPPORT_MATRIX.md`. World Forge has two additive lanes. Authoring
+validity is not runtime executability, and neither lane may silently project
+into the other.
+
+## Generic creation lane
+
+```text
+creation project + independent profile facets
+        -> typed source modules
+        -> integral validation + phase-report v3 P00-P14
+        -> immutable gamepack + bounded analysis + mechanic ledger
+        -> gamepack asset subject -> D1 planning -> D2 production/QA -> D3 seal
+        -> code-owned adapter registry/snapshot + compatibility evidence
+        -> runtime bundle -> materialization bundle -> external standalone game
+        -> headless/save/replay/package -> native evidence per declared platform
+```
+
+Every arrow binds exact format/version/ID/hash inputs, output identity, stable
+failure state, and evidence. A generic creation library is neutral authoring,
+not an executable game. A compiled gamepack is not a sealed assetpack; sealing
+is not adapter verification; headless is not native; local is not hosted.
+
+The generic runtime is bounded to the neutral `gamepack_runtime` state machine
+and the implemented puzzle/text raylib 2D adapters. Their local recording and
+headless tests are not native Linux/Windows proof. Complete generic 3D and mixed
+adapters are not implemented.
+
+## Legacy RPG lane
 
 ```text
 Forge repository                       world-authoring repository
@@ -19,6 +47,10 @@ Forge repository                       world-authoring repository
 independent game repository <---------- copied, hash-locked data
 (pyray/raylib code, UX, saves, packaging; no authoring control plane)
 ```
+
+This retained specialization uses the published world project, worldpack,
+renderpack/assetpack, composed bundle, `isoworld`, and pyray contracts. It is
+not the generic authoring model and `src/isoworld` remains stdlib-only.
 
 ## Forge Studio application-service boundary
 
@@ -75,7 +107,7 @@ snapshot. `world.validate` and `world.analyze` construct the existing
 narrative analyzer; they never call report writers. `workspace.overview`
 projects identity and lifecycle status without returning absolute roots.
 
-A workspace requires the active Forge repository and one canonical v2 world
+A workspace requires the active Forge repository and one canonical v2 or v3 world
 repository. Optional game and bundle roots must pass their existing standalone
 boundary inspectors. Symlinked roots, repeated filesystem identities,
 casefold/NFC aliases, and nested or overlapping responsibilities are rejected.
@@ -161,7 +193,9 @@ encoded field before returning a fresh `Uint8Array` through preload. Only PNG
 and WAV are authorized; no preview UI is part of this boundary change.
 
 Development selects Python and Codex through explicit absolute
-`RWF_STUDIO_DEV_PYTHON` and `RWF_STUDIO_DEV_CODEX` paths. A package may select
+`WORLD_FORGE_STUDIO_DEV_PYTHON` and `WORLD_FORGE_STUDIO_DEV_CODEX` paths.
+Deprecated `RWF_STUDIO_*` aliases are accepted only when they are not in
+conflict. A package may select
 them only through the closed runtime manifest and pinned protocol provenance in
 Electron resources; it never searches `PATH`. Packages without both native
 runtimes report the bridge unavailable. Renderer artifacts use the same registered custom
@@ -456,10 +490,13 @@ world/release rather than to a representation variant. A pure composition plan
 orders world base, world overlay, and UI overlay by layer and slot while audio
 remains a separate sequence.
 
-Native dispatch is a narrower code-owned authorization: the current release
-permits only the exact legacy 2.5D adapter on Linux x86_64 and rejects an
-unsupported presentation before importing pyray or opening a window. The
-`pyray_3d_v1` proof is not dispatchable because the required collision
+Native dispatch is a narrower code-owned authorization. The retained legacy
+`isoworld_raylib_2_5d` adapter and the additive bounded generic 2D puzzle and
+2D/text narrative adapters are separate code-owned implementations; each may be
+selected only when its exact platform and runtime-support evidence authorize the
+immutable logic/runtime bundle being consumed. Unsupported presentations or
+required capabilities fail closed before importing pyray or opening a window.
+The `pyray_3d_v1` proof is not dispatchable because the required collision
 capability is absent. See
 [ADR-0020](decisions/0020-composed-release-game-consumer.md).
 

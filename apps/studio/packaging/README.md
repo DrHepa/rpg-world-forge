@@ -94,6 +94,15 @@ canonical `runtime-package-manifest.json`. The package manifest follows
 the source archive identities and target launch paths, and always states
 `release_ready: false`. ARM64 runtimes are neither declared nor accepted.
 
+The retained `app.asar` verification includes the dedicated generic game
+runtime bundle CJS surface. Its puzzle and branching-narrative smoke creates
+only temporary pre-execution directories, verifies exact transfer integrity,
+rejects same-size tampering, and keeps release support blocked. It never starts
+Electron, Python, raylib, a model, or a provider. The same retained bytes also
+exercise the generic headless structural inspector against both canonical
+execution scripts and self-resealed order tampering. That inspection explicitly
+requires packaged Python for execution and evidence semantics.
+
 Existing synthetic trees and deterministic ZIPs can be checked without
 creating or changing artifacts:
 
@@ -174,11 +183,12 @@ runtime sources, and runtime package/source schemas byte for byte. The pinned
 Electron 43.2.0 Windows shell root includes exactly the literal `dxcompiler.dll`
 and `dxil.dll` DXC pair; missing or additional root files fail closed. Process
 builds first remove the generated process tree, Vite empties the renderer tree,
-and electron-builder is limited to the exact five clean build files plus its
-sanitized `package.json`. The verifier pins the clean
-`dist-electron` and `dist-renderer` source snapshots through final binding and
-requires exact ASAR file/directory equality plus matching sizes and hashes;
-stale files and hidden vendor/runtime payloads are rejected.
+and electron-builder is limited to the exact 17 clean source/build files plus
+its sanitized `package.json` (18 ASAR entries total before directories). The
+verifier pins the clean `dist-electron` and `dist-renderer` source snapshots
+through final binding and requires exact ASAR file/directory equality plus
+matching sizes and hashes; stale files and hidden vendor/runtime payloads are
+rejected.
 
 The result is deliberately `shell_only`, with no Python or Codex runtime
 payload. It always records `release_ready: false`, `blocked`, and the same seven
@@ -186,10 +196,15 @@ open blocker codes as `runtime-sources.json`. Linux retains descriptor-relative
 no-follow handles. On Windows, a stdlib Python backend reuses the audited Forge
 `NtCreateFile` RootDirectory, no-reparse, no-delete-sharing, identity, and final
 binding primitives. It keeps original and private snapshot handles live while
-Node performs supported static ASAR and fuse inspection. Windows requires an
-absolute Python 3.11/3.12 path in `RWF_STUDIO_BUILD_PYTHON` and never searches
-`PATH`; unavailable primitives fail closed. The Windows backend marks only the
-two snapshot files that it created for deletion through their retained
+Node performs supported static ASAR and fuse inspection. The generic-asset
+runtime smoke consumes the exact retained ASAR bytes during this same binding
+window and must return the inventory SHA-256 and byte count before finalization;
+it never reopens the published ASAR after the snapshot closes. Windows requires
+an absolute Python 3.11/3.12 path in `WORLD_FORGE_STUDIO_BUILD_PYTHON` and never
+searches `PATH`; the deprecated `RWF_STUDIO_BUILD_PYTHON` alias is accepted
+only when it does not conflict, and unavailable primitives fail closed. The
+Windows backend marks
+only the two snapshot files that it created for deletion through their retained
 delete-capable handles, revalidates them, and closes those handles while the
 snapshot directory binding is still guarded. On successful finalization it
 captures the root identity, closes every package, source, snapshot-chain, and

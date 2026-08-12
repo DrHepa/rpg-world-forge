@@ -567,6 +567,132 @@ class BundlePublicationTests(unittest.TestCase):
             )
             self.assertEqual([], list(root.glob(".created.rollback-*")))
 
+    def test_windows_retained_tree_closes_child_handle_when_initial_stat_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            created = root / "created"
+            created.mkdir()
+            child = created / "owned.txt"
+            child.write_text("owned\n", encoding="utf-8")
+            root_state = directory_publish_module.path_file_stat(created)
+
+            def handle_stat(handle: int) -> object:
+                if handle == 123:
+                    return root_state
+                raise OSError("simulated child handle stat failure")
+
+            with (
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    side_effect=handle_stat,
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_windows_open_delete_handle",
+                    return_value=456,
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_windows_close_cleanup_handle",
+                ) as close_handle,
+                self.assertRaisesRegex(OSError, "child handle stat failure"),
+            ):
+                directory_publish_module._retain_windows_directory_tree(  # noqa: SLF001
+                    created,
+                    123,
+                )
+
+            close_handle.assert_called_once_with(456)
+
+    def test_windows_retained_tree_closes_child_handle_when_registration_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            created = root / "created"
+            created.mkdir()
+            child = created / "owned.txt"
+            child.write_text("owned\n", encoding="utf-8")
+            states = {
+                123: directory_publish_module.path_file_stat(created),
+                456: directory_publish_module.path_file_stat(child),
+            }
+
+            with (
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    side_effect=lambda handle: states[handle],
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_windows_open_delete_handle",
+                    return_value=456,
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_register_retained_windows_entry",
+                    create=True,
+                    side_effect=MemoryError("simulated retained-list allocation failure"),
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_windows_close_cleanup_handle",
+                ) as close_handle,
+                self.assertRaisesRegex(MemoryError, "retained-list allocation failure"),
+            ):
+                directory_publish_module._retain_windows_directory_tree(  # noqa: SLF001
+                    created,
+                    123,
+                )
+
+            close_handle.assert_called_once_with(456)
+
+    def test_windows_retained_tree_closes_registered_child_handle_exactly_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            created = root / "created"
+            created.mkdir()
+            child = created / "owned.txt"
+            child.write_text("owned\n", encoding="utf-8")
+            states = {
+                123: directory_publish_module.path_file_stat(created),
+                456: directory_publish_module.path_file_stat(child),
+            }
+
+            def append_then_interrupt(retained: list[object], entry: object) -> None:
+                retained.append(entry)
+                raise MemoryError("simulated interruption after retained-list registration")
+
+            with (
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    side_effect=lambda handle: states[handle],
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_windows_open_delete_handle",
+                    return_value=456,
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_register_retained_windows_entry",
+                    create=True,
+                    side_effect=append_then_interrupt,
+                ),
+                patch.object(
+                    directory_publish_module,
+                    "_windows_close_cleanup_handle",
+                ) as close_handle,
+                self.assertRaisesRegex(MemoryError, "after retained-list registration"),
+            ):
+                directory_publish_module._retain_windows_directory_tree(  # noqa: SLF001
+                    created,
+                    123,
+                )
+
+            close_handle.assert_called_once_with(456)
+
     def test_empty_directory_cleanup_claim_preserves_a_foreign_replacement(
         self,
     ) -> None:

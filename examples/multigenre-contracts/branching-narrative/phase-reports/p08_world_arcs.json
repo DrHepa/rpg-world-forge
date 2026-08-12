@@ -1,0 +1,110 @@
+{
+  "content_hash": "909514e4cf1cc70d3dd77176c684887313eb5a91bec98d58f99c03007235ceae",
+  "evidence": [
+    {
+      "claim": "The exact creation profile was validated.",
+      "evidence_id": "creation_profile",
+      "subject": {
+        "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+        "format": "world-forge.creation_profile",
+        "format_version": 1,
+        "id": "branching_narrative_profile"
+      }
+    },
+    {
+      "claim": "The exact creation project was validated.",
+      "evidence_id": "creation_project",
+      "subject": {
+        "content_hash": "4675a74458c29e1fa8e4b99acfa8e4ac501ea0e0e3bcec11c207e95644146c03",
+        "format": "world-forge.project",
+        "format_version": 1,
+        "id": "branching_narrative"
+      }
+    },
+    {
+      "claim": "The exact typed source manifest was validated.",
+      "evidence_id": "source_manifest",
+      "subject": {
+        "content_hash": "3f3ed623c2f26208c60762888e8aa544f877bd198664c16e64ccbfd7f41226cf",
+        "format": "world-forge.creation_source_manifest",
+        "format_version": 1,
+        "id": "branching_narrative"
+      }
+    }
+  ],
+  "extensions": [],
+  "format": "world-forge.phase_report",
+  "format_version": 2,
+  "invalidation_dependencies": [
+    {
+      "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+      "format": "world-forge.creation_profile",
+      "format_version": 1,
+      "id": "branching_narrative_profile"
+    },
+    {
+      "content_hash": "3f3ed623c2f26208c60762888e8aa544f877bd198664c16e64ccbfd7f41226cf",
+      "format": "world-forge.creation_source_manifest",
+      "format_version": 1,
+      "id": "branching_narrative"
+    },
+    {
+      "content_hash": "29512bafe8701029b4c53b2408346d9133cc4845c86aa05ee80edace950ccdaf",
+      "format": "world-forge.narrative_module",
+      "format_version": 1,
+      "id": "branching_units"
+    },
+    {
+      "content_hash": "4675a74458c29e1fa8e4b99acfa8e4ac501ea0e0e3bcec11c207e95644146c03",
+      "format": "world-forge.project",
+      "format_version": 1,
+      "id": "branching_narrative"
+    }
+  ],
+  "output_evidence": {
+    "content_hash": "33c30b0901de7aba9826e350003c62785facd050cf68e70b50206aad457babfb",
+    "format": "world-forge.phase_output_evidence",
+    "format_version": 1,
+    "id": "p08_world_arcs_narrative_architecture",
+    "phase": "p08_world_arcs",
+    "reviewer": {
+      "id": "lead_reviewer",
+      "role": "validation_analyst"
+    },
+    "role": "narrative_architecture",
+    "subject": {
+      "content_hash": "29512bafe8701029b4c53b2408346d9133cc4845c86aa05ee80edace950ccdaf",
+      "format": "world-forge.narrative_module",
+      "format_version": 1,
+      "id": "branching_units"
+    }
+  },
+  "phase": "p08_world_arcs",
+  "profile": {
+    "content_hash": "10e95d34b653a06e5a8c59957a486f69d0aeec51e6e5838299050757ebd25637",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "branching_narrative_profile"
+  },
+  "project": {
+    "content_hash": "4675a74458c29e1fa8e4b99acfa8e4ac501ea0e0e3bcec11c207e95644146c03",
+    "format": "world-forge.project",
+    "format_version": 1,
+    "id": "branching_narrative"
+  },
+  "rationale": {
+    "code": "phase_ready",
+    "message": "The authored branching narrative architecture was reviewed."
+  },
+  "reviewer": {
+    "id": "lead_reviewer",
+    "role": "validation_analyst"
+  },
+  "source_manifest": {
+    "content_hash": "3f3ed623c2f26208c60762888e8aa544f877bd198664c16e64ccbfd7f41226cf",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "branching_narrative"
+  },
+  "status": "ready"
+}

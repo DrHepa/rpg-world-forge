@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src blob:; media-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>World Forge Authority Review</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <h1 id="title">Authority Review</h1>
+      <dl>
+        <dt>Preview SHA-256</dt>
+        <dd id="sha256">pending</dd>
+        <dt>Preview bytes</dt>
+        <dd id="bytes">pending</dd>
+        <dt>Preview media type</dt>
+        <dd id="media-type">pending</dd>
+        <dt>Artifact</dt>
+        <dd id="artifact">pending</dd>
+      </dl>
+      <section>
+        <h2>Preview</h2>
+        <div id="preview"></div>
+      </section>
+      <section>
+        <h2>Criteria</h2>
+        <ol id="criteria"></ol>
+      </section>
+      <div class="actions">
+        <button id="approve" type="button">Approve</button>
+        <button id="reject" type="button">Reject</button>
+        <button id="cancel" type="button">Cancel</button>
+      </div>
+    </main>
+    <script src="./renderer.js"></script>
+  </body>
+</html>

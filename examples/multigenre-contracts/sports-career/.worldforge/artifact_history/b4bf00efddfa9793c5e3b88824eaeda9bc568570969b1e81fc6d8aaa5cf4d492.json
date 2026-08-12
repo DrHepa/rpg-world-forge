@@ -1,0 +1,53 @@
+{
+  "content_hash": "b4bf00efddfa9793c5e3b88824eaeda9bc568570969b1e81fc6d8aaa5cf4d492",
+  "extensions": [],
+  "format": "world-forge.creation_source_manifest",
+  "format_version": 1,
+  "modules": {
+    "activity_modules": [
+      {
+        "content_hash": "f18cc4175952726a39a8368e6935469a2a1d4de0f5f0adaa902779c49a95e5e0",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "sports_career_activities",
+        "path": "activities/sports_career.json"
+      }
+    ],
+    "logic_modules": [
+      {
+        "content_hash": "49d7803ab4c3ce918e9c0bc5231cf0e8ff25b6f92db8659d4dbaa00b8422fe38",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "sports_career_logic",
+        "path": "logic/sports_career.json"
+      }
+    ],
+    "narrative_modules": [],
+    "system_modules": [
+      {
+        "content_hash": "1829438f8fcaf8054dae64a2c6b794727272a8cf784d413c2ad279681cc9a58b",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "sports_career_systems",
+        "path": "systems/sports_career.json"
+      }
+    ],
+    "world_modules": [
+      {
+        "content_hash": "8199c8fcedae14d1d3b53a84b68adc28dfb11de91274a6e0380a3c63309a0478",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "sports_career_space",
+        "path": "world/sports_career.json"
+      }
+    ]
+  },
+  "profile": {
+    "content_hash": "598dd49eea0b0f76f9057d1a17d171b4c34809a204de6b957ff07944bd506bb9",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "sports_career_profile",
+    "path": "profile.json"
+  },
+  "project_id": "sports_career"
+}

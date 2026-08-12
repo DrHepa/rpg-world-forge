@@ -10,8 +10,16 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 
-from worldforge.studio.contracts import MANAGED_JOB_OPERATIONS, studio_job_path
+from worldforge.studio.contracts import (
+    EXTERNAL_JOB_ERROR_CODES,
+    EXTERNAL_JOB_VERSION,
+    MANAGED_JOB_OPERATIONS,
+    StudioContractError,
+    studio_job_path,
+    validate_studio_recovery_evidence,
+)
 from worldforge.studio.errors import StudioError
+from worldforge.studio.external_grants import ExternalGrantManager
 from worldforge.studio.job_paths import (
     JobPathError,
     proof_matches,
@@ -19,6 +27,7 @@ from worldforge.studio.job_paths import (
     verify_workspace_file,
 )
 from worldforge.studio.job_protocol import (
+    LEGACY_WORKER_VERSION,
     MAX_WORKER_REQUEST_BYTES,
     MAX_WORKER_RESPONSE_BYTES,
     WORKER_PROTOCOL,
@@ -325,7 +334,39 @@ class JobScheduler:
 
     def _prepare_request(
         self, store: StudioStore, job: dict[str, Any]
-    ) -> tuple[dict[str, Any], Path, tuple[int, int], dict[str, PurePosixPath]]:
+    ) -> tuple[
+        dict[str, Any],
+        Path | None,
+        tuple[int, int] | None,
+        dict[str, PurePosixPath],
+    ]:
+        if job["format_version"] == EXTERNAL_JOB_VERSION:
+            binding = ExternalGrantManager(store).binding_for_job(job)
+            source = binding["source_grant"]
+            target = binding["target_grant"]
+            request = {
+                "protocol": WORKER_PROTOCOL,
+                "protocol_version": WORKER_VERSION,
+                "operation": job["operation"],
+                "input": job["input"],
+                "source": {
+                    "path": str(binding["source_path"]),
+                    "identity": list(binding["source_identity"]),
+                    "artifact_kind": source["artifact_kind"],
+                },
+                "target": {
+                    "path": str(binding["target_path"]),
+                    "parent_identity": list(binding["parent_identity"]),
+                    "leaf": binding["target_path"].name,
+                    "artifact_kind": target["artifact_kind"],
+                    "grant_id": target["grant_id"],
+                    "generation": binding["generation"],
+                },
+            }
+            encoded = encode_json(request).encode("utf-8") + b"\n"
+            if len(encoded) > MAX_WORKER_REQUEST_BYTES:
+                raise JobPathError("external worker request exceeds its bound")
+            return request, None, None, {}
         operation = job["operation"]
         if operation not in MANAGED_JOB_OPERATIONS:
             raise JobPathError("managed job operation is invalid")
@@ -340,7 +381,7 @@ class JobScheduler:
         }
         request = {
             "protocol": WORKER_PROTOCOL,
-            "protocol_version": WORKER_VERSION,
+            "protocol_version": LEGACY_WORKER_VERSION,
             "operation": operation,
             "input": job["input"],
             "world_root": str(root),
@@ -354,11 +395,25 @@ class JobScheduler:
 
     @staticmethod
     def _revalidate_request(
+        store: StudioStore,
+        job: dict[str, Any],
         request: dict[str, Any],
-        root: Path,
-        root_identity: tuple[int, int],
+        root: Path | None,
+        root_identity: tuple[int, int] | None,
         paths: dict[str, PurePosixPath],
     ) -> None:
+        if job["format_version"] == EXTERNAL_JOB_VERSION:
+            binding = ExternalGrantManager(store).binding_for_job(job)
+            if (
+                request["source"]["path"] != str(binding["source_path"])
+                or request["source"]["identity"] != list(binding["source_identity"])
+                or request["target"]["path"] != str(binding["target_path"])
+                or request["target"]["parent_identity"] != list(binding["parent_identity"])
+                or request["target"]["generation"] != binding["generation"]
+            ):
+                raise JobPathError("external job authority changed before worker start")
+            return
+        assert root is not None and root_identity is not None
         verify_root(root, root_identity)
         proofs = request["files"]
         for field, relative in paths.items():
@@ -368,10 +423,18 @@ class JobScheduler:
 
     def _execute(self, jobs: JobManager, store: StudioStore, job: dict[str, Any]) -> None:
         job_id = job["job_id"]
+        external = job["format_version"] == EXTERNAL_JOB_VERSION
         try:
             request, root, root_identity, paths = self._prepare_request(store, job)
             jobs.progress(job_id, 20, "validated")
-            self._revalidate_request(request, root, root_identity, paths)
+            self._revalidate_request(
+                store,
+                job,
+                request,
+                root,
+                root_identity,
+                paths,
+            )
         except (JobPathError, StudioError):
             jobs.finish(
                 job_id,
@@ -435,13 +498,19 @@ class JobScheduler:
                 if stop_reason == "shutdown":
                     jobs.finish(job_id, "orphaned", reason="service_shutdown")
                 elif stop_reason == "canceled":
-                    jobs.finish(job_id, "canceled")
+                    if external:
+                        jobs.resolve_forced_cancel(job_id)
+                    else:
+                        jobs.finish(job_id, "canceled")
                 else:
-                    jobs.finish(
-                        job_id,
-                        "failed",
-                        error={"code": "timeout", "message": "Managed job timed out"},
-                    )
+                    if external:
+                        jobs.finish(job_id, "orphaned", reason="worker_timeout")
+                    else:
+                        jobs.finish(
+                            job_id,
+                            "failed",
+                            error={"code": "timeout", "message": "Managed job timed out"},
+                        )
                 return
             return_code = process.wait()
             stdout_capture.join()
@@ -450,35 +519,66 @@ class JobScheduler:
                 jobs.finish(job_id, "orphaned", reason="service_shutdown")
                 return
             if jobs.cancellation_requested(job_id):
-                jobs.finish(job_id, "canceled")
+                if external:
+                    jobs.resolve_forced_cancel(job_id)
+                else:
+                    jobs.finish(job_id, "canceled")
                 return
             if stdout_capture.overflow or stderr_capture.overflow:
-                self._fail_protocol(jobs, job_id, "Worker output exceeded its bound")
+                if external:
+                    jobs.finish(job_id, "orphaned", reason="worker_output_overflow")
+                else:
+                    self._fail_protocol(jobs, job_id, "Worker output exceeded its bound")
                 return
             if return_code != 0 or stderr_capture.payload:
-                jobs.finish(
-                    job_id,
-                    "failed",
-                    error={"code": "worker_crashed", "message": "Managed worker crashed"},
-                )
+                if external:
+                    jobs.finish(job_id, "orphaned", reason="worker_death")
+                else:
+                    jobs.finish(
+                        job_id,
+                        "failed",
+                        error={"code": "worker_crashed", "message": "Managed worker crashed"},
+                    )
                 return
             response = self._decode_worker_response(bytes(stdout_capture.payload))
             if response["ok"] is True:
                 jobs.finish(job_id, "succeeded", result=response["result"])
             else:
-                jobs.finish(job_id, "failed", error=response["error"])
+                if external:
+                    worker_error = response["error"]
+                    retained_error = None
+                    if "recovery_evidence" in worker_error:
+                        retained_error = {
+                            "code": "recovery_required",
+                            "message": worker_error["message"],
+                            "recovery_evidence": worker_error["recovery_evidence"],
+                        }
+                    jobs.finish(
+                        job_id,
+                        "orphaned",
+                        error=retained_error,
+                        reason="worker_execution_failed",
+                    )
+                else:
+                    jobs.finish(job_id, "failed", error=response["error"])
         except (OSError, subprocess.SubprocessError):
             if process is not None:
                 _terminate_and_reap(process, tree)
-            jobs.finish(
-                job_id,
-                "failed",
-                error={"code": "worker_crashed", "message": "Managed worker could not run"},
-            )
+            if external:
+                jobs.finish(job_id, "orphaned", reason="worker_death")
+            else:
+                jobs.finish(
+                    job_id,
+                    "failed",
+                    error={"code": "worker_crashed", "message": "Managed worker could not run"},
+                )
         except Exception:
             if process is not None:
                 _terminate_and_reap(process, tree)
-            self._fail_protocol(jobs, job_id, "Managed worker returned an invalid result")
+            if external:
+                jobs.finish(job_id, "orphaned", reason="worker_protocol")
+            else:
+                self._fail_protocol(jobs, job_id, "Managed worker returned an invalid result")
         finally:
             if stdout_capture is not None:
                 stdout_capture.close()
@@ -498,14 +598,25 @@ class JobScheduler:
             return response
         if set(response) == {"ok", "error"} and response["ok"] is False:
             error = response["error"]
+            fields = {"code", "message"}
+            if isinstance(error, dict) and "recovery_evidence" in error:
+                fields.add("recovery_evidence")
             if (
                 not isinstance(error, dict)
-                or set(error) != {"code", "message"}
-                or error.get("code") not in {"execution_failed", "worker_protocol"}
+                or set(error) != fields
+                or error.get("code") not in EXTERNAL_JOB_ERROR_CODES | {"worker_protocol"}
                 or not isinstance(error.get("message"), str)
                 or not 1 <= len(error["message"]) <= 512
             ):
                 raise ValueError("worker error is invalid")
+            if "recovery_evidence" in error:
+                try:
+                    validate_studio_recovery_evidence(
+                        error["recovery_evidence"],
+                        "worker error/recovery_evidence",
+                    )
+                except StudioContractError as exc:
+                    raise ValueError("worker error is invalid") from exc
             return response
         raise ValueError("worker response shape is invalid")
 

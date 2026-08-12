@@ -1,5 +1,9 @@
 # Session: target-scoped visual and audio bibles
 
+> **Retained legacy-world prompt.** This M5 target/bible flow is bound to a
+> worldpack. Generic gamepacks use the separate generic asset subject, target,
+> style, inventory, and specification lane.
+
 Work only from a canon-locked worldpack, its canonical documentation, and one
 reviewed `rpg-world-forge.asset_target`. GPT is the decision orchestrator. Do not
 generate assets, choose providers, or invent requirements that canon and the

@@ -1,0 +1,726 @@
+{
+  "adapter": {
+    "adapter_id": null,
+    "adapter_version": null,
+    "status": "absent"
+  },
+  "content_hash": "367f1e63bee9423d9d81e7e96485ecfda4813b2b9cf7cd023442ebc84829faf7",
+  "features": [
+    {
+      "extension": null,
+      "feature_id": "logic:deterministic_actions",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "extension": null,
+      "feature_id": "logic:finite_state",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "extension": null,
+      "feature_id": "sports:season",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "reason_code": "adapter_not_evaluated",
+      "status": "authoring_only",
+      "test_evidence": []
+    }
+  ],
+  "format": "world-forge.mechanic_capability_ledger",
+  "format_version": 1,
+  "gamepack": {
+    "content_hash": "3a1d776f9d6404fb34bf851621d3d3989ac5a2b995c536737958c07b11b507e3",
+    "format": "world-forge.gamepack",
+    "format_version": 1,
+    "id": "sports_career"
+  },
+  "ledger_id": "sports_career_authoring_capabilities",
+  "mechanics": [
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "career_points",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "player_team",
+        "season_opponents",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [
+        "result_phase_for_record_round_1_win",
+        "round_ready_for_record_round_1_win",
+        "schedule_valid_for_record_round_1_win",
+        "team_registered_for_record_round_1_win"
+      ],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "record_round_1_win_advance_career",
+        "record_round_1_win_advance_round",
+        "record_round_1_win_record_opponent",
+        "record_round_1_win_record_result",
+        "record_round_1_win_return_to_planning",
+        "record_round_1_win_update_standings"
+      ],
+      "extension": null,
+      "mechanic_id": "career_match",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "record_round_1_win_rule"
+      ],
+      "runtime_action_id": "record_round_1_win",
+      "save_replay": {
+        "event_ids": [
+          "match_resolved"
+        ],
+        "state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "last_match_plan",
+        "match_phase",
+        "season_round"
+      ],
+      "condition_ids": [
+        "match_remaining_for_plan_aggressive_match",
+        "planning_phase_for_plan_aggressive_match"
+      ],
+      "core_verb_id": "plan",
+      "effect_ids": [
+        "plan_aggressive_match_record",
+        "plan_aggressive_match_request_result"
+      ],
+      "extension": null,
+      "mechanic_id": "plan_aggressive_match_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "plan_aggressive_match_rule"
+      ],
+      "runtime_action_id": "plan_aggressive_match",
+      "save_replay": {
+        "event_ids": [
+          "match_planned"
+        ],
+        "state_ids": [
+          "last_match_plan",
+          "match_phase",
+          "season_round"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "last_match_plan",
+        "match_phase",
+        "season_round"
+      ],
+      "condition_ids": [
+        "match_remaining_for_plan_balanced_match",
+        "planning_phase_for_plan_balanced_match"
+      ],
+      "core_verb_id": "plan",
+      "effect_ids": [
+        "plan_balanced_match_record",
+        "plan_balanced_match_request_result"
+      ],
+      "extension": null,
+      "mechanic_id": "plan_balanced_match_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "plan_balanced_match_rule"
+      ],
+      "runtime_action_id": "plan_balanced_match",
+      "save_replay": {
+        "event_ids": [
+          "match_planned"
+        ],
+        "state_ids": [
+          "last_match_plan",
+          "match_phase",
+          "season_round"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "career_points",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "player_team",
+        "season_opponents",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [
+        "result_phase_for_record_round_1_draw",
+        "round_ready_for_record_round_1_draw",
+        "schedule_valid_for_record_round_1_draw",
+        "team_registered_for_record_round_1_draw"
+      ],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "record_round_1_draw_advance_career",
+        "record_round_1_draw_advance_round",
+        "record_round_1_draw_record_opponent",
+        "record_round_1_draw_record_result",
+        "record_round_1_draw_return_to_planning",
+        "record_round_1_draw_update_standings"
+      ],
+      "extension": null,
+      "mechanic_id": "record_round_1_draw_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "record_round_1_draw_rule"
+      ],
+      "runtime_action_id": "record_round_1_draw",
+      "save_replay": {
+        "event_ids": [
+          "match_resolved"
+        ],
+        "state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "career_points",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "player_team",
+        "season_opponents",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [
+        "result_phase_for_record_round_1_loss",
+        "round_ready_for_record_round_1_loss",
+        "schedule_valid_for_record_round_1_loss",
+        "team_registered_for_record_round_1_loss"
+      ],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "record_round_1_loss_advance_career",
+        "record_round_1_loss_advance_round",
+        "record_round_1_loss_record_opponent",
+        "record_round_1_loss_record_result",
+        "record_round_1_loss_return_to_planning",
+        "record_round_1_loss_update_standings"
+      ],
+      "extension": null,
+      "mechanic_id": "record_round_1_loss_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "record_round_1_loss_rule"
+      ],
+      "runtime_action_id": "record_round_1_loss",
+      "save_replay": {
+        "event_ids": [
+          "match_resolved"
+        ],
+        "state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "career_points",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "player_team",
+        "season_opponents",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [
+        "result_phase_for_record_round_2_draw",
+        "round_ready_for_record_round_2_draw",
+        "schedule_valid_for_record_round_2_draw",
+        "team_registered_for_record_round_2_draw"
+      ],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "record_round_2_draw_advance_career",
+        "record_round_2_draw_advance_round",
+        "record_round_2_draw_record_opponent",
+        "record_round_2_draw_record_result",
+        "record_round_2_draw_return_to_planning",
+        "record_round_2_draw_update_standings"
+      ],
+      "extension": null,
+      "mechanic_id": "record_round_2_draw_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "record_round_2_draw_rule"
+      ],
+      "runtime_action_id": "record_round_2_draw",
+      "save_replay": {
+        "event_ids": [
+          "match_resolved"
+        ],
+        "state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "career_points",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "player_team",
+        "season_opponents",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [
+        "result_phase_for_record_round_2_loss",
+        "round_ready_for_record_round_2_loss",
+        "schedule_valid_for_record_round_2_loss",
+        "team_registered_for_record_round_2_loss"
+      ],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "record_round_2_loss_advance_career",
+        "record_round_2_loss_advance_round",
+        "record_round_2_loss_record_opponent",
+        "record_round_2_loss_record_result",
+        "record_round_2_loss_return_to_planning",
+        "record_round_2_loss_update_standings"
+      ],
+      "extension": null,
+      "mechanic_id": "record_round_2_loss_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "record_round_2_loss_rule"
+      ],
+      "runtime_action_id": "record_round_2_loss",
+      "save_replay": {
+        "event_ids": [
+          "match_resolved"
+        ],
+        "state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "career_points",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "player_team",
+        "season_opponents",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [
+        "result_phase_for_record_round_2_win",
+        "round_ready_for_record_round_2_win",
+        "schedule_valid_for_record_round_2_win",
+        "team_registered_for_record_round_2_win"
+      ],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "record_round_2_win_advance_career",
+        "record_round_2_win_advance_round",
+        "record_round_2_win_record_opponent",
+        "record_round_2_win_record_result",
+        "record_round_2_win_return_to_planning",
+        "record_round_2_win_update_standings"
+      ],
+      "extension": null,
+      "mechanic_id": "record_round_2_win_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "record_round_2_win_rule"
+      ],
+      "runtime_action_id": "record_round_2_win",
+      "save_replay": {
+        "event_ids": [
+          "match_resolved"
+        ],
+        "state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "career_points",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "player_team",
+        "season_opponents",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [
+        "result_phase_for_record_round_3_draw",
+        "round_ready_for_record_round_3_draw",
+        "schedule_valid_for_record_round_3_draw",
+        "team_registered_for_record_round_3_draw"
+      ],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "record_round_3_draw_advance_career",
+        "record_round_3_draw_advance_round",
+        "record_round_3_draw_record_opponent",
+        "record_round_3_draw_record_result",
+        "record_round_3_draw_return_to_planning",
+        "record_round_3_draw_update_standings"
+      ],
+      "extension": null,
+      "mechanic_id": "record_round_3_draw_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "record_round_3_draw_rule"
+      ],
+      "runtime_action_id": "record_round_3_draw",
+      "save_replay": {
+        "event_ids": [
+          "match_resolved"
+        ],
+        "state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "career_points",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "player_team",
+        "season_opponents",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [
+        "result_phase_for_record_round_3_loss",
+        "round_ready_for_record_round_3_loss",
+        "schedule_valid_for_record_round_3_loss",
+        "team_registered_for_record_round_3_loss"
+      ],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "record_round_3_loss_advance_career",
+        "record_round_3_loss_advance_round",
+        "record_round_3_loss_record_opponent",
+        "record_round_3_loss_record_result",
+        "record_round_3_loss_return_to_planning",
+        "record_round_3_loss_update_standings"
+      ],
+      "extension": null,
+      "mechanic_id": "record_round_3_loss_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "record_round_3_loss_rule"
+      ],
+      "runtime_action_id": "record_round_3_loss",
+      "save_replay": {
+        "event_ids": [
+          "match_resolved"
+        ],
+        "state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "career_points",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "player_team",
+        "season_opponents",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [
+        "result_phase_for_record_round_3_win",
+        "round_ready_for_record_round_3_win",
+        "schedule_valid_for_record_round_3_win",
+        "team_registered_for_record_round_3_win"
+      ],
+      "core_verb_id": "compete",
+      "effect_ids": [
+        "record_round_3_win_advance_career",
+        "record_round_3_win_advance_round",
+        "record_round_3_win_record_opponent",
+        "record_round_3_win_record_result",
+        "record_round_3_win_return_to_planning",
+        "record_round_3_win_update_standings"
+      ],
+      "extension": null,
+      "mechanic_id": "record_round_3_win_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "record_round_3_win_rule"
+      ],
+      "runtime_action_id": "record_round_3_win",
+      "save_replay": {
+        "event_ids": [
+          "match_resolved"
+        ],
+        "state_ids": [
+          "career_points",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "player_team",
+          "season_opponents",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    },
+    {
+      "asset_binding_ids": [
+        "season_dashboard_visual"
+      ],
+      "authoritative_state_ids": [
+        "last_match_plan",
+        "last_match_result",
+        "last_opponent",
+        "match_phase",
+        "season_round",
+        "standings_points"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "restart",
+      "effect_ids": [
+        "reset_last_match_plan",
+        "reset_last_match_result",
+        "reset_last_opponent",
+        "reset_match_phase",
+        "reset_season_round",
+        "reset_standings_points"
+      ],
+      "extension": null,
+      "mechanic_id": "restart_mechanic",
+      "missing_feature_ids": [],
+      "native_evidence": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "reason_code": "adapter_not_evaluated",
+      "rule_ids": [
+        "restart_rule"
+      ],
+      "runtime_action_id": "restart_scenario",
+      "save_replay": {
+        "event_ids": [
+          "scenario_restarted"
+        ],
+        "state_ids": [
+          "last_match_plan",
+          "last_match_result",
+          "last_opponent",
+          "match_phase",
+          "season_round",
+          "standings_points"
+        ]
+      },
+      "status": "authoring_only",
+      "test_evidence": []
+    }
+  ]
+}

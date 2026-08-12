@@ -1,0 +1,305 @@
+{
+  "actions": [
+    {
+      "core_verb_id": "engage",
+      "id": "engage_objective",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "action:realtime_combat",
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "action_mission"
+        },
+        {
+          "kind": "system",
+          "source_id": "mission_resolution"
+        }
+      ]
+    },
+    {
+      "core_verb_id": "restart",
+      "id": "restart_scenario",
+      "parameters": [],
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ],
+      "source_bindings": [
+        {
+          "kind": "activity",
+          "source_id": "action_mission"
+        }
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "action_id": "engage_objective",
+      "comparison": "greater_than",
+      "id": "mission_time_available",
+      "left": {
+        "kind": "state",
+        "state_id": "mission_time_remaining"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 0,
+        "value_type": "integer"
+      }
+    },
+    {
+      "action_id": null,
+      "id": "scenario_ready",
+      "operator": "constant",
+      "value": true
+    },
+    {
+      "action_id": null,
+      "comparison": "greater_or_equal",
+      "id": "victory_condition",
+      "left": {
+        "kind": "state",
+        "state_id": "mission_progress"
+      },
+      "operator": "compare",
+      "right": {
+        "kind": "literal",
+        "value": 3,
+        "value_type": "integer"
+      }
+    }
+  ],
+  "content_hash": "db2f73c5a07fecad38d6fbbd6e3b2747fc63bd6c5ccdb8225e32e242f129fd7b",
+  "effects": [
+    {
+      "action_id": "engage_objective",
+      "amount": {
+        "kind": "literal",
+        "value": 1,
+        "value_type": "integer"
+      },
+      "id": "advance_progress",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "mission_progress"
+    },
+    {
+      "action_id": "engage_objective",
+      "amount": {
+        "kind": "literal",
+        "value": -1,
+        "value_type": "integer"
+      },
+      "id": "consume_mission_time",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "increment",
+      "state_id": "mission_time_remaining"
+    },
+    {
+      "action_id": "restart_scenario",
+      "id": "reset_mission_time",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "mission_time_remaining"
+    },
+    {
+      "action_id": "restart_scenario",
+      "id": "reset_progress",
+      "invalid_transition_policy": "reject_transition",
+      "operation": "reset",
+      "state_id": "mission_progress"
+    }
+  ],
+  "endings": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "event_ids": [],
+      "id": "scenario_complete",
+      "kind": "success",
+      "presentation_hook_ids": [
+        "ending_feedback"
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "progress_advanced"
+    },
+    {
+      "id": "scenario_restarted"
+    }
+  ],
+  "extensions": [],
+  "failures": [],
+  "format": "world-forge.logic_module",
+  "format_version": 1,
+  "goals": [
+    {
+      "condition_ids": [
+        "victory_condition"
+      ],
+      "id": "authored_victory",
+      "success_ending_id": "scenario_complete"
+    }
+  ],
+  "mechanics": [
+    {
+      "action_id": "engage_objective",
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "authoritative_state_ids": [
+        "mission_progress",
+        "mission_time_remaining"
+      ],
+      "condition_ids": [
+        "mission_time_available"
+      ],
+      "core_verb_id": "engage",
+      "effect_ids": [
+        "advance_progress",
+        "consume_mission_time"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "objective_engagement",
+      "presentation_hook_ids": [
+        "progress_feedback",
+        "progress_view"
+      ],
+      "required_feature_ids": [
+        "action:realtime_combat",
+        "logic:deterministic_actions",
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "advance_rule"
+      ]
+    },
+    {
+      "action_id": "restart_scenario",
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "authoritative_state_ids": [
+        "mission_progress",
+        "mission_time_remaining"
+      ],
+      "condition_ids": [],
+      "core_verb_id": "restart",
+      "effect_ids": [
+        "reset_mission_time",
+        "reset_progress"
+      ],
+      "event_ids": [
+        "scenario_restarted"
+      ],
+      "id": "restart_mechanic",
+      "presentation_hook_ids": [
+        "progress_feedback"
+      ],
+      "required_feature_ids": [
+        "logic:finite_state"
+      ],
+      "rule_ids": [
+        "restart_rule"
+      ]
+    }
+  ],
+  "module_id": "action_framing_logic",
+  "presentation_hooks": [
+    {
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "id": "ending_feedback",
+      "kind": "ending"
+    },
+    {
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "id": "progress_feedback",
+      "kind": "feedback"
+    },
+    {
+      "asset_binding_ids": [
+        "action_hud_visual"
+      ],
+      "id": "progress_view",
+      "kind": "board"
+    }
+  ],
+  "project_id": "action_framing",
+  "rules": [
+    {
+      "action_id": "engage_objective",
+      "condition_ids": [
+        "mission_time_available"
+      ],
+      "effect_ids": [
+        "advance_progress",
+        "consume_mission_time"
+      ],
+      "event_ids": [
+        "progress_advanced"
+      ],
+      "id": "advance_rule",
+      "order": 0
+    },
+    {
+      "action_id": "restart_scenario",
+      "condition_ids": [],
+      "effect_ids": [
+        "reset_mission_time",
+        "reset_progress"
+      ],
+      "event_ids": [
+        "scenario_restarted"
+      ],
+      "id": "restart_rule",
+      "order": 1
+    }
+  ],
+  "state_variables": [
+    {
+      "id": "mission_progress",
+      "initial": 0,
+      "maximum": 3,
+      "minimum": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "integer"
+    },
+    {
+      "id": "mission_time_remaining",
+      "initial": 3,
+      "maximum": 3,
+      "minimum": 0,
+      "mutability": "mutable",
+      "persistence": "saved",
+      "type": "integer"
+    }
+  ],
+  "title": "Neutral authored action logic"
+}

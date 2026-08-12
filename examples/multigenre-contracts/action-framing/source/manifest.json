@@ -1,0 +1,61 @@
+{
+  "content_hash": "942f0078f72362503e7ac65c4622e8660e81ba47e15173a304c5b7d6848fec38",
+  "extensions": [],
+  "format": "world-forge.creation_source_manifest",
+  "format_version": 1,
+  "modules": {
+    "activity_modules": [
+      {
+        "content_hash": "8ae41817bcd72c6bf4b3143a20a16033d594fcb853bfe687c4a489aaed932d88",
+        "format": "world-forge.activity_module",
+        "format_version": 1,
+        "id": "action_framing_activities",
+        "path": "activities/action_framing.json"
+      }
+    ],
+    "logic_modules": [
+      {
+        "content_hash": "db2f73c5a07fecad38d6fbbd6e3b2747fc63bd6c5ccdb8225e32e242f129fd7b",
+        "format": "world-forge.logic_module",
+        "format_version": 1,
+        "id": "action_framing_logic",
+        "path": "logic/action_framing.json"
+      }
+    ],
+    "narrative_modules": [
+      {
+        "content_hash": "76da592c31d755218d9a3f9e1d9bfee3308d47770a7e519088c869d8a2de6d2a",
+        "format": "world-forge.narrative_module",
+        "format_version": 1,
+        "id": "action_framing_narrative",
+        "path": "narrative/action_framing.json"
+      }
+    ],
+    "system_modules": [
+      {
+        "content_hash": "10c23cb18803f7be4b382913291a761827c1bde82d07d7c8baa606b9ab5f22a9",
+        "format": "world-forge.system_module",
+        "format_version": 1,
+        "id": "action_framing_systems",
+        "path": "systems/action_framing.json"
+      }
+    ],
+    "world_modules": [
+      {
+        "content_hash": "31632bcf802e1e602ae5b35e0ee059286a54fd23514ad4dcdefb3a9f55dfb088",
+        "format": "world-forge.world_module",
+        "format_version": 1,
+        "id": "action_framing_space",
+        "path": "world/action_framing.json"
+      }
+    ]
+  },
+  "profile": {
+    "content_hash": "de17d92a8781a925ee26586d07c7f14f72a80b8153e517aaf3ebde67a97349b3",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "action_framing_profile",
+    "path": "profile.json"
+  },
+  "project_id": "action_framing"
+}

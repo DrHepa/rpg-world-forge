@@ -1,0 +1,25 @@
+{
+  "content_hash": "d56fc85f586d456f49e1960a25ffeb49aff207df1611dd30e2d9f25144f46f63",
+  "default_locale": "en",
+  "extensions": [],
+  "format": "world-forge.project",
+  "format_version": 1,
+  "profile": {
+    "content_hash": "3e66a9136b1bc394bb63c07a0473b1561057513ae894e15e4e97047ef6c97f94",
+    "format": "world-forge.creation_profile",
+    "format_version": 1,
+    "id": "modular_roguelite_profile",
+    "path": "profile.json"
+  },
+  "project_id": "modular_roguelite",
+  "project_kind": "game",
+  "project_version": "1.0.0",
+  "source_manifest": {
+    "content_hash": "679bc7d780c2604dc011a311543854050bb3fa7a3401d83e0b92a3a8c26b3475",
+    "format": "world-forge.creation_source_manifest",
+    "format_version": 1,
+    "id": "modular_roguelite",
+    "path": "source/manifest.json"
+  },
+  "title": "Modular Roguelite"
+}

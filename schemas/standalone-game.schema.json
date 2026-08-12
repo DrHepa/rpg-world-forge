@@ -1,0 +1,235 @@
+{
+  "$defs": {
+    "file": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size_bytes": {
+          "maximum": 33554432,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "maxLength": 64,
+      "minLength": 2,
+      "pattern": "^(?!(?:aux|con|nul|prn|com[1-9]|lpt[1-9])$)[a-z][a-z0-9_]{1,63}$",
+      "type": "string"
+    },
+    "path": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^(?![./])(?!.*/(?:\\.{1,2})(?:/|$))(?!(?:.*[/])?(?:aux|con|nul|prn|com[1-9]|lpt[1-9])(?:[./]|$))[a-zA-Z0-9_][a-zA-Z0-9_.@ -]*(?:/[a-zA-Z0-9_.@ -]+)*$",
+      "type": "string"
+    },
+    "semver": {
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://world-forge.local/schemas/standalone-game.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "content_hash": {
+      "$ref": "#/$defs/sha256"
+    },
+    "entry_points": {
+      "additionalProperties": false,
+      "properties": {
+        "game": {
+          "const": "run_game.py"
+        },
+        "native_smoke": {
+          "const": "scripts/native_smoke.py"
+        },
+        "offline_smoke": {
+          "const": "scripts/offline_smoke.py"
+        },
+        "verifier": {
+          "const": "scripts/verify_game.py"
+        }
+      },
+      "required": [
+        "game",
+        "verifier",
+        "offline_smoke",
+        "native_smoke"
+      ],
+      "type": "object"
+    },
+    "format": {
+      "const": "world-forge.standalone_game"
+    },
+    "format_version": {
+      "const": 1
+    },
+    "game_id": {
+      "$ref": "#/$defs/id"
+    },
+    "lineage": {
+      "additionalProperties": false,
+      "properties": {
+        "assetpack_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "gamepack_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_bundle_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_composition_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_snapshot_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "gamepack_hash",
+        "assetpack_hash",
+        "runtime_snapshot_hash",
+        "runtime_composition_hash",
+        "runtime_bundle_hash"
+      ],
+      "type": "object"
+    },
+    "materialization_bundle": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.game_materialization_bundle"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "payload_lock": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.standalone_game_lock"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "tree_hash": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash",
+        "tree_hash"
+      ],
+      "type": "object"
+    },
+    "platform_set": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.standalone_platform"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "runtime_implementation": {
+      "additionalProperties": false,
+      "properties": {
+        "content_hash": {
+          "$ref": "#/$defs/sha256"
+        },
+        "format": {
+          "const": "world-forge.runtime_implementation"
+        },
+        "format_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "format",
+        "format_version",
+        "id",
+        "content_hash"
+      ],
+      "type": "object"
+    },
+    "state": {
+      "const": "materialized"
+    }
+  },
+  "required": [
+    "format",
+    "format_version",
+    "game_id",
+    "state",
+    "lineage",
+    "materialization_bundle",
+    "runtime_implementation",
+    "platform_set",
+    "payload_lock",
+    "entry_points",
+    "content_hash"
+  ],
+  "title": "World Forge standalone game manifest v1",
+  "type": "object",
+  "x-world-forge-canonical-content-hash": true,
+  "x-world-forge-standalone-game-coherent": true
+}

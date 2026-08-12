@@ -1,0 +1,145 @@
+{
+  "accepted_logic_formats": [
+    {
+      "format": "world-forge.gamepack",
+      "versions": [
+        1
+      ]
+    }
+  ],
+  "adapter_id": "gamepack_raylib_2d_puzzle",
+  "adapter_version": "1.1.0",
+  "asset_bindings": [
+    {
+      "asset_id": "board_ui",
+      "binding_id": "board_texture",
+      "media_type": "image/png",
+      "role": "texture",
+      "runtime_path": "assets/ui/board.png"
+    }
+  ],
+  "asset_formats": [
+    "asset:png"
+  ],
+  "assetpacks": [
+    {
+      "format": "world-forge.assetpack",
+      "versions": [
+        1
+      ]
+    }
+  ],
+  "budgets": {
+    "max_actions": 128,
+    "max_assets": 1024,
+    "max_loaded_bytes": 536870912,
+    "max_state_bytes": 65536,
+    "target_frame_milliseconds": 17
+  },
+  "content_hash": "75d8480ada2c1f773f3c0e1d7f1427773b370beb212fb6a91aaad2875ed290e1",
+  "evidence_requirements": [
+    "check:headless_determinism",
+    "check:native_raylib",
+    "check:package_verification",
+    "check:save_replay"
+  ],
+  "execution_semantics": {
+    "content_hash": "f43fa43e4c54a2910ae8a99fbbfc0b2556359f95c1c88abef59a2508c9ea5983",
+    "version": 1
+  },
+  "format": "world-forge.runtime_adapter",
+  "format_version": 1,
+  "implementation": {
+    "backend": "backend:raylib",
+    "renderer": "raylib",
+    "runtime_api": {
+      "id": "gamepack_runtime",
+      "version": "1.0.0"
+    },
+    "snapshot": {
+      "format": "world-forge.game_runtime_snapshot",
+      "versions": [
+        1
+      ]
+    }
+  },
+  "input_capabilities": [
+    "input:keyboard",
+    "input:pointer"
+  ],
+  "limitations": [
+    "Bounded deterministic two-dimensional adapter.",
+    "No runtime AI, network access, subprocesses, or executable content."
+  ],
+  "packaging_targets": [
+    "standalone desktop directory"
+  ],
+  "persistence": {
+    "replay": {
+      "format": "world-forge.game_replay",
+      "required": true,
+      "versions": [
+        1
+      ]
+    },
+    "save": {
+      "format": "world-forge.game_save",
+      "required": true,
+      "versions": [
+        1
+      ]
+    }
+  },
+  "platforms": [
+    {
+      "architecture": "architecture:x86_64",
+      "backend": "backend:raylib",
+      "platform_family": "platform:linux",
+      "platform_id": "platform:linux_x86_64",
+      "renderer": "raylib"
+    },
+    {
+      "architecture": "architecture:x86_64",
+      "backend": "backend:raylib",
+      "platform_family": "platform:windows",
+      "platform_id": "platform:windows_x86_64",
+      "renderer": "raylib"
+    }
+  ],
+  "presentations": [
+    {
+      "camera": "fixed",
+      "mode": "2d",
+      "perspective": "orthographic board",
+      "requested_renderer": "raylib"
+    }
+  ],
+  "state": "declared",
+  "supported_features": [
+    "logic:deterministic_actions",
+    "logic:finite_state"
+  ],
+  "supported_profiles": [
+    "profile:abstract_puzzle"
+  ],
+  "supported_semantics": {
+    "action_parameter_types": [
+      "integer"
+    ],
+    "condition_operators": [
+      "compare",
+      "constant",
+      "index_valid",
+      "integer_distance"
+    ],
+    "effect_operations": [
+      "increment",
+      "reset",
+      "swap_array_items"
+    ],
+    "ending_kinds": [
+      "success"
+    ],
+    "narrative_cursor": false
+  }
+}
