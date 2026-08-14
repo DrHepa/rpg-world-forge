@@ -1490,6 +1490,29 @@ def _entry_info(parent: _PinnedOutputParent, name: str) -> FileStat | None:
             parent.windows_api.close(handle)
 
 
+def _published_file_info(parent: _PinnedOutputParent, name: str) -> FileStat | None:
+    handle: int | None = None
+    try:
+        if parent.parent_fd is not None:
+            return _entry_info(parent, name)
+        if parent.windows_api is None or parent.windows_parent_handle is None:
+            raise AssetContractError("secure publication primitives are unavailable")
+        handle = parent.windows_api.open_existing_file_strict(
+            parent.windows_parent_handle,
+            name,
+            share_delete=True,
+        )
+        return parent.windows_api.strict_entry_info(
+            handle,
+            context=f"published output {parent.path / name}",
+        )
+    except FileNotFoundError:
+        return None
+    finally:
+        if handle is not None and parent.windows_api is not None:
+            parent.windows_api.close(handle)
+
+
 @dataclass(slots=True)
 class _TemporaryEntry:
     descriptor: int
@@ -2505,7 +2528,7 @@ def _write_json_publication(
                         overwrite=True,
                     )
             try:
-                published = _entry_info(parent, destination.name)
+                published = _published_file_info(parent, destination.name)
             except OSError as exc:
                 raise AssetContractError(
                     f"Could not verify published output {requested_destination}: {exc}"
@@ -2622,7 +2645,7 @@ def write_bytes_atomic(
             except FileExistsError as exc:
                 raise AssetContractError(f"Refusing to overwrite {requested_destination}") from exc
             try:
-                published = _entry_info(parent, destination.name)
+                published = _published_file_info(parent, destination.name)
             except OSError as exc:
                 raise AssetContractError(
                     f"Could not verify published output {requested_destination}: {exc}"

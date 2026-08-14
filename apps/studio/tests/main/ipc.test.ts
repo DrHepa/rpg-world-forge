@@ -1,9 +1,14 @@
 import { createHash } from "node:crypto";
+import { mkdtemp, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+    readSelectedCreationProjectIdentity,
     registerStudioIpc,
+    selectedCreationProjectOpenFlags,
     validateAssetCatalogInspectArgument,
     validateAssetCatalogListArgument,
     validateAssetPreviewCloseArgument,
@@ -210,10 +215,109 @@ describe("Studio named authoring and job IPC contracts", () => {
     );
 });
 
+describe("Selected creation project descriptor pinning", () => {
+    const roots: string[] = [];
+    const hash = "a".repeat(64);
+
+    afterEach(async () => {
+        await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+    });
+
+    async function createRoot(label: string): Promise<string> {
+        const root = await mkdtemp(path.join(tmpdir(), `world-forge-${label}-`));
+        roots.push(root);
+        return await realpath(root);
+    }
+
+    async function writeProject(root: string, title = "Pinned project"): Promise<void> {
+        await writeFile(
+            path.join(root, "project.json"),
+            JSON.stringify({
+                format: "world-forge.project",
+                format_version: 1,
+                title,
+                content_hash: hash,
+            }),
+        );
+    }
+
+    it("accepts a regular descriptor while preserving Windows no-follow flag policy", async () => {
+        const root = await createRoot("valid");
+        await writeProject(root, "Windows-safe project");
+
+        await expect(
+            readSelectedCreationProjectIdentity(root, { platform: "win32" }),
+        ).resolves.toEqual({
+            contentHash: hash,
+            displayName: "Windows-safe project",
+        });
+    });
+
+    it("rejects a symlinked descriptor even when Windows omits O_NOFOLLOW", async () => {
+        const root = await createRoot("descriptor-symlink");
+        const targetRoot = await createRoot("descriptor-target");
+        await writeProject(targetRoot, "Escaped project");
+        await symlink(
+            path.join(targetRoot, "project.json"),
+            path.join(root, "project.json"),
+        );
+
+        await expect(
+            readSelectedCreationProjectIdentity(root, { platform: "win32" }),
+        ).rejects.toThrow("Selected creation project descriptor is invalid");
+    });
+
+    it("rejects descriptor replacement between precheck and open", async () => {
+        const root = await createRoot("descriptor-replacement");
+        const replacement = path.join(root, "replacement.json");
+        await writeProject(root, "Original project");
+        await writeFile(
+            replacement,
+            JSON.stringify({
+                format: "world-forge.project",
+                format_version: 1,
+                title: "Replacement project",
+                content_hash: "b".repeat(64),
+            }),
+        );
+
+        await expect(
+            readSelectedCreationProjectIdentity(root, {
+                platform: "win32",
+                beforeOpen: async () => {
+                    await rename(replacement, path.join(root, "project.json"));
+                },
+            }),
+        ).rejects.toThrow("Selected creation project descriptor is invalid");
+    });
+
+    it("rejects a selected root whose descriptor resolves outside the literal root", async () => {
+        const targetRoot = await createRoot("root-target");
+        const selectedRoot = `${targetRoot}-link`;
+        roots.push(selectedRoot);
+        await writeProject(targetRoot, "Escaped root project");
+        await symlink(targetRoot, selectedRoot);
+
+        await expect(
+            readSelectedCreationProjectIdentity(selectedRoot, { platform: "win32" }),
+        ).rejects.toThrow("Selected creation project descriptor is invalid");
+    });
+});
+
 describe("Studio fixed generic creation IPC contracts", () => {
     const hash = "a".repeat(64);
     const recordHash = "b".repeat(64);
     const reviewHash = "c".repeat(64);
+
+    it("omits no-follow from selected creation project open flags on Windows", () => {
+        const syntheticNoFollow = 0x20000;
+        const flags = selectedCreationProjectOpenFlags(
+            "win32",
+            syntheticNoFollow,
+        );
+
+        expect(flags & syntheticNoFollow).toBe(0);
+    });
 
     it("accepts only closed pathless project, document, and exact CAS inputs", () => {
         expect(

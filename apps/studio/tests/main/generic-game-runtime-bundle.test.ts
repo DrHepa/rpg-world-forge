@@ -22,6 +22,7 @@ import {
 } from "../../scripts/verify-game-runtime-bundle.mjs";
 import {
   GENERIC_GAME_RUNTIME_BUNDLE_VALIDATOR_RUNTIME,
+  noFollowOpenFlagForPlatform,
   validateGenericGameRuntimeBundle,
   verifyGenericGameRuntimeBundleDirectory,
 } from "../../src/main/generic-game-runtime-bundle";
@@ -176,6 +177,11 @@ function buildStructuralBundle() {
 }
 
 describe("generic game runtime bundle validation", () => {
+  it("uses no raw O_NOFOLLOW flag on Windows while keeping it elsewhere", () => {
+    expect(noFollowOpenFlagForPlatform("win32", 0x20000)).toBe(0);
+    expect(noFollowOpenFlagForPlatform("linux", 0x20000)).toBe(0x20000);
+  });
+
   it("keeps structural validation separate from integral runtime evidence", () => {
     expect(
       GENERIC_GAME_RUNTIME_BUNDLE_VALIDATOR_RUNTIME.contract_formats,

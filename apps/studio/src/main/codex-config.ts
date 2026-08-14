@@ -4,6 +4,7 @@ import { lstat, mkdir, open, realpath, rename } from "node:fs/promises";
 import path from "node:path";
 
 import { CODEX_VERSION, FORGE_MCP_MODULE, type CodexRuntime } from "./runtime-manifest";
+import { noFollowOpenFlagForPlatform } from "./no-follow-open-flag";
 
 const WORKSPACE_ID_PATTERN = /^[a-z][a-z0-9_-]{1,63}$/u;
 const FORGE_TOOLS = Object.freeze([
@@ -171,7 +172,7 @@ async function atomicWritePrivateFile(filename: string, content: string): Promis
   try {
     handle = await open(
       temporary,
-      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
+      codexConfigPrivateFileOpenFlags(process.platform, constants.O_NOFOLLOW),
       0o600,
     );
     const info = await handle.stat();
@@ -203,6 +204,18 @@ async function atomicWritePrivateFile(filename: string, content: string): Promis
     const { rm } = await import("node:fs/promises");
     await rm(temporary, { force: true }).catch(() => undefined);
   }
+}
+
+export function codexConfigPrivateFileOpenFlags(
+  platform: NodeJS.Platform,
+  noFollowFlag: number | undefined = constants.O_NOFOLLOW,
+): number {
+  return (
+    constants.O_CREAT |
+    constants.O_EXCL |
+    constants.O_WRONLY |
+    noFollowOpenFlagForPlatform(platform, noFollowFlag)
+  );
 }
 
 async function syncDirectory(directory: string): Promise<void> {

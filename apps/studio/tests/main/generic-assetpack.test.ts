@@ -23,6 +23,7 @@ import {
   canonicalGenericAssetContentHash,
 } from "../../scripts/generic-asset-validation.mjs";
 import {
+  noFollowOpenFlagForPlatform,
   validateGenericAssetpack,
   verifyGenericAssetpackDirectory,
 } from "../../src/main/generic-assetpack";
@@ -304,6 +305,11 @@ afterAll(async () => {
 });
 
 describe("sealed generic assetpack validation", () => {
+  it("uses no raw O_NOFOLLOW flag on Windows while keeping it elsewhere", () => {
+    expect(noFollowOpenFlagForPlatform("win32", 0x20000)).toBe(0);
+    expect(noFollowOpenFlagForPlatform("linux", 0x20000)).toBe(0x20000);
+  });
+
   it("keeps structural validation separate from frozen integral sealed evidence", async () => {
     const fixture = await buildPuzzlePack();
     const structural = validateGenericAssetpack(fixture.document);

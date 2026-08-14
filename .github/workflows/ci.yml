@@ -304,21 +304,23 @@ jobs:
             --no-deps \
             --only-binary=:all: \
             --dest "${wheelhouse}" \
+            "cffi==1.17.1" \
+            "pycparser==2.23" \
             "raylib==6.0.1.0"
           python -c \
-            'import pathlib, sys; files=sorted(pathlib.Path(sys.argv[1]).glob("*.whl")); assert len(files) == 1; print(files[0])' \
+            'import pathlib, sys; files=[path for path in sorted(pathlib.Path(sys.argv[1]).glob("*.whl")) if path.name.startswith("raylib-")]; assert len(files) == 1; print(files[0])' \
             "${wheelhouse}" > "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt"
           runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
           PYTHONPATH=src python -m scripts.verify_multigenre_release \
             --report "${RUNNER_TEMP}/world-forge-raylib-attestation.json" \
             --verify-runtime-wheel "${runtime_wheel}"
           python -c \
-            'import json, pathlib, sys; report=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")); pathlib.Path(sys.argv[2]).write_text("raylib==6.0.1.0 --hash=sha256:" + report["artifact"]["sha256"] + "\n", encoding="utf-8")' \
+            'import json, pathlib, subprocess, sys; wheelhouse=pathlib.Path(sys.argv[1]); report=json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")); pins=("cffi==1.17.1","pycparser==2.23","raylib==6.0.1.0"); files={path.name.casefold(): path for path in wheelhouse.glob("*.whl")}; raylib_sha=report["artifact"]["sha256"]; rows=[]; [rows.append((pin, [path for name, path in files.items() if name.startswith(pin.split("==", 1)[0].replace("-", "_").casefold() + "-")])) for pin in pins]; assert all(len(matches) == 1 for _pin, matches in rows), [(pin, [path.name for path in matches]) for pin, matches in rows]; lines=["%s --hash=sha256:%s\n" % (pin, raylib_sha if pin == "raylib==6.0.1.0" else subprocess.check_output([sys.executable, "-m", "pip", "hash", "--algorithm", "sha256", str(matches[0])], text=True).rsplit("--hash=sha256:", 1)[1].strip()) for pin, matches in rows]; pathlib.Path(sys.argv[3]).write_text("".join(lines), encoding="utf-8")' \
+            "${wheelhouse}" \
             "${RUNNER_TEMP}/world-forge-raylib-attestation.json" \
             "${RUNNER_TEMP}/world-forge-raylib-requirements.txt"
           python -m pip install \
             --no-index \
-            --no-deps \
             --force-reinstall \
             --find-links "${wheelhouse}" \
             --require-hashes \

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
-import { open } from "node:fs/promises";
+import { lstat, open, realpath } from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -60,6 +60,7 @@ import {
 } from "../shared/studio-api";
 import type { CodexBridgeClient } from "./codex-bridge";
 import { CodexTransportError } from "./codex-supervisor";
+import { noFollowOpenFlagForPlatform } from "./no-follow-open-flag";
 import type { ForgeServiceClient } from "./forge-service";
 import {
     StudioRequestCancelledError,
@@ -5732,45 +5733,182 @@ function newCreationWorkspaceId(): string {
     return `creation_${randomUUID().replaceAll("-", "")}`;
 }
 
-async function readSelectedCreationProjectIdentity(
+type SelectedCreationProjectFileState = Readonly<{
+    ctimeNs: bigint;
+    dev: bigint;
+    ino: bigint;
+    mode: bigint;
+    mtimeNs: bigint;
+    nlink: bigint;
+    size: bigint;
+}>;
+
+type SelectedCreationProjectReadOptions = Readonly<{
+    platform?: NodeJS.Platform;
+    beforeOpen?: () => Promise<void>;
+}>;
+
+function selectedCreationProjectStateOf(stat: {
+    ctimeNs: bigint;
+    dev: bigint;
+    ino: bigint;
+    mode: bigint;
+    mtimeNs: bigint;
+    nlink: bigint;
+    size: bigint;
+}): SelectedCreationProjectFileState {
+    return {
+        ctimeNs: stat.ctimeNs,
+        dev: stat.dev,
+        ino: stat.ino,
+        mode: stat.mode,
+        mtimeNs: stat.mtimeNs,
+        nlink: stat.nlink,
+        size: stat.size,
+    };
+}
+
+function sameSelectedCreationProjectState(
+    left: SelectedCreationProjectFileState,
+    right: SelectedCreationProjectFileState,
+): boolean {
+    return (
+        left.ctimeNs === right.ctimeNs &&
+        left.dev === right.dev &&
+        left.ino === right.ino &&
+        left.mode === right.mode &&
+        left.mtimeNs === right.mtimeNs &&
+        left.nlink === right.nlink &&
+        left.size === right.size
+    );
+}
+
+function isWithinSelectedCreationRoot(root: string, candidate: string): boolean {
+    const relative = path.relative(root, candidate);
+    return (
+        candidate === root ||
+        (relative !== ".." &&
+            !relative.startsWith(`..${path.sep}`) &&
+            !path.isAbsolute(relative))
+    );
+}
+
+function rejectInvalidSelectedCreationProjectDescriptor(): never {
+    throw new Error("Selected creation project descriptor is invalid");
+}
+
+export async function readSelectedCreationProjectIdentity(
     rootPath: string,
+    options: SelectedCreationProjectReadOptions = {},
 ): Promise<{ contentHash: string; displayName: string }> {
-    const projectPath = path.join(rootPath, "project.json");
-    const noFollow = process.platform === "win32" ? 0 : fsConstants.O_NOFOLLOW;
-    const handle = await open(projectPath, fsConstants.O_RDONLY | noFollow);
-    try {
-        const info = await handle.stat();
-        if (
-            !info.isFile() ||
-            info.nlink !== 1 ||
-            info.size > MAX_CREATION_PROJECT_BYTES
-        ) {
-            throw new Error("Selected creation project descriptor is invalid");
-        }
-        const payload = await handle.readFile();
-        if (payload.byteLength !== info.size) {
-            throw new Error("Selected creation project changed while reading");
-        }
-        const document = JSON.parse(
-            new TextDecoder("utf-8", { fatal: true }).decode(payload),
-        ) as unknown;
-        if (
-            !isRecord(document) ||
-            document.format !== "world-forge.project" ||
-            document.format_version !== 1 ||
-            typeof document.content_hash !== "string" ||
-            !SHA256_PATTERN.test(document.content_hash)
-        ) {
-            throw new Error("Selected creation project descriptor is invalid");
-        }
-        const displayName =
-            typeof document.title === "string" && document.title.trim()
-                ? document.title.trim()
-                : path.basename(rootPath);
-        return { contentHash: document.content_hash, displayName };
-    } finally {
-        await handle.close();
+    const root = path.resolve(rootPath);
+    const projectPath = path.resolve(root, "project.json");
+    if (projectPath !== path.join(root, "project.json")) {
+        rejectInvalidSelectedCreationProjectDescriptor();
     }
+    try {
+        const rootInfo = await lstat(root, { bigint: true });
+        if (
+            !rootInfo.isDirectory() ||
+            rootInfo.isSymbolicLink() ||
+            (await realpath(root)) !== root
+        ) {
+            rejectInvalidSelectedCreationProjectDescriptor();
+        }
+        const before = await lstat(projectPath, { bigint: true });
+        if (
+            !before.isFile() ||
+            before.isSymbolicLink() ||
+            before.nlink !== 1n ||
+            before.size < 0n ||
+            before.size > BigInt(MAX_CREATION_PROJECT_BYTES) ||
+            (await realpath(projectPath)) !== projectPath ||
+            !isWithinSelectedCreationRoot(root, projectPath)
+        ) {
+            rejectInvalidSelectedCreationProjectDescriptor();
+        }
+        const initial = selectedCreationProjectStateOf(before);
+        await options.beforeOpen?.();
+        const handle = await open(
+            projectPath,
+            selectedCreationProjectOpenFlags(options.platform),
+        );
+        try {
+            const opened = await handle.stat({ bigint: true });
+            if (
+                !opened.isFile() ||
+                opened.nlink !== 1n ||
+                opened.size < 0n ||
+                opened.size > BigInt(MAX_CREATION_PROJECT_BYTES) ||
+                !sameSelectedCreationProjectState(
+                    initial,
+                    selectedCreationProjectStateOf(opened),
+                )
+            ) {
+                rejectInvalidSelectedCreationProjectDescriptor();
+            }
+            const payload = await handle.readFile();
+            const after = await handle.stat({ bigint: true });
+            if (
+                BigInt(payload.byteLength) !== opened.size ||
+                !sameSelectedCreationProjectState(
+                    selectedCreationProjectStateOf(opened),
+                    selectedCreationProjectStateOf(after),
+                )
+            ) {
+                rejectInvalidSelectedCreationProjectDescriptor();
+            }
+            const final = await lstat(projectPath, { bigint: true });
+            if (
+                final.isSymbolicLink() ||
+                !sameSelectedCreationProjectState(
+                    initial,
+                    selectedCreationProjectStateOf(final),
+                ) ||
+                (await realpath(projectPath)) !== projectPath ||
+                !isWithinSelectedCreationRoot(root, projectPath)
+            ) {
+                rejectInvalidSelectedCreationProjectDescriptor();
+            }
+            const document = JSON.parse(
+                new TextDecoder("utf-8", { fatal: true }).decode(payload),
+            ) as unknown;
+            if (
+                !isRecord(document) ||
+                document.format !== "world-forge.project" ||
+                document.format_version !== 1 ||
+                typeof document.content_hash !== "string" ||
+                !SHA256_PATTERN.test(document.content_hash)
+            ) {
+                rejectInvalidSelectedCreationProjectDescriptor();
+            }
+            const displayName =
+                typeof document.title === "string" && document.title.trim()
+                    ? document.title.trim()
+                    : path.basename(root);
+            return { contentHash: document.content_hash, displayName };
+        } finally {
+            await handle.close();
+        }
+    } catch (error) {
+        if (
+            error instanceof Error &&
+            error.message === "Selected creation project descriptor is invalid"
+        ) {
+            throw error;
+        }
+        rejectInvalidSelectedCreationProjectDescriptor();
+    }
+}
+
+export function selectedCreationProjectOpenFlags(
+    platform: NodeJS.Platform = process.platform,
+    noFollowFlag: number | undefined = fsConstants.O_NOFOLLOW,
+): number {
+    return (
+        fsConstants.O_RDONLY |
+        noFollowOpenFlagForPlatform(platform, noFollowFlag)
+    );
 }
 
 async function selectExternalArtifactPath(

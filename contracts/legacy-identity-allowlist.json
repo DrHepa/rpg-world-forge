@@ -12,11 +12,11 @@
     },
     {
       "category": "migration",
-      "file_sha256": "3e6f174a1b871bb0bea524aed144f01476d6e1871c30e4eb85c3e69f89f7d2a2",
+      "file_sha256": "f2cb3b1cc3d426b6c0702e6b5b66f97950b66df866295ebd12ea61dee82b77c3",
       "justification": "Restricts the hosted native authority workflow old/new repository bridge to trusted main pushes and the stable GitHub repository ID.",
       "offsets": [
-        21427,
-        29360
+        22269,
+        30202
       ],
       "path": ".github/workflows/ci.yml",
       "pattern": "rpg-world-forge"
@@ -344,14 +344,14 @@
     },
     {
       "category": "legacy_contract",
-      "file_sha256": "fa90371777eec2cb782a4581aecdef1cc730ba5b259e03716e927a7c27960020",
+      "file_sha256": "0697063699afadb96933b93f7fd26460f2f2f57260b15c6af23b0f57ba280556",
       "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
       "offsets": [
-        211350,
-        211763,
-        216793,
-        217250,
-        307955
+        215808,
+        216221,
+        221251,
+        221708,
+        312413
       ],
       "path": "apps/studio/src/main/ipc.ts",
       "pattern": "rpg-world-forge"
@@ -383,16 +383,16 @@
     },
     {
       "category": "legacy_contract",
-      "file_sha256": "029dee064d4c44f3b4501d453a64c88f9b7bdef5bb7bc00b99cc83c997da0f29",
+      "file_sha256": "9da779077de2ed74ab16313f075fbc7417dd822f769e5a6895933f68d0b5177c",
       "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
       "offsets": [
-        393,
-        815,
-        908,
-        1014,
-        1774,
-        2048,
-        52323
+        462,
+        884,
+        977,
+        1083,
+        1843,
+        2117,
+        52570
       ],
       "path": "apps/studio/src/main/runtime-manifest.ts",
       "pattern": "rpg-world-forge"
@@ -498,31 +498,31 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "070e302cefe2650fb6d9f9bf9e48ccae16cb04aaa976054169c94a78f32e4223",
+      "file_sha256": "8e4c616520632ff5c517cf77a222392ea0c50646806e7e5ae68babbd3b22240c",
       "justification": "Regression evidence preserves legacy identity input and reader behavior.",
       "offsets": [
-        55849,
-        114888,
-        116198,
-        179472,
-        180380,
-        180984,
-        195021,
-        195723,
-        196387,
-        199048,
-        202791,
-        203090,
-        210541,
-        223417,
-        223918,
-        226247,
-        226459,
-        227349,
-        227823,
-        229158,
-        229500,
-        229865
+        59739,
+        118778,
+        120088,
+        183362,
+        184270,
+        184874,
+        198911,
+        199613,
+        200277,
+        202938,
+        206681,
+        206980,
+        214431,
+        227307,
+        227808,
+        230137,
+        230349,
+        231239,
+        231713,
+        233048,
+        233390,
+        233755
       ],
       "path": "apps/studio/tests/main/ipc.test.ts",
       "pattern": "rpg-world-forge"
@@ -572,15 +572,15 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "e338b21d3e2e2d83e3f30af1c53bd8e5ebaed4111c92d9e9776d743bb303b748",
+      "file_sha256": "60a012c1b1af29c59f275f8360657332bb79e1600c43a54647632a6c690c2000",
       "justification": "Regression evidence preserves legacy identity input and reader behavior.",
       "offsets": [
-        14751,
-        16090,
-        18923,
-        19345,
-        22825,
-        24767
+        15024,
+        16363,
+        19196,
+        19618,
+        23098,
+        25040
       ],
       "path": "apps/studio/tests/main/runtime-manifest.test.ts",
       "pattern": "rpg-world-forge"
@@ -3708,12 +3708,12 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "15160201d98a647e1b2d0758cbdebc9fa58f3b59fdb933db63e84a034a0af139",
+      "file_sha256": "216cb5c497575d3f950599c05ae345de567fa4b337536076a2e5a5c1aac9d640",
       "justification": "Exercises retained v2 project identity and native Windows migration rejection/commit-forward behavior.",
       "offsets": [
-        27431,
-        31916,
-        34868
+        27850,
+        32335,
+        35287
       ],
       "path": "tests/test_windows_world_project_migration.py",
       "pattern": "rpg-world-forge"

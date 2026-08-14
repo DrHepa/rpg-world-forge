@@ -12,7 +12,10 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { prepareCodexLaunch } from "../../src/main/codex-config";
+import {
+  codexConfigPrivateFileOpenFlags,
+  prepareCodexLaunch,
+} from "../../src/main/codex-config";
 import { CODEX_VERSION, type CodexRuntime } from "../../src/main/runtime-manifest";
 
 const roots: string[] = [];
@@ -23,6 +26,13 @@ afterEach(async () => {
 });
 
 describe("Codex workspace configuration", () => {
+  it("omits no-follow from private config creation flags on Windows", () => {
+    const syntheticNoFollow = 0x20000;
+    const flags = codexConfigPrivateFileOpenFlags("win32", syntheticNoFollow);
+
+    expect(flags & syntheticNoFollow).toBe(0);
+  });
+
   it("writes a private, closed Forge-only config and strips inherited injection", async () => {
     const fixture = await makeFixture();
     const launch = await prepareCodexLaunch({

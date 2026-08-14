@@ -5,6 +5,7 @@ import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import type { FixedSpawnSpec } from "./ndjson-supervisor";
+import { noFollowOpenFlagForPlatform } from "./no-follow-open-flag";
 import { resolveStudioEnvironment } from "../../scripts/studio-environment.mjs";
 
 const MANIFEST_FORMAT = "rpg-world-forge.studio_runtime_manifest";
@@ -255,7 +256,7 @@ export async function resolveForgeServiceLaunch(options: ForgeLaunchOptions): Pr
   const platform = options.platform ?? process.platform;
   const architecture = options.architecture ?? process.arch;
   const key = runtimePlatformKey(platform, architecture);
-  const contract = await loadPackagedRuntimeContract(options.resourcesPath, key);
+  const contract = await loadPackagedRuntimeContract(options.resourcesPath, key, platform);
   const entry = inventoryEntry(
     contract.packageManifest,
     contract.manifest.python[key],
@@ -296,7 +297,7 @@ export async function resolveCodexRuntime(
   const platform = options.platform ?? process.platform;
   const architecture = options.architecture ?? process.arch;
   const key = runtimePlatformKey(platform, architecture);
-  const contract = await loadPackagedRuntimeContract(options.resourcesPath, key);
+  const contract = await loadPackagedRuntimeContract(options.resourcesPath, key, platform);
   await verifyPackagedProtocol(
     options.resourcesPath,
     contract.manifest.codex_protocol.manifest,
@@ -331,12 +332,16 @@ export async function resolveCodexRuntime(
   };
 }
 
-async function loadRuntimeManifest(resourcesPath: string): Promise<LoadedRuntimeManifest> {
+async function loadRuntimeManifest(
+  resourcesPath: string,
+  platform: NodeJS.Platform = process.platform,
+): Promise<LoadedRuntimeManifest> {
   const resource = await readPinnedResourceFile(
     resourcesPath,
     MANIFEST_FILE,
     MANIFEST_MAX_BYTES,
     "Studio runtime manifest",
+    platform,
   );
   const expected = canonicalRuntimeManifest();
   if (!resource.bytes.equals(canonicalJsonBytes(expected))) {
@@ -383,13 +388,15 @@ function canonicalRuntimeManifest(): RuntimeManifest {
 async function loadPackagedRuntimeContract(
   resourcesPath: string,
   key: RuntimePlatformKey,
+  platform: NodeJS.Platform,
 ): Promise<PackagedRuntimeContract> {
-  const loaded = await loadRuntimeManifest(resourcesPath);
+  const loaded = await loadRuntimeManifest(resourcesPath, platform);
   const packageResource = await readPinnedResourceFile(
     resourcesPath,
     loaded.manifest.package_manifest.path,
     PACKAGE_MANIFEST_MAX_BYTES,
     "runtime package manifest",
+    platform,
   );
   let parsed: unknown;
   try {
@@ -409,6 +416,7 @@ async function loadPackagedRuntimeContract(
         NORMALIZATION_PACKAGE_PATH,
         NORMALIZATION_SIZE,
         "Linux Python archive normalization receipt",
+        platform,
       )
     : undefined;
   const runtimeSourcesResource =
@@ -418,6 +426,7 @@ async function loadPackagedRuntimeContract(
           RUNTIME_SOURCES_FILE,
           RUNTIME_SOURCES_SIZE,
           "Studio runtime source provenance",
+          platform,
         )
       : undefined;
   const packageManifest = validateRuntimePackageManifestSemantic(
@@ -1643,6 +1652,7 @@ async function readPinnedResourceFile(
   relativePath: string,
   maxBytes: number,
   label: string,
+  platform: NodeJS.Platform = process.platform,
 ): Promise<PinnedResourceFile> {
   if (!isPortableResourcePath(relativePath)) {
     throw new Error(`Packaged ${label} path is not portable`);
@@ -1666,7 +1676,7 @@ async function readPinnedResourceFile(
     throw new Error(`Packaged ${label} identity is not anchored in resources`);
   }
 
-  const flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
+  const flags = packagedResourceOpenFlags(platform, constants.O_NOFOLLOW);
   let handle;
   try {
     handle = await open(filename, flags);
@@ -1706,6 +1716,13 @@ async function readPinnedResourceFile(
     throw new Error(`Packaged ${label} identity changed after its pinned read`);
   }
   return { bytes, filename, mode: before.mode };
+}
+
+export function packagedResourceOpenFlags(
+  platform: NodeJS.Platform,
+  noFollowFlag: number | undefined = constants.O_NOFOLLOW,
+): number {
+  return constants.O_RDONLY | noFollowOpenFlagForPlatform(platform, noFollowFlag);
 }
 
 function sameFileIdentity(left: Stats, right: Stats): boolean {

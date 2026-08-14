@@ -37,6 +37,8 @@ import {
   snapshotStrictJsonObject,
 } from "../../scripts/strict-json.mjs";
 import type { WorldForgeSealedGenericAssetpackV1 } from "../generated/world-forge-contracts";
+import { noFollowOpenFlagForPlatform } from "./no-follow-open-flag";
+export { noFollowOpenFlagForPlatform } from "./no-follow-open-flag";
 
 const MAX_ASSETPACK_MANIFEST_BYTES = 16 * 1024 * 1024;
 const MAX_ASSETPACK_FILE_BYTES = 256 * 1024 * 1024;
@@ -537,7 +539,8 @@ async function pinnedFile(
   try {
     handle = await open(
       filename,
-      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+      constants.O_RDONLY |
+        noFollowOpenFlagForPlatform(process.platform, constants.O_NOFOLLOW),
     );
   } catch {
     return null;

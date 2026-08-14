@@ -436,6 +436,7 @@ class WindowsProjectCommitApi:
             name,
             sealed=True,
             delete=delete,
+            write=True,
         )
         try:
             loaded, links = self.api.read_strict_bound_bytes(
@@ -559,6 +560,7 @@ class WindowsProjectCommitApi:
                 self.lease.control_handle,
                 self.target_stage_name,
                 share_delete=True,
+                write=True,
             )
             staged, links = self.api.read_strict_bound_bytes(
                 stage_handle,
@@ -596,6 +598,7 @@ class WindowsProjectCommitApi:
                 self.lease.control_handle,
                 self.target_stage_name,
                 delete=True,
+                write=True,
             )
             staged, links = self.api.read_strict_bound_bytes(
                 handle,

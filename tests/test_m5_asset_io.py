@@ -695,6 +695,69 @@ class AssetIOTests(unittest.TestCase):
 
             self.assertEqual([("delete", 22), ("close", 22)], events)
 
+    def test_windows_published_json_identity_verification_shares_delete_only_after_rename(
+        self,
+    ) -> None:
+        info = SimpleNamespace(
+            st_mode=stat.S_IFREG | stat.S_IRUSR,
+            st_dev=7,
+            st_ino=11,
+            st_nlink=1,
+            st_size=17,
+            st_mtime_ns=0,
+            st_ctime_ns=0,
+            st_file_attributes=0,
+        )
+        events: list[tuple[str, object]] = []
+
+        class _Api:
+            def open_existing_file_strict(
+                self,
+                parent_handle: int,
+                name: str,
+                *,
+                sealed: bool = False,
+                delete: bool = False,
+                share_delete: bool = False,
+                write: bool = False,
+            ) -> int:
+                events.append(
+                    (
+                        "open-strict",
+                        parent_handle,
+                        name,
+                        sealed,
+                        delete,
+                        share_delete,
+                        write,
+                    )
+                )
+                return 99
+
+            def strict_entry_info(self, handle: int, *, context: str):
+                events.append(("strict-info", handle, context))
+                return info
+
+            def close(self, handle: int) -> None:
+                events.append(("close", handle))
+
+        parent = asset_io_module._PinnedOutputParent(
+            Path("C:/safe"),
+            (),
+            windows_api=_Api(),
+            windows_handles=(8,),
+        )
+
+        self.assertIs(asset_io_module._published_file_info(parent, "report.json"), info)
+        self.assertEqual(
+            [
+                ("open-strict", 8, "report.json", False, False, True, False),
+                ("strict-info", 99, "published output C:/safe/report.json"),
+                ("close", 99),
+            ],
+            events,
+        )
+
     def test_windows_entry_operations_are_relative_to_the_retained_parent(self) -> None:
         events: list[tuple[str, int, str]] = []
         info = SimpleNamespace(

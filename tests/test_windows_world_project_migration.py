@@ -27,6 +27,7 @@ class _FakeWindowsNativeApi:
         }
         self.handles: dict[int, _FakeWindowsFile] = {}
         self.open_names: dict[int, str] = {}
+        self.handle_write_access: dict[int, bool] = {}
         self.next_handle = 10
         self.next_identity = 200
         self.events: list[str] = []
@@ -42,7 +43,7 @@ class _FakeWindowsNativeApi:
         self.legacy_identity_reads = 0
         self.disposition_attempted = False
 
-    def _open(self, name: str) -> int:
+    def _open(self, name: str, *, write: bool = False) -> int:
         try:
             entry = self.entries[name]
         except KeyError as exc:
@@ -51,6 +52,7 @@ class _FakeWindowsNativeApi:
         self.next_handle += 1
         self.handles[handle] = entry
         self.open_names[handle] = name
+        self.handle_write_access[handle] = write
         return handle
 
     def _links(self, entry: _FakeWindowsFile) -> int:
@@ -93,7 +95,7 @@ class _FakeWindowsNativeApi:
                 self.entries[name].change_time_ns += 1
         if share_delete and self.fail_absence_open:
             raise RuntimeError("injected absence verification failure")
-        handle = self._open(name)
+        handle = self._open(name, write=write)
         if share_delete:
             self.verification_handles.add(handle)
         return handle
@@ -145,7 +147,7 @@ class _FakeWindowsNativeApi:
         self.next_identity += 1
         self.entries[name] = entry
         self.events.append(f"create:{name}")
-        return self._open(name)
+        return self._open(name, write=True)
 
     def write_strict_bytes(self, handle: int, payload: bytes, *, context: str) -> None:
         entry = self.handles[handle]
@@ -172,6 +174,10 @@ class _FakeWindowsNativeApi:
         self.events.append(f"append-strict:{context}")
 
     def flush_handle(self, handle: int, *, context: str) -> None:
+        if not self.handle_write_access.get(handle, False):
+            from worldforge.asset_io import AssetContractError
+
+            raise AssetContractError("injected flush access denied without GENERIC_WRITE")
         self.events.append(f"flush:{context}:{handle}")
 
     def create_source_hard_link(self, destination: Path, source: Path) -> None:
@@ -215,6 +221,7 @@ class _FakeWindowsNativeApi:
             raise RuntimeError("injected retained evidence close failure")
         self.handles.pop(handle, None)
         self.open_names.pop(handle, None)
+        self.handle_write_access.pop(handle, None)
 
 
 class _FakeWindowsLease:
@@ -1463,6 +1470,10 @@ class WindowsProjectMigrationPolicyTests(unittest.TestCase):
             ".project.json.migration." + "a" * 64 + ".target",
             native.entries,
         )
+        flushed_open_events = [
+            event for event in native.events if event.startswith("open:") and "write=True" in event
+        ]
+        self.assertGreaterEqual(len(flushed_open_events), 3)
         self.assertIsNotNone(adapter.target_identity)
         self.assertGreater(lease.flushes, 0)
 

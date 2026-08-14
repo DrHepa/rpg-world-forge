@@ -144,6 +144,28 @@ class M5ReleaseReadinessTests(unittest.TestCase):
             self.assertIn(operation, cpu_media_smoke)
         self.assertNotIn("pr.init_window", cpu_media_smoke)
 
+    def test_native_raylib_matrix_installs_locked_runtime_dependency_closure(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        native_release = workflow.split("  multigenre-native-release:\n", 1)[1].split(
+            "  multigenre-native-release-aggregate:\n", 1
+        )[0]
+        install_step = native_release.split(
+            "      - name: Download, attest, and install the locked raylib wheel\n",
+            1,
+        )[1].split("      - name: Install Linux virtual display\n", 1)[0]
+
+        for pin in ("cffi==1.17.1", "pycparser==2.23", "raylib==6.0.1.0"):
+            with self.subTest(pin=pin):
+                self.assertIn(pin, install_step)
+        self.assertIn("--require-hashes", install_step)
+        self.assertIn("python -m pip check", install_step)
+        self.assertNotRegex(
+            install_step,
+            r"python -m pip install\s+\\\n"
+            r"(?:.*\n)*?\s+--no-deps\s+\\\n"
+            r"(?:.*\n)*?\s+--requirement \"\$\{RUNNER_TEMP\}/world-forge-raylib-requirements.txt\"",
+        )
+
     def test_security_jobs_verify_exact_inputs_and_scan_complete_history(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("fetch-depth: 0", workflow)

@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   CODEX_VERSION,
+  packagedResourceOpenFlags,
   resolveCodexRuntime,
   resolveForgeServiceLaunch,
 } from "../../src/main/runtime-manifest";
@@ -36,6 +37,13 @@ async function temporaryRoot(): Promise<string> {
 }
 
 describe("runtime manifest", () => {
+  it("omits no-follow from packaged resource open flags on Windows", () => {
+    const syntheticNoFollow = 0x20000;
+    const flags = packagedResourceOpenFlags("win32", syntheticNoFollow);
+
+    expect(flags & syntheticNoFollow).toBe(0);
+  });
+
   it("ships only the two audited x64 target declarations", async () => {
     const manifest = JSON.parse(
       await readFile(

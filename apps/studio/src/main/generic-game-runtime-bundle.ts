@@ -29,6 +29,8 @@ import {
   decodeStrictJsonObject,
   snapshotStrictJsonObject,
 } from "../../scripts/strict-json.mjs";
+import { noFollowOpenFlagForPlatform } from "./no-follow-open-flag";
+export { noFollowOpenFlagForPlatform } from "./no-follow-open-flag";
 import {
   validateGenericAssetpack,
   verifyGenericAssetpackDirectory,
@@ -386,7 +388,8 @@ async function pinnedFile(
   try {
     handle = await open(
       filename,
-      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+      constants.O_RDONLY |
+        noFollowOpenFlagForPlatform(process.platform, constants.O_NOFOLLOW),
     );
   } catch {
     return null;
