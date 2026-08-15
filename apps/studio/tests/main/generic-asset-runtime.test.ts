@@ -5,7 +5,9 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
+  symlink,
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -14,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  createCanonicalAssetpackSmokeRoot,
   GENERIC_ASSET_RUNTIME_ENTRY,
   verifyGenericAssetRuntimeArtifact,
   verifyGenericAssetRuntimeSnapshot,
@@ -61,6 +64,22 @@ afterAll(async () => {
 });
 
 describe("packaged generic asset validator runtime", () => {
+  it("canonicalizes an aliased smoke root before production verification", async () => {
+    const canonicalParent = path.join(temporaryRoot, "canonical-smoke-parent");
+    const aliasParent = path.join(temporaryRoot, "aliased-smoke-parent");
+    await mkdir(canonicalParent);
+    await symlink(
+      canonicalParent,
+      aliasParent,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+
+    const root = await createCanonicalAssetpackSmokeRoot(aliasParent);
+
+    expect(root).toBe(await realpath(root));
+    expect(path.dirname(root)).toBe(await realpath(canonicalParent));
+  });
+
   it("executes all fourteen D2 contract validators from the built internal CJS entry", async () => {
     const report = await verifyGenericAssetRuntimeArtifact({
       artifactPath: builtRuntime,

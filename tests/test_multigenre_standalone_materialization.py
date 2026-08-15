@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,7 @@ from gamepack_runtime.headless import (
 )
 from tests.test_multigenre_materialization_contracts import _fixture, _runtime_bundle
 from worldforge.game_materialization_bundle import build_game_materialization_bundle
+from worldforge.integrity import canonical_json_bytes
 from worldforge.repository_boundary import repository_kind
 from worldforge.runtime_implementation import load_runtime_implementation
 from worldforge.runtime_platform_lock import load_runtime_platform_lock
@@ -39,6 +41,7 @@ from worldforge.standalone_game import (
     validate_standalone_platform_document,
     verify_standalone_game,
 )
+from worldforge.standalone_templates import STANDALONE_TEMPLATE_FILES
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -115,6 +118,153 @@ def _ready_materialization(name: str, root: Path):
 
 
 class StandaloneMaterializationTests(unittest.TestCase):
+    def test_package_launcher_keeps_its_argument_parser_boundary(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-package-launcher-parser-") as temporary:
+            script = Path(temporary) / "scripts/package_game.py"
+            script.parent.mkdir()
+            script.write_bytes(STANDALONE_TEMPLATE_FILES["scripts/package_game.py"][0])
+            result = subprocess.run(
+                [sys.executable, "-I", str(script), "--help"],
+                cwd=Path(temporary),
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn("usage:", result.stdout)
+            self.assertNotIn("NameError", result.stderr)
+
+    def test_native_smoke_launcher_publishes_external_report_without_forge(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-native-smoke-launcher-") as temporary:
+            root = Path(temporary)
+            game_root = root / "relocated-game"
+            script = game_root / "scripts/native_smoke.py"
+            script.parent.mkdir(parents=True)
+            script.write_bytes(STANDALONE_TEMPLATE_FILES["scripts/native_smoke.py"][0])
+            snapshot = game_root / "game_data/runtime-bundle/runtime/snapshot-tree"
+            shutil.copytree(ROOT / "src/gamepack_runtime", snapshot / "gamepack_runtime")
+            snapshot.joinpath("worldforge.py").write_text(
+                "raise AssertionError('native launcher imported Forge authoring code')\n",
+                encoding="utf-8",
+            )
+            adapter = snapshot / "gamepack_raylib_2d"
+            adapter.mkdir()
+            adapter.joinpath("__init__.py").write_text("", encoding="utf-8")
+            adapter.joinpath("native_smoke.py").write_text(
+                "class NativeSmokeError(RuntimeError):\n"
+                "    pass\n\n"
+                "def native_smoke(_root, *, max_frames, hidden):\n"
+                "    assert max_frames == 2\n"
+                "    assert hidden is True\n"
+                "    return {\n"
+                "        'adapter_id': 'adapter_test',\n"
+                "        'adapter_version': '1.2.3',\n"
+                "        'frames': 2,\n"
+                "        'platform_id': 'platform:test_x86_64',\n"
+                "        'status': 'native_smoke_executed',\n"
+                "    }\n",
+                encoding="utf-8",
+            )
+            evidence = root / "native-evidence"
+            evidence.mkdir()
+            parent_state = evidence.stat()
+            report = evidence / "report.json"
+            environment = {
+                key: value
+                for key, value in os.environ.items()
+                if key not in {"PYTHONHOME", "PYTHONPATH"}
+            }
+            arguments = [
+                sys.executable,
+                "-I",
+                str(script),
+                "--report",
+                str(report),
+                "--report-parent-device",
+                str(parent_state.st_dev),
+                "--report-parent-inode",
+                str(parent_state.st_ino),
+            ]
+            result = subprocess.run(
+                arguments,
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual("", result.stdout)
+            expected = {
+                "adapter_id": "adapter_test",
+                "adapter_version": "1.2.3",
+                "frames": 2,
+                "platform_id": "platform:test_x86_64",
+                "status": "native_smoke_executed",
+            }
+            self.assertEqual(canonical_json_bytes(expected), report.read_bytes())
+
+            repeated = subprocess.run(
+                arguments,
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            self.assertEqual(1, repeated.returncode)
+            self.assertIn("ERROR", repeated.stderr)
+            self.assertEqual(canonical_json_bytes(expected), report.read_bytes())
+
+            manual = subprocess.run(
+                [sys.executable, "-I", str(script)],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            self.assertEqual(0, manual.returncode, manual.stderr)
+            self.assertEqual(expected, json.loads(manual.stdout))
+
+            incomplete = subprocess.run(
+                [sys.executable, "-I", str(script), "--report", str(evidence / "partial.json")],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            self.assertEqual(2, incomplete.returncode)
+            self.assertNotIn("Traceback", incomplete.stderr)
+            self.assertFalse((evidence / "partial.json").exists())
+
+            inside_parent = game_root / "forbidden-evidence"
+            inside_parent.mkdir()
+            inside_state = inside_parent.stat()
+            inside_report = inside_parent / "report.json"
+            inside = subprocess.run(
+                [
+                    sys.executable,
+                    "-I",
+                    str(script),
+                    "--report",
+                    str(inside_report),
+                    "--report-parent-device",
+                    str(inside_state.st_dev),
+                    "--report-parent-inode",
+                    str(inside_state.st_ino),
+                ],
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            self.assertEqual(1, inside.returncode)
+            self.assertIn("ERROR", inside.stderr)
+            self.assertFalse(inside_report.exists())
+
     def test_ready_envelope_has_exact_complete_launcher_inventory(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wf-ready-materialization-") as temporary:
             with _ready_materialization("abstract-puzzle", Path(temporary)) as bundle:
@@ -145,6 +295,33 @@ class StandaloneMaterializationTests(unittest.TestCase):
                     require_standalone_materialization_source(bundle.root).manifest,
                     manifest,
                 )
+
+    def test_native_smoke_launcher_hash_rotation_is_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-native-launcher-hash-") as temporary:
+            root = Path(temporary)
+            first_root = root / "first"
+            second_root = root / "second"
+            first_root.mkdir()
+            second_root.mkdir()
+            with (
+                _ready_materialization("abstract-puzzle", first_root) as first,
+                _ready_materialization("abstract-puzzle", second_root) as second,
+            ):
+                payload = STANDALONE_TEMPLATE_FILES["scripts/native_smoke.py"][0]
+                records = []
+                for bundle in (first, second):
+                    record = next(
+                        item
+                        for item in bundle.manifest["launchers"]["inventory"]
+                        if item["role"] == "native_smoke_launcher"
+                    )
+                    self.assertEqual("launchers/templates/scripts/native_smoke.py", record["path"])
+                    self.assertEqual(hashlib.sha256(payload).hexdigest(), record["sha256"])
+                    self.assertEqual(len(payload), record["size_bytes"])
+                    self.assertEqual(payload, bundle.read_bytes(record["path"]))
+                    records.append(record)
+                self.assertEqual(records[0], records[1])
+                self.assertEqual(first.manifest, second.manifest)
 
     def test_materializes_and_independently_verifies_both_verticals(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wf-standalone-e2e-") as temporary:

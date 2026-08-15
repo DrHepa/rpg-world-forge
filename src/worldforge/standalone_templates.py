@@ -293,6 +293,7 @@ NATIVE_SMOKE = _text(
     r"""
     from __future__ import annotations
 
+    import argparse
     import json
     import sys
     from pathlib import Path
@@ -303,18 +304,98 @@ NATIVE_SMOKE = _text(
     sys.path.insert(0, str(ROOT / "game_data/runtime-bundle/runtime/snapshot-tree"))
 
     from gamepack_raylib_2d.native_smoke import NativeSmokeError, native_smoke
+    from gamepack_runtime.persistence_io import PersistenceIOError, publish_bytes_noreplace
+
+
+    REPORT_LIMIT = 16 * 1024
+
+
+    def _arguments() -> argparse.Namespace:
+        parser = argparse.ArgumentParser(description="Run the packaged native smoke")
+        parser.add_argument("--report", type=Path)
+        parser.add_argument("--report-parent-device", type=int)
+        parser.add_argument("--report-parent-inode", type=int)
+        arguments = parser.parse_args()
+        report_arguments = (
+            arguments.report,
+            arguments.report_parent_device,
+            arguments.report_parent_inode,
+        )
+        if any(value is not None for value in report_arguments) and not all(
+            value is not None for value in report_arguments
+        ):
+            parser.error("report path and retained parent identity must be supplied together")
+        return arguments
+
+
+    def _external_report_target(
+        arguments: argparse.Namespace,
+    ) -> tuple[Path, tuple[int, int]] | None:
+        if arguments.report is None:
+            return None
+        report = arguments.report
+        if not report.is_absolute() or not report.name:
+            raise ValueError("native smoke report path must be absolute")
+        parent = report.parent.resolve(strict=True)
+        canonical = parent / report.name
+        if report != canonical:
+            raise ValueError("native smoke report path must be canonical")
+        try:
+            canonical.relative_to(ROOT)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("native smoke report must be outside the extracted game")
+        identity = (arguments.report_parent_device, arguments.report_parent_inode)
+        if any(type(value) is not int or value < 0 for value in identity):
+            raise ValueError("native smoke report parent identity is invalid")
+        return canonical, identity
+
+
+    def _canonical_report_bytes(report: object) -> bytes:
+        return (
+            json.dumps(
+                report,
+                allow_nan=False,
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8", errors="strict")
 
 
     def main() -> int:
         try:
+            target = _external_report_target(_arguments())
             report = native_smoke(
                 ROOT / "game_data/runtime-bundle",
                 max_frames=2,
                 hidden=True,
             )
-            print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+            if target is None:
+                print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+            else:
+                report_path, parent_identity = target
+                publish_bytes_noreplace(
+                    report_path.parent,
+                    report_path.name,
+                    _canonical_report_bytes(report),
+                    expected_parent_identity=parent_identity,
+                    limit=REPORT_LIMIT,
+                    mode=0o600,
+                )
             return 0
-        except (ImportError, NativeSmokeError, OSError, RuntimeError, ValueError) as exc:
+        except (
+            ImportError,
+            NativeSmokeError,
+            OSError,
+            PersistenceIOError,
+            RuntimeError,
+            TypeError,
+            UnicodeError,
+            ValueError,
+        ) as exc:
             print(f"ERROR {exc}", file=sys.stderr)
             return 1
 

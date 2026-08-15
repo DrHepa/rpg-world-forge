@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import ctypes
 import os
 import tempfile
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
+import worldforge.studio.workspaces as workspaces_module
 from worldforge.repository_boundary import FORGE_ROOT
+from worldforge.retained_tree import _WindowsTreeApi
 from worldforge.scaffold import create_world_project
 from worldforge.studio.errors import StudioError
 from worldforge.studio.jobs import JobManager
@@ -20,6 +24,183 @@ from worldforge.studio.workspaces import (
 
 
 class StudioWorkspacesAndJobsTests(unittest.TestCase):
+    def test_windows_workspace_walker_reuses_retained_tree_open_contract(self) -> None:
+        self.assertTrue(issubclass(workspaces_module._WindowsRelativeDirectoryApi, _WindowsTreeApi))
+        share_mode = getattr(
+            workspaces_module._WindowsRelativeDirectoryApi,
+            "_FILE_SHARE_MODE",
+            workspaces_module._WindowsRelativeDirectoryApi._FILE_SHARE_ALL,
+        )
+        self.assertEqual(0x00000001 | 0x00000002, share_mode)
+        self.assertFalse(share_mode & 0x00000004)  # FILE_SHARE_DELETE
+        self.assertEqual(
+            _WindowsTreeApi._FILE_OPEN_FOR_BACKUP_INTENT,
+            workspaces_module._WindowsRelativeDirectoryApi._FILE_OPEN_FOR_BACKUP_INTENT,
+        )
+
+    def test_windows_workspace_anchor_blocks_delete_for_runner_temp_ancestors(self) -> None:
+        api = object.__new__(workspaces_module._WindowsRelativeDirectoryApi)
+        api._invalid_handle = ctypes.c_void_p(-1).value
+        captured: list[tuple[str, int, int, int, int]] = []
+
+        def create_file(
+            path: str,
+            access: int,
+            share: int,
+            _security: object,
+            disposition: int,
+            flags: int,
+            _template: object,
+        ) -> int:
+            captured.append((path, access, share, disposition, flags))
+            return 91
+
+        api._create_file = create_file
+        api.state = lambda *_args, **_kwargs: SimpleNamespace()
+
+        anchor = Path("D:/")
+        self.assertEqual(91, api.open_anchor(anchor, context="candidate artifact root"))
+        self.assertEqual(1, len(captured))
+        path, _access, share, disposition, flags = captured[0]
+        self.assertEqual(str(anchor), path)
+        self.assertEqual(0x00000001 | 0x00000002, share)
+        self.assertFalse(share & 0x00000004)  # FILE_SHARE_DELETE
+        self.assertEqual(api._OPEN_EXISTING, disposition)
+        self.assertTrue(flags & api._FILE_FLAG_OPEN_REPARSE_POINT)
+        self.assertTrue(flags & api._FILE_FLAG_BACKUP_SEMANTICS)
+
+    def test_windows_workspace_walker_maps_ntstatus_without_exposing_the_root(self) -> None:
+        api = object.__new__(workspaces_module._WindowsRelativeDirectoryApi)
+        api._invalid_handle = ctypes.c_void_p(-1).value
+        denied = ctypes.c_int32(0xC0000043).value
+        mapped_statuses: list[int] = []
+        shares: list[int] = []
+
+        def denied_open(*args: object) -> int:
+            shares.append(int(args[6]))
+            return denied
+
+        api._nt_create_file = denied_open
+
+        def map_status(status: ctypes.c_long) -> int:
+            mapped_statuses.append(int(status.value))
+            return 32
+
+        api._rtl_nt_status_to_dos_error = map_status
+        with (
+            patch.object(
+                ctypes,
+                "WinError",
+                return_value=OSError(13, "sharing violation"),
+                create=True,
+            ),
+            self.assertRaisesRegex(
+                OSError,
+                "could not retain Windows tree entry candidate",
+            ) as caught,
+        ):
+            api.open_relative(
+                17,
+                "candidate",
+                context="candidate artifact root D:\\a\\_temp",
+                directory=True,
+            )
+
+        self.assertEqual([denied], mapped_statuses)
+        self.assertEqual([0x00000001 | 0x00000002], shares)
+        self.assertNotIn("D:\\a\\_temp", str(caught.exception))
+
+    def test_windows_workspace_ancestry_rejects_visible_parent_substitution(self) -> None:
+        candidate_path = Path.cwd() / "runner" / "_temp" / "candidate"
+        original = ((7, 1), (7, 2), (7, 3))
+        substituted = ((7, 1), (7, 20), (7, 30))
+        walks = iter(
+            (
+                ([11, 12, 13], original),
+                ([21, 22, 23], substituted),
+            )
+        )
+        api = SimpleNamespace()
+
+        with (
+            patch.object(workspaces_module.os, "name", "nt"),
+            patch.object(
+                workspaces_module,
+                "_WindowsRelativeDirectoryApi",
+                return_value=api,
+            ),
+            patch.object(
+                workspaces_module,
+                "_open_windows_ancestry",
+                side_effect=lambda *_args, **_kwargs: next(walks),
+            ) as open_ancestry,
+            patch.object(workspaces_module, "_close_windows_handles") as close_handles,
+            self.assertRaisesRegex(StudioError, "identity changed"),
+        ):
+            with _pinned_ancestor_identities(
+                candidate_path,
+                context="candidate artifact root",
+            ) as identities:
+                self.assertEqual(original, identities)
+
+        self.assertEqual(2, open_ancestry.call_count)
+        self.assertEqual(
+            [([21, 22, 23],), ([11, 12, 13],)],
+            [call.args[1:] for call in close_handles.call_args_list],
+        )
+
+    def test_windows_workspace_ancestry_blocks_aba_swap_use_restore(self) -> None:
+        left = Path.cwd() / "runner" / "_temp" / "world"
+        right = left / "child"
+        original_left = ((1, 1), (7, 10), (7, 20))
+        replacement_right = ((1, 1), (7, 99), (7, 100), (7, 101))
+        api = object.__new__(workspaces_module._WindowsRelativeDirectoryApi)
+        events: list[str] = []
+        walk_index = 0
+
+        def walk(
+            active_api: object,
+            _path: Path,
+            *,
+            context: str,
+        ) -> tuple[list[int], tuple[tuple[int, int], ...]]:
+            nonlocal walk_index
+            self.assertIs(api, active_api)
+            current = walk_index
+            walk_index += 1
+            if current == 0:
+                events.append("original_pinned")
+                return [11, 12, 13], original_left
+            if current == 1:
+                events.append("swap_attempted")
+                share_mode = getattr(active_api, "_FILE_SHARE_MODE", active_api._FILE_SHARE_ALL)
+                if not share_mode & 0x00000004:  # FILE_SHARE_DELETE
+                    raise PermissionError("retained ancestor blocks the rename")
+                events.append("replacement_used")
+                return [21, 22, 23, 24], replacement_right
+            if current == 2:
+                events.append("replacement_verified")
+                return [31, 32, 33, 34], replacement_right
+            if current == 3:
+                events.append("original_restored")
+                return [41, 42, 43], original_left
+            self.fail(f"unexpected Windows ancestry walk for {context}")
+
+        with (
+            patch.object(workspaces_module.os, "name", "nt"),
+            patch.object(
+                workspaces_module,
+                "_WindowsRelativeDirectoryApi",
+                return_value=api,
+            ),
+            patch.object(workspaces_module, "_open_windows_ancestry", side_effect=walk),
+            patch.object(workspaces_module, "_close_windows_handles"),
+            self.assertRaisesRegex(StudioError, "Could not inspect workspace boundary"),
+        ):
+            _overlaps(left, right)
+
+        self.assertEqual(["original_pinned", "swap_attempted"], events)
+
     def test_overlap_uses_directory_identity_across_path_aliases(self) -> None:
         short_data = Path("short-alias/world/.studio-data")
         long_world = Path("long-alias/world")

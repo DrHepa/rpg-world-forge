@@ -19,6 +19,7 @@ from pathlib import Path
 from unittest import mock
 
 import worldforge.asset_formats.gltf as generic_gltf
+import worldforge.generic_asset_production as production_module
 from scripts.generate_generic_asset_fixtures import _narrative_ttf
 from scripts.generate_generic_asset_production_schemas import (
     build_schemas as build_production_schemas,
@@ -1039,6 +1040,49 @@ class GenericAssetProductionTests(unittest.TestCase):
                     expected_sha256=hashlib.sha256(payload).hexdigest(),
                     expected_size_bytes=len(payload),
                 )
+
+    @unittest.skipUnless(os.name == "posix", "POSIX retained-ancestry replacement regression")
+    def test_candidate_snapshot_rejects_root_replacement_after_the_retained_read(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="world-forge-candidate-swap-") as temporary:
+            parent = Path(temporary)
+            root = parent / "candidate-root"
+            retained = parent / "candidate-root-retained"
+            artifact = root / "processed" / "texture.png"
+            artifact.parent.mkdir(parents=True)
+            payload = b"retained candidate bytes"
+            artifact.write_bytes(payload)
+            original_snapshot = production_module._safe_entry_snapshot
+
+            def replace_root_after_snapshot(*args: object, **kwargs: object):
+                snapshot = original_snapshot(*args, **kwargs)
+                root.rename(retained)
+                (root / "processed").mkdir(parents=True)
+                (root / "processed" / "texture.png").write_bytes(b"foreign replacement")
+                return snapshot
+
+            with (
+                mock.patch.object(
+                    production_module,
+                    "_safe_entry_snapshot",
+                    side_effect=replace_root_after_snapshot,
+                ),
+                self.assertRaisesRegex(
+                    GenericAssetProductionError,
+                    "production_artifact_read_failed",
+                ),
+            ):
+                read_verified_artifact_bytes(
+                    root,
+                    "processed/texture.png",
+                    expected_sha256=hashlib.sha256(payload).hexdigest(),
+                    expected_size_bytes=len(payload),
+                )
+
+            self.assertEqual(payload, (retained / "processed" / "texture.png").read_bytes())
+            self.assertEqual(
+                b"foreign replacement",
+                (root / "processed" / "texture.png").read_bytes(),
+            )
 
     def test_production_schemas_are_canonical_generator_outputs(self) -> None:
         for name, schema in build_production_schemas().items():

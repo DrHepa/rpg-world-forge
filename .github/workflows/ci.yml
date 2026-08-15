@@ -10,8 +10,166 @@ permissions:
   contents: read
 
 jobs:
+  headless-suite-shards:
+    name: Headless suite (${{ matrix.os }}, Python ${{ matrix.python-version }}, ${{ matrix.shard }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 115
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2022
+        python-version: ["3.11", "3.12"]
+        shard:
+          - s00
+          - s01
+          - s02
+          - s03
+          - s04
+          - s05
+          - s06
+          - s07
+          - s08
+          - s09
+          - s10
+          - s11
+          - s12
+          - s13
+          - s14
+          - s15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-m5.lock
+      - name: Install exact headless toolchain and Forge
+        run: |
+          python -m pip install --requirement requirements-m5.lock
+          python -m pip install --no-build-isolation --no-deps -e .
+          python -m pip check
+      - name: Plan and run exact headless shard
+        shell: bash
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/world-forge-headless-suite-evidence
+          PYTHON_MINOR: ${{ matrix.python-version }}
+          SHARD_ID: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          python -c 'import os, pathlib; pathlib.Path(os.environ["EVIDENCE_DIR"]).mkdir(mode=0o700)'
+          : "${ImageOS:?missing hosted runner image OS}"
+          : "${ImageVersion:?missing hosted runner image version}"
+          runner_image="${ImageOS}.${ImageVersion}"
+          common=(
+            --source-root "${GITHUB_WORKSPACE}"
+            --manifest "${GITHUB_WORKSPACE}/.github/headless-suite-shards-v1.json"
+            --output-dir "${EVIDENCE_DIR}"
+            --github-sha "${GITHUB_SHA}"
+            --runner-os "${RUNNER_OS}"
+            --runner-image "${runner_image}"
+            --python-minor "${PYTHON_MINOR}"
+          )
+          python -m scripts.verify_headless_suite plan "${common[@]}"
+          python -m scripts.verify_headless_suite worker "${common[@]}" \
+            --plan "${EVIDENCE_DIR}/plan.json" \
+            --shard "${SHARD_ID}"
+      - name: Upload exact headless shard evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: headless-suite-${{ runner.os }}-py${{ matrix.python-version }}-${{ matrix.shard }}
+          path: |
+            ${{ runner.temp }}/world-forge-headless-suite-evidence/plan.json
+            ${{ runner.temp }}/world-forge-headless-suite-evidence/events.jsonl
+            ${{ runner.temp }}/world-forge-headless-suite-evidence/receipt.json
+          if-no-files-found: error
+          retention-days: 90
+
+  headless-suite-aggregate:
+    name: Hosted headless suite aggregate
+    needs: headless-suite-shards
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONUTF8: "1"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-m5.lock
+      - name: Install exact aggregate toolchain and Forge
+        run: |
+          python -m pip install --requirement requirements-m5.lock
+          python -m pip install --no-build-isolation --no-deps -e .
+          python -m pip check
+      - name: Prepare exact aggregate roots
+        shell: bash
+        env:
+          ARTIFACTS_DIR: ${{ runner.temp }}/world-forge-headless-suite-artifacts
+          EVIDENCE_DIR: ${{ runner.temp }}/world-forge-headless-suite-aggregate
+        run: |
+          set -euo pipefail
+          python -c 'import os, pathlib; pathlib.Path(os.environ["ARTIFACTS_DIR"]).mkdir(mode=0o700); pathlib.Path(os.environ["EVIDENCE_DIR"]).mkdir(mode=0o700)'
+      - name: Download exact headless shard artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: headless-suite-*-py*-s*
+          path: ${{ runner.temp }}/world-forge-headless-suite-artifacts
+          merge-multiple: false
+      - name: Validate exact hosted headless suite
+        id: headless-aggregate-validation
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.verify_headless_suite aggregate \
+            --source-root "${GITHUB_WORKSPACE}" \
+            --artifacts-root "${RUNNER_TEMP}/world-forge-headless-suite-artifacts" \
+            --output-dir "${RUNNER_TEMP}/world-forge-headless-suite-aggregate"
+      - name: Upload non-authoritative headless aggregate attempt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: headless-suite-aggregate-attempt
+          path: ${{ runner.temp }}/world-forge-headless-suite-aggregate/aggregate-attempt.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload authoritative passing headless aggregate
+        if: success() && steps.headless-aggregate-validation.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: headless-suite-aggregate
+          path: ${{ runner.temp }}/world-forge-headless-suite-aggregate/aggregate.json
+          if-no-files-found: error
+          retention-days: 90
+
   release-readiness:
     name: Release readiness (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    needs: headless-suite-aggregate
+    if: always()
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -55,8 +213,6 @@ jobs:
       - name: Run native Windows world-project migration gate
         if: runner.os == 'Windows'
         run: python tests/windows_native_world_project_migration.py
-      - name: Run complete headless test suite
-        run: python -m unittest discover -s tests -v
       - name: Validate foundation release profile
         run: python -m worldforge validate examples/foundation/source/manifest.json --profile release
       - name: Analyze neutral narrative fixture
@@ -73,6 +229,16 @@ jobs:
           tests.test_m4_game_scaffold.GameSkillLayoutTests -v
       - name: Verify neutral standalone and reproducible releases
         run: python -m scripts.verify_m5_release
+      - name: Enforce complete hosted headless suite
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          aggregate_result="${{ needs.headless-suite-aggregate.result }}"
+          if [ "${aggregate_result}" != "success" ]; then
+            echo "hosted headless aggregate must succeed; got ${aggregate_result}" >&2
+            exit 1
+          fi
 
   studio-m6-readiness:
     name: Studio and M6 portability (${{ matrix.os }}, Python ${{ matrix.python-version }})
@@ -333,9 +499,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends xvfb xauth
       - name: Verify exact generic release lineage with native raylib
+        id: native_release_verify
         shell: bash
         run: |
-          report="${RUNNER_TEMP}/world-forge-${RUNNER_OS}-py${{ matrix.python-version }}.json"
           work="${RUNNER_TEMP}/world-forge-multigenre-work"
           runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
           command=(
@@ -343,21 +509,38 @@ jobs:
             --native required
             --runtime-wheel "${runtime_wheel}"
             --work-root "${work}"
-            --report "${report}"
           )
           if [ "${RUNNER_OS}" = "Linux" ]; then
             xvfb-run -a "${command[@]}"
           else
             "${command[@]}"
           fi
-          python -c 'import json, pathlib, sys; report=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")); expected_cases=["abstract-puzzle", "branching-narrative"]; assert report["status"] == "passed"; assert [case["case_id"] for case in report["cases"]] == expected_cases; assert all(case["native_evidence"]["state"] == "passed" for case in report["cases"])' "${report}"
       - name: Upload exact matrix evidence
+        if: always() && steps.native_release_verify.outcome == 'success' && steps.native_release_verify.outputs.release_row_published == 'true' && steps.native_release_verify.outputs.release_row_path != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: multigenre-release-${{ runner.os }}-py${{ matrix.python-version }}
-          path: ${{ runner.temp }}/world-forge-${{ runner.os }}-py${{ matrix.python-version }}.json
+          path: ${{ steps.native_release_verify.outputs.release_row_path }}
           if-no-files-found: error
           retention-days: 90
+      - name: Upload native smoke diagnostics
+        if: always() && steps.native_release_verify.outcome == 'success' && steps.native_release_verify.outputs.native_smoke_evidence_published == 'true' && steps.native_release_verify.outputs.native_smoke_evidence_path != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: multigenre-native-diagnostics-${{ runner.os }}-py${{ matrix.python-version }}
+          path: ${{ steps.native_release_verify.outputs.native_smoke_evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
+      - name: Enforce exact native release result
+        if: always()
+        shell: bash
+        run: |
+          if [ "${{ steps.native_release_verify.outcome }}" != "success" ] || [ "${{ steps.native_release_verify.outputs.release_row_published }}" != "true" ]; then
+            echo "trusted native release row was not published" >&2
+            exit 1
+          fi
+          report="${{ steps.native_release_verify.outputs.release_row_path }}"
+          python -c 'import json, pathlib, sys; report=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")); assert report["status"] == "passed"; assert all(case["native_evidence"]["state"] == "passed" for case in report["cases"])' "${report}"
 
   multigenre-native-release-aggregate:
     name: Aggregate multi-genre native release evidence

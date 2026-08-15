@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import errno
 import hashlib
 import os
@@ -663,6 +664,93 @@ class AssetIOTests(unittest.TestCase):
             self.assertRaisesRegex(AssetContractError, "safe regular file"),
         ):
             api._state(7, directory=False, context="temporary output")
+
+    def test_windows_rename_ex_uses_same_directory_root_and_conservative_buffer(self) -> None:
+        api = object.__new__(asset_io_module._WindowsPublicationApi)
+
+        for destination_name in ("project.json", "projet-é.json"):
+            with self.subTest(destination_name=destination_name):
+                captured: list[tuple[int, int, bytes, int]] = []
+
+                def set_information(
+                    handle: ctypes.c_void_p,
+                    information_class: int,
+                    buffer: ctypes.Array[ctypes.c_char],
+                    buffer_size: int,
+                    captured: list[tuple[int, int, bytes, int]] = captured,
+                ) -> int:
+                    captured.append(
+                        (
+                            int(handle.value or 0),
+                            information_class,
+                            ctypes.string_at(buffer, buffer_size),
+                            buffer_size,
+                        )
+                    )
+                    return 1
+
+                api.set_information = set_information
+                api.rename_ex(41, 73, destination_name)
+
+                encoded = destination_name.encode("utf-16-le")
+                expected_size = ctypes.sizeof(
+                    asset_io_module._WindowsFileRenameInformationEx
+                ) + len(encoded)
+                self.assertEqual(1, len(captured))
+                handle, information_class, raw, buffer_size = captured[0]
+                self.assertEqual(41, handle)
+                self.assertEqual(api._FILE_RENAME_INFORMATION_EX, information_class)
+                self.assertEqual(expected_size, buffer_size)
+                information = asset_io_module._WindowsFileRenameInformationEx.from_buffer_copy(raw)
+                self.assertEqual(0x3, information.flags)
+                self.assertIsNone(information.root_directory)
+                self.assertEqual(len(encoded), information.filename_length)
+                offset = asset_io_module._WindowsFileRenameInformationEx.filename.offset
+                self.assertEqual(encoded, raw[offset : offset + len(encoded)])
+
+    def test_windows_rename_ex_rejects_non_simple_destination_names(self) -> None:
+        api = object.__new__(asset_io_module._WindowsPublicationApi)
+        api.set_information = lambda *_args: self.fail(
+            "unsafe destination reached FileRenameInfoEx"
+        )
+
+        for destination_name in ("", ".", "..", "nested/project.json", "nested\\project.json"):
+            with (
+                self.subTest(destination_name=destination_name),
+                self.assertRaisesRegex(AssetContractError, "target name is invalid"),
+            ):
+                api.rename_ex(41, 73, destination_name)
+
+    def test_windows_directory_creation_can_pin_names_without_requesting_delete(self) -> None:
+        api = object.__new__(asset_io_module._WindowsPublicationApi)
+        captured: list[dict[str, int]] = []
+
+        def open_relative(
+            _parent: int,
+            _name: str,
+            **arguments: int | str,
+        ) -> int:
+            captured.append(
+                {key: value for key, value in arguments.items() if isinstance(value, int)}
+            )
+            return 91
+
+        api._open_relative = open_relative
+        api._state = lambda *_args, **_kwargs: SimpleNamespace()
+
+        self.assertEqual(
+            91,
+            api.create_directory(73, "trusted-evidence", request_delete=False),
+        )
+        self.assertEqual(1, len(captured))
+        self.assertEqual(0, captured[0]["access"] & api._DELETE)
+        self.assertEqual(0, captured[0]["share"] & api._SHARE_DELETE)
+        self.assertEqual(api._FILE_CREATE, captured[0]["disposition"])
+
+        captured.clear()
+        self.assertEqual(91, api.create_directory(73, "temporary-stage"))
+        self.assertEqual(api._DELETE, captured[0]["access"] & api._DELETE)
+        self.assertEqual(0, captured[0]["share"] & api._SHARE_DELETE)
 
     def test_windows_failed_temporary_cleanup_targets_only_the_retained_handle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -4,6 +4,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rename,
   rm,
   symlink,
@@ -372,6 +373,25 @@ describe("sealed generic assetpack validation", () => {
       status: "sealed",
     });
     expect(Object.isFrozen(verified)).toBe(true);
+  });
+
+  it("rejects an aliased root while accepting the same canonical assetpack", async () => {
+    const fixture = await buildPuzzlePack();
+    const canonicalRoot = path.join(temporaryRoot, "canonical-root-pack");
+    const aliasRoot = path.join(temporaryRoot, "aliased-root-pack");
+    await writePack(canonicalRoot, fixture.document, fixture.files);
+    await symlink(
+      canonicalRoot,
+      aliasRoot,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+
+    await expect(verifyGenericAssetpackDirectory(aliasRoot)).resolves.toBeNull();
+    const canonical = await realpath(aliasRoot);
+    await expect(verifyGenericAssetpackDirectory(canonical)).resolves.toMatchObject({
+      root: canonical,
+      status: "sealed",
+    });
   });
 
   it("binds processed media to constraints and rejects a resealed bad PNG CRC", async () => {

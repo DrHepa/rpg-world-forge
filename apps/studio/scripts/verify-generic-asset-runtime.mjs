@@ -2,6 +2,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -60,6 +61,19 @@ const FIXTURE_PATHS = Object.freeze([
 
 export const GENERIC_ASSET_RUNTIME_ENTRY =
   "dist-electron/main/generic-asset-runtime.cjs";
+
+/**
+ * @param {string} [parent]
+ * @returns {Promise<string>}
+ */
+export async function createCanonicalAssetpackSmokeRoot(
+  parent = os.tmpdir(),
+) {
+  const root = await mkdtemp(
+    path.join(parent, "world-forge-generic-assetpack-runtime-"),
+  );
+  return realpath(root);
+}
 
 function fail(code) {
   throw new Error(`generic_asset_runtime_smoke:${code}`);
@@ -352,9 +366,7 @@ export async function writeAssetpack(root, fixture) {
 }
 
 async function smokeAssetpacks(runtimeSurface) {
-  const temporaryRoot = await mkdtemp(
-    path.join(os.tmpdir(), "world-forge-generic-assetpack-runtime-"),
-  );
+  const temporaryRoot = await createCanonicalAssetpackSmokeRoot();
   let verified = 0;
   let tamperRejected = 0;
   try {

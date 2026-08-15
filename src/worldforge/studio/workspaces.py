@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ctypes
 import os
 import sqlite3
 import stat
@@ -13,15 +12,16 @@ from typing import Any
 
 from isoworld.content.file_stat import (
     FileStat,
-    _windows_handle_stat,
     descriptor_file_stat,
     path_file_stat,
 )
+from worldforge.file_stat import windows_handle_file_stat
 from worldforge.repository_boundary import (
     repository_kind,
     require_standalone_bundle_root,
     require_standalone_game_root,
 )
+from worldforge.retained_tree import _WindowsTreeApi
 from worldforge.studio.contracts import WORKSPACE_ID_PATTERN, validate_forge_workspace
 from worldforge.studio.errors import (
     StudioContractError,
@@ -85,91 +85,13 @@ def _resolved_root(value: object, *, context: str, required: bool) -> Path | Non
     return resolved
 
 
-class _WindowsRelativeDirectoryApi:
-    _FILE_LIST_DIRECTORY = 0x0001
-    _FILE_READ_ATTRIBUTES = 0x0080
-    _SYNCHRONIZE = 0x00100000
-    _GENERIC_READ = 0x80000000
-    _FILE_SHARE_READ = 0x00000001
-    _FILE_SHARE_WRITE = 0x00000002
-    _FILE_OPEN = 0x00000001
-    _FILE_DIRECTORY_FILE = 0x00000001
-    _FILE_SYNCHRONOUS_IO_NONALERT = 0x00000020
-    _FILE_NON_DIRECTORY_FILE = 0x00000040
-    _FILE_OPEN_REPARSE_POINT = 0x00200000
-    _FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
-    _FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
-    _OPEN_EXISTING = 3
-    _OBJ_CASE_INSENSITIVE = 0x00000040
-
-    def __init__(self) -> None:
-        try:
-            from ctypes import wintypes
-
-            self.wintypes = wintypes
-            self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-            self.ntdll = ctypes.WinDLL("ntdll")
-        except (AttributeError, ImportError, OSError) as exc:
-            raise OSError("Windows relative directory API is unavailable") from exc
-
-        class UnicodeString(ctypes.Structure):
-            _fields_ = [
-                ("Length", wintypes.USHORT),
-                ("MaximumLength", wintypes.USHORT),
-                ("Buffer", wintypes.LPWSTR),
-            ]
-
-        class ObjectAttributes(ctypes.Structure):
-            _fields_ = [
-                ("Length", wintypes.ULONG),
-                ("RootDirectory", wintypes.HANDLE),
-                ("ObjectName", ctypes.POINTER(UnicodeString)),
-                ("Attributes", wintypes.ULONG),
-                ("SecurityDescriptor", wintypes.LPVOID),
-                ("SecurityQualityOfService", wintypes.LPVOID),
-            ]
-
-        class IoStatusBlock(ctypes.Structure):
-            _fields_ = [
-                ("Status", ctypes.c_void_p),
-                ("Information", ctypes.c_size_t),
-            ]
-
-        self.UnicodeString = UnicodeString
-        self.ObjectAttributes = ObjectAttributes
-        self.IoStatusBlock = IoStatusBlock
-        self.create_file = self.kernel32.CreateFileW
-        self.create_file.argtypes = [
-            wintypes.LPCWSTR,
-            wintypes.DWORD,
-            wintypes.DWORD,
-            wintypes.LPVOID,
-            wintypes.DWORD,
-            wintypes.DWORD,
-            wintypes.HANDLE,
-        ]
-        self.create_file.restype = wintypes.HANDLE
-        self.close_handle = self.kernel32.CloseHandle
-        self.close_handle.argtypes = [wintypes.HANDLE]
-        self.close_handle.restype = wintypes.BOOL
-        self.nt_create_file = self.ntdll.NtCreateFile
-        self.nt_create_file.argtypes = [
-            ctypes.POINTER(wintypes.HANDLE),
-            wintypes.ULONG,
-            ctypes.POINTER(ObjectAttributes),
-            ctypes.POINTER(IoStatusBlock),
-            wintypes.LPVOID,
-            wintypes.ULONG,
-            wintypes.ULONG,
-            wintypes.ULONG,
-            wintypes.ULONG,
-            wintypes.LPVOID,
-            wintypes.ULONG,
-        ]
-        self.nt_create_file.restype = wintypes.LONG
+class _WindowsRelativeDirectoryApi(_WindowsTreeApi):
+    # Overlap checks later use path names, so every retained ancestry handle
+    # must block delete/rename sharing to prevent swap-use-restore substitution.
+    _FILE_SHARE_MODE = _WindowsTreeApi._FILE_SHARE_READ | _WindowsTreeApi._FILE_SHARE_WRITE
 
     def state(self, handle: int, *, context: str, directory: bool) -> FileStat:
-        info = _windows_handle_stat(handle)
+        info = windows_handle_file_stat(handle)
         is_link = stat.S_ISLNK(info.st_mode) or bool(
             getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
         )
@@ -180,19 +102,7 @@ class _WindowsRelativeDirectoryApi:
         return info
 
     def open_anchor(self, anchor: Path, *, context: str) -> int:
-        handle = self.create_file(
-            str(anchor),
-            self._FILE_LIST_DIRECTORY | self._FILE_READ_ATTRIBUTES | self._SYNCHRONIZE,
-            self._FILE_SHARE_READ | self._FILE_SHARE_WRITE,
-            None,
-            self._OPEN_EXISTING,
-            self._FILE_FLAG_BACKUP_SEMANTICS | self._FILE_FLAG_OPEN_REPARSE_POINT,
-            None,
-        )
-        value = ctypes.cast(handle, ctypes.c_void_p).value
-        if value in {None, ctypes.c_void_p(-1).value}:
-            raise ctypes.WinError(ctypes.get_last_error())
-        result = int(value)
+        result = self.open_path_directory(anchor)
         try:
             self.state(result, context=context, directory=True)
         except BaseException:
@@ -208,65 +118,13 @@ class _WindowsRelativeDirectoryApi:
         context: str,
         directory: bool,
     ) -> int:
-        if not name or name in {".", ".."} or "/" in name or "\\" in name or "\x00" in name:
-            raise OSError("relative entry name is invalid")
-        try:
-            encoded = name.encode("utf-16-le", errors="strict")
-        except UnicodeError as exc:
-            raise OSError("relative entry name is invalid") from exc
-        if len(encoded) > 65_532:
-            raise OSError("relative entry name is too long")
-        buffer = ctypes.create_unicode_buffer(name)
-        unicode_name = self.UnicodeString(
-            len(encoded),
-            len(encoded) + 2,
-            ctypes.cast(buffer, self.wintypes.LPWSTR),
-        )
-        attributes = self.ObjectAttributes(
-            ctypes.sizeof(self.ObjectAttributes),
-            self.wintypes.HANDLE(parent),
-            ctypes.pointer(unicode_name),
-            self._OBJ_CASE_INSENSITIVE,
-            None,
-            None,
-        )
-        io_status = self.IoStatusBlock()
-        output = self.wintypes.HANDLE()
-        status_code = int(
-            self.nt_create_file(
-                ctypes.byref(output),
-                (self._FILE_LIST_DIRECTORY if directory else self._GENERIC_READ)
-                | self._FILE_READ_ATTRIBUTES
-                | self._SYNCHRONIZE,
-                ctypes.byref(attributes),
-                ctypes.byref(io_status),
-                None,
-                0,
-                self._FILE_SHARE_READ | self._FILE_SHARE_WRITE,
-                self._FILE_OPEN,
-                (self._FILE_DIRECTORY_FILE if directory else self._FILE_NON_DIRECTORY_FILE)
-                | self._FILE_OPEN_REPARSE_POINT
-                | self._FILE_SYNCHRONOUS_IO_NONALERT,
-                None,
-                0,
-            )
-        )
-        if status_code < 0:
-            raise OSError(f"Windows relative open failed: 0x{status_code & 0xFFFFFFFF:08x}")
-        value = ctypes.cast(output, ctypes.c_void_p).value
-        if value is None:
-            raise OSError("Windows relative open returned no handle")
-        result = int(value)
+        result = super().open_relative(parent, name, directory=directory)
         try:
             self.state(result, context=context, directory=directory)
         except BaseException:
             self.close(result)
             raise
         return result
-
-    def close(self, handle: int) -> None:
-        if handle and not self.close_handle(self.wintypes.HANDLE(handle)):
-            raise ctypes.WinError(ctypes.get_last_error())
 
 
 def _close_descriptors(descriptors: list[int]) -> None:

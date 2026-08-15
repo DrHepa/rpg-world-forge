@@ -777,17 +777,27 @@ class _WindowsPublicationApi:
             context=f"create temporary output {name}",
         )
 
-    def create_directory(self, parent: int, name: str) -> int:
-        result = self._open_relative(
-            parent,
-            name,
-            access=self._GENERIC_READ
+    def create_directory(
+        self,
+        parent: int,
+        name: str,
+        *,
+        request_delete: bool = True,
+    ) -> int:
+        access = (
+            self._GENERIC_READ
             | self._GENERIC_WRITE
-            | self._DELETE
             | self._FILE_LIST_DIRECTORY
             | self._FILE_TRAVERSE
             | self._FILE_READ_ATTRIBUTES
-            | self._SYNCHRONIZE,
+            | self._SYNCHRONIZE
+        )
+        if request_delete:
+            access |= self._DELETE
+        result = self._open_relative(
+            parent,
+            name,
+            access=access,
             disposition=self._FILE_CREATE,
             share=self._SHARE_READ | self._SHARE_WRITE,
             options=self._FILE_DIRECTORY_FILE,
@@ -1169,16 +1179,32 @@ class _WindowsPublicationApi:
         parent_handle: int,
         destination_name: str,
     ) -> None:
-        encoded = destination_name.encode("utf-16-le", errors="strict")
+        if (
+            type(destination_name) is not str
+            or not destination_name
+            or destination_name in {".", ".."}
+            or "/" in destination_name
+            or "\\" in destination_name
+            or "\x00" in destination_name
+        ):
+            raise AssetContractError("Windows migration target name is invalid")
+        try:
+            encoded = destination_name.encode("utf-16-le", errors="strict")
+        except UnicodeError as exc:
+            raise AssetContractError("Windows migration target name is invalid") from exc
+        if len(encoded) > 65_532:
+            raise AssetContractError("Windows migration target name is invalid")
         offset = _WindowsFileRenameInformationEx.filename.offset
         buffer = ctypes.create_string_buffer(
-            max(ctypes.sizeof(_WindowsFileRenameInformationEx), offset + len(encoded))
+            ctypes.sizeof(_WindowsFileRenameInformationEx) + len(encoded)
         )
         information = _WindowsFileRenameInformationEx.from_buffer(buffer)
         information.flags = (
             self._FILE_RENAME_FLAG_REPLACE_IF_EXISTS | self._FILE_RENAME_FLAG_POSIX_SEMANTICS
         )
-        information.root_directory = parent_handle
+        # The caller-retained parent proves authority; a simple same-directory
+        # FileRenameInfoEx target itself requires a null RootDirectory.
+        information.root_directory = None
         information.filename_length = len(encoded)
         ctypes.memmove(ctypes.addressof(buffer) + offset, encoded, len(encoded))
         if not self.set_information(

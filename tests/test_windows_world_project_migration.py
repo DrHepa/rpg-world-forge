@@ -42,6 +42,7 @@ class _FakeWindowsNativeApi:
         self.fail_close_names: set[str] = set()
         self.legacy_identity_reads = 0
         self.disposition_attempted = False
+        self.fail_rename_once = False
 
     def _open(self, name: str, *, write: bool = False) -> int:
         try:
@@ -188,6 +189,11 @@ class _FakeWindowsNativeApi:
         self.events.append("retain")
 
     def rename_ex(self, handle: int, _parent_handle: int, destination_name: str) -> None:
+        if self.fail_rename_once:
+            self.fail_rename_once = False
+            from worldforge.asset_io import AssetContractError
+
+            raise AssetContractError("injected FileRenameInfoEx failure")
         entry = self.handles[handle]
         source_name = next(
             name
@@ -1524,6 +1530,54 @@ class WindowsProjectMigrationPolicyTests(unittest.TestCase):
                 recovered.delete_durable_source_retention()
                 recovered.release_source_seal()
                 self.assertEqual({"project.json"}, set(native.entries))
+
+    def test_native_adapter_fails_closed_before_rename_and_retries_commit_forward(self) -> None:
+        from worldforge.windows_project_migration import (
+            WindowsMigrationPublishError,
+            WindowsProjectCommitApi,
+            commit_windows_project,
+        )
+
+        source = b'{"format_version":2}\n'
+        target = b'{"format_version":3}\n'
+        operation_id = "c" * 64
+        native = _FakeWindowsNativeApi(source)
+        lease = _FakeWindowsLease(native)
+
+        def adapter() -> WindowsProjectCommitApi:
+            return WindowsProjectCommitApi(
+                lease,
+                operation_id=operation_id,
+                source_identity=(7, 101),
+                source_sha256=__import__("hashlib").sha256(source).hexdigest(),
+                source_change_time_ns=1_000,
+                target_payload=target,
+            )
+
+        native.fail_rename_once = True
+        with self.assertRaisesRegex(WindowsMigrationPublishError, "publication failed"):
+            commit_windows_project(adapter())
+
+        retained_name = f".project.json.migration.{operation_id}.exchange"
+        staged_name = f".project.json.migration.{operation_id}.target"
+        self.assertEqual(source, native.entries["project.json"].payload)
+        self.assertEqual(source, native.entries[retained_name].payload)
+        self.assertEqual(target, native.entries[staged_name].payload)
+        self.assertTrue(
+            any(
+                event.startswith(f"open:{staged_name}:")
+                and "delete=True" in event
+                and "write=True" in event
+                for event in native.events
+            )
+        )
+
+        recovered = adapter()
+        commit_windows_project(recovered, retain_seal=True)
+        self.assertEqual(target, native.entries["project.json"].payload)
+        recovered.delete_durable_source_retention()
+        recovered.release_source_seal()
+        self.assertEqual({"project.json"}, set(native.entries))
 
     def test_unsupported_or_unsafe_source_fails_before_namespace_mutation(self) -> None:
         from worldforge.windows_project_migration import (

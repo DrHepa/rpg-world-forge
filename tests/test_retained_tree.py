@@ -1,17 +1,158 @@
 from __future__ import annotations
 
+import ctypes
 import inspect
 import os
 import stat
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from worldforge.contract_catalog import LEGACY_SHARE_DIRECTORY
 from worldforge.file_stat import WindowsFileStat
 
 
 class RetainedTreeTests(unittest.TestCase):
+    def test_bounded_snapshot_verifier_rejects_unexpected_inventory_before_file_reads(
+        self,
+    ) -> None:
+        from worldforge.retained_tree import (
+            RetainedTreeCapacityError,
+            capture_retained_tree,
+            verify_retained_tree_snapshot,
+        )
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "extracted"
+            root.mkdir()
+            (root / "expected.bin").write_bytes(b"expected")
+            expected = capture_retained_tree(root)
+            self.assertIsNone(verify_retained_tree_snapshot(root, expected))
+
+            (root / "rogue-large.bin").write_bytes(b"X" * (2 * 1024 * 1024))
+            events: list[tuple[str, str | None]] = []
+            with self.assertRaises(RetainedTreeCapacityError):
+                verify_retained_tree_snapshot(
+                    root,
+                    expected,
+                    verification_hook=lambda event, relative: events.append((event, relative)),
+                )
+            self.assertNotIn(("after_file_read", "rogue-large.bin"), events)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX bounded enumeration seam")
+    def test_bounded_snapshot_verifier_stops_name_enumeration_and_size_drift_before_read(
+        self,
+    ) -> None:
+        from worldforge import retained_tree
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "extracted"
+            root.mkdir()
+            expected_file = root / "expected.bin"
+            expected_file.write_bytes(b"expected")
+            expected = retained_tree.capture_retained_tree(root)
+
+            expected_file.write_bytes(b"X" * (2 * 1024 * 1024))
+            events: list[tuple[str, str | None]] = []
+            with self.assertRaisesRegex(retained_tree.RetainedTreeError, "size"):
+                retained_tree.verify_retained_tree_snapshot(
+                    root,
+                    expected,
+                    verification_hook=lambda event, relative: events.append((event, relative)),
+                )
+            self.assertNotIn(("after_file_read", "expected.bin"), events)
+
+            expected_file.write_bytes(b"expected")
+            for index in range(32):
+                (root / f"rogue-{index:02d}.bin").write_bytes(b"x")
+            with (
+                mock.patch.object(
+                    retained_tree.os,
+                    "listdir",
+                    side_effect=AssertionError("unbounded name allocation"),
+                ),
+                self.assertRaises(retained_tree.RetainedTreeCapacityError),
+            ):
+                retained_tree.verify_retained_tree_snapshot(root, expected)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX link and mutation seams")
+    def test_bounded_snapshot_verifier_rejects_links_directories_and_read_mutation(
+        self,
+    ) -> None:
+        from worldforge import retained_tree
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "extracted"
+            root.mkdir()
+            payload = root / "payload.bin"
+            payload.write_bytes(b"original")
+            expected = retained_tree.capture_retained_tree(root)
+
+            rogue_directory = root / "rogue-directory"
+            rogue_directory.mkdir()
+            with self.assertRaises(retained_tree.RetainedTreeCapacityError):
+                retained_tree.verify_retained_tree_snapshot(root, expected)
+            rogue_directory.rmdir()
+
+            rogue_link = root / "rogue-link"
+            rogue_link.symlink_to(payload)
+            with self.assertRaises(retained_tree.RetainedTreeError):
+                retained_tree.verify_retained_tree_snapshot(root, expected)
+            rogue_link.unlink()
+
+            def mutate_after_read(event: str, relative: str | None) -> None:
+                if event == "after_file_read" and relative == "payload.bin":
+                    payload.write_bytes(b"mutated!")
+
+            with self.assertRaisesRegex(retained_tree.RetainedTreeError, "changed"):
+                retained_tree.verify_retained_tree_snapshot(
+                    root,
+                    expected,
+                    verification_hook=mutate_after_read,
+                )
+
+    def test_windows_open_at_uses_delete_sharing_backup_intent_and_unsigned_status(self) -> None:
+        from worldforge.retained_tree import _WindowsTreeApi
+
+        api = object.__new__(_WindowsTreeApi)
+        api._invalid_handle = ctypes.c_void_p(-1).value
+        captured: list[tuple[int, int, int]] = []
+
+        def successful_open(
+            opened: object,
+            access: int,
+            _attributes: object,
+            _io_status: object,
+            _allocation: object,
+            _file_attributes: int,
+            share: int,
+            _disposition: int,
+            options: int,
+            _ea_buffer: object,
+            _ea_length: int,
+        ) -> int:
+            captured.append((access, share, options))
+            ctypes.cast(opened, ctypes.POINTER(ctypes.c_void_p)).contents.value = 91
+            return 0
+
+        api._nt_create_file = successful_open
+        handle, status = api._nt_open(17, "candidate", directory=True)
+
+        self.assertEqual((91, 0), (handle, status))
+        self.assertEqual(1, len(captured))
+        _access, share, options = captured[0]
+        self.assertEqual(api._FILE_SHARE_ALL, share)
+        self.assertTrue(share & 0x00000004)  # FILE_SHARE_DELETE
+        self.assertTrue(options & api._FILE_OPEN_REPARSE_POINT)
+        self.assertTrue(options & api._FILE_OPEN_FOR_BACKUP_INTENT)
+
+        denied = ctypes.c_int32(0xC0000043).value
+        api._nt_create_file = lambda *_args: denied
+        handle, status = api._nt_open(17, "candidate", directory=True)
+        self.assertIsNone(handle)
+        self.assertEqual(0xC0000043, status)
+
     def test_direct_file_census_accepts_exact_capacity_and_fails_on_one_more(self) -> None:
         from worldforge.retained_tree import (
             RetainedTreeCapacityError,

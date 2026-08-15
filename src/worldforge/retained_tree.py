@@ -183,6 +183,25 @@ def _read_descriptor(descriptor: int, relative: str) -> bytes:
         raise RetainedTreeError(f"could not read retained tree file {relative}: {exc}") from exc
 
 
+def _read_descriptor_bounded(descriptor: int, relative: str, maximum_bytes: int) -> bytes:
+    try:
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        payload = bytearray()
+        while len(payload) <= maximum_bytes:
+            chunk = os.read(
+                descriptor,
+                min(1024 * 1024, maximum_bytes + 1 - len(payload)),
+            )
+            if not chunk:
+                return bytes(payload)
+            payload.extend(chunk)
+        raise RetainedTreeError(f"retained tree file size exceeded its bound: {relative}")
+    except RetainedTreeError:
+        raise
+    except OSError as exc:
+        raise RetainedTreeError(f"could not read retained tree file {relative}: {exc}") from exc
+
+
 def _posix_open_flags(*, directory: bool) -> int:
     if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
         raise RetainedTreeError("safe retained POSIX tree primitives are unavailable")
@@ -199,9 +218,18 @@ def _posix_directory_entries(
     *,
     exclude_directory: DirectoryExclusion | None,
     portable_paths: dict[tuple[str, ...], str] | None,
+    maximum_entries: int | None = None,
 ) -> list[tuple[str, FileStat, str]]:
     try:
-        raw_names = os.listdir(directory.descriptor)
+        if maximum_entries is None:
+            raw_names = os.listdir(directory.descriptor)
+        else:
+            raw_names = []
+            with os.scandir(directory.descriptor) as iterator:
+                for entry in iterator:
+                    raw_names.append(entry.name)
+                    if len(raw_names) > maximum_entries:
+                        break
     except OSError as exc:
         raise RetainedTreeError(
             f"could not enumerate retained tree directory {directory.relative or '.'}: {exc}"
@@ -225,6 +253,8 @@ def _posix_directory_entries(
         if kind == "directory" and exclude_directory is not None and exclude_directory(relative):
             continue
         entries.append((name, info, kind))
+        if maximum_entries is not None and len(entries) > maximum_entries:
+            raise RetainedTreeCapacityError(maximum_entries)
     return entries
 
 
@@ -365,7 +395,12 @@ def _posix_file_census_once(
     maximum_entries: int,
 ) -> tuple[tuple[str, tuple[int, int, int, int, int, int, int, int]], ...]:
     try:
-        raw_names = os.listdir(descriptor)
+        raw_names: list[str] = []
+        with os.scandir(descriptor) as iterator:
+            for entry in iterator:
+                raw_names.append(entry.name)
+                if len(raw_names) > maximum_entries:
+                    break
     except OSError as exc:
         raise RetainedTreeError(f"could not enumerate retained directory: {exc}") from exc
     names = sorted(raw_names, key=os.fsencode)
@@ -373,7 +408,7 @@ def _posix_file_census_once(
         raise RetainedTreeError("retained directory returned duplicate names")
     portable_paths: dict[tuple[str, ...], str] = {}
     states: list[tuple[str, tuple[int, int, int, int, int, int, int, int]]] = []
-    for name in names[: maximum_entries + 1]:
+    for name in names:
         if type(name) is not str or not name or name in {".", ".."}:
             raise RetainedTreeError("retained directory returned an invalid name")
         _register_portable_path(name, portable_paths)
@@ -476,16 +511,78 @@ def _capture_posix_directory_file_census(
         _close_descriptors(descriptors)
 
 
+def _snapshot_expectation(
+    source: Path,
+    expected: RetainedTreeSnapshot,
+) -> tuple[dict[str, dict[str, str]], int, int, int]:
+    if not isinstance(expected, RetainedTreeSnapshot) or expected.root != source:
+        raise ValueError("expected snapshot must describe the exact retained tree root")
+    if (
+        type(expected.root_identity) is not tuple
+        or len(expected.root_identity) != 2
+        or any(type(value) is not int or value < 0 for value in expected.root_identity)
+    ):
+        raise ValueError("expected snapshot root identity is invalid")
+    directories = expected.directories
+    if (
+        type(directories) is not tuple
+        or not directories
+        or directories[0] != ""
+        or len(directories) != len(set(directories))
+        or tuple(sorted(directories)) != directories
+    ):
+        raise ValueError("expected snapshot directory inventory is invalid")
+    directory_set = set(directories)
+    children: dict[str, dict[str, str]] = {relative: {} for relative in directories}
+    portable_paths: dict[tuple[str, ...], str] = {}
+
+    def register(relative: str, kind: str) -> None:
+        _register_portable_path(relative, portable_paths)
+        parent, _, name = relative.rpartition("/")
+        if parent not in directory_set or name in children[parent]:
+            raise ValueError("expected snapshot topology is invalid")
+        children[parent][name] = kind
+
+    for relative in directories[1:]:
+        if type(relative) is not str or not relative:
+            raise ValueError("expected snapshot directory inventory is invalid")
+        register(relative, "directory")
+    total_bytes = 0
+    maximum_file_bytes = 0
+    if type(expected.files) is not dict:
+        raise ValueError("expected snapshot file inventory is invalid")
+    for relative, payload in expected.files.items():
+        if type(relative) is not str or not relative or type(payload) is not bytes:
+            raise ValueError("expected snapshot file inventory is invalid")
+        register(relative, "file")
+        size = len(payload)
+        total_bytes += size
+        maximum_file_bytes = max(maximum_file_bytes, size)
+    maximum_entries = len(directories) - 1 + len(expected.files)
+    return children, maximum_entries, maximum_file_bytes, total_bytes
+
+
 def _capture_posix(
     root: Path,
     *,
     exclude_directory: DirectoryExclusion | None,
     verification_hook: RetainedTreeHook | None,
+    expected: RetainedTreeSnapshot | None = None,
 ) -> RetainedTreeSnapshot:
     retained_directories: list[_RetainedDirectory] = []
     retained_files: list[_RetainedFile] = []
     descriptors: list[int] = []
     portable_paths: dict[tuple[str, ...], str] = {}
+    expected_children: dict[str, dict[str, str]] | None = None
+    maximum_entries = maximum_file_bytes = maximum_total_bytes = 0
+    observed_entries = observed_bytes = 0
+    if expected is not None:
+        (
+            expected_children,
+            maximum_entries,
+            maximum_file_bytes,
+            maximum_total_bytes,
+        ) = _snapshot_expectation(root, expected)
     try:
         parent_descriptor = os.open(root.parent, _posix_open_flags(directory=True))
         descriptors.append(parent_descriptor)
@@ -513,6 +610,7 @@ def _capture_posix(
             or file_identity(parent_info) != file_identity(lexical_parent)
             or file_identity(root_info) != file_identity(root_named)
             or file_identity(root_info) != file_identity(lexical_root)
+            or (expected is not None and file_identity(root_info) != expected.root_identity)
         ):
             raise RetainedTreeError("tree root must resolve to one retained real directory")
         retained_directories.append(
@@ -534,10 +632,24 @@ def _capture_posix(
                 directory,
                 exclude_directory=exclude_directory,
                 portable_paths=portable_paths,
+                maximum_entries=(
+                    len(expected_children[directory.relative])
+                    if expected_children is not None
+                    else None
+                ),
             )
+            if expected_children is not None:
+                actual_children = {name: kind for name, _info, kind in entries}
+                if actual_children != expected_children[directory.relative]:
+                    raise RetainedTreeError(
+                        f"retained tree inventory changed: {directory.relative or '.'}"
+                    )
             directory.names = tuple(name for name, _info, _kind in entries)
             for name, initial, kind in entries:
                 relative = f"{directory.relative}/{name}" if directory.relative else name
+                observed_entries += 1
+                if expected is not None and observed_entries > maximum_entries:
+                    raise RetainedTreeCapacityError(maximum_entries)
                 try:
                     child_descriptor = os.open(
                         name,
@@ -583,8 +695,27 @@ def _capture_posix(
                     or _entry_state(opened) != _entry_state(named)
                 ):
                     raise RetainedTreeError(f"tree file changed before retention: {relative}")
+                if expected is not None:
+                    expected_size = len(expected.files[relative])
+                    if opened.st_size != expected_size:
+                        raise RetainedTreeError(
+                            f"retained tree file size changed before read: {relative}"
+                        )
+                    if opened.st_size > maximum_file_bytes:
+                        raise RetainedTreeError(
+                            f"retained tree file size exceeded its bound: {relative}"
+                        )
+                    observed_bytes += opened.st_size
+                    if observed_bytes > maximum_total_bytes:
+                        raise RetainedTreeError(
+                            "retained tree aggregate bytes exceeded their bound"
+                        )
                 _invoke_hook(verification_hook, "after_file_retained", relative)
-                payload = _read_descriptor(child_descriptor, relative)
+                payload = (
+                    _read_descriptor_bounded(child_descriptor, relative, expected_size)
+                    if expected is not None
+                    else _read_descriptor(child_descriptor, relative)
+                )
                 retained = descriptor_file_stat(child_descriptor)
                 if (
                     not _file_valid(retained)
@@ -637,6 +768,11 @@ def _capture_posix(
                 directory,
                 exclude_directory=exclude_directory,
                 portable_paths=None,
+                maximum_entries=(
+                    len(expected_children[directory.relative])
+                    if expected_children is not None
+                    else None
+                ),
             )
             current_names = tuple(name for name, _info, _kind in current_entries)
             if (
@@ -680,7 +816,15 @@ def _capture_posix(
                 or not _file_valid(rebound_info)
                 or _entry_state(retained) != retained_file.state
                 or _entry_state(rebound_info) != retained_file.state
-                or _read_descriptor(retained_file.descriptor, retained_file.relative)
+                or (
+                    _read_descriptor_bounded(
+                        retained_file.descriptor,
+                        retained_file.relative,
+                        len(retained_file.payload),
+                    )
+                    if expected is not None
+                    else _read_descriptor(retained_file.descriptor, retained_file.relative)
+                )
                 != retained_file.payload
                 or _entry_state(descriptor_file_stat(retained_file.descriptor))
                 != retained_file.state
@@ -980,7 +1124,11 @@ class _WindowsTreeApi:
     _FILE_LIST_DIRECTORY = 0x00000001
     _FILE_READ_ATTRIBUTES = 0x00000080
     _SYNCHRONIZE = 0x00100000
-    _FILE_SHARE_ALL = 0x00000001 | 0x00000002 | 0x00000004
+    _FILE_SHARE_READ = 0x00000001
+    _FILE_SHARE_WRITE = 0x00000002
+    _FILE_SHARE_DELETE = 0x00000004
+    _FILE_SHARE_ALL = _FILE_SHARE_READ | _FILE_SHARE_WRITE | _FILE_SHARE_DELETE
+    _FILE_SHARE_MODE = _FILE_SHARE_ALL
     _OPEN_EXISTING = 3
     _FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
     _FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
@@ -1096,7 +1244,7 @@ class _WindowsTreeApi:
         handle = self._create_file(
             str(path),
             self._FILE_LIST_DIRECTORY | self._FILE_READ_ATTRIBUTES | self._SYNCHRONIZE,
-            self._FILE_SHARE_ALL,
+            self._FILE_SHARE_MODE,
             None,
             self._OPEN_EXISTING,
             self._FILE_FLAG_OPEN_REPARSE_POINT | self._FILE_FLAG_BACKUP_SEMANTICS,
@@ -1152,7 +1300,7 @@ class _WindowsTreeApi:
                 ctypes.byref(io_status),
                 None,
                 0,
-                self._FILE_SHARE_ALL,
+                self._FILE_SHARE_MODE,
                 self._FILE_OPEN,
                 options,
                 None,
@@ -1172,7 +1320,13 @@ class _WindowsTreeApi:
             raise self._nt_error(status, f"could not retain Windows tree entry {name}")
         return handle
 
-    def _query_names(self, directory_handle: int, relative: str) -> tuple[str, ...]:
+    def _query_names(
+        self,
+        directory_handle: int,
+        relative: str,
+        *,
+        maximum_entries: int | None = None,
+    ) -> tuple[str, ...]:
         names: list[str] = []
         first_query = True
         while True:
@@ -1239,6 +1393,8 @@ class _WindowsTreeApi:
                 if name not in {".", ".."}:
                     self._validate_component(name)
                     names.append(name)
+                    if maximum_entries is not None and len(names) > maximum_entries:
+                        return tuple(sorted(names, key=lambda item: item.encode("utf-8")))
                 if next_offset == 0:
                     break
                 offset += next_offset
@@ -1258,12 +1414,17 @@ class _WindowsTreeApi:
         exclude_directory: DirectoryExclusion | None,
         portable_paths: dict[tuple[str, ...], str] | None,
         strict_entries: bool = True,
+        maximum_entries: int | None = None,
     ) -> tuple[tuple[str, ...], list[tuple[str, int, str, FileStat]]]:
         names: list[str] = []
         entries: list[tuple[str, int, str, FileStat]] = []
         opened_handles: list[int] = []
         try:
-            for name in self._query_names(directory_handle, relative):
+            for name in self._query_names(
+                directory_handle,
+                relative,
+                maximum_entries=maximum_entries,
+            ):
                 child_relative = f"{relative}/{name}" if relative else name
                 if portable_paths is not None:
                     _register_portable_path(child_relative, portable_paths)
@@ -1312,6 +1473,8 @@ class _WindowsTreeApi:
                     continue
                 names.append(name)
                 entries.append((name, handle, kind, info))
+                if maximum_entries is not None and len(entries) > maximum_entries:
+                    raise RetainedTreeCapacityError(maximum_entries)
             return tuple(names), entries
         except BaseException:
             self.close_many(opened_handles)
@@ -1343,6 +1506,34 @@ class _WindowsTreeApi:
                 return b"".join(chunks)
             chunks.append(buffer.raw[:count])
 
+    def read_file_bounded(self, handle: int, relative: str, maximum_bytes: int) -> bytes:
+        position = ctypes.c_int64()
+        if not self._set_file_pointer(
+            ctypes.c_void_p(handle),
+            0,
+            ctypes.byref(position),
+            self._FILE_BEGIN,
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        payload = bytearray()
+        while len(payload) <= maximum_bytes:
+            requested = min(1024 * 1024, maximum_bytes + 1 - len(payload))
+            buffer = ctypes.create_string_buffer(requested)
+            read = ctypes.c_uint32()
+            if not self._read_file(
+                ctypes.c_void_p(handle),
+                buffer,
+                len(buffer),
+                ctypes.byref(read),
+                None,
+            ):
+                raise ctypes.WinError(ctypes.get_last_error())
+            count = int(read.value)
+            if count == 0:
+                return bytes(payload)
+            payload.extend(buffer.raw[:count])
+        raise RetainedTreeError(f"retained tree file size exceeded its bound: {relative}")
+
     def close(self, handle: int) -> None:
         if not self._close_handle(ctypes.c_void_p(handle)):
             raise ctypes.WinError(ctypes.get_last_error())
@@ -1369,6 +1560,7 @@ def _capture_windows(
     *,
     exclude_directory: DirectoryExclusion | None,
     verification_hook: RetainedTreeHook | None,
+    expected: RetainedTreeSnapshot | None = None,
 ) -> RetainedTreeSnapshot:
     try:
         api = _WindowsTreeApi()
@@ -1378,6 +1570,16 @@ def _capture_windows(
     retained_directories: list[_RetainedDirectory] = []
     retained_files: list[_RetainedFile] = []
     portable_paths: dict[tuple[str, ...], str] = {}
+    expected_children: dict[str, dict[str, str]] | None = None
+    maximum_entries = maximum_file_bytes = maximum_total_bytes = 0
+    observed_entries = observed_bytes = 0
+    if expected is not None:
+        (
+            expected_children,
+            maximum_entries,
+            maximum_file_bytes,
+            maximum_total_bytes,
+        ) = _snapshot_expectation(root, expected)
     try:
         parent_handle = api.open_path_directory(root.parent)
         handles.append(parent_handle)
@@ -1394,6 +1596,7 @@ def _capture_windows(
             or not _directory_valid(lexical_root)
             or file_identity(parent_info) != file_identity(lexical_parent)
             or file_identity(root_info) != file_identity(lexical_root)
+            or (expected is not None and file_identity(root_info) != expected.root_identity)
         ):
             raise RetainedTreeError("tree root must resolve to one retained real directory")
         retained_directories.append(
@@ -1416,11 +1619,25 @@ def _capture_windows(
                 directory.relative,
                 exclude_directory=exclude_directory,
                 portable_paths=portable_paths,
+                maximum_entries=(
+                    len(expected_children[directory.relative])
+                    if expected_children is not None
+                    else None
+                ),
             )
+            if expected_children is not None:
+                actual_children = {name: kind for name, _handle, kind, _info in entries}
+                if actual_children != expected_children[directory.relative]:
+                    raise RetainedTreeError(
+                        f"retained tree inventory changed: {directory.relative or '.'}"
+                    )
             directory.names = names
             handles.extend(handle for _name, handle, _kind, _info in entries)
             for name, child_handle, kind, opened in entries:
                 relative = f"{directory.relative}/{name}" if directory.relative else name
+                observed_entries += 1
+                if expected is not None and observed_entries > maximum_entries:
+                    raise RetainedTreeCapacityError(maximum_entries)
                 rebound = api.open_relative(
                     directory.descriptor,
                     name,
@@ -1456,8 +1673,27 @@ def _capture_windows(
                     or _entry_state(opened) != _entry_state(rebound_info)
                 ):
                     raise RetainedTreeError(f"tree file changed before retention: {relative}")
+                if expected is not None:
+                    expected_size = len(expected.files[relative])
+                    if opened.st_size != expected_size:
+                        raise RetainedTreeError(
+                            f"retained tree file size changed before read: {relative}"
+                        )
+                    if opened.st_size > maximum_file_bytes:
+                        raise RetainedTreeError(
+                            f"retained tree file size exceeded its bound: {relative}"
+                        )
+                    observed_bytes += opened.st_size
+                    if observed_bytes > maximum_total_bytes:
+                        raise RetainedTreeError(
+                            "retained tree aggregate bytes exceeded their bound"
+                        )
                 _invoke_hook(verification_hook, "after_file_retained", relative)
-                payload = api.read_file(child_handle, relative)
+                payload = (
+                    api.read_file_bounded(child_handle, relative, expected_size)
+                    if expected is not None
+                    else api.read_file(child_handle, relative)
+                )
                 retained = windows_handle_file_stat(child_handle)
                 if (
                     not _file_valid(retained)
@@ -1509,6 +1745,11 @@ def _capture_windows(
                 directory.relative,
                 exclude_directory=exclude_directory,
                 portable_paths=None,
+                maximum_entries=(
+                    len(expected_children[directory.relative])
+                    if expected_children is not None
+                    else None
+                ),
             )
             api.close_many([handle for _name, handle, _kind, _info in current_entries])
             if (
@@ -1552,7 +1793,15 @@ def _capture_windows(
                 or not _file_valid(rebound_info)
                 or _entry_state(retained) != retained_file.state
                 or _entry_state(rebound_info) != retained_file.state
-                or api.read_file(retained_file.descriptor, retained_file.relative)
+                or (
+                    api.read_file_bounded(
+                        retained_file.descriptor,
+                        retained_file.relative,
+                        len(retained_file.payload),
+                    )
+                    if expected is not None
+                    else api.read_file(retained_file.descriptor, retained_file.relative)
+                )
                 != retained_file.payload
                 or _entry_state(windows_handle_file_stat(retained_file.descriptor))
                 != retained_file.state
@@ -1634,10 +1883,14 @@ def _windows_file_census_once(
     *,
     maximum_entries: int,
 ) -> tuple[tuple[str, tuple[int, int, int, int, int, int, int, int]], ...]:
-    names = api._query_names(directory_handle, "retained directory census")
+    names = api._query_names(
+        directory_handle,
+        "retained directory census",
+        maximum_entries=maximum_entries,
+    )
     portable_paths: dict[tuple[str, ...], str] = {}
     states: list[tuple[str, tuple[int, int, int, int, int, int, int, int]]] = []
-    for name in names[: maximum_entries + 1]:
+    for name in names:
         _register_portable_path(name, portable_paths)
         handles: list[int] = []
         try:
@@ -2043,6 +2296,35 @@ def capture_retained_tree(
     )
 
 
+def verify_retained_tree_snapshot(
+    root: str | Path,
+    expected: RetainedTreeSnapshot,
+    *,
+    verification_hook: RetainedTreeHook | None = None,
+) -> None:
+    """Verify one exact snapshot without reading beyond its trusted inventory."""
+
+    source = Path(os.path.abspath(os.fspath(root)))
+    if not source.name:
+        raise RetainedTreeError("filesystem root cannot be used as a retained tree root")
+    if os.name == "nt":
+        actual = _capture_windows(
+            source,
+            exclude_directory=None,
+            verification_hook=verification_hook,
+            expected=expected,
+        )
+    else:
+        actual = _capture_posix(
+            source,
+            exclude_directory=None,
+            verification_hook=verification_hook,
+            expected=expected,
+        )
+    if actual != expected:
+        raise RetainedTreeError("retained tree snapshot changed")
+
+
 def capture_retained_directory_file_census(
     root: str | Path,
     *,
@@ -2123,4 +2405,5 @@ __all__ = [
     "capture_retained_directory_file_census",
     "capture_retained_named_child_trees",
     "capture_retained_tree",
+    "verify_retained_tree_snapshot",
 ]

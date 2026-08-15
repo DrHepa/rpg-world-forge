@@ -1,0 +1,373 @@
+{
+  "calibration": {
+    "commit": "e1b25320b2a9bd6718ca584e8f3ea48cdc16ed7f",
+    "discovered_module_count": 110,
+    "discovered_test_count": 2205,
+    "ordered_test_id_stream_sha256": "abfe9ba24ffd4f7743b5e77e6ac593a7b7b0e2385be59fcc88567c29a0fdaec8",
+    "ordered_test_id_stream_size_bytes": 254268,
+    "run_log_sha256": "d56a1cd5f2b6207f5850ce898ea761f2b8a1163fbec4adff1eedb7a6d557a30f",
+    "skipped_test_count": 19,
+    "source_tree": "ea512c9",
+    "wall_time_milliseconds": 14722056
+  },
+  "discovery": {
+    "pattern": "test_*.py",
+    "start_directory": "tests"
+  },
+  "format": "world-forge.headless_suite_shards",
+  "format_version": 1,
+  "modules": [
+    "test_adapter_executable_shape",
+    "test_architecture",
+    "test_authoring_only_multigenre_fixtures",
+    "test_bundle_publication",
+    "test_ci_headless_sharding",
+    "test_content_pipeline",
+    "test_contract_catalog",
+    "test_creation_content_mode_generator",
+    "test_creation_reconciliation_cli",
+    "test_creation_reconciliation_edge",
+    "test_creation_scaffold_kinds",
+    "test_game_boundary_policy",
+    "test_gamepack_raylib_2d",
+    "test_gamepack_runtime_kernel",
+    "test_generic_asset_authority",
+    "test_generic_creation_workflow",
+    "test_hosted_native_release_authority",
+    "test_identity_audit",
+    "test_m1_systems",
+    "test_m2_5_assets",
+    "test_m2_narrative",
+    "test_m3_living_world",
+    "test_m4_bundle",
+    "test_m4_cli",
+    "test_m4_content",
+    "test_m4_game_scaffold",
+    "test_m4_world_lifecycle",
+    "test_m5_asset_io",
+    "test_m5_assetpack_3d",
+    "test_m5_inventory",
+    "test_m5_neutral_fixture",
+    "test_m5_plan",
+    "test_m5_processing",
+    "test_m5_production",
+    "test_m5_release_builder",
+    "test_m5_release_readiness",
+    "test_m5_renderpack_release",
+    "test_m5_toolchain",
+    "test_m6_composed_bundle",
+    "test_m6_game_consumer",
+    "test_m6_pyray_2_5d",
+    "test_m6_pyray_3d",
+    "test_m6_release_readiness",
+    "test_m6_runtime_composition_contracts",
+    "test_m6_runtime_loading",
+    "test_map_import",
+    "test_multigenre_asset_processing",
+    "test_multigenre_asset_production",
+    "test_multigenre_assetpack",
+    "test_multigenre_assets",
+    "test_multigenre_contracts",
+    "test_multigenre_game_analysis",
+    "test_multigenre_game_package",
+    "test_multigenre_game_persistence",
+    "test_multigenre_game_runtime_bundle",
+    "test_multigenre_gamepack",
+    "test_multigenre_generic_headless",
+    "test_multigenre_guidance",
+    "test_multigenre_logic_module",
+    "test_multigenre_materialization_contracts",
+    "test_multigenre_materialization_publication",
+    "test_multigenre_phase_lorepack",
+    "test_multigenre_release_gate",
+    "test_multigenre_runtime_contracts",
+    "test_multigenre_runtime_review",
+    "test_multigenre_standalone_materialization",
+    "test_narrative_fixture_font",
+    "test_renderpack_resources",
+    "test_resource_snapshot_reader",
+    "test_retained_tree",
+    "test_runtime",
+    "test_runtime_io",
+    "test_runtime_support_authority",
+    "test_studio_asset_previews",
+    "test_studio_assets",
+    "test_studio_authoring",
+    "test_studio_changeset_review",
+    "test_studio_changesets",
+    "test_studio_changesets_v2",
+    "test_studio_contracts",
+    "test_studio_creation_asset_jobs_v4",
+    "test_studio_creation_asset_release_v11",
+    "test_studio_creation_asset_review_v10",
+    "test_studio_creation_asset_seal_v4",
+    "test_studio_creation_authoring_v3",
+    "test_studio_creation_evidence_v4",
+    "test_studio_creation_game_materialize_v4",
+    "test_studio_creation_game_package_extract_v4",
+    "test_studio_creation_game_package_v4",
+    "test_studio_creation_jobs_v4",
+    "test_studio_creation_materialization_bundle_v4",
+    "test_studio_creation_previews_v4",
+    "test_studio_creation_previews_v5",
+    "test_studio_creation_runtime_bundle_v4",
+    "test_studio_creation_runtime_compose_v4",
+    "test_studio_creation_runtime_headless_v12",
+    "test_studio_creation_service_v3",
+    "test_studio_creation_v3",
+    "test_studio_executor",
+    "test_studio_external_jobs",
+    "test_studio_mcp",
+    "test_studio_protocol_v5",
+    "test_studio_runtime_assembly",
+    "test_studio_runtime_inputs",
+    "test_studio_runtime_sources",
+    "test_studio_service",
+    "test_studio_shell_package_snapshot",
+    "test_studio_storage",
+    "test_studio_workspaces_jobs",
+    "test_windows_world_project_migration",
+    "test_world_project_migration"
+  ],
+  "shards": [
+    {
+      "calibration_state": "complete",
+      "id": "s00",
+      "modules": [
+        "test_multigenre_asset_processing"
+      ],
+      "test_count": 30,
+      "weight_seconds": 3454
+    },
+    {
+      "calibration_state": "partial",
+      "id": "s01",
+      "modules": [
+        "test_ci_headless_sharding",
+        "test_creation_reconciliation_edge",
+        "test_m2_5_assets",
+        "test_m5_neutral_fixture",
+        "test_m5_plan",
+        "test_m5_production",
+        "test_m5_release_readiness",
+        "test_multigenre_game_runtime_bundle",
+        "test_multigenre_logic_module",
+        "test_runtime",
+        "test_studio_contracts"
+      ],
+      "test_count": 128,
+      "weight_seconds": 3170
+    },
+    {
+      "calibration_state": "complete",
+      "id": "s02",
+      "modules": [
+        "test_gamepack_runtime_kernel",
+        "test_m4_bundle",
+        "test_m4_game_scaffold",
+        "test_m5_asset_io",
+        "test_m6_pyray_3d",
+        "test_m6_release_readiness",
+        "test_multigenre_assetpack",
+        "test_multigenre_guidance",
+        "test_multigenre_materialization_publication",
+        "test_multigenre_phase_lorepack",
+        "test_studio_asset_previews",
+        "test_studio_changesets",
+        "test_studio_changesets_v2"
+      ],
+      "test_count": 275,
+      "weight_seconds": 3170
+    },
+    {
+      "calibration_state": "complete",
+      "id": "s03",
+      "modules": [
+        "test_architecture",
+        "test_contract_catalog",
+        "test_identity_audit",
+        "test_m2_narrative",
+        "test_m3_living_world",
+        "test_m4_cli",
+        "test_m5_processing",
+        "test_m5_release_builder",
+        "test_m6_composed_bundle",
+        "test_m6_game_consumer",
+        "test_m6_runtime_loading",
+        "test_multigenre_game_analysis",
+        "test_multigenre_materialization_contracts",
+        "test_renderpack_resources",
+        "test_runtime_io"
+      ],
+      "test_count": 446,
+      "weight_seconds": 3170
+    },
+    {
+      "calibration_state": "complete",
+      "id": "s04",
+      "modules": [
+        "test_multigenre_game_package",
+        "test_multigenre_game_persistence",
+        "test_multigenre_generic_headless",
+        "test_runtime_support_authority"
+      ],
+      "test_count": 88,
+      "weight_seconds": 3188
+    },
+    {
+      "calibration_state": "complete",
+      "id": "s05",
+      "modules": [
+        "test_authoring_only_multigenre_fixtures",
+        "test_bundle_publication",
+        "test_content_pipeline",
+        "test_game_boundary_policy",
+        "test_gamepack_raylib_2d",
+        "test_m5_inventory",
+        "test_m6_runtime_composition_contracts",
+        "test_map_import",
+        "test_multigenre_asset_production",
+        "test_narrative_fixture_font"
+      ],
+      "test_count": 204,
+      "weight_seconds": 3170
+    },
+    {
+      "calibration_state": "complete",
+      "id": "s06",
+      "modules": [
+        "test_generic_asset_authority",
+        "test_generic_creation_workflow",
+        "test_hosted_native_release_authority",
+        "test_m1_systems",
+        "test_m4_content",
+        "test_m4_world_lifecycle",
+        "test_m5_renderpack_release",
+        "test_multigenre_gamepack",
+        "test_multigenre_runtime_review",
+        "test_multigenre_standalone_materialization",
+        "test_resource_snapshot_reader",
+        "test_studio_authoring",
+        "test_studio_changeset_review",
+        "test_studio_creation_asset_jobs_v4"
+      ],
+      "test_count": 257,
+      "weight_seconds": 3170
+    },
+    {
+      "calibration_state": "complete",
+      "id": "s07",
+      "modules": [
+        "test_adapter_executable_shape",
+        "test_creation_content_mode_generator",
+        "test_creation_reconciliation_cli",
+        "test_creation_scaffold_kinds",
+        "test_m5_assetpack_3d",
+        "test_m5_toolchain",
+        "test_m6_pyray_2_5d",
+        "test_multigenre_assets",
+        "test_multigenre_contracts",
+        "test_multigenre_release_gate",
+        "test_multigenre_runtime_contracts",
+        "test_retained_tree",
+        "test_studio_assets"
+      ],
+      "test_count": 199,
+      "weight_seconds": 3170
+    },
+    {
+      "calibration_state": "partial",
+      "id": "s08",
+      "modules": [
+        "test_studio_creation_asset_release_v11"
+      ],
+      "test_count": 5,
+      "weight_seconds": 1771
+    },
+    {
+      "calibration_state": "unmeasured",
+      "id": "s09",
+      "modules": [
+        "test_studio_creation_asset_review_v10",
+        "test_studio_creation_asset_seal_v4",
+        "test_studio_creation_authoring_v3"
+      ],
+      "test_count": 48,
+      "weight_seconds": null
+    },
+    {
+      "calibration_state": "unmeasured",
+      "id": "s10",
+      "modules": [
+        "test_studio_creation_evidence_v4",
+        "test_studio_creation_game_materialize_v4",
+        "test_studio_creation_game_package_extract_v4",
+        "test_studio_creation_game_package_v4"
+      ],
+      "test_count": 59,
+      "weight_seconds": null
+    },
+    {
+      "calibration_state": "unmeasured",
+      "id": "s11",
+      "modules": [
+        "test_studio_creation_jobs_v4"
+      ],
+      "test_count": 53,
+      "weight_seconds": null
+    },
+    {
+      "calibration_state": "unmeasured",
+      "id": "s12",
+      "modules": [
+        "test_studio_creation_materialization_bundle_v4",
+        "test_studio_creation_previews_v4",
+        "test_studio_creation_previews_v5",
+        "test_studio_creation_runtime_bundle_v4",
+        "test_studio_creation_runtime_compose_v4",
+        "test_studio_creation_runtime_headless_v12"
+      ],
+      "test_count": 47,
+      "weight_seconds": null
+    },
+    {
+      "calibration_state": "unmeasured",
+      "id": "s13",
+      "modules": [
+        "test_studio_creation_service_v3",
+        "test_studio_creation_v3",
+        "test_studio_executor",
+        "test_studio_external_jobs",
+        "test_studio_mcp",
+        "test_studio_protocol_v5"
+      ],
+      "test_count": 103,
+      "weight_seconds": null
+    },
+    {
+      "calibration_state": "unmeasured",
+      "id": "s14",
+      "modules": [
+        "test_studio_runtime_assembly",
+        "test_studio_runtime_inputs",
+        "test_studio_runtime_sources",
+        "test_studio_service",
+        "test_studio_shell_package_snapshot"
+      ],
+      "test_count": 188,
+      "weight_seconds": null
+    },
+    {
+      "calibration_state": "unmeasured",
+      "id": "s15",
+      "modules": [
+        "test_studio_storage",
+        "test_studio_workspaces_jobs",
+        "test_windows_world_project_migration",
+        "test_world_project_migration"
+      ],
+      "test_count": 75,
+      "weight_seconds": null
+    }
+  ]
+}

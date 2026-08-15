@@ -1,5 +1,9 @@
 export const GENERIC_ASSET_RUNTIME_ENTRY: string;
 
+export function createCanonicalAssetpackSmokeRoot(
+  parent?: string,
+): Promise<string>;
+
 export function buildAssetpackFixture(fixtureName: string): Promise<{
   document: Record<string, unknown>;
   files: Map<string, Buffer>;

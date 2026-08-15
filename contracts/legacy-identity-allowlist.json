@@ -12,11 +12,11 @@
     },
     {
       "category": "migration",
-      "file_sha256": "f2cb3b1cc3d426b6c0702e6b5b66f97950b66df866295ebd12ea61dee82b77c3",
+      "file_sha256": "15a32d7672a3114ea78b3a9ddb0f6309ac5ad45c0ba446e4c5f86331010fa773",
       "justification": "Restricts the hosted native authority workflow old/new repository bridge to trusted main pushes and the stable GitHub repository ID.",
       "offsets": [
-        22269,
-        30202
+        29834,
+        37767
       ],
       "path": ".github/workflows/ci.yml",
       "pattern": "rpg-world-forge"
@@ -2906,10 +2906,10 @@
     },
     {
       "category": "legacy_contract",
-      "file_sha256": "7f7c3c0373e302a7c30757c07b19d4a59160859f85166dc8c00a710f632a5dd3",
+      "file_sha256": "cbae97f77239e8551a5557f0ad791c8c16a4f42b336f1f8faaae0b5d2eda030f",
       "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
       "offsets": [
-        19956
+        14703
       ],
       "path": "src/worldforge/studio/workspaces.py",
       "pattern": "rpg-world-forge"
@@ -3082,7 +3082,7 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "3ab98e65df030c12b32c8de09e2195b022fc551cd0f568bc816f5b1318135345",
+      "file_sha256": "fdb942248e9d17233aa47eaaa450019940de0008628924fa8c9ea25c37f14c89",
       "justification": "Regression evidence preserves legacy identity input and reader behavior.",
       "offsets": [
         6027,
@@ -3099,7 +3099,7 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "3ab98e65df030c12b32c8de09e2195b022fc551cd0f568bc816f5b1318135345",
+      "file_sha256": "fdb942248e9d17233aa47eaaa450019940de0008628924fa8c9ea25c37f14c89",
       "justification": "Regression evidence preserves legacy identity input and reader behavior.",
       "offsets": [
         5866,
@@ -3698,22 +3698,22 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "94335a107d4d1ea1ef0aa28df8a08c9795b1128a4b81f05f76b9d39fc18c9e10",
+      "file_sha256": "e9bb27fa860618f144fe6ff189a6bfe96e07fb2955b7c756777d1bee363401e8",
       "justification": "Regression evidence preserves legacy identity input and reader behavior.",
       "offsets": [
-        8414
+        15711
       ],
       "path": "tests/test_studio_workspaces_jobs.py",
       "pattern": "rpg-world-forge"
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "216cb5c497575d3f950599c05ae345de567fa4b337536076a2e5a5c1aac9d640",
+      "file_sha256": "7f8deacd6785324d8970c8cc68baa63b7ae2a7e894d4e11392ea01da5eb59932",
       "justification": "Exercises retained v2 project identity and native Windows migration rejection/commit-forward behavior.",
       "offsets": [
-        27850,
-        32335,
-        35287
+        28102,
+        32587,
+        35539
       ],
       "path": "tests/test_windows_world_project_migration.py",
       "pattern": "rpg-world-forge"
@@ -3746,10 +3746,10 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "42823036473d5129bee6a16fc563e243e224a53623f11445ac482af77264dfcb",
+      "file_sha256": "7da3d9a68580578f240d00016a38ba811cb61f2925ab8eb69aee19b113a5e8bd",
       "justification": "Proves the trusted hosted old/new repository condition in release gate CI.",
       "offsets": [
-        20436
+        23516
       ],
       "path": "tests/test_multigenre_release_gate.py",
       "pattern": "rpg-world-forge"

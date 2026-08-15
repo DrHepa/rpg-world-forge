@@ -641,7 +641,7 @@ class IdentityAuditTests(unittest.TestCase):
                     "justification": (
                         "Proves the trusted hosted old/new repository condition in release gate CI."
                     ),
-                    "offsets": [20436],
+                    "offsets": [23516],
                     "path": key[0],
                     "pattern": key[1],
                 },
