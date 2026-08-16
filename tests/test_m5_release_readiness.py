@@ -193,7 +193,7 @@ class M5ReleaseReadinessTests(unittest.TestCase):
             final_gate,
         )
 
-    def test_windows_native_work_roots_are_unique_siblings_not_runner_temp_or_repo(
+    def test_windows_native_work_roots_are_unique_drive_root_children_not_workspace_parent(
         self,
     ) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
@@ -225,10 +225,17 @@ class M5ReleaseReadinessTests(unittest.TestCase):
                     1
                 ].split("Cleanup strict external Windows native work root", 1)[0]
                 self.assertIn("Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE", init_step)
-                self.assertIn("GetDirectoryName($repo)", init_step)
-                self.assertIn("GetFullPath", init_step)
-                self.assertIn("StartsWith($repo", init_step)
-                self.assertIn("StartsWith($runnerTemp", init_step)
+                self.assertIn("[System.IO.Path]::GetPathRoot($env:GITHUB_WORKSPACE)", init_step)
+                self.assertIn("$repoParent = [System.IO.Path]::GetDirectoryName($repo)", init_step)
+                self.assertIn("Join-Path $driveRoot $name", init_step)
+                self.assertNotIn("Join-Path $workspaceParent $name", init_step)
+                self.assertIn("Test-IsPathWithinOrEqual $root $repoParent", init_step)
+                self.assertIn("Test-IsPathWithinOrEqual $root $runnerTemp", init_step)
+                self.assertIn("Test-IsPathWithinOrEqual $runnerTemp $root", init_step)
+                self.assertIn(
+                    "strict Windows native work root resolved to filesystem root",
+                    init_step,
+                )
                 self.assertIn("New-Item -ItemType Directory", init_step)
                 self.assertIn(">> $env:GITHUB_ENV", init_step)
 

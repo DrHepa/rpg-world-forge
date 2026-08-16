@@ -253,17 +253,30 @@ jobs:
       - name: Initialize strict external Windows native work root
         shell: pwsh
         run: |
+          function Test-IsPathWithinOrEqual($Candidate, $Ancestor) {
+            $candidateFull = [System.IO.Path]::GetFullPath($Candidate)
+            $ancestorFull = [System.IO.Path]::GetFullPath($Ancestor)
+            $relative = [System.IO.Path]::GetRelativePath($ancestorFull, $candidateFull)
+            return $relative -eq "." -or (-not ([System.IO.Path]::IsPathRooted($relative)) -and -not ($relative.StartsWith(".." + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::Ordinal)) -and $relative -ne "..")
+          }
           $repo = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path)
+          $repoParent = [System.IO.Path]::GetDirectoryName($repo)
           $runnerTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path)
-          $workspaceParent = [System.IO.Path]::GetDirectoryName($repo)
+          $driveRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetPathRoot($env:GITHUB_WORKSPACE))
           $safeJob = $env:GITHUB_JOB -replace '[^A-Za-z0-9_.-]', '-'
           $name = "rwf-native-work-{0}-{1}-{2}" -f $env:GITHUB_RUN_ID, $env:GITHUB_RUN_ATTEMPT, $safeJob
-          $root = [System.IO.Path]::GetFullPath((Join-Path $workspaceParent $name))
-          if ($root.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase)) {
+          $root = [System.IO.Path]::GetFullPath((Join-Path $driveRoot $name))
+          if ($root -eq $driveRoot) {
+            throw "strict Windows native work root resolved to filesystem root"
+          }
+          if (Test-IsPathWithinOrEqual $root $repo) {
             throw "strict Windows native work root resolved inside repository"
           }
-          if ($root.StartsWith($runnerTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "strict Windows native work root resolved inside RUNNER_TEMP"
+          if (Test-IsPathWithinOrEqual $root $repoParent) {
+            throw "strict Windows native work root resolved inside workspace parent"
+          }
+          if ((Test-IsPathWithinOrEqual $root $runnerTemp) -or (Test-IsPathWithinOrEqual $runnerTemp $root)) {
+            throw "strict Windows native work root resolved in RUNNER_TEMP ancestry"
           }
           if (Test-Path -LiteralPath $root) {
             throw "strict Windows native work root already exists"
@@ -350,10 +363,18 @@ jobs:
         shell: pwsh
         run: |
           if ($env:WORLD_FORGE_NATIVE_WORK_ROOT) {
+            function Test-IsPathWithinOrEqual($Candidate, $Ancestor) {
+              $candidateFull = [System.IO.Path]::GetFullPath($Candidate)
+              $ancestorFull = [System.IO.Path]::GetFullPath($Ancestor)
+              $relative = [System.IO.Path]::GetRelativePath($ancestorFull, $candidateFull)
+              return $relative -eq "." -or (-not ([System.IO.Path]::IsPathRooted($relative)) -and -not ($relative.StartsWith(".." + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::Ordinal)) -and $relative -ne "..")
+            }
             $repo = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path)
+            $repoParent = [System.IO.Path]::GetDirectoryName($repo)
             $runnerTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path)
+            $driveRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetPathRoot($env:GITHUB_WORKSPACE))
             $root = [System.IO.Path]::GetFullPath($env:WORLD_FORGE_NATIVE_WORK_ROOT)
-            if ($root.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase) -or $root.StartsWith($runnerTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
+            if ($root -eq $driveRoot -or (Test-IsPathWithinOrEqual $root $repo) -or (Test-IsPathWithinOrEqual $root $repoParent) -or (Test-IsPathWithinOrEqual $root $runnerTemp) -or (Test-IsPathWithinOrEqual $runnerTemp $root)) {
               throw "refusing to cleanup unsafe Windows native work root"
             }
             Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
@@ -387,17 +408,30 @@ jobs:
       - name: Initialize strict external Windows native work root
         shell: pwsh
         run: |
+          function Test-IsPathWithinOrEqual($Candidate, $Ancestor) {
+            $candidateFull = [System.IO.Path]::GetFullPath($Candidate)
+            $ancestorFull = [System.IO.Path]::GetFullPath($Ancestor)
+            $relative = [System.IO.Path]::GetRelativePath($ancestorFull, $candidateFull)
+            return $relative -eq "." -or (-not ([System.IO.Path]::IsPathRooted($relative)) -and -not ($relative.StartsWith(".." + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::Ordinal)) -and $relative -ne "..")
+          }
           $repo = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path)
+          $repoParent = [System.IO.Path]::GetDirectoryName($repo)
           $runnerTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path)
-          $workspaceParent = [System.IO.Path]::GetDirectoryName($repo)
+          $driveRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetPathRoot($env:GITHUB_WORKSPACE))
           $safeJob = $env:GITHUB_JOB -replace '[^A-Za-z0-9_.-]', '-'
           $name = "rwf-native-work-{0}-{1}-{2}" -f $env:GITHUB_RUN_ID, $env:GITHUB_RUN_ATTEMPT, $safeJob
-          $root = [System.IO.Path]::GetFullPath((Join-Path $workspaceParent $name))
-          if ($root.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase)) {
+          $root = [System.IO.Path]::GetFullPath((Join-Path $driveRoot $name))
+          if ($root -eq $driveRoot) {
+            throw "strict Windows native work root resolved to filesystem root"
+          }
+          if (Test-IsPathWithinOrEqual $root $repo) {
             throw "strict Windows native work root resolved inside repository"
           }
-          if ($root.StartsWith($runnerTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "strict Windows native work root resolved inside RUNNER_TEMP"
+          if (Test-IsPathWithinOrEqual $root $repoParent) {
+            throw "strict Windows native work root resolved inside workspace parent"
+          }
+          if ((Test-IsPathWithinOrEqual $root $runnerTemp) -or (Test-IsPathWithinOrEqual $runnerTemp $root)) {
+            throw "strict Windows native work root resolved in RUNNER_TEMP ancestry"
           }
           if (Test-Path -LiteralPath $root) {
             throw "strict Windows native work root already exists"
@@ -439,10 +473,18 @@ jobs:
         shell: pwsh
         run: |
           if ($env:WORLD_FORGE_NATIVE_WORK_ROOT) {
+            function Test-IsPathWithinOrEqual($Candidate, $Ancestor) {
+              $candidateFull = [System.IO.Path]::GetFullPath($Candidate)
+              $ancestorFull = [System.IO.Path]::GetFullPath($Ancestor)
+              $relative = [System.IO.Path]::GetRelativePath($ancestorFull, $candidateFull)
+              return $relative -eq "." -or (-not ([System.IO.Path]::IsPathRooted($relative)) -and -not ($relative.StartsWith(".." + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::Ordinal)) -and $relative -ne "..")
+            }
             $repo = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path)
+            $repoParent = [System.IO.Path]::GetDirectoryName($repo)
             $runnerTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path)
+            $driveRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetPathRoot($env:GITHUB_WORKSPACE))
             $root = [System.IO.Path]::GetFullPath($env:WORLD_FORGE_NATIVE_WORK_ROOT)
-            if ($root.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase) -or $root.StartsWith($runnerTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
+            if ($root -eq $driveRoot -or (Test-IsPathWithinOrEqual $root $repo) -or (Test-IsPathWithinOrEqual $root $repoParent) -or (Test-IsPathWithinOrEqual $root $runnerTemp) -or (Test-IsPathWithinOrEqual $runnerTemp $root)) {
               throw "refusing to cleanup unsafe Windows native work root"
             }
             Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue

@@ -35,8 +35,8 @@ const sha = "0".repeat(64);
 let temporaryRoot: string;
 
 beforeAll(async () => {
-  temporaryRoot = await mkdtemp(
-    path.join(os.tmpdir(), "world-forge-studio-runtime-bundle-test-"),
+  temporaryRoot = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "world-forge-studio-runtime-bundle-test-")),
   );
 });
 

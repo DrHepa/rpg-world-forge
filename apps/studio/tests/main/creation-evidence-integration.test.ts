@@ -2,7 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,7 +44,9 @@ describe("production Studio v4 evidence boundary", () => {
     "crosses Python, NDJSON/Ajv, IPC, preload, and renderer without service mocks",
     { timeout: 30_000 },
     async () => {
-      const temporary = await mkdtemp(path.join(tmpdir(), "world-forge-studio-v4-"));
+      const temporary = await realpath(
+        await mkdtemp(path.join(tmpdir(), "world-forge-studio-v4-")),
+      );
       temporaryRoots.push(temporary);
       const service = new ForgeServiceSupervisor({
         executable: python,

@@ -13,12 +13,14 @@ describe("Studio environment compatibility bridge", () => {
       resolveStudioEnvironmentValue(
         { WORLD_FORGE_STUDIO_DEV_PYTHON: "/canonical/python" },
         "DEV_PYTHON",
+        { cwd: "/workspace", pathFlavor: path.posix },
       ),
     ).toBe("/canonical/python");
     expect(
       resolveStudioEnvironmentValue(
         { RWF_STUDIO_DEV_PYTHON: "/legacy/python" },
         "DEV_PYTHON",
+        { cwd: "/workspace", pathFlavor: path.posix },
       ),
     ).toBe("/legacy/python");
     expect(
@@ -28,6 +30,7 @@ describe("Studio environment compatibility bridge", () => {
           RWF_STUDIO_DEV_PYTHON: "/same/python",
         },
         "DEV_PYTHON",
+        { cwd: "/workspace", pathFlavor: path.posix },
       ),
     ).toBe("/same/python");
   });
@@ -38,9 +41,12 @@ describe("Studio environment compatibility bridge", () => {
       RWF_STUDIO_DEV_CODEX: "/legacy/codex",
       UNRELATED: "keep",
     };
-    expect(() => resolveStudioEnvironment(source)).toThrow(
-      /conflicting Studio environment variables/u,
-    );
+    expect(() =>
+      resolveStudioEnvironment(source, {
+        cwd: "/workspace",
+        pathFlavor: path.posix,
+      }),
+    ).toThrow(/conflicting Studio environment variables/u);
     expect(source).toEqual({
       WORLD_FORGE_STUDIO_DEV_CODEX: "/canonical/codex",
       RWF_STUDIO_DEV_CODEX: "/legacy/codex",

@@ -296,8 +296,8 @@ function mutateGlb(
 }
 
 beforeAll(async () => {
-  temporaryRoot = await mkdtemp(
-    path.join(os.tmpdir(), "world-forge-studio-d3-test-"),
+  temporaryRoot = await realpath(
+    await mkdtemp(path.join(os.tmpdir(), "world-forge-studio-d3-test-")),
   );
 });
 
