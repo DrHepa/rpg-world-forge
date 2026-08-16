@@ -201,6 +201,7 @@ _NATIVE_SMOKE_INGRESS_CLEANUP_MAX_FILES = 64
 _NATIVE_SMOKE_EVIDENCE_ROOT_PREFIX = "world-forge-native-smoke-evidence-"
 _NATIVE_SMOKE_EVIDENCE_ROOT_ATTEMPTS = 100
 _PROCESS_TREE_REAP_SECONDS = 1.0
+_LINUX_BROKER_READY_TIMEOUT_SECONDS = 10.0
 _PROCESS_PIPE_JOIN_SECONDS = 1.0
 _CONTAINED_PROCESS_TIMEOUT_CEILING_SECONDS = 6000
 _CONTAINED_PROCESS_OUTPUT_CEILING_BYTES = 16 * 1024 * 1024
@@ -868,7 +869,7 @@ def _start_linux_contained_process(
             raise OSError("Linux broker release gate was unavailable")
         ready = _read_linux_broker_record(
             status_reader,
-            timeout=_PROCESS_TREE_REAP_SECONDS,
+            timeout=_LINUX_BROKER_READY_TIMEOUT_SECONDS,
             secret=secret,
         )
         target_pid, target_start_time = _validate_linux_broker_ready(

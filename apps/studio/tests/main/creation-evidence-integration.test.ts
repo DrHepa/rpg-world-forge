@@ -44,9 +44,7 @@ describe("production Studio v4 evidence boundary", () => {
     "crosses Python, NDJSON/Ajv, IPC, preload, and renderer without service mocks",
     { timeout: 30_000 },
     async () => {
-      const temporary = await realpath(
-        await mkdtemp(path.join(tmpdir(), "world-forge-studio-v4-")),
-      );
+      const temporary = await createTestOwnedTemporaryRoot();
       temporaryRoots.push(temporary);
       const service = new ForgeServiceSupervisor({
         executable: python,
@@ -75,8 +73,7 @@ describe("production Studio v4 evidence boundary", () => {
         10_000,
         3,
       );
-      expect(grantReply.kind).toBe("response");
-      if (grantReply.kind !== "response") throw new Error(grantReply.error.message);
+      assertServiceResponse(grantReply, "creation_root_grant.create");
       const grant = (grantReply.result as {
         grant: { grant_id: string; generation: number };
       }).grant;
@@ -97,8 +94,7 @@ describe("production Studio v4 evidence boundary", () => {
         10_000,
         3,
       );
-      expect(workspaceReply.kind).toBe("response");
-      if (workspaceReply.kind !== "response") throw new Error(workspaceReply.error.message);
+      assertServiceResponse(workspaceReply, "creation_workspace.create");
       const workspace = (workspaceReply.result as {
         workspace: StudioCreationWorkspace;
       }).workspace;
@@ -245,7 +241,53 @@ describe("production Studio v4 evidence boundary", () => {
       }
     },
   );
+
+  it("creates test-owned roots under WORLD_FORGE_NATIVE_WORK_ROOT when configured", async () => {
+    const base = await realpath(await mkdtemp(path.join(tmpdir(), "world-forge-native-work-")));
+    temporaryRoots.push(base);
+    const previous = process.env.WORLD_FORGE_NATIVE_WORK_ROOT;
+    process.env.WORLD_FORGE_NATIVE_WORK_ROOT = base;
+    try {
+      const temporary = await createTestOwnedTemporaryRoot();
+      temporaryRoots.push(temporary);
+      expect(path.relative(base, temporary)).toMatch(/^world-forge-studio-v4-/u);
+      expect(path.relative(base, temporary)).not.toMatch(/^\.\.(?:[/\\]|$)/u);
+      expect(path.isAbsolute(path.relative(base, temporary))).toBe(false);
+    } finally {
+      if (previous === undefined) {
+        Reflect.deleteProperty(process.env, "WORLD_FORGE_NATIVE_WORK_ROOT");
+      } else {
+        process.env.WORLD_FORGE_NATIVE_WORK_ROOT = previous;
+      }
+    }
+  });
 });
+
+async function createTestOwnedTemporaryRoot(): Promise<string> {
+  const configuredRoot = process.env.WORLD_FORGE_NATIVE_WORK_ROOT;
+  const base = await realpath(configuredRoot ? configuredRoot : tmpdir());
+  const temporary = await realpath(await mkdtemp(path.join(base, "world-forge-studio-v4-")));
+  const relative = path.relative(base, temporary);
+  if (
+    relative === "" ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
+    throw new Error(`Test temporary root escaped configured base: ${temporary}`);
+  }
+  return temporary;
+}
+
+function assertServiceResponse(
+  reply: Awaited<ReturnType<ForgeServiceSupervisor["request"]>>,
+  method: string,
+): asserts reply is Extract<typeof reply, { kind: "response" }> {
+  if (reply.kind !== "response") {
+    throw new Error(`${method} expected response envelope: ${JSON.stringify(reply)}`);
+  }
+  expect(reply.kind).toBe("response");
+}
 
 function registerRealServiceIpc(service: ForgeServiceSupervisor) {
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();

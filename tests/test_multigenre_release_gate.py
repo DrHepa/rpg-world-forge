@@ -1643,7 +1643,7 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
             mock.patch.object(gate.os, "close"),
             mock.patch.object(gate.os, "write", return_value=gate._LINUX_BROKER_SECRET_BYTES),
             mock.patch.object(gate, "_linux_process_state", return_value=broker_state),
-            mock.patch.object(gate, "_read_linux_broker_record", return_value={}),
+            mock.patch.object(gate, "_read_linux_broker_record", return_value={}) as read_record,
             mock.patch.object(gate, "_validate_linux_broker_ready", return_value=(102, 1002)),
             mock.patch.object(gate, "_LinuxBrokerAuthority", return_value=authority),
             mock.patch.object(gate, "_terminate_linux_broker"),
@@ -1660,6 +1660,12 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
                 )
 
         authority.close.assert_called_once_with()
+        read_record.assert_called_once_with(
+            10,
+            timeout=gate._LINUX_BROKER_READY_TIMEOUT_SECONDS,
+            secret=mock.ANY,
+        )
+        process.wait.assert_called_once_with(timeout=gate._PROCESS_TREE_REAP_SECONDS)
 
     def test_linux_broker_attests_ready_before_release_and_empty_after_cleanup(self) -> None:
         gate = _load_gate()
