@@ -10,105 +10,16 @@ permissions:
   contents: read
 
 jobs:
-  headless-suite-shards:
-    name: Headless suite (${{ matrix.os }}, Python ${{ matrix.python-version }}, ${{ matrix.shard }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 115
-    defaults:
-      run:
-        shell: bash
-    strategy:
-      fail-fast: false
-      max-parallel: 16
-      matrix:
-        os:
-          - ubuntu-24.04
-          - windows-2022
-        python-version: ["3.11", "3.12"]
-        shard:
-          - s00
-          - s01
-          - s02
-          - s03
-          - s04
-          - s05
-          - s06
-          - s07
-          - s08
-          - s09
-          - s10
-          - s11
-          - s12
-          - s13
-          - s14
-          - s15
-    env:
-      PYTHONDONTWRITEBYTECODE: "1"
-      PYTHONNOUSERSITE: "1"
-      PYTHONUTF8: "1"
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: requirements-m5.lock
-      - name: Install exact headless toolchain and Forge
-        run: |
-          python -m pip install --requirement requirements-m5.lock
-          python -m pip install --no-build-isolation --no-deps -e .
-          python -m pip check
-      - name: Plan and run exact headless shard
-        shell: bash
-        env:
-          EVIDENCE_DIR: ${{ runner.temp }}/world-forge-headless-suite-evidence
-          PYTHON_MINOR: ${{ matrix.python-version }}
-          SHARD_ID: ${{ matrix.shard }}
-        run: |
-          set -euo pipefail
-          python -c 'import os, pathlib; pathlib.Path(os.environ["EVIDENCE_DIR"]).mkdir(mode=0o700)'
-          : "${ImageOS:?missing hosted runner image OS}"
-          : "${ImageVersion:?missing hosted runner image version}"
-          runner_image="${ImageOS}.${ImageVersion}"
-          common=(
-            --source-root "${GITHUB_WORKSPACE}"
-            --manifest "${GITHUB_WORKSPACE}/.github/headless-suite-shards-v1.json"
-            --output-dir "${EVIDENCE_DIR}"
-            --github-sha "${GITHUB_SHA}"
-            --runner-os "${RUNNER_OS}"
-            --runner-image "${runner_image}"
-            --python-minor "${PYTHON_MINOR}"
-          )
-          python -m scripts.verify_headless_suite plan "${common[@]}"
-          python -m scripts.verify_headless_suite worker "${common[@]}" \
-            --plan "${EVIDENCE_DIR}/plan.json" \
-            --shard "${SHARD_ID}"
-      - name: Upload exact headless shard evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: headless-suite-${{ runner.os }}-py${{ matrix.python-version }}-${{ matrix.shard }}
-          path: |
-            ${{ runner.temp }}/world-forge-headless-suite-evidence/plan.json
-            ${{ runner.temp }}/world-forge-headless-suite-evidence/events.jsonl
-            ${{ runner.temp }}/world-forge-headless-suite-evidence/receipt.json
-          if-no-files-found: error
-          retention-days: 90
-
-  headless-suite-aggregate:
-    name: Hosted headless suite aggregate
-    needs: headless-suite-shards
-    if: always()
+  ubuntu-py312-core:
+    name: Ubuntu Python 3.12 core release gates
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 240
     env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONNOUSERSITE: "1"
       PYTHONUTF8: "1"
+      WORLD_FORGE_RUNNER_IMAGE: ubuntu-24.04
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
@@ -120,170 +31,213 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: requirements-m5.lock
-      - name: Install exact aggregate toolchain and Forge
-        run: |
-          python -m pip install --requirement requirements-m5.lock
-          python -m pip install --no-build-isolation --no-deps -e .
-          python -m pip check
-      - name: Prepare exact aggregate roots
-        shell: bash
-        env:
-          ARTIFACTS_DIR: ${{ runner.temp }}/world-forge-headless-suite-artifacts
-          EVIDENCE_DIR: ${{ runner.temp }}/world-forge-headless-suite-aggregate
-        run: |
-          set -euo pipefail
-          python -c 'import os, pathlib; pathlib.Path(os.environ["ARTIFACTS_DIR"]).mkdir(mode=0o700); pathlib.Path(os.environ["EVIDENCE_DIR"]).mkdir(mode=0o700)'
-      - name: Download exact headless shard artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: headless-suite-*-py*-s*
-          path: ${{ runner.temp }}/world-forge-headless-suite-artifacts
-          merge-multiple: false
-      - name: Validate exact hosted headless suite
-        id: headless-aggregate-validation
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m scripts.verify_headless_suite aggregate \
-            --source-root "${GITHUB_WORKSPACE}" \
-            --artifacts-root "${RUNNER_TEMP}/world-forge-headless-suite-artifacts" \
-            --output-dir "${RUNNER_TEMP}/world-forge-headless-suite-aggregate"
-      - name: Upload non-authoritative headless aggregate attempt
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: headless-suite-aggregate-attempt
-          path: ${{ runner.temp }}/world-forge-headless-suite-aggregate/aggregate-attempt.json
-          if-no-files-found: error
-          retention-days: 90
-      - name: Upload authoritative passing headless aggregate
-        if: success() && steps.headless-aggregate-validation.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: headless-suite-aggregate
-          path: ${{ runner.temp }}/world-forge-headless-suite-aggregate/aggregate.json
-          if-no-files-found: error
-          retention-days: 90
-
-  release-readiness:
-    name: Release readiness (${{ matrix.os }}, Python ${{ matrix.python-version }})
-    needs: headless-suite-aggregate
-    if: always()
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-24.04
-          - windows-2022
-        python-version:
-          - "3.11"
-          - "3.12"
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: requirements-m5.lock
-      - name: Install audited toolchain and Forge
-        run: |
-          python -m pip install --requirement requirements-m5.lock
-          python -m pip install --no-build-isolation --no-deps -e .
-          python -m pip check
-      - name: Lint and formatting
-        run: |
-          python -m ruff check src tests scripts apps/studio/scripts/shell_package_snapshot.py
-          python -m ruff format --check src tests scripts apps/studio/scripts/shell_package_snapshot.py
-      - name: Compile Python
-        run: >-
-          python -m compileall -q
-          src scripts tests apps/studio/scripts/shell_package_snapshot.py
-      - name: Run Windows fail-fast publication contract gate
-        if: runner.os == 'Windows'
-        run: >-
-          python -m unittest -v
-          tests.test_bundle_publication.BundlePublicationTests.test_windows_seam_bundle_verifier_reads_with_seal_handles_active
-          tests.test_m6_game_consumer.M6GameConsumerTests.test_stage_mkdir_failure_leaves_no_compositions_tree_and_retry_succeeds
-      - name: Run native Windows world-project migration gate
-        if: runner.os == 'Windows'
-        run: python tests/windows_native_world_project_migration.py
-      - name: Validate foundation release profile
-        run: python -m worldforge validate examples/foundation/source/manifest.json --profile release
-      - name: Analyze neutral narrative fixture
-        run: >-
-          python -m worldforge analyze-narrative
-          examples/foundation/source/manifest.json --fail-on warning
-      - name: Audit source contracts
-        run: python -m worldforge audit-contracts --source-root .
-      - name: Audit runtime AI boundary
-        run: python -m worldforge audit-runtime src/isoworld
-      - name: Audit phase skills
-        run: >-
-          python -m unittest
-          tests.test_m4_game_scaffold.GameSkillLayoutTests -v
-      - name: Verify neutral standalone and reproducible releases
-        run: python -m scripts.verify_m5_release
-      - name: Enforce complete hosted headless suite
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          aggregate_result="${{ needs.headless-suite-aggregate.result }}"
-          if [ "${aggregate_result}" != "success" ]; then
-            echo "hosted headless aggregate must succeed; got ${aggregate_result}" >&2
-            exit 1
-          fi
-
-  studio-m6-readiness:
-    name: Studio and M6 portability (${{ matrix.os }}, Python ${{ matrix.python-version }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-24.04
-          - windows-2022
-        python-version:
-          - "3.11"
-          - "3.12"
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: "false"
-      PYTHONDONTWRITEBYTECODE: "1"
-      PYTHONNOUSERSITE: "1"
-      PYTHONUTF8: "1"
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: ${{ matrix.python-version }}
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24.14.1"
           cache: npm
           cache-dependency-path: apps/studio/package-lock.json
-      - name: Install exact npm toolchain
-        run: npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0
+      - name: Install audited toolchain and Forge
+        run: |
+          python -m pip install --requirement requirements-m5.lock
+          python -m pip install --no-build-isolation --no-deps -e .
+          python -m pip check
+          npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0
       - name: Bind exact Linux Python for Studio subprocesses
-        if: runner.os == 'Linux'
         shell: bash
         run: |
+          set -euo pipefail
           python_path="${pythonLocation}/bin/python"
           test -x "${python_path}"
           printf 'PYTHON=%s\nWORLD_FORGE_STUDIO_BUILD_PYTHON=%s\nWORLD_FORGE_STUDIO_TEST_PYTHON=%s\n' \
             "${python_path}" "${python_path}" "${python_path}" >> "${GITHUB_ENV}"
+      - name: Install exact Studio dependencies
+        working-directory: apps/studio
+        run: npm ci
+      - name: Run complete Studio verification
+        working-directory: apps/studio
+        run: npm run verify
+      - name: Lint and formatting
+        run: |
+          python -m ruff check src tests scripts apps/studio/scripts/shell_package_snapshot.py
+          python -m ruff format --check src tests scripts apps/studio/scripts/shell_package_snapshot.py
+      - name: Compile Python
+        run: python -m compileall -q src scripts tests apps/studio/scripts/shell_package_snapshot.py
+      - name: Audit source contracts
+        run: python -m worldforge audit-contracts --source-root .
+      - name: Audit runtime AI boundary
+        run: python -m worldforge audit-runtime src/isoworld
+      - name: Validate foundation release profile
+        run: python -m worldforge validate examples/foundation/source/manifest.json --profile release
+      - name: Analyze neutral narrative fixture
+        run: python -m worldforge analyze-narrative examples/foundation/source/manifest.json --fail-on warning
+      - name: Audit phase skills
+        run: python -m unittest tests.test_m4_game_scaffold.GameSkillLayoutTests -v
+      - name: Verify neutral standalone and reproducible releases
+        run: python -m scripts.verify_m5_release
+      - name: Install Linux virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends xvfb xauth
+      - name: Exercise graphical raylib runtime under Xvfb
+        run: xvfb-run -a python tests/raylib_smoke.py
+      - name: Exercise bounded pyray GLB animation proof under Xvfb
+        run: xvfb-run -a python tests/pyray_3d_native_smoke.py
+      - name: Download, attest, and install the locked raylib wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheelhouse="${RUNNER_TEMP}/world-forge-runtime-wheel"
+          mkdir -p "${wheelhouse}"
+          python -m pip download --no-deps --only-binary=:all: --dest "${wheelhouse}" "cffi==1.17.1" "pycparser==2.23" "raylib==6.0.1.0"
+          python -c 'import pathlib, sys; files=[path for path in sorted(pathlib.Path(sys.argv[1]).glob("*.whl")) if path.name.startswith("raylib-")]; assert len(files) == 1; print(files[0])' "${wheelhouse}" > "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt"
+          runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
+          PYTHONPATH=src python -m scripts.verify_multigenre_release --report "${RUNNER_TEMP}/world-forge-raylib-attestation.json" --verify-runtime-wheel "${runtime_wheel}"
+          python -m pip install --no-index --force-reinstall --find-links "${wheelhouse}" "cffi==1.17.1" "pycparser==2.23" "raylib==6.0.1.0"
+          python -m pip check
+      - name: Verify exact generic release lineage with native raylib
+        id: native_release_verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/world-forge-multigenre-work"
+          runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
+          xvfb-run -a python -m scripts.verify_multigenre_release --native required --runtime-wheel "${runtime_wheel}" --work-root "${work}"
+      - name: Run bounded full unittest suite once
+        run: |
+          python - <<'PY'
+          import concurrent.futures
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          modules = [
+              f"tests.{path.stem}"
+              for path in sorted(Path("tests").glob("test_*.py"))
+              if path.name != "__init__.py"
+          ]
+          if len(modules) != len(set(modules)):
+              raise SystemExit("duplicate test module discovered")
+          if not modules:
+              raise SystemExit("no test modules discovered")
+
+          def run_module(module: str) -> tuple[str, int]:
+              return module, subprocess.run(
+                  [sys.executable, "-m", "unittest", module, "-v"]
+              ).returncode
+
+          failures = []
+          with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+              for module, returncode in executor.map(run_module, modules):
+                  if returncode != 0:
+                      failures.append(module)
+          if failures:
+              print("failing modules:", *failures, sep="\n", file=sys.stderr)
+              raise SystemExit(1)
+          PY
+      - name: Upload exact native evidence row
+        if: always() && steps.native_release_verify.outcome == 'success' && steps.native_release_verify.outputs.release_row_published == 'true' && steps.native_release_verify.outputs.release_row_path != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: multigenre-release-Linux-py3.12
+          path: ${{ steps.native_release_verify.outputs.release_row_path }}
+          if-no-files-found: error
+          retention-days: 90
+
+  ubuntu-py311-compat-native:
+    name: Ubuntu Python 3.11 compatibility native gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONUTF8: "1"
+      WORLD_FORGE_RUNNER_IMAGE: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-m5.lock
+      - name: Install audited Forge dependencies
+        run: |
+          python -m pip install --requirement requirements-m5.lock
+          python -m pip install --no-build-isolation --no-deps -e .
+          python -m pip check
+      - name: Install Linux virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends xvfb xauth
+      - name: Run focused Ubuntu compatibility gates
+        run: python -m unittest -v tests.test_m5_release_readiness.M5ReleaseReadinessTests.test_driver_defines_cross_platform_clean_artifact_gates tests.test_multigenre_release_gate.MultigenreReleaseGateContractTests.test_required_native_missing_runtime_wheel_preflight_creates_no_outputs
+      - name: Download, attest, and install the locked raylib wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheelhouse="${RUNNER_TEMP}/world-forge-runtime-wheel"
+          mkdir -p "${wheelhouse}"
+          python -m pip download --no-deps --only-binary=:all: --dest "${wheelhouse}" "cffi==1.17.1" "pycparser==2.23" "raylib==6.0.1.0"
+          python -c 'import pathlib, sys; files=[path for path in sorted(pathlib.Path(sys.argv[1]).glob("*.whl")) if path.name.startswith("raylib-")]; assert len(files) == 1; print(files[0])' "${wheelhouse}" > "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt"
+          runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
+          PYTHONPATH=src python -m scripts.verify_multigenre_release --report "${RUNNER_TEMP}/world-forge-raylib-attestation.json" --verify-runtime-wheel "${runtime_wheel}"
+          python -m pip install --no-index --force-reinstall --find-links "${wheelhouse}" "cffi==1.17.1" "pycparser==2.23" "raylib==6.0.1.0"
+          python -m pip check
+      - name: Verify exact generic release lineage with native raylib
+        id: native_release_verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/world-forge-multigenre-work"
+          runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
+          xvfb-run -a python -m scripts.verify_multigenre_release --native required --runtime-wheel "${runtime_wheel}" --work-root "${work}"
+      - name: Upload exact native evidence row
+        if: always() && steps.native_release_verify.outcome == 'success' && steps.native_release_verify.outputs.release_row_published == 'true' && steps.native_release_verify.outputs.release_row_path != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: multigenre-release-Linux-py3.11
+          path: ${{ steps.native_release_verify.outputs.release_row_path }}
+          if-no-files-found: error
+          retention-days: 90
+
+  windows-py312-release:
+    name: Windows Python 3.12 release gates
+    runs-on: windows-2022
+    timeout-minutes: 180
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONUTF8: "1"
+      WORLD_FORGE_RUNNER_IMAGE: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-m5.lock
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.14.1"
+          cache: npm
+          cache-dependency-path: apps/studio/package-lock.json
+      - name: Install audited toolchains and Forge
+        run: |
+          python -m pip install --requirement requirements-m5.lock
+          python -m pip install --no-build-isolation --no-deps -e .
+          python -m pip check
+          npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0
       - name: Bind exact Windows Python for Studio subprocesses
-        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $pythonPath = Join-Path $env:pythonLocation "python.exe"
@@ -296,36 +250,39 @@ jobs:
             "WORLD_FORGE_STUDIO_TEST_PYTHON=$pythonPath"
           ) |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Verify pinned Node and npm toolchain
-        working-directory: apps/studio
-        shell: bash
+      - name: Initialize strict external Windows native work root
+        shell: pwsh
         run: |
-          test "$(node --version)" = "v24.14.1"
-          test "$(npm --version)" = "11.13.0"
-          npm_root="$(npm root --global)"
-          node -e '
-            const fs = require("node:fs");
-            const manifest = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-            if (manifest.version !== "11.13.0") process.exit(1);
-          ' "${npm_root}/npm/package.json"
+          $repo = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path)
+          $runnerTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path)
+          $workspaceParent = [System.IO.Path]::GetDirectoryName($repo)
+          $safeJob = $env:GITHUB_JOB -replace '[^A-Za-z0-9_.-]', '-'
+          $name = "rwf-native-work-{0}-{1}-{2}" -f $env:GITHUB_RUN_ID, $env:GITHUB_RUN_ATTEMPT, $safeJob
+          $root = [System.IO.Path]::GetFullPath((Join-Path $workspaceParent $name))
+          if ($root.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "strict Windows native work root resolved inside repository"
+          }
+          if ($root.StartsWith($runnerTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "strict Windows native work root resolved inside RUNNER_TEMP"
+          }
+          if (Test-Path -LiteralPath $root) {
+            throw "strict Windows native work root already exists"
+          }
+          New-Item -ItemType Directory -Path $root | Out-Null
+          "WORLD_FORGE_NATIVE_WORK_ROOT=$root" >> $env:GITHUB_ENV
       - name: Install exact Studio dependencies
         working-directory: apps/studio
         run: npm ci
       - name: Run complete Studio verification
         working-directory: apps/studio
         run: npm run verify
-      - name: Exercise synthetic assembly and real fail-before-output policy
-        run: >-
-          python -m unittest -v
-          tests.test_studio_runtime_assembly.StudioRuntimeAssemblyTest.test_synthetic_linux_and_windows_resources_are_complete_and_non_publishable
-          tests.test_studio_runtime_assembly.StudioRuntimeAssemblyTest.test_real_cli_fails_before_cache_or_output_mutation_with_all_blockers
+      - name: Run Windows fail-fast publication contract gate
+        run: python -m unittest -v tests.test_bundle_publication.BundlePublicationTests.test_windows_seam_bundle_verifier_reads_with_seal_handles_active tests.test_m6_game_consumer.M6GameConsumerTests.test_stage_mkdir_failure_leaves_no_compositions_tree_and_retry_succeeds
+      - name: Run native Windows world-project migration gate
+        run: python tests/windows_native_world_project_migration.py
       - name: Exercise native Windows Python handle contracts without skips
-        if: runner.os == 'Windows'
-        run: >-
-          python tests/test_m6_release_readiness.py
-          --run-windows-native-python
+        run: python tests/test_m6_release_readiness.py --run-windows-native-python
       - name: Exercise native Windows shell handle contract without skips
-        if: runner.os == 'Windows'
         shell: pwsh
         working-directory: apps/studio
         run: |
@@ -341,22 +298,11 @@ jobs:
             ../../tests/test_m6_release_readiness.py `
             --assert-vitest-passed $report `
             "retains the native Windows package root against parent replacement"
-      - name: Build and reverify unpacked Linux shell
-        if: matrix.python-version == '3.12' && runner.os == 'Linux'
-        shell: bash
-        working-directory: apps/studio
-        run: |
-          output="${RUNNER_TEMP}/rwf-studio-shell-linux-x64"
-          test ! -e "${output}"
-          npm run package:dir -- --output "${output}" --target linux-x64
-          npm run package:verify -- \
-            --path "${output}/linux-unpacked" --target linux-x64
       - name: Build and reverify unpacked Windows shell
-        if: matrix.python-version == '3.12' && runner.os == 'Windows'
         shell: pwsh
         working-directory: apps/studio
         run: |
-          $output = Join-Path $env:RUNNER_TEMP "rwf-studio-shell-win32-x64"
+          $output = Join-Path $env:WORLD_FORGE_NATIVE_WORK_ROOT "rwf-studio-shell-win32-x64"
           if (Test-Path -LiteralPath $output) {
             throw "strict external package output already exists"
           }
@@ -366,86 +312,62 @@ jobs:
           }
           $packageReport = @($packageOutput)[-1] | ConvertFrom-Json
           $unpacked = [string]$packageReport.package_path
-          $runnerTemp = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd(
-            [IO.Path]::DirectorySeparatorChar
-          )
-          $runnerPrefix = $runnerTemp + [IO.Path]::DirectorySeparatorChar
-          $unpacked = [IO.Path]::GetFullPath($unpacked)
-          if (-not $unpacked.StartsWith(
-            $runnerPrefix,
-            [StringComparison]::OrdinalIgnoreCase
-          )) {
-            throw "package wrapper returned a path outside RUNNER_TEMP"
-          }
           npm run package:verify -- --path $unpacked --target win32-x64
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
-
-  graphical-raylib-smoke:
-    name: Graphical raylib smoke (Ubuntu 24.04)
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements-m5.lock
-      - name: Install audited runtime
-        run: |
-          python -m pip install --requirement requirements-m5.lock
-          python -m pip install --no-build-isolation --no-deps -e .
-          python -m pip check
-      - name: Install virtual display
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends xvfb xauth
-      - name: Exercise graphical raylib runtime under Xvfb
-        run: xvfb-run -a python tests/raylib_smoke.py
-      - name: Exercise bounded pyray GLB animation proof under Xvfb
-        run: xvfb-run -a python tests/pyray_3d_native_smoke.py
-
-  windows-raylib-cpu-media-smoke:
-    name: Raylib CPU/media smoke (Windows Server 2022)
-    runs-on: windows-2022
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements-m5.lock
-      - name: Install audited runtime
-        run: |
-          python -m pip install --requirement requirements-m5.lock
-          python -m pip install --no-build-isolation --no-deps -e .
-          python -m pip check
       - name: Exercise raylib CPU image encode and decode on Windows
         run: python tests/raylib_cpu_media_smoke.py
       - name: Verify pyray 3D ABI without claiming native graphics
         run: python tests/pyray_3d_abi_smoke.py
+      - name: Download, attest, and install the locked raylib wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheelhouse="${RUNNER_TEMP}/world-forge-runtime-wheel"
+          mkdir -p "${wheelhouse}"
+          python -m pip download --no-deps --only-binary=:all: --dest "${wheelhouse}" "cffi==1.17.1" "pycparser==2.23" "raylib==6.0.1.0"
+          python -c 'import pathlib, sys; files=[path for path in sorted(pathlib.Path(sys.argv[1]).glob("*.whl")) if path.name.startswith("raylib-")]; assert len(files) == 1; print(files[0])' "${wheelhouse}" > "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt"
+          runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
+          PYTHONPATH=src python -m scripts.verify_multigenre_release --report "${RUNNER_TEMP}/world-forge-raylib-attestation.json" --verify-runtime-wheel "${runtime_wheel}"
+          python -m pip install --no-index --force-reinstall --find-links "${wheelhouse}" "cffi==1.17.1" "pycparser==2.23" "raylib==6.0.1.0"
+          python -m pip check
+      - name: Verify exact generic release lineage with native raylib
+        id: native_release_verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="${WORLD_FORGE_NATIVE_WORK_ROOT}/world-forge-multigenre-work"
+          runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
+          python -m scripts.verify_multigenre_release --native required --runtime-wheel "${runtime_wheel}" --work-root "${work}"
+      - name: Upload exact native evidence row
+        if: always() && steps.native_release_verify.outcome == 'success' && steps.native_release_verify.outputs.release_row_published == 'true' && steps.native_release_verify.outputs.release_row_path != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: multigenre-release-Windows-py3.12
+          path: ${{ steps.native_release_verify.outputs.release_row_path }}
+          if-no-files-found: error
+          retention-days: 90
+      - name: Cleanup strict external Windows native work root
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:WORLD_FORGE_NATIVE_WORK_ROOT) {
+            $repo = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path)
+            $runnerTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path)
+            $root = [System.IO.Path]::GetFullPath($env:WORLD_FORGE_NATIVE_WORK_ROOT)
+            if ($root.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase) -or $root.StartsWith($runnerTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "refusing to cleanup unsafe Windows native work root"
+            }
+            Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+          }
 
-  multigenre-native-release:
-    name: Multi-genre native release (${{ matrix.os }}, Python ${{ matrix.python-version }})
-    runs-on: ${{ matrix.os }}
+  windows-py311-compat-native:
+    name: Windows Python 3.11 compatibility native gates
+    runs-on: windows-2022
+    timeout-minutes: 90
     env:
-      WORLD_FORGE_RUNNER_IMAGE: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-24.04
-          - windows-2022
-        python-version: ["3.11", "3.12"]
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONUTF8: "1"
+      WORLD_FORGE_RUNNER_IMAGE: windows-2022
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
@@ -454,135 +376,187 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements-m5.lock
       - name: Install audited Forge dependencies
         run: |
-          python -m pip install "Pillow==12.3.0" "setuptools==83.0.0" "wheel==0.47.0"
+          python -m pip install --requirement requirements-m5.lock
           python -m pip install --no-build-isolation --no-deps -e .
+          python -m pip check
+      - name: Initialize strict external Windows native work root
+        shell: pwsh
+        run: |
+          $repo = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path)
+          $runnerTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path)
+          $workspaceParent = [System.IO.Path]::GetDirectoryName($repo)
+          $safeJob = $env:GITHUB_JOB -replace '[^A-Za-z0-9_.-]', '-'
+          $name = "rwf-native-work-{0}-{1}-{2}" -f $env:GITHUB_RUN_ID, $env:GITHUB_RUN_ATTEMPT, $safeJob
+          $root = [System.IO.Path]::GetFullPath((Join-Path $workspaceParent $name))
+          if ($root.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "strict Windows native work root resolved inside repository"
+          }
+          if ($root.StartsWith($runnerTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "strict Windows native work root resolved inside RUNNER_TEMP"
+          }
+          if (Test-Path -LiteralPath $root) {
+            throw "strict Windows native work root already exists"
+          }
+          New-Item -ItemType Directory -Path $root | Out-Null
+          "WORLD_FORGE_NATIVE_WORK_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Run focused Windows compatibility gates
+        run: python -m unittest -v tests.test_bundle_publication.BundlePublicationTests.test_windows_seam_bundle_verifier_reads_with_seal_handles_active tests.test_m6_game_consumer.M6GameConsumerTests.test_stage_mkdir_failure_leaves_no_compositions_tree_and_retry_succeeds
       - name: Download, attest, and install the locked raylib wheel
         shell: bash
         run: |
+          set -euo pipefail
           wheelhouse="${RUNNER_TEMP}/world-forge-runtime-wheel"
           mkdir -p "${wheelhouse}"
-          python -m pip download \
-            --no-deps \
-            --only-binary=:all: \
-            --dest "${wheelhouse}" \
-            "cffi==1.17.1" \
-            "pycparser==2.23" \
-            "raylib==6.0.1.0"
-          python -c \
-            'import pathlib, sys; files=[path for path in sorted(pathlib.Path(sys.argv[1]).glob("*.whl")) if path.name.startswith("raylib-")]; assert len(files) == 1; print(files[0])' \
-            "${wheelhouse}" > "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt"
+          python -m pip download --no-deps --only-binary=:all: --dest "${wheelhouse}" "cffi==1.17.1" "pycparser==2.23" "raylib==6.0.1.0"
+          python -c 'import pathlib, sys; files=[path for path in sorted(pathlib.Path(sys.argv[1]).glob("*.whl")) if path.name.startswith("raylib-")]; assert len(files) == 1; print(files[0])' "${wheelhouse}" > "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt"
           runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
-          PYTHONPATH=src python -m scripts.verify_multigenre_release \
-            --report "${RUNNER_TEMP}/world-forge-raylib-attestation.json" \
-            --verify-runtime-wheel "${runtime_wheel}"
-          python -c \
-            'import json, pathlib, subprocess, sys; wheelhouse=pathlib.Path(sys.argv[1]); report=json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")); pins=("cffi==1.17.1","pycparser==2.23","raylib==6.0.1.0"); files={path.name.casefold(): path for path in wheelhouse.glob("*.whl")}; raylib_sha=report["artifact"]["sha256"]; rows=[]; [rows.append((pin, [path for name, path in files.items() if name.startswith(pin.split("==", 1)[0].replace("-", "_").casefold() + "-")])) for pin in pins]; assert all(len(matches) == 1 for _pin, matches in rows), [(pin, [path.name for path in matches]) for pin, matches in rows]; lines=["%s --hash=sha256:%s\n" % (pin, raylib_sha if pin == "raylib==6.0.1.0" else subprocess.check_output([sys.executable, "-m", "pip", "hash", "--algorithm", "sha256", str(matches[0])], text=True).rsplit("--hash=sha256:", 1)[1].strip()) for pin, matches in rows]; pathlib.Path(sys.argv[3]).write_text("".join(lines), encoding="utf-8")' \
-            "${wheelhouse}" \
-            "${RUNNER_TEMP}/world-forge-raylib-attestation.json" \
-            "${RUNNER_TEMP}/world-forge-raylib-requirements.txt"
-          python -m pip install \
-            --no-index \
-            --force-reinstall \
-            --find-links "${wheelhouse}" \
-            --require-hashes \
-            --requirement "${RUNNER_TEMP}/world-forge-raylib-requirements.txt"
+          PYTHONPATH=src python -m scripts.verify_multigenre_release --report "${RUNNER_TEMP}/world-forge-raylib-attestation.json" --verify-runtime-wheel "${runtime_wheel}"
+          python -m pip install --no-index --force-reinstall --find-links "${wheelhouse}" "cffi==1.17.1" "pycparser==2.23" "raylib==6.0.1.0"
           python -m pip check
-          python -c "import pyray"
-      - name: Install Linux virtual display
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends xvfb xauth
       - name: Verify exact generic release lineage with native raylib
         id: native_release_verify
         shell: bash
         run: |
-          work="${RUNNER_TEMP}/world-forge-multigenre-work"
+          set -euo pipefail
+          work="${WORLD_FORGE_NATIVE_WORK_ROOT}/world-forge-multigenre-work"
           runtime_wheel="$(cat "${RUNNER_TEMP}/world-forge-runtime-wheel-path.txt")"
-          command=(
-            python -m scripts.verify_multigenre_release
-            --native required
-            --runtime-wheel "${runtime_wheel}"
-            --work-root "${work}"
-          )
-          if [ "${RUNNER_OS}" = "Linux" ]; then
-            xvfb-run -a "${command[@]}"
-          else
-            "${command[@]}"
-          fi
-      - name: Upload exact matrix evidence
+          python -m scripts.verify_multigenre_release --native required --runtime-wheel "${runtime_wheel}" --work-root "${work}"
+      - name: Upload exact native evidence row
         if: always() && steps.native_release_verify.outcome == 'success' && steps.native_release_verify.outputs.release_row_published == 'true' && steps.native_release_verify.outputs.release_row_path != ''
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: multigenre-release-${{ runner.os }}-py${{ matrix.python-version }}
+          name: multigenre-release-Windows-py3.11
           path: ${{ steps.native_release_verify.outputs.release_row_path }}
           if-no-files-found: error
           retention-days: 90
-      - name: Upload native smoke diagnostics
-        if: always() && steps.native_release_verify.outcome == 'success' && steps.native_release_verify.outputs.native_smoke_evidence_published == 'true' && steps.native_release_verify.outputs.native_smoke_evidence_path != ''
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: multigenre-native-diagnostics-${{ runner.os }}-py${{ matrix.python-version }}
-          path: ${{ steps.native_release_verify.outputs.native_smoke_evidence_path }}
-          if-no-files-found: error
-          retention-days: 90
-      - name: Enforce exact native release result
+      - name: Cleanup strict external Windows native work root
         if: always()
-        shell: bash
+        shell: pwsh
         run: |
-          if [ "${{ steps.native_release_verify.outcome }}" != "success" ] || [ "${{ steps.native_release_verify.outputs.release_row_published }}" != "true" ]; then
-            echo "trusted native release row was not published" >&2
-            exit 1
-          fi
-          report="${{ steps.native_release_verify.outputs.release_row_path }}"
-          python -c 'import json, pathlib, sys; report=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")); assert report["status"] == "passed"; assert all(case["native_evidence"]["state"] == "passed" for case in report["cases"])' "${report}"
+          if ($env:WORLD_FORGE_NATIVE_WORK_ROOT) {
+            $repo = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE).Path)
+            $runnerTemp = [System.IO.Path]::GetFullPath((Resolve-Path -LiteralPath $env:RUNNER_TEMP).Path)
+            $root = [System.IO.Path]::GetFullPath($env:WORLD_FORGE_NATIVE_WORK_ROOT)
+            if ($root.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase) -or $root.StartsWith($runnerTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
+              throw "refusing to cleanup unsafe Windows native work root"
+            }
+            Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+          }
 
-  multigenre-native-release-aggregate:
-    name: Aggregate multi-genre native release evidence
-    needs: multigenre-native-release
+  ci-required:
+    name: CI required
+    needs:
+      - ubuntu-py312-core
+      - ubuntu-py311-compat-native
+      - windows-py312-release
+      - windows-py311-compat-native
+    if: always()
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     permissions:
       contents: read
+      id-token: write
+      attestations: write
     steps:
-      - name: Check out source
+      - name: Check out complete history
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
         with:
+          fetch-depth: 0
           persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
-      - name: Install Forge without dependency resolution
-        run: python -m pip install --no-build-isolation --no-deps -e .
-      - name: Download Linux Python 3.11 matrix evidence
+          cache: pip
+          cache-dependency-path: requirements-m5.lock
+      - name: Install locked final-gate Python dependencies
+        run: |
+          python -m pip install --requirement requirements-m5.lock
+          python -m pip install --no-build-isolation --no-deps -e .
+          python -m pip check
+      - name: Set up pinned Studio Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24.14.1"
+          cache: npm
+          cache-dependency-path: apps/studio/package-lock.json
+      - name: Install exact Studio npm audit toolchain
+        run: npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0
+      - name: Verify pinned Studio dependency audit toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node --version)" = "v24.14.1"
+          test "$(npm --version)" = "11.13.0"
+      - name: Audit exact requirement files
+        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
+        with:
+          inputs: >-
+            requirements-m5.lock
+            src/worldforge/templates/pyray_game/requirements.lock.tmpl
+          no-deps: true
+      - name: Audit exact Studio package lock
+        working-directory: apps/studio
+        run: npm audit --package-lock-only --audit-level=high
+      - name: Download and verify Gitleaks 8.30.1
+        env:
+          GITLEAKS_CHECKSUM_FILE_SHA256: 061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae
+          GITLEAKS_LINUX_X64_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          version=8.30.1
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          checksums="gitleaks_${version}_checksums.txt"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${version}"
+          curl --fail --location --silent --show-error --output "${RUNNER_TEMP}/${checksums}" "${base}/${checksums}"
+          printf '%s  %s\n' "${GITLEAKS_CHECKSUM_FILE_SHA256}" "${RUNNER_TEMP}/${checksums}" | sha256sum --check --strict -
+          curl --fail --location --silent --show-error --output "${RUNNER_TEMP}/${archive}" "${base}/${archive}"
+          grep --fixed-strings --line-regexp "${GITLEAKS_LINUX_X64_SHA256}  ${archive}" "${RUNNER_TEMP}/${checksums}"
+          (
+            cd "${RUNNER_TEMP}"
+            printf '%s  %s\n' "${GITLEAKS_LINUX_X64_SHA256}" "${archive}" | sha256sum --check --strict -
+            tar --extract --gzip --file "${archive}" gitleaks
+          )
+          "${RUNNER_TEMP}/gitleaks" git --no-banner --redact --verbose --log-opts=--all
+      - name: Download Linux Python 3.11 native evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: multigenre-release-Linux-py3.11
           path: ${{ runner.temp }}/multigenre-release-Linux-py3.11
-      - name: Download Linux Python 3.12 matrix evidence
+      - name: Download Linux Python 3.12 native evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: multigenre-release-Linux-py3.12
           path: ${{ runner.temp }}/multigenre-release-Linux-py3.12
-      - name: Download Windows Python 3.11 matrix evidence
+      - name: Download Windows Python 3.11 native evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: multigenre-release-Windows-py3.11
           path: ${{ runner.temp }}/multigenre-release-Windows-py3.11
-      - name: Download Windows Python 3.12 matrix evidence
+      - name: Download Windows Python 3.12 native evidence
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: multigenre-release-Windows-py3.12
           path: ${{ runner.temp }}/multigenre-release-Windows-py3.12
-      - name: Aggregate exact 2x2 native evidence
+      - name: Aggregate exact four native rows
         shell: bash
         run: |
           set -euo pipefail
+          for axis_result in \
+            "ubuntu-py312-core=${{ needs.ubuntu-py312-core.result }}" \
+            "ubuntu-py311-compat-native=${{ needs.ubuntu-py311-compat-native.result }}" \
+            "windows-py312-release=${{ needs.windows-py312-release.result }}" \
+            "windows-py311-compat-native=${{ needs.windows-py311-compat-native.result }}"; do
+            case "${axis_result}" in
+              *=success) ;;
+              *) echo "native axis failed or skipped: ${axis_result}" >&2; exit 1 ;;
+            esac
+          done
           rows_dir="${RUNNER_TEMP}/world-forge-multigenre-rows"
           mkdir -p "${rows_dir}"
           specs=(
@@ -602,75 +576,32 @@ jobs:
             reports+=("${rows_dir}/${expected_name}")
           done
           aggregate="${RUNNER_TEMP}/world-forge-multigenre-aggregate.json"
-          python -m scripts.verify_multigenre_release \
-            --report "${aggregate}" \
-            --aggregate "${reports[@]}"
+          python -m scripts.verify_multigenre_release --report "${aggregate}" --aggregate "${reports[@]}"
           python -c 'import json, pathlib, sys; from worldforge.multigenre_release_contract import validate_aggregate_report; aggregate=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")); assert validate_aggregate_report(aggregate) == aggregate; assert aggregate["status"] == "passed"; assert aggregate["matrix"] == [{"os": "linux", "python_minor": "3.11"}, {"os": "linux", "python_minor": "3.12"}, {"os": "windows", "python_minor": "3.11"}, {"os": "windows", "python_minor": "3.12"}]' "${aggregate}"
-          evidence_dir="${RUNNER_TEMP}/world-forge-multigenre-aggregate-evidence"
-          mkdir -p "${evidence_dir}"
-          cp "${aggregate}" "${evidence_dir}/world-forge-multigenre-aggregate.json"
-          for report in "${reports[@]}"; do
-            cp "${report}" "${evidence_dir}/$(basename "${report}")"
-          done
-      - name: Upload aggregate and exact rows evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: multigenre-release-aggregate-and-rows
-          path: |
-            ${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/world-forge-multigenre-aggregate.json
-            ${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/world-forge-Linux-py3.11.json
-            ${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/world-forge-Linux-py3.12.json
-            ${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/world-forge-Windows-py3.11.json
-            ${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/world-forge-Windows-py3.12.json
-          if-no-files-found: error
-          retention-days: 90
-
-  multigenre-hosted-native-release-authority:
-    name: Hosted native release authority attestation
-    needs: multigenre-native-release-aggregate
-    if: >-
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/main' &&
-      github.repository_id == '1305601753' &&
-      (github.repository == 'DrHepa/rpg-world-forge' || github.repository == 'DrHepa/world-forge')
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12"
-      - name: Install Forge without dependency resolution
-        run: python -m pip install --no-build-isolation --no-deps -e .
-      - name: Download exact aggregate and rows evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: multigenre-release-aggregate-and-rows
-          path: ${{ runner.temp }}/hosted-native-aggregate
       - name: Build hosted native release authority candidate
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          github.repository_id == '1305601753' &&
+          (github.repository == 'DrHepa/rpg-world-forge' || github.repository == 'DrHepa/world-forge')
         shell: bash
         run: |
           set -euo pipefail
-          aggregate_dir="${RUNNER_TEMP}/hosted-native-aggregate"
+          rows_dir="${RUNNER_TEMP}/world-forge-multigenre-rows"
           authority_dir="${RUNNER_TEMP}/hosted-native-authority"
           mkdir -p "${authority_dir}"
-          test -f "${aggregate_dir}/world-forge-multigenre-aggregate.json"
+          test -f "${RUNNER_TEMP}/world-forge-multigenre-aggregate.json"
           rows=(
-            "${aggregate_dir}/world-forge-Linux-py3.11.json"
-            "${aggregate_dir}/world-forge-Linux-py3.12.json"
-            "${aggregate_dir}/world-forge-Windows-py3.11.json"
-            "${aggregate_dir}/world-forge-Windows-py3.12.json"
+            "${rows_dir}/world-forge-Linux-py3.11.json"
+            "${rows_dir}/world-forge-Linux-py3.12.json"
+            "${rows_dir}/world-forge-Windows-py3.11.json"
+            "${rows_dir}/world-forge-Windows-py3.12.json"
           )
           for row in "${rows[@]}"; do
             test -f "${row}"
           done
+          : "${GITHUB_WORKFLOW_REF:?missing workflow ref}"
+          : "${GITHUB_WORKFLOW_SHA:?missing workflow sha}"
           export WORLD_FORGE_INPUT_TREE_HASH="$(git rev-parse HEAD^{tree})"
           python -m scripts.verify_hosted_native_release build-candidate \
             --row "${rows[0]}" \
@@ -680,6 +611,11 @@ jobs:
             --output "${authority_dir}/hosted-native-release-authority.json" \
             > "${authority_dir}/hosted-native-release-candidate-build-status.json"
       - name: Download and verify pinned GitHub CLI verifier
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          github.repository_id == '1305601753' &&
+          (github.repository == 'DrHepa/rpg-world-forge' || github.repository == 'DrHepa/world-forge')
         shell: bash
         run: |
           set -euo pipefail
@@ -701,10 +637,20 @@ jobs:
           printf '%s\n' "${gh_bin}" > "${gh_root}/binary-path.txt"
       - name: Attest hosted native release authority candidate
         id: attest
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          github.repository_id == '1305601753' &&
+          (github.repository == 'DrHepa/rpg-world-forge' || github.repository == 'DrHepa/world-forge')
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2 audited tag
         with:
           subject-path: ${{ runner.temp }}/hosted-native-authority/hosted-native-release-authority.json
       - name: Verify attestation, write receipt, and reverify
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          github.repository_id == '1305601753' &&
+          (github.repository == 'DrHepa/rpg-world-forge' || github.repository == 'DrHepa/world-forge')
         shell: bash
         env:
           ATTESTATION_ID: ${{ steps.attest.outputs.attestation-id }}
@@ -713,16 +659,16 @@ jobs:
         run: |
           set -euo pipefail
           authority_dir="${RUNNER_TEMP}/hosted-native-authority"
-          aggregate_dir="${RUNNER_TEMP}/hosted-native-aggregate"
+          rows_dir="${RUNNER_TEMP}/world-forge-multigenre-rows"
           gh_root="${RUNNER_TEMP}/hosted-native-gh"
           gh_archive="$(cat "${gh_root}/archive-path.txt")"
           gh_bin="$(cat "${gh_root}/binary-path.txt")"
           cp "${ATTESTATION_BUNDLE_PATH}" "${authority_dir}/hosted-native-release-attestation.bundle.json"
           rows=(
-            "${aggregate_dir}/world-forge-Linux-py3.11.json"
-            "${aggregate_dir}/world-forge-Linux-py3.12.json"
-            "${aggregate_dir}/world-forge-Windows-py3.11.json"
-            "${aggregate_dir}/world-forge-Windows-py3.12.json"
+            "${rows_dir}/world-forge-Linux-py3.11.json"
+            "${rows_dir}/world-forge-Linux-py3.12.json"
+            "${rows_dir}/world-forge-Windows-py3.11.json"
+            "${rows_dir}/world-forge-Windows-py3.12.json"
           )
           python -m scripts.verify_hosted_native_release verify-write-receipt \
             --row "${rows[0]}" \
@@ -748,16 +694,16 @@ jobs:
             --gh "${gh_bin}" \
             > "${authority_dir}/hosted-native-release-reverify-status.json"
       - name: Upload hosted native authority evidence
+        if: >-
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          github.repository_id == '1305601753' &&
+          (github.repository == 'DrHepa/rpg-world-forge' || github.repository == 'DrHepa/world-forge')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: multigenre-hosted-native-release-authority-evidence
           path: |
             ${{ runner.temp }}/hosted-native-authority/hosted-native-release-authority.json
-            ${{ runner.temp }}/hosted-native-aggregate/world-forge-Linux-py3.11.json
-            ${{ runner.temp }}/hosted-native-aggregate/world-forge-Linux-py3.12.json
-            ${{ runner.temp }}/hosted-native-aggregate/world-forge-Windows-py3.11.json
-            ${{ runner.temp }}/hosted-native-aggregate/world-forge-Windows-py3.12.json
-            ${{ runner.temp }}/hosted-native-aggregate/world-forge-multigenre-aggregate.json
             ${{ runner.temp }}/hosted-native-authority/hosted-native-release-attestation.bundle.json
             ${{ runner.temp }}/hosted-native-authority/hosted-native-release-attestation-receipt.json
             ${{ runner.temp }}/hosted-native-authority/hosted-native-release-candidate-build-status.json
@@ -765,118 +711,3 @@ jobs:
             ${{ runner.temp }}/hosted-native-authority/hosted-native-release-reverify-status.json
           if-no-files-found: error
           retention-days: 90
-
-  multigenre-native-release-status:
-    name: Multi-genre native release status
-    needs:
-      - multigenre-native-release
-      - multigenre-native-release-aggregate
-      - multigenre-hosted-native-release-authority
-    if: always()
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Enforce hosted native release status truth table
-        shell: bash
-        run: |
-          set -euo pipefail
-          trusted_main_push=false
-          if [ "${{ github.event_name }}" = "push" ] && \
-             [ "${{ github.ref }}" = "refs/heads/main" ] && \
-             [ "${{ github.repository_id }}" = "1305601753" ] && \
-             { [ "${{ github.repository }}" = "DrHepa/rpg-world-forge" ] || [ "${{ github.repository }}" = "DrHepa/world-forge" ]; }; then
-            trusted_main_push=true
-          fi
-          matrix_result="${{ needs.multigenre-native-release.result }}"
-          aggregate_result="${{ needs.multigenre-native-release-aggregate.result }}"
-          authority_result="${{ needs.multigenre-hosted-native-release-authority.result }}"
-          if [ "${matrix_result}" != "success" ]; then
-            echo "native matrix must succeed; got ${matrix_result}" >&2
-            exit 1
-          fi
-          if [ "${aggregate_result}" != "success" ]; then
-            echo "native aggregate must succeed; got ${aggregate_result}" >&2
-            exit 1
-          fi
-          if [ "${trusted_main_push}" = "true" ]; then
-            if [ "${authority_result}" != "success" ]; then
-              echo "trusted hosted native authority is required on main push; got ${authority_result}" >&2
-              exit 1
-            fi
-            echo "release_status=hosted-pending"
-          else
-            if [ "${authority_result}" != "skipped" ]; then
-              echo "authority must be skipped outside trusted main push; got ${authority_result}" >&2
-              exit 1
-            fi
-            echo "release_status=not-hosted-authoritative"
-          fi
-
-  dependency-audit:
-    name: Dependency audit
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
-        with:
-          persist-credentials: false
-      - name: Set up pinned Studio Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: "24.14.1"
-          cache: npm
-          cache-dependency-path: apps/studio/package-lock.json
-      - name: Install exact Studio npm audit toolchain
-        run: npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0
-      - name: Verify pinned Studio dependency audit toolchain
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(node --version)" = "v24.14.1"
-          test "$(npm --version)" = "11.13.0"
-      - name: Audit exact requirement files
-        uses: pypa/gh-action-pip-audit@1220774d901786e6f652ae159f7b6bc8fea6d266 # v1.1.0
-        with:
-          inputs: >-
-            requirements-m5.lock
-            src/worldforge/templates/pyray_game/requirements.lock.tmpl
-          no-deps: true
-      - name: Audit exact Studio package lock
-        working-directory: apps/studio
-        run: npm audit --package-lock-only --audit-level=high
-
-  secret-scan:
-    name: Gitleaks 8.30.1 full-history scan
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out complete history
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # releases/v4 security backport
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Download and verify Gitleaks 8.30.1
-        env:
-          GITLEAKS_CHECKSUM_FILE_SHA256: 061476c21adaf5441516f96f185c1a4706a83cd6329b9b38762271b3d4a52fae
-          GITLEAKS_LINUX_X64_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
-        run: |
-          set -euo pipefail
-          version=8.30.1
-          archive="gitleaks_${version}_linux_x64.tar.gz"
-          checksums="gitleaks_${version}_checksums.txt"
-          base="https://github.com/gitleaks/gitleaks/releases/download/v${version}"
-          curl --fail --location --silent --show-error \
-            --output "${RUNNER_TEMP}/${checksums}" "${base}/${checksums}"
-          printf '%s  %s\n' "${GITLEAKS_CHECKSUM_FILE_SHA256}" "${RUNNER_TEMP}/${checksums}" \
-            | sha256sum --check --strict -
-          curl --fail --location --silent --show-error \
-            --output "${RUNNER_TEMP}/${archive}" "${base}/${archive}"
-          grep --fixed-strings --line-regexp \
-            "${GITLEAKS_LINUX_X64_SHA256}  ${archive}" "${RUNNER_TEMP}/${checksums}"
-          (
-            cd "${RUNNER_TEMP}"
-            printf '%s  %s\n' "${GITLEAKS_LINUX_X64_SHA256}" "${archive}" \
-              | sha256sum --check --strict -
-            tar --extract --gzip --file "${archive}" gitleaks
-          )
-          "${RUNNER_TEMP}/gitleaks" git --no-banner --redact --verbose --log-opts=--all

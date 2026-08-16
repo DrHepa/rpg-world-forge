@@ -95,14 +95,6 @@ REVIEWED_ADDITIONS[("tests/test_hosted_native_release_authority.py", _LEGACY_DAS
         ),
     )
 )
-REVIEWED_ADDITIONS[("tests/test_multigenre_release_gate.py", _LEGACY_DASHED)] = (
-    ReviewedIdentityPolicy(
-        category="regression_fixture",
-        justification=(
-            "Proves the trusted hosted old/new repository condition in release gate CI."
-        ),
-    )
-)
 REVIEWED_ADDITIONS[("src/worldforge/hosted_native_release_authority.py", _LEGACY_DASHED)] = (
     ReviewedIdentityPolicy(
         category="legacy_contract",

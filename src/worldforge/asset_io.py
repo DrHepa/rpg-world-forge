@@ -436,7 +436,8 @@ class _WindowsPublicationApi:
     _OBJ_CASE_INSENSITIVE = 0x00000040
     _DUPLICATE_SAME_ACCESS = 0x00000002
     _FILE_RENAME_INFORMATION = 10
-    _FILE_RENAME_INFORMATION_EX = 22
+    _WIN32_FILE_RENAME_INFO_EX = 22
+    _NT_FILE_RENAME_INFORMATION_EX = 65
     _FILE_DISPOSITION_INFORMATION = 4
     _FILE_DISPOSITION_INFORMATION_EX = 21
     _FILE_RENAME_FLAG_REPLACE_IF_EXISTS = 0x00000001
@@ -1150,6 +1151,7 @@ class _WindowsPublicationApi:
             flushable = False
         ex_information_classes = (
             callable(getattr(self, "set_information", None))
+            and callable(getattr(self, "nt_set_information", None))
             and _windows_migration_ex_contract_supported()
         )
         return WindowsMigrationCapabilities(
@@ -1196,25 +1198,34 @@ class _WindowsPublicationApi:
             raise AssetContractError("Windows migration target name is invalid")
         offset = _WindowsFileRenameInformationEx.filename.offset
         buffer = ctypes.create_string_buffer(
-            ctypes.sizeof(_WindowsFileRenameInformationEx) + len(encoded)
+            max(ctypes.sizeof(_WindowsFileRenameInformationEx), offset + len(encoded))
         )
         information = _WindowsFileRenameInformationEx.from_buffer(buffer)
         information.flags = (
             self._FILE_RENAME_FLAG_REPLACE_IF_EXISTS | self._FILE_RENAME_FLAG_POSIX_SEMANTICS
         )
-        # The caller-retained parent proves authority; a simple same-directory
-        # FileRenameInfoEx target itself requires a null RootDirectory.
-        information.root_directory = None
+        # Bind the simple target name to the caller-retained parent handle.
+        # This avoids cwd-relative rename behavior and keeps the migration
+        # publication authority inside the sealed same-directory transaction.
+        information.root_directory = parent_handle
         information.filename_length = len(encoded)
         ctypes.memmove(ctypes.addressof(buffer) + offset, encoded, len(encoded))
-        if not self.set_information(
-            ctypes.c_void_p(handle),
-            self._FILE_RENAME_INFORMATION_EX,
-            buffer,
-            len(buffer),
-        ):
-            error = ctypes.get_last_error()
-            raise AssetContractError(f"Could not publish Windows migration target: error {error}")
+        io_status = _WindowsIoStatusBlock()
+        status = ctypes.c_int32(
+            int(
+                self.nt_set_information(
+                    ctypes.c_void_p(handle),
+                    ctypes.byref(io_status),
+                    buffer,
+                    len(buffer),
+                    self._NT_FILE_RENAME_INFORMATION_EX,
+                )
+            )
+        ).value
+        if status >= 0:
+            return
+        error = int(self.nt_status_to_dos_error(status))
+        raise AssetContractError(f"Could not publish Windows migration target: error {error}")
 
     def dispose_ex(self, handle: int) -> None:
         information = _WindowsFileDispositionInformationEx(

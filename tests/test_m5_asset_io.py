@@ -665,48 +665,72 @@ class AssetIOTests(unittest.TestCase):
         ):
             api._state(7, directory=False, context="temporary output")
 
-    def test_windows_rename_ex_uses_same_directory_root_and_conservative_buffer(self) -> None:
+    def test_windows_rename_ex_uses_parent_bound_nt_request_and_conservative_buffer(self) -> None:
         api = object.__new__(asset_io_module._WindowsPublicationApi)
+        self.assertEqual(22, api._WIN32_FILE_RENAME_INFO_EX)
+        self.assertEqual(65, api._NT_FILE_RENAME_INFORMATION_EX)
 
         for destination_name in ("project.json", "projet-é.json"):
             with self.subTest(destination_name=destination_name):
-                captured: list[tuple[int, int, bytes, int]] = []
+                captured: list[tuple[int, object, bytes, int, int]] = []
 
-                def set_information(
+                def nt_set_information(
                     handle: ctypes.c_void_p,
-                    information_class: int,
+                    io_status: object,
                     buffer: ctypes.Array[ctypes.c_char],
                     buffer_size: int,
-                    captured: list[tuple[int, int, bytes, int]] = captured,
+                    information_class: int,
+                    captured: list[tuple[int, object, bytes, int, int]] = captured,
                 ) -> int:
                     captured.append(
                         (
                             int(handle.value or 0),
-                            information_class,
+                            io_status,
                             ctypes.string_at(buffer, buffer_size),
                             buffer_size,
+                            information_class,
                         )
                     )
-                    return 1
+                    return 0
 
-                api.set_information = set_information
+                api.nt_set_information = nt_set_information
+                api.nt_status_to_dos_error = lambda _status: 317
+                api.set_information = lambda *_args: self.fail(
+                    "migration rename_ex fell back to SetFileInformationByHandle"
+                )
                 api.rename_ex(41, 73, destination_name)
 
                 encoded = destination_name.encode("utf-16-le")
-                expected_size = ctypes.sizeof(
-                    asset_io_module._WindowsFileRenameInformationEx
-                ) + len(encoded)
+                expected_size = max(
+                    ctypes.sizeof(asset_io_module._WindowsFileRenameInformationEx),
+                    asset_io_module._WindowsFileRenameInformationEx.filename.offset + len(encoded),
+                )
                 self.assertEqual(1, len(captured))
-                handle, information_class, raw, buffer_size = captured[0]
+                handle, io_status, raw, buffer_size, information_class = captured[0]
                 self.assertEqual(41, handle)
-                self.assertEqual(api._FILE_RENAME_INFORMATION_EX, information_class)
+                self.assertIsNotNone(io_status)
+                self.assertEqual(65, information_class)
+                self.assertNotEqual(22, information_class)
                 self.assertEqual(expected_size, buffer_size)
                 information = asset_io_module._WindowsFileRenameInformationEx.from_buffer_copy(raw)
                 self.assertEqual(0x3, information.flags)
-                self.assertIsNone(information.root_directory)
+                self.assertEqual(73, information.root_directory)
                 self.assertEqual(len(encoded), information.filename_length)
                 offset = asset_io_module._WindowsFileRenameInformationEx.filename.offset
                 self.assertEqual(encoded, raw[offset : offset + len(encoded)])
+
+    def test_windows_rename_ex_maps_ntstatus_without_kernel32_fallback(self) -> None:
+        api = object.__new__(asset_io_module._WindowsPublicationApi)
+        api.nt_set_information = lambda *_args: -1073741790
+        api.nt_status_to_dos_error = lambda status: 5 if status == -1073741790 else 317
+        api.set_information = lambda *_args: self.fail(
+            "migration rename_ex fell back to SetFileInformationByHandle"
+        )
+
+        with self.assertRaisesRegex(
+            AssetContractError, "Could not publish Windows migration target: error 5"
+        ):
+            api.rename_ex(41, 73, "project.json")
 
     def test_windows_rename_ex_rejects_non_simple_destination_names(self) -> None:
         api = object.__new__(asset_io_module._WindowsPublicationApi)

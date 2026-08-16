@@ -86,14 +86,37 @@ def _write_live_toolchain_fixture(output: Path, python_version: str) -> None:
 
 
 class M5ReleaseReadinessTests(unittest.TestCase):
-    def test_root_workflow_uses_explicit_runners_and_only_full_action_shas(self) -> None:
+    def test_root_workflow_declares_five_static_visible_jobs_without_matrices(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("ubuntu-24.04", workflow)
-        self.assertIn("windows-2022", workflow)
         self.assertNotIn("ubuntu-latest", workflow)
         self.assertNotIn("windows-latest", workflow)
-        self.assertIn('          - "3.11"', workflow)
-        self.assertIn('          - "3.12"', workflow)
+
+        jobs_section = workflow.split("\njobs:\n", 1)[1]
+        job_ids = re.findall(r"^  ([A-Za-z0-9_-]+):$", jobs_section, flags=re.MULTILINE)
+        self.assertEqual(
+            [
+                "ubuntu-py312-core",
+                "ubuntu-py311-compat-native",
+                "windows-py312-release",
+                "windows-py311-compat-native",
+                "ci-required",
+            ],
+            job_ids,
+        )
+        self.assertNotIn("matrix:", workflow)
+        self.assertNotIn("headless-suite-shards", workflow)
+        self.assertNotIn("headless-suite-aggregate", workflow)
+        self.assertNotIn("verify_headless_suite", workflow)
+        self.assertNotIn("headless-suite-", workflow)
+
+        for path in (
+            ROOT / ".github/headless-suite-shards-v1.json",
+            ROOT / "scripts/verify_headless_suite.py",
+            ROOT / "tests/test_ci_headless_sharding.py",
+        ):
+            with self.subTest(path=path.name):
+                self.assertFalse(path.exists())
+
         uses = re.findall(r"^\s*uses:\s*([^@\s]+)@([^\s]+)", workflow, flags=re.MULTILINE)
         self.assertGreaterEqual(len(uses), 7)
         for action, revision in uses:
@@ -103,71 +126,167 @@ class M5ReleaseReadinessTests(unittest.TestCase):
         self.assertIn(("actions/setup-python", SETUP_PYTHON_SHA), uses)
         self.assertIn(("pypa/gh-action-pip-audit", PIP_AUDIT_ACTION_SHA), uses)
 
-    def test_raylib_workflow_separates_graphical_and_cpu_media_smokes(self) -> None:
+    def test_static_jobs_partition_full_suite_studio_native_and_security_once(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        graphical = workflow.split("  graphical-raylib-smoke:\n", 1)[1].split(
-            "  windows-raylib-cpu-media-smoke:\n", 1
+        ubuntu_core = workflow.split("  ubuntu-py312-core:\n", 1)[1].split(
+            "  ubuntu-py311-compat-native:\n", 1
         )[0]
-        windows_cpu_media = workflow.split("  windows-raylib-cpu-media-smoke:\n", 1)[1].split(
-            "  dependency-audit:\n", 1
+        ubuntu_compat = workflow.split("  ubuntu-py311-compat-native:\n", 1)[1].split(
+            "  windows-py312-release:\n", 1
         )[0]
+        windows_release = workflow.split("  windows-py312-release:\n", 1)[1].split(
+            "  windows-py311-compat-native:\n", 1
+        )[0]
+        windows_compat = workflow.split("  windows-py311-compat-native:\n", 1)[1].split(
+            "  ci-required:\n", 1
+        )[0]
+        final_gate = workflow.split("  ci-required:\n", 1)[1]
 
-        self.assertIn("name: Graphical raylib smoke (Ubuntu 24.04)", graphical)
-        self.assertIn("runs-on: ubuntu-24.04", graphical)
-        self.assertIn("xvfb-run -a python tests/raylib_smoke.py", graphical)
-        self.assertNotIn("windows-2022", graphical)
+        self.assertIn("name: Ubuntu Python 3.12 core release gates", ubuntu_core)
+        self.assertIn("runs-on: ubuntu-24.04", ubuntu_core)
+        self.assertIn('python-version: "3.12"', ubuntu_core)
+        self.assertIn("Run bounded full unittest suite once", ubuntu_core)
+        self.assertEqual(1, workflow.count("python - <<'PY'\n          import concurrent.futures"))
+        self.assertIn("Validate foundation release profile", ubuntu_core)
+        self.assertIn("Verify neutral standalone and reproducible releases", ubuntu_core)
+        self.assertIn("xvfb-run -a python tests/raylib_smoke.py", ubuntu_core)
+        self.assertIn("xvfb-run -a python tests/pyray_3d_native_smoke.py", ubuntu_core)
 
-        self.assertIn("name: Raylib CPU/media smoke (Windows Server 2022)", windows_cpu_media)
-        self.assertIn("runs-on: windows-2022", windows_cpu_media)
-        self.assertIn("python tests/raylib_cpu_media_smoke.py", windows_cpu_media)
-        self.assertNotIn("tests/raylib_smoke.py", windows_cpu_media)
-        self.assertNotIn("graphical", windows_cpu_media.casefold())
+        self.assertIn("name: Ubuntu Python 3.11 compatibility native gates", ubuntu_compat)
+        self.assertIn("runs-on: ubuntu-24.04", ubuntu_compat)
+        self.assertIn('python-version: "3.11"', ubuntu_compat)
+        self.assertNotIn("Run bounded full unittest suite once", ubuntu_compat)
+        self.assertNotIn("npm", ubuntu_compat.casefold())
+        self.assertNotIn("studio", ubuntu_compat.casefold())
+        self.assertNotIn("apps/studio", ubuntu_compat)
 
-        graphical_smoke = (ROOT / "tests/raylib_smoke.py").read_text(encoding="utf-8")
+        self.assertIn("name: Windows Python 3.12 release gates", windows_release)
+        self.assertIn("runs-on: windows-2022", windows_release)
+        self.assertIn('python-version: "3.12"', windows_release)
+        self.assertIn("Run native Windows world-project migration gate", windows_release)
+        self.assertIn("python tests/raylib_cpu_media_smoke.py", windows_release)
+        self.assertIn("python tests/pyray_3d_abi_smoke.py", windows_release)
+        self.assertIn("Run complete Studio verification", windows_release)
+        self.assertIn("Build and reverify unpacked Windows shell", windows_release)
+
+        self.assertIn("name: Windows Python 3.11 compatibility native gates", windows_compat)
+        self.assertIn("runs-on: windows-2022", windows_compat)
+        self.assertIn('python-version: "3.11"', windows_compat)
+        self.assertNotIn("Run complete Studio verification", windows_compat)
+
+        self.assertEqual(2, workflow.count("Run complete Studio verification"))
+        self.assertEqual(2, workflow.count("npm run verify"))
+        self.assertIn("Set up Node", ubuntu_core)
+        self.assertIn("Set up Node", windows_release)
+        self.assertNotIn("Run focused Studio verification on Ubuntu", workflow)
+        self.assertNotIn("Run focused Studio verification on Windows", workflow)
+        self.assertEqual(1, workflow.count("pypa/gh-action-pip-audit@"))
+        self.assertEqual(1, workflow.count('"${RUNNER_TEMP}/gitleaks" git'))
+        self.assertIn("name: CI required", final_gate)
+        self.assertIn("if: always()", final_gate)
         self.assertIn(
-            "if not pr.is_window_ready():\n"
-            '            raise RuntimeError("raylib did not produce a ready graphical window")',
-            graphical_smoke,
-        )
-        self.assertLess(
-            graphical_smoke.index("if not pr.is_window_ready():"),
-            graphical_smoke.index("pr.export_image"),
+            "needs:\n"
+            "      - ubuntu-py312-core\n"
+            "      - ubuntu-py311-compat-native\n"
+            "      - windows-py312-release\n"
+            "      - windows-py311-compat-native\n",
+            final_gate,
         )
 
-        cpu_media_smoke = (ROOT / "tests/raylib_cpu_media_smoke.py").read_text(encoding="utf-8")
-        for operation in (
-            "pr.gen_image_color",
-            "pr.export_image",
-            "pr.load_image",
-            "pr.get_image_color",
-        ):
-            self.assertIn(operation, cpu_media_smoke)
-        self.assertNotIn("pr.init_window", cpu_media_smoke)
-
-    def test_native_raylib_matrix_installs_locked_runtime_dependency_closure(self) -> None:
+    def test_windows_native_work_roots_are_unique_siblings_not_runner_temp_or_repo(
+        self,
+    ) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        native_release = workflow.split("  multigenre-native-release:\n", 1)[1].split(
-            "  multigenre-native-release-aggregate:\n", 1
+        windows_release = workflow.split("  windows-py312-release:\n", 1)[1].split(
+            "  windows-py311-compat-native:\n", 1
         )[0]
-        install_step = native_release.split(
-            "      - name: Download, attest, and install the locked raylib wheel\n",
-            1,
-        )[1].split("      - name: Install Linux virtual display\n", 1)[0]
+        windows_compat = workflow.split("  windows-py311-compat-native:\n", 1)[1].split(
+            "  ci-required:\n", 1
+        )[0]
+
+        for job_id, block in (
+            ("windows-py312-release", windows_release),
+            ("windows-py311-compat-native", windows_compat),
+        ):
+            with self.subTest(job_id=job_id):
+                self.assertIn("Initialize strict external Windows native work root", block)
+                self.assertIn("Cleanup strict external Windows native work root", block)
+                self.assertIn("WORLD_FORGE_NATIVE_WORK_ROOT", block)
+                self.assertIn("$env:GITHUB_WORKSPACE", block)
+                self.assertIn("$env:GITHUB_JOB", block)
+                self.assertIn("$env:GITHUB_RUN_ID", block)
+                self.assertIn("$env:GITHUB_RUN_ATTEMPT", block)
+                self.assertNotIn('work="${RUNNER_TEMP}/world-forge-multigenre-work"', block)
+                self.assertNotIn(
+                    '$output = Join-Path $env:RUNNER_TEMP "rwf-studio-shell-win32-x64"',
+                    block,
+                )
+                init_step = block.split("Initialize strict external Windows native work root", 1)[
+                    1
+                ].split("Cleanup strict external Windows native work root", 1)[0]
+                self.assertIn("Resolve-Path -LiteralPath $env:GITHUB_WORKSPACE", init_step)
+                self.assertIn("GetDirectoryName($repo)", init_step)
+                self.assertIn("GetFullPath", init_step)
+                self.assertIn("StartsWith($repo", init_step)
+                self.assertIn("StartsWith($runnerTemp", init_step)
+                self.assertIn("New-Item -ItemType Directory", init_step)
+                self.assertIn(">> $env:GITHUB_ENV", init_step)
+
+    def test_four_native_axes_publish_exact_rows_and_final_gate_aggregates_them(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        expected_rows = {
+            "ubuntu-py312-core": ("Linux", "3.12", "ubuntu-24.04"),
+            "ubuntu-py311-compat-native": ("Linux", "3.11", "ubuntu-24.04"),
+            "windows-py312-release": ("Windows", "3.12", "windows-2022"),
+            "windows-py311-compat-native": ("Windows", "3.11", "windows-2022"),
+        }
+
+        def job_block(job_id: str) -> str:
+            remainder = workflow.split(f"  {job_id}:\n", 1)[1]
+            lines = remainder.splitlines(keepends=True)
+            end = next(
+                (
+                    index
+                    for index, line in enumerate(lines)
+                    if line.startswith("  ") and not line.startswith("    ")
+                ),
+                len(lines),
+            )
+            return "".join(lines[:end])
+
+        for job_id, (runner_os, python_minor, runner_image) in expected_rows.items():
+            with self.subTest(job_id=job_id):
+                block = job_block(job_id)
+                self.assertIn(f'python-version: "{python_minor}"', block)
+                self.assertIn(f"WORLD_FORGE_RUNNER_IMAGE: {runner_image}", block)
+                self.assertIn("Download, attest, and install the locked raylib wheel", block)
+                self.assertIn("Verify exact generic release lineage with native raylib", block)
+                self.assertIn("Upload exact native evidence row", block)
+                self.assertIn(
+                    f"name: multigenre-release-{runner_os}-py{python_minor}",
+                    block,
+                )
 
         for pin in ("cffi==1.17.1", "pycparser==2.23", "raylib==6.0.1.0"):
             with self.subTest(pin=pin):
-                self.assertIn(pin, install_step)
-        self.assertIn("--require-hashes", install_step)
-        self.assertIn("python -m pip check", install_step)
-        self.assertNotRegex(
-            install_step,
-            r"python -m pip install\s+\\\n"
-            r"(?:.*\n)*?\s+--no-deps\s+\\\n"
-            r"(?:.*\n)*?\s+--requirement \"\$\{RUNNER_TEMP\}/world-forge-raylib-requirements.txt\"",
+                self.assertIn(pin, workflow)
+        final_gate = workflow.split("  ci-required:\n", 1)[1]
+        self.assertIn("Download Linux Python 3.11 native evidence", final_gate)
+        self.assertIn("Download Linux Python 3.12 native evidence", final_gate)
+        self.assertIn("Download Windows Python 3.11 native evidence", final_gate)
+        self.assertIn("Download Windows Python 3.12 native evidence", final_gate)
+        self.assertIn("Aggregate exact four native rows", final_gate)
+        self.assertIn(
+            'aggregate["matrix"] == [{"os": "linux", "python_minor": "3.11"}, '
+            '{"os": "linux", "python_minor": "3.12"}, '
+            '{"os": "windows", "python_minor": "3.11"}, '
+            '{"os": "windows", "python_minor": "3.12"}]',
+            final_gate,
         )
 
-    def test_security_jobs_verify_exact_inputs_and_scan_complete_history(self) -> None:
+    def test_final_gate_runs_security_once_and_fails_truthfully(self) -> None:
         workflow = WORKFLOW.read_text(encoding="utf-8")
+        final_gate = workflow.split("  ci-required:\n", 1)[1]
         self.assertIn("fetch-depth: 0", workflow)
         self.assertIn("requirements-m5.lock", workflow)
         self.assertIn("src/worldforge/templates/pyray_game/requirements.lock.tmpl", workflow)
@@ -180,6 +299,17 @@ class M5ReleaseReadinessTests(unittest.TestCase):
         self.assertIn('"${RUNNER_TEMP}/gitleaks" git', workflow)
         self.assertIn("--log-opts=--all", workflow)
         self.assertNotIn("continue-on-error", workflow)
+        self.assertIn("Install locked final-gate Python dependencies", final_gate)
+        self.assertIn("python -m pip install --requirement requirements-m5.lock", final_gate)
+        self.assertIn("python -m pip install --no-build-isolation --no-deps -e .", final_gate)
+        self.assertIn("python -m pip check", final_gate)
+        for needed in (
+            "${{ needs.ubuntu-py312-core.result }}",
+            "${{ needs.ubuntu-py311-compat-native.result }}",
+            "${{ needs.windows-py312-release.result }}",
+            "${{ needs.windows-py311-compat-native.result }}",
+        ):
+            self.assertIn(needed, final_gate)
         ignored = [
             line.strip()
             for line in (ROOT / ".gitleaksignore").read_text(encoding="utf-8").splitlines()
@@ -187,85 +317,32 @@ class M5ReleaseReadinessTests(unittest.TestCase):
         ]
         self.assertEqual(list(GITLEAKS_IGNORED_FINGERPRINTS), ignored)
 
-    def test_dependency_audit_combines_python_and_studio_lock_security_without_check_drift(
+    def test_full_suite_discovery_uses_real_test_modules_without_unittest_suite_introspection(
         self,
     ) -> None:
-        def dependency_audit_errors(workflow: str) -> set[str]:
-            errors: set[str] = set()
-            if workflow.count("  dependency-audit:\n") != 1:
-                errors.add("job-id-drift")
-                return errors
-            dependency_audit = workflow.split("  dependency-audit:\n", 1)[1].split(
-                "  secret-scan:\n", 1
-            )[0]
-            step_blocks = re.findall(
-                r"(?ms)^      - name: (?P<name>[^\n]+)\n(?P<body>.*?)(?=^      - name: |\Z)",
-                dependency_audit,
-            )
-            steps = {name: body for name, body in step_blocks}
-            setup_node = steps.get("Set up pinned Studio Node", "")
-            verify_node = steps.get("Verify pinned Studio dependency audit toolchain", "")
-            studio_audit = steps.get("Audit exact Studio package lock", "")
-
-            if "name: Dependency audit" not in dependency_audit:
-                errors.add("check-identity-drift")
-            if f"uses: actions/setup-node@{SETUP_NODE_SHA}" not in setup_node:
-                errors.add("floating-node-action")
-            if 'node-version: "24.14.1"' not in setup_node:
-                errors.add("node-version-drift")
-            if "cache: npm" not in setup_node or (
-                "cache-dependency-path: apps/studio/package-lock.json" not in setup_node
-            ):
-                errors.add("studio-lock-cache-drift")
-            if (
-                "npm install --global --ignore-scripts --no-audit --no-fund npm@11.13.0"
-                not in dependency_audit
-            ):
-                errors.add("npm-toolchain-drift")
-            if (
-                'test "$(node --version)" = "v24.14.1"' not in verify_node
-                or 'test "$(npm --version)" = "11.13.0"' not in verify_node
-            ):
-                errors.add("toolchain-version-check-drift")
-            if "working-directory: apps/studio" not in studio_audit:
-                errors.add("studio-working-directory-drift")
-            if "npm audit --package-lock-only --audit-level=high" not in studio_audit:
-                errors.add("studio-audit-command-drift")
-            if "--omit=dev" in studio_audit:
-                errors.add("studio-audit-omits-dev")
-            if "npm audit fix" in studio_audit or "npm install\n" in studio_audit:
-                errors.add("studio-lock-mutation")
-            return errors
-
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertEqual(dependency_audit_errors(workflow), set())
+        core = workflow.split("  ubuntu-py312-core:\n", 1)[1].split(
+            "  ubuntu-py311-compat-native:\n", 1
+        )[0]
+        script = core.split("      - name: Run bounded full unittest suite once\n", 1)[1].split(
+            "      - name: Upload exact native evidence row\n", 1
+        )[0]
+        self.assertIn('Path("tests").glob("test_*.py")', script)
+        self.assertIn('f"tests.{path.stem}"', script)
+        self.assertIn("ThreadPoolExecutor(max_workers=4)", script)
+        self.assertIn("failing modules:", script)
+        self.assertNotIn("unittest.suite", script)
+        self.assertNotIn("for group in suite for case in group", script)
 
-        mutations = {
-            "job-id-drift": workflow.replace(
-                "  dependency-audit:\n", "  dependency-security-audit:\n", 1
-            ),
-            "floating-node-action": workflow.replace(
-                f"Set up pinned Studio Node\n        uses: actions/setup-node@{SETUP_NODE_SHA}",
-                "Set up pinned Studio Node\n        uses: actions/setup-node@v4",
-                1,
-            ),
-            "studio-audit-omits-dev": workflow.replace(
-                "npm audit --package-lock-only --audit-level=high",
-                "npm audit --package-lock-only --audit-level=high --omit=dev",
-                1,
-            ),
-            "studio-working-directory-drift": workflow.replace(
-                (
-                    "      - name: Audit exact Studio package lock\n"
-                    "        working-directory: apps/studio\n"
-                ),
-                "      - name: Audit exact Studio package lock\n",
-                1,
-            ),
-        }
-        for expected, mutated in mutations.items():
-            with self.subTest(expected=expected):
-                self.assertIn(expected, dependency_audit_errors(mutated))
+        modules = [
+            f"tests.{path.stem}"
+            for path in sorted((ROOT / "tests").glob("test_*.py"))
+            if path.name != "__init__.py"
+        ]
+        self.assertGreater(len(modules), 100)
+        self.assertEqual(len(modules), len(set(modules)))
+        self.assertIn("tests.test_m5_release_readiness", modules)
+        self.assertIn("tests.test_multigenre_release_gate", modules)
 
     def test_driver_refuses_to_write_inside_repository(self) -> None:
         blocked = ROOT / "must-not-create-readiness-output"

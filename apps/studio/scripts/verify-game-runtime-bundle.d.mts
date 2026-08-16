@@ -23,6 +23,10 @@ export function applySelfResealedGameRuntimeBundleMutation(
     | "composition_asset_inventory_id",
 ): Promise<void>;
 
+export function createCanonicalGameRuntimeBundleSmokeRoot(
+  parent?: string,
+): Promise<string>;
+
 export function verifyGameRuntimeBundleArtifact(input: {
   artifactKind: "asar" | "module";
   artifactPath: string;

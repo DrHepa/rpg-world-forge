@@ -1,7 +1,10 @@
 import {
+  mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -18,6 +21,7 @@ import {
 import {
   applySelfResealedGameRuntimeBundleMutation,
   buildGameRuntimeBundleFixture,
+  createCanonicalGameRuntimeBundleSmokeRoot,
   writeGameRuntimeBundleFixture,
 } from "../../scripts/verify-game-runtime-bundle.mjs";
 import {
@@ -177,6 +181,22 @@ function buildStructuralBundle() {
 }
 
 describe("generic game runtime bundle validation", () => {
+  it("canonicalizes an aliased smoke root before strict bundle verification", async () => {
+    const canonicalParent = path.join(temporaryRoot, "canonical-smoke-parent");
+    const aliasParent = path.join(temporaryRoot, "aliased-smoke-parent");
+    await mkdir(canonicalParent);
+    await symlink(
+      canonicalParent,
+      aliasParent,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+
+    const root = await createCanonicalGameRuntimeBundleSmokeRoot(aliasParent);
+
+    expect(root).toBe(await realpath(root));
+    expect(path.dirname(root)).toBe(await realpath(canonicalParent));
+  });
+
   it("uses no raw O_NOFOLLOW flag on Windows while keeping it elsewhere", () => {
     expect(noFollowOpenFlagForPlatform("win32", 0x20000)).toBe(0);
     expect(noFollowOpenFlagForPlatform("linux", 0x20000)).toBe(0x20000);

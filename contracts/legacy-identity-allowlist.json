@@ -12,11 +12,14 @@
     },
     {
       "category": "migration",
-      "file_sha256": "15a32d7672a3114ea78b3a9ddb0f6309ac5ad45c0ba446e4c5f86331010fa773",
+      "file_sha256": "e813bf07116a900217c809960a0f139704bef255fc6931b724dedaea6519105a",
       "justification": "Restricts the hosted native authority workflow old/new repository bridge to trusted main pushes and the stable GitHub repository ID.",
       "offsets": [
-        29834,
-        37767
+        32088,
+        33608,
+        35085,
+        35610,
+        38116
       ],
       "path": ".github/workflows/ci.yml",
       "pattern": "rpg-world-forge"
@@ -3082,7 +3085,7 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "fdb942248e9d17233aa47eaaa450019940de0008628924fa8c9ea25c37f14c89",
+      "file_sha256": "7d753f5f3389358124d2214cbe6784ca7c84b6200a30b8b81a91078fae32e6c9",
       "justification": "Regression evidence preserves legacy identity input and reader behavior.",
       "offsets": [
         6027,
@@ -3092,14 +3095,14 @@
         12673,
         18476,
         19962,
-        31544
+        29843
       ],
       "path": "tests/test_identity_audit.py",
       "pattern": "RPG World Forge"
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "fdb942248e9d17233aa47eaaa450019940de0008628924fa8c9ea25c37f14c89",
+      "file_sha256": "7d753f5f3389358124d2214cbe6784ca7c84b6200a30b8b81a91078fae32e6c9",
       "justification": "Regression evidence preserves legacy identity input and reader behavior.",
       "offsets": [
         5866,
@@ -3131,12 +3134,12 @@
         20454,
         21144,
         23432,
-        25665,
-        27939,
-        29316,
-        29861,
-        30504,
-        31087
+        25565,
+        26238,
+        27615,
+        28160,
+        28803,
+        29386
       ],
       "path": "tests/test_identity_audit.py",
       "pattern": "rpg-world-forge"
@@ -3742,16 +3745,6 @@
         794
       ],
       "path": "tests/windows_native_world_project_migration.py",
-      "pattern": "rpg-world-forge"
-    },
-    {
-      "category": "regression_fixture",
-      "file_sha256": "7da3d9a68580578f240d00016a38ba811cb61f2925ab8eb69aee19b113a5e8bd",
-      "justification": "Proves the trusted hosted old/new repository condition in release gate CI.",
-      "offsets": [
-        23516
-      ],
-      "path": "tests/test_multigenre_release_gate.py",
       "pattern": "rpg-world-forge"
     }
   ],

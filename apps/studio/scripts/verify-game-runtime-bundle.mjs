@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -34,6 +35,19 @@ export const GAME_RUNTIME_BUNDLE_ENTRY =
 
 function fail(code) {
   throw new Error(`game_runtime_bundle_smoke:${code}`);
+}
+
+/**
+ * @param {string} [parent]
+ * @returns {Promise<string>}
+ */
+export async function createCanonicalGameRuntimeBundleSmokeRoot(
+  parent = os.tmpdir(),
+) {
+  const root = await mkdtemp(
+    path.join(parent, "world-forge-game-runtime-bundle-smoke-"),
+  );
+  return realpath(root);
 }
 
 function canonicalPretty(value) {
@@ -729,9 +743,7 @@ async function smokeRuntime(runtimeSurface, artifactKind) {
   ) {
     fail("surface_invalid");
   }
-  const temporaryRoot = await mkdtemp(
-    path.join(os.tmpdir(), "world-forge-game-runtime-bundle-smoke-"),
-  );
+  const temporaryRoot = await createCanonicalGameRuntimeBundleSmokeRoot();
   let verified = 0;
   let tamperRejected = 0;
   let resealedTamperRejected = 0;

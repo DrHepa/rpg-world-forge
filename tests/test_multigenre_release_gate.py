@@ -25,6 +25,12 @@ from worldforge.standalone_templates import STANDALONE_TEMPLATE_FILES
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _load_gate():
+    from scripts import verify_multigenre_release as gate
+
+    return gate
+
+
 def _workflow_job_block(workflow: str, job_id: str) -> str:
     marker = f"  {job_id}:\n"
     if workflow.count(marker) != 1:
@@ -299,408 +305,6 @@ def _assert_all_uses_are_pinned(workflow: str) -> None:
         raise AssertionError("workflow must contain at least ten action uses")
     for uses_value in uses:
         _action_ref(uses_value)
-
-
-def _assert_native_release_job_contract(job: dict[str, object]) -> None:
-    if job.get("needs") is not None:
-        raise AssertionError("native release matrix job must not declare needs")
-    self_permissions = job.get("permissions")
-    if self_permissions is not None:
-        raise AssertionError("native release matrix job must not declare permissions")
-    if job.get("runs-on") != "${{ matrix.os }}":
-        raise AssertionError("native release matrix job must run on matrix.os")
-    if job.get("env") != {"WORLD_FORGE_RUNNER_IMAGE": "${{ matrix.os }}"}:
-        raise AssertionError("native release matrix job must bind runner image to matrix.os")
-    if job.get("strategy") != {
-        "fail-fast": "false",
-        "matrix": {"os": ["ubuntu-24.04", "windows-2022"], "python-version": ["3.11", "3.12"]},
-    }:
-        raise AssertionError(
-            "native release matrix must be the exact Linux/Windows x 3.11/3.12 grid"
-        )
-    upload = _step_by_name(job, "Upload exact matrix evidence")
-    if _action_ref(upload.get("uses")) != (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
-    ):
-        raise AssertionError("native release upload must use the audited upload-artifact ref")
-    trusted_row_condition = (
-        "always() && "
-        "steps.native_release_verify.outcome == 'success' && "
-        "steps.native_release_verify.outputs.release_row_published == 'true' && "
-        "steps.native_release_verify.outputs.release_row_path != ''"
-    )
-    if upload.get("if") != trusted_row_condition:
-        raise AssertionError("native release row upload must require trusted publication outputs")
-    if upload.get("continue-on-error") is not None:
-        raise AssertionError("native release row upload must remain fail-closed")
-    if upload.get("with") != {
-        "name": "multigenre-release-${{ runner.os }}-py${{ matrix.python-version }}",
-        "path": "${{ steps.native_release_verify.outputs.release_row_path }}",
-        "if-no-files-found": "error",
-        "retention-days": "90",
-    }:
-        raise AssertionError("native release upload artifact contract drifted")
-    diagnostics = _step_by_name(job, "Upload native smoke diagnostics")
-    if _action_ref(diagnostics.get("uses")) != (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
-    ):
-        raise AssertionError("native diagnostics upload must use the audited upload-artifact ref")
-    trusted_condition = (
-        "always() && "
-        "steps.native_release_verify.outcome == 'success' && "
-        "steps.native_release_verify.outputs.native_smoke_evidence_published == 'true' && "
-        "steps.native_release_verify.outputs.native_smoke_evidence_path != ''"
-    )
-    if diagnostics.get("if") != trusted_condition:
-        raise AssertionError(
-            "native diagnostics upload must require the explicit trusted publication outputs"
-        )
-    if diagnostics.get("continue-on-error") is not None:
-        raise AssertionError("native diagnostics upload must remain fail-closed")
-    if diagnostics.get("with") != {
-        "name": "multigenre-native-diagnostics-${{ runner.os }}-py${{ matrix.python-version }}",
-        "path": "${{ steps.native_release_verify.outputs.native_smoke_evidence_path }}",
-        "if-no-files-found": "error",
-        "retention-days": "90",
-    }:
-        raise AssertionError("native diagnostics upload artifact contract drifted")
-    verify = _step_by_name(job, "Verify exact generic release lineage with native raylib")
-    if verify.get("id") != "native_release_verify":
-        raise AssertionError("native release verifier step id drifted")
-    _assert_closed_run_tokens(
-        verify.get("run"),
-        required={
-            "--native required",
-        },
-        forbidden={
-            "continue-on-error",
-            "--native optional",
-            "--report",
-            "${RUNNER_TEMP}/world-forge-${RUNNER_OS}",
-        },
-    )
-    enforce = _step_by_name(job, "Enforce exact native release result")
-    if enforce.get("if") != "always()" or enforce.get("continue-on-error") is not None:
-        raise AssertionError("native release enforcement must always run and remain fail-closed")
-    _assert_closed_run_tokens(
-        enforce.get("run"),
-        required={
-            "steps.native_release_verify.outputs.release_row_path",
-            "steps.native_release_verify.outputs.release_row_published",
-            "steps.native_release_verify.outcome",
-            'report["status"] == "passed"',
-            'case["native_evidence"]["state"] == "passed"',
-        },
-        forbidden={"continue-on-error", "native_smoke_evidence_path", "RUNNER_TEMP"},
-    )
-    step_names = [step.get("name") for step in job["steps"]]
-    if not (
-        step_names.index("Verify exact generic release lineage with native raylib")
-        < step_names.index("Upload native smoke diagnostics")
-        < step_names.index("Enforce exact native release result")
-    ):
-        raise AssertionError("native diagnostics must upload before final result enforcement")
-
-
-def _assert_aggregate_job_contract(job: dict[str, object]) -> None:
-    if job.get("needs") != "multigenre-native-release":
-        raise AssertionError("aggregate job must need only the native release matrix")
-    if job.get("runs-on") != "ubuntu-24.04":
-        raise AssertionError("aggregate job runner drifted")
-    if job.get("permissions") != {"contents": "read"}:
-        raise AssertionError("aggregate job permissions drifted")
-    downloads = [
-        step
-        for step in job.get("steps", [])
-        if isinstance(step, dict) and step.get("uses", "").startswith("actions/download-artifact@")
-    ]
-    expected_downloads = [
-        (
-            "Download Linux Python 3.11 matrix evidence",
-            "multigenre-release-Linux-py3.11",
-            "${{ runner.temp }}/multigenre-release-Linux-py3.11",
-        ),
-        (
-            "Download Linux Python 3.12 matrix evidence",
-            "multigenre-release-Linux-py3.12",
-            "${{ runner.temp }}/multigenre-release-Linux-py3.12",
-        ),
-        (
-            "Download Windows Python 3.11 matrix evidence",
-            "multigenre-release-Windows-py3.11",
-            "${{ runner.temp }}/multigenre-release-Windows-py3.11",
-        ),
-        (
-            "Download Windows Python 3.12 matrix evidence",
-            "multigenre-release-Windows-py3.12",
-            "${{ runner.temp }}/multigenre-release-Windows-py3.12",
-        ),
-    ]
-    if len(downloads) != 4:
-        raise AssertionError("aggregate job must use exactly four explicit artifact downloads")
-    for step, (name, artifact_name, path) in zip(downloads, expected_downloads, strict=True):
-        if step.get("name") != name:
-            raise AssertionError("aggregate download step name drifted")
-        if _action_ref(step.get("uses")) != (
-            "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
-        ):
-            raise AssertionError("aggregate download step action ref drifted")
-        if step.get("with") != {"name": artifact_name, "path": path}:
-            raise AssertionError("aggregate download step must use an exact name/path pair")
-    aggregate = _step_by_name(job, "Aggregate exact 2x2 native evidence")
-    _assert_closed_run_tokens(
-        aggregate.get("run"),
-        required={
-            "expected_os expected_python expected_runner directory expected_name",
-            "world-forge-Linux-py3.11.json",
-            "world-forge-Linux-py3.12.json",
-            "world-forge-Windows-py3.11.json",
-            "world-forge-Windows-py3.12.json",
-            "from worldforge.multigenre_release_contract import validate_aggregate_report",
-            "from worldforge.multigenre_release_contract import validate_release_report",
-            'report["host"]["os"] == sys.argv[2]',
-            'report["host"]["python_minor"] == sys.argv[3]',
-            'report["host"]["runner_image"] == sys.argv[4]',
-            'report["toolchain"]["python"].startswith(sys.argv[3] + ".")',
-            '--aggregate "${reports[@]}"',
-            (
-                'aggregate["matrix"] == [{"os": "linux", "python_minor": "3.11"}, '
-                '{"os": "linux", "python_minor": "3.12"}, '
-                '{"os": "windows", "python_minor": "3.11"}, '
-                '{"os": "windows", "python_minor": "3.12"}]'
-            ),
-            "validate_aggregate_report(aggregate)",
-        },
-        forbidden={
-            "pattern:",
-            "merge-multiple",
-            "continue-on-error",
-            'host"]["runner_os"]',
-            'toolchain"]["python_version"]',
-            "operating_systems",
-            "python_versions",
-        },
-    )
-    upload = _step_by_name(job, "Upload aggregate and exact rows evidence")
-    if _action_ref(upload.get("uses")) != (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
-    ):
-        raise AssertionError("aggregate upload action ref drifted")
-    if upload.get("with") != {
-        "name": "multigenre-release-aggregate-and-rows",
-        "path": "\n".join(
-            [
-                (
-                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
-                    "world-forge-multigenre-aggregate.json"
-                ),
-                (
-                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
-                    "world-forge-Linux-py3.11.json"
-                ),
-                (
-                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
-                    "world-forge-Linux-py3.12.json"
-                ),
-                (
-                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
-                    "world-forge-Windows-py3.11.json"
-                ),
-                (
-                    "${{ runner.temp }}/world-forge-multigenre-aggregate-evidence/"
-                    "world-forge-Windows-py3.12.json"
-                ),
-            ]
-        ),
-        "if-no-files-found": "error",
-        "retention-days": "90",
-    }:
-        raise AssertionError("aggregate upload file list/retention drifted")
-
-
-def _assert_authority_job_contract(job: dict[str, object]) -> None:
-    if job.get("needs") != "multigenre-native-release-aggregate":
-        raise AssertionError("authority job must need only the aggregate job")
-    if job.get("runs-on") != "ubuntu-24.04":
-        raise AssertionError("authority job runner drifted")
-    if job.get("permissions") != {
-        "contents": "read",
-        "id-token": "write",
-        "attestations": "write",
-    }:
-        raise AssertionError("authority job permissions drifted")
-    if job.get("if") != (
-        "github.event_name == 'push' && github.ref == 'refs/heads/main' && "
-        "github.repository_id == '1305601753' && "
-        "(github.repository == 'DrHepa/rpg-world-forge' || "
-        "github.repository == 'DrHepa/world-forge')"
-    ):
-        raise AssertionError("authority trusted-main condition drifted")
-    checkout = _step_by_name(job, "Check out source")
-    if _action_ref(checkout.get("uses")) != (
-        "actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
-    ):
-        raise AssertionError("authority checkout action ref drifted")
-    if checkout.get("with") != {"persist-credentials": "false"}:
-        raise AssertionError("authority checkout must not persist credentials")
-    download = _step_by_name(job, "Download exact aggregate and rows evidence")
-    if _action_ref(download.get("uses")) != (
-        "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093"
-    ):
-        raise AssertionError("authority download action ref drifted")
-    if download.get("with") != {
-        "name": "multigenre-release-aggregate-and-rows",
-        "path": "${{ runner.temp }}/hosted-native-aggregate",
-    }:
-        raise AssertionError("authority download artifact contract drifted")
-    attest = _step_by_name(job, "Attest hosted native release authority candidate")
-    if attest.get("id") != "attest":
-        raise AssertionError("authority attest step id drifted")
-    if _action_ref(attest.get("uses")) != (
-        "actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6"
-    ):
-        raise AssertionError("authority attest action ref drifted")
-    if attest.get("with") != {
-        "subject-path": (
-            "${{ runner.temp }}/hosted-native-authority/hosted-native-release-authority.json"
-        )
-    }:
-        raise AssertionError("authority attest subject path drifted")
-    build = _step_by_name(job, "Build hosted native release authority candidate")
-    _assert_closed_run_tokens(
-        build.get("run"),
-        required={
-            "${aggregate_dir}/world-forge-Linux-py3.11.json",
-            "${aggregate_dir}/world-forge-Linux-py3.12.json",
-            "${aggregate_dir}/world-forge-Windows-py3.11.json",
-            "${aggregate_dir}/world-forge-Windows-py3.12.json",
-            '--output "${authority_dir}/hosted-native-release-authority.json"',
-        },
-        forbidden={"docs/evidence/multigenre-release-status.json", "registry"},
-    )
-    verify = _step_by_name(job, "Verify attestation, write receipt, and reverify")
-    if verify.get("env") != {
-        "ATTESTATION_ID": "${{ steps.attest.outputs.attestation-id }}",
-        "ATTESTATION_URL": "${{ steps.attest.outputs.attestation-url }}",
-        "ATTESTATION_BUNDLE_PATH": "${{ steps.attest.outputs.bundle-path }}",
-    }:
-        raise AssertionError("authority attestation env contract drifted")
-    _assert_closed_run_tokens(
-        verify.get("run"),
-        required={
-            "verify-write-receipt",
-            "reverify",
-            '--candidate "${authority_dir}/hosted-native-release-authority.json"',
-            '--bundle "${authority_dir}/hosted-native-release-attestation.bundle.json"',
-            '--gh-archive "${gh_archive}"',
-            '--gh "${gh_bin}"',
-            '--receipt "${authority_dir}/hosted-native-release-attestation-receipt.json"',
-            '--attestation-id "${ATTESTATION_ID}"',
-            '--attestation-url "${ATTESTATION_URL}"',
-        },
-        forbidden={"docs/evidence/multigenre-release-status.json", "registry"},
-    )
-    upload = _step_by_name(job, "Upload hosted native authority evidence")
-    if _action_ref(upload.get("uses")) != (
-        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
-    ):
-        raise AssertionError("authority upload action ref drifted")
-    if upload.get("with") != {
-        "name": "multigenre-hosted-native-release-authority-evidence",
-        "path": "\n".join(
-            [
-                "${{ runner.temp }}/hosted-native-authority/hosted-native-release-authority.json",
-                "${{ runner.temp }}/hosted-native-aggregate/world-forge-Linux-py3.11.json",
-                "${{ runner.temp }}/hosted-native-aggregate/world-forge-Linux-py3.12.json",
-                "${{ runner.temp }}/hosted-native-aggregate/world-forge-Windows-py3.11.json",
-                "${{ runner.temp }}/hosted-native-aggregate/world-forge-Windows-py3.12.json",
-                "${{ runner.temp }}/hosted-native-aggregate/world-forge-multigenre-aggregate.json",
-                (
-                    "${{ runner.temp }}/hosted-native-authority/"
-                    "hosted-native-release-attestation.bundle.json"
-                ),
-                (
-                    "${{ runner.temp }}/hosted-native-authority/"
-                    "hosted-native-release-attestation-receipt.json"
-                ),
-                (
-                    "${{ runner.temp }}/hosted-native-authority/"
-                    "hosted-native-release-candidate-build-status.json"
-                ),
-                (
-                    "${{ runner.temp }}/hosted-native-authority/"
-                    "hosted-native-release-receipt-status.json"
-                ),
-                (
-                    "${{ runner.temp }}/hosted-native-authority/"
-                    "hosted-native-release-reverify-status.json"
-                ),
-            ]
-        ),
-        "if-no-files-found": "error",
-        "retention-days": "90",
-    }:
-        raise AssertionError("authority upload file list/retention drifted")
-
-
-def _hosted_native_release_status(
-    *,
-    trusted_main_push: bool,
-    matrix_result: str | None,
-    aggregate_result: str | None,
-    authority_result: str | None,
-) -> tuple[bool, str]:
-    if matrix_result != "success":
-        return False, f"native matrix must succeed; got {matrix_result}"
-    if aggregate_result != "success":
-        return False, f"native aggregate must succeed; got {aggregate_result}"
-    if trusted_main_push:
-        if authority_result != "success":
-            return (
-                False,
-                f"trusted hosted native authority is required on main push; got {authority_result}",
-            )
-        return True, "release_status=hosted-pending"
-    if authority_result != "skipped":
-        return False, f"authority must be skipped outside trusted main push; got {authority_result}"
-    return True, "release_status=not-hosted-authoritative"
-
-
-def _assert_status_job_contract(job: dict[str, object]) -> None:
-    if job.get("needs") != [
-        "multigenre-native-release",
-        "multigenre-native-release-aggregate",
-        "multigenre-hosted-native-release-authority",
-    ]:
-        raise AssertionError("status job needs list drifted")
-    if job.get("if") != "always()":
-        raise AssertionError("status job must run with always()")
-    if job.get("runs-on") != "ubuntu-24.04":
-        raise AssertionError("status job runner drifted")
-    if job.get("permissions") != {"contents": "read"}:
-        raise AssertionError("status job permissions drifted")
-    status = _step_by_name(job, "Enforce hosted native release status truth table")
-    _assert_closed_run_tokens(
-        status.get("run"),
-        required={
-            "trusted_main_push=false",
-            "trusted_main_push=true",
-            'matrix_result="${{ needs.multigenre-native-release.result }}"',
-            'aggregate_result="${{ needs.multigenre-native-release-aggregate.result }}"',
-            'authority_result="${{ needs.multigenre-hosted-native-release-authority.result }}"',
-            "release_status=hosted-pending",
-            "release_status=not-hosted-authoritative",
-            "authority must be skipped outside trusted main push",
-            "trusted hosted native authority is required on main push",
-        },
-        forbidden={"release_status=ready", "multigenre-hosted-native-release-authority-evidence"},
-    )
-
-
-def _load_gate():
-    from scripts import verify_multigenre_release
-
-    return verify_multigenre_release
 
 
 def _native_smoke_report() -> dict[str, object]:
@@ -2900,8 +2504,7 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
     def test_prewritten_rogue_github_outputs_cannot_authorize_upload(self) -> None:
         gate = _load_gate()
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        release = _workflow_job_contract(workflow, "multigenre-native-release")
-        diagnostics = _step_by_name(release, "Upload native smoke diagnostics")
+        self.assertNotIn("Upload native smoke diagnostics", workflow)
         with tempfile.TemporaryDirectory(prefix="wf-native-github-preclaim-") as temporary:
             root = Path(temporary)
             output = root / "github-output"
@@ -2922,19 +2525,7 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
             ):
                 gate._publish_native_smoke_github_output(output, evidence_root, release_row)
 
-            self.assertEqual(
-                (
-                    "always() && steps.native_release_verify.outcome == 'success' && "
-                    "steps.native_release_verify.outputs.native_smoke_evidence_published "
-                    "== 'true' && steps.native_release_verify.outputs."
-                    "native_smoke_evidence_path != ''"
-                ),
-                diagnostics["if"],
-            )
-            self.assertEqual(
-                "${{ steps.native_release_verify.outputs.native_smoke_evidence_path }}",
-                diagnostics["with"]["path"],
-            )
+            self.assertNotIn("native_smoke_evidence_path", workflow)
 
     def test_ci_native_main_does_not_forward_a_child_discoverable_report_path(self) -> None:
         gate = _load_gate()
@@ -3879,202 +3470,50 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
                         source_root=repository,
                     )
 
-    def test_ci_declares_exact_native_matrix_and_pinned_artifact_aggregation(self) -> None:
+    def test_ci_declares_four_static_native_axes_and_final_aggregation(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         self.assertNotIn(
             "${{ runner.temp }}/world-forge-multigenre-work/native-smoke-evidence",
             workflow,
         )
-        release_job = _workflow_job_contract(workflow, "multigenre-native-release")
-        aggregate_job = _workflow_job_contract(workflow, "multigenre-native-release-aggregate")
-
-        _assert_native_release_job_contract(release_job)
-        _assert_aggregate_job_contract(aggregate_job)
-
-    def test_ci_declares_hosted_native_authority_attestation_job(self) -> None:
-        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        authority = _workflow_job_contract(workflow, "multigenre-hosted-native-release-authority")
-
-        _assert_authority_job_contract(authority)
-
-    def test_ci_final_status_enforces_main_authority_and_pr_skip_truth_table(self) -> None:
-        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        status = _workflow_job_contract(workflow, "multigenre-native-release-status")
-
-        _assert_status_job_contract(status)
-
-        cases = [
-            (True, "success", "success", "success", True, "release_status=hosted-pending"),
-            (
-                False,
-                "success",
-                "success",
-                "skipped",
-                True,
-                "release_status=not-hosted-authoritative",
-            ),
-            (True, "failure", "success", "success", False, "native matrix must succeed"),
-            (True, "cancelled", "success", "success", False, "native matrix must succeed"),
-            (True, None, "success", "success", False, "native matrix must succeed"),
-            (True, "success", "failure", "success", False, "native aggregate must succeed"),
-            (
-                True,
-                "success",
-                "success",
-                "skipped",
-                False,
-                "trusted hosted native authority is required on main push",
-            ),
-            (
-                True,
-                "success",
-                "success",
-                None,
-                False,
-                "trusted hosted native authority is required on main push",
-            ),
-            (
-                False,
-                "success",
-                "success",
-                "success",
-                False,
-                "authority must be skipped outside trusted main push",
-            ),
-            (
-                False,
-                "success",
-                "success",
-                "failure",
-                False,
-                "authority must be skipped outside trusted main push",
-            ),
-        ]
-        for trusted, matrix, aggregate, authority, expected_ok, expected_message in cases:
-            with self.subTest(
-                trusted=trusted, matrix=matrix, aggregate=aggregate, authority=authority
-            ):
-                ok, message = _hosted_native_release_status(
-                    trusted_main_push=trusted,
-                    matrix_result=matrix,
-                    aggregate_result=aggregate,
-                    authority_result=authority,
-                )
-                self.assertIs(ok, expected_ok)
-                self.assertIn(expected_message, message)
-
-    def test_ci_structural_contract_helpers_reject_broken_workflow_mutations(self) -> None:
-        workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-
-        aggregate = _workflow_job_contract(workflow, "multigenre-native-release-aggregate")
-        broken_aggregate = copy.deepcopy(aggregate)
-        broken_aggregate["needs"] = "multigenre-hosted-native-release-authority"
-        with self.assertRaisesRegex(AssertionError, "aggregate job must need only"):
-            _assert_aggregate_job_contract(broken_aggregate)
-
-        broken_aggregate = copy.deepcopy(aggregate)
-        first_download = _step_by_name(
-            broken_aggregate,
-            "Download Linux Python 3.11 matrix evidence",
+        self.assertNotIn("matrix:", workflow)
+        expected_jobs = (
+            "ubuntu-py312-core",
+            "ubuntu-py311-compat-native",
+            "windows-py312-release",
+            "windows-py311-compat-native",
+            "ci-required",
         )
-        first_download["with"]["path"] = "${{ runner.temp }}/wrong"
-        with self.assertRaisesRegex(AssertionError, "exact name/path pair"):
-            _assert_aggregate_job_contract(broken_aggregate)
-
-        release = _workflow_job_contract(workflow, "multigenre-native-release")
-        broken_release = copy.deepcopy(release)
-        _step_by_name(broken_release, "Upload exact matrix evidence")["if"] = "success()"
-        with self.assertRaisesRegex(AssertionError, "trusted publication outputs"):
-            _assert_native_release_job_contract(broken_release)
-
-        broken_release = copy.deepcopy(release)
-        fixed_upload = _step_by_name(broken_release, "Upload exact matrix evidence")
-        fixed_upload["with"]["path"] = (
-            "${{ runner.temp }}/world-forge-${{ runner.os }}-py${{ matrix.python-version }}.json"
+        for job_id in expected_jobs:
+            with self.subTest(job_id=job_id):
+                self.assertEqual(1, workflow.count(f"  {job_id}:\n"))
+        self.assertEqual(
+            4, workflow.count("Verify exact generic release lineage with native raylib")
         )
-        with self.assertRaisesRegex(AssertionError, "artifact contract drifted"):
-            _assert_native_release_job_contract(broken_release)
-
-        for step_name in ("Upload exact matrix evidence", "Upload native smoke diagnostics"):
-            broken_release = copy.deepcopy(release)
-            _step_by_name(broken_release, step_name)["continue-on-error"] = "true"
-            with (
-                self.subTest(step_name=step_name, mutation="continue-on-error"),
-                self.assertRaisesRegex(AssertionError, "fail-closed"),
-            ):
-                _assert_native_release_job_contract(broken_release)
-
-        diagnostics_mutations = (
-            ("if", "always()", "explicit trusted publication outputs"),
-            ("if", "success()", "explicit trusted publication outputs"),
-            (
-                "path",
-                "${{ runner.temp }}/world-forge-multigenre-work/native-smoke-evidence",
-                "artifact contract drifted",
-            ),
-            ("path", "${{ runner.temp }}/**", "artifact contract drifted"),
+        self.assertEqual(4, workflow.count("Upload exact native evidence row"))
+        self.assertIn("Download Linux Python 3.11 native evidence", workflow)
+        self.assertIn("Download Linux Python 3.12 native evidence", workflow)
+        self.assertIn("Download Windows Python 3.11 native evidence", workflow)
+        self.assertIn("Download Windows Python 3.12 native evidence", workflow)
+        self.assertIn("Aggregate exact four native rows", workflow)
+        final = workflow.split("  ci-required:\n", 1)[1]
+        self.assertIn("permissions:\n      contents: read\n      id-token: write\n", final)
+        self.assertIn("      attestations: write\n", final)
+        self.assertIn("Install locked final-gate Python dependencies", workflow)
+        self.assertIn("GITHUB_WORKFLOW_REF", final)
+        self.assertIn("scripts.verify_hosted_native_release build-candidate", final)
+        self.assertIn("scripts.verify_hosted_native_release verify-write-receipt", final)
+        self.assertIn("scripts.verify_hosted_native_release reverify", final)
+        self.assertIn("github.repository_id == '1305601753'", workflow)
+        self.assertIn("github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6", workflow)
+        self.assertIn(
+            'aggregate["matrix"] == [{"os": "linux", "python_minor": "3.11"}, '
+            '{"os": "linux", "python_minor": "3.12"}, '
+            '{"os": "windows", "python_minor": "3.11"}, '
+            '{"os": "windows", "python_minor": "3.12"}]',
+            workflow,
         )
-        for field, value, message in diagnostics_mutations:
-            broken_release = copy.deepcopy(release)
-            diagnostics = _step_by_name(broken_release, "Upload native smoke diagnostics")
-            target = diagnostics if field == "if" else diagnostics["with"]
-            target[field] = value
-            with (
-                self.subTest(field=field, value=value),
-                self.assertRaisesRegex(AssertionError, message),
-            ):
-                _assert_native_release_job_contract(broken_release)
-
-        broken_release = copy.deepcopy(release)
-        diagnostics = _step_by_name(broken_release, "Upload native smoke diagnostics")
-        diagnostics["if"] = diagnostics["if"].replace(
-            "steps.native_release_verify.outcome == 'success' && ",
-            "",
-        )
-        with self.assertRaisesRegex(AssertionError, "explicit trusted publication outputs"):
-            _assert_native_release_job_contract(broken_release)
-
-        broken_release = copy.deepcopy(release)
-        _step_by_name(
-            broken_release,
-            "Verify exact generic release lineage with native raylib",
-        ).pop("id", None)
-        with self.assertRaisesRegex(AssertionError, "verifier step id drifted"):
-            _assert_native_release_job_contract(broken_release)
-
-        broken_release = copy.deepcopy(release)
-        _step_by_name(broken_release, "Enforce exact native release result")["if"] = "success()"
-        with self.assertRaisesRegex(AssertionError, "enforcement must always run"):
-            _assert_native_release_job_contract(broken_release)
-
-        authority = _workflow_job_contract(workflow, "multigenre-hosted-native-release-authority")
-        broken_authority = copy.deepcopy(authority)
-        broken_authority["permissions"]["attestations"] = "read"
-        with self.assertRaisesRegex(AssertionError, "authority job permissions drifted"):
-            _assert_authority_job_contract(broken_authority)
-
-        broken_authority = copy.deepcopy(authority)
-        broken_authority["if"] = "github.event_name == 'push'"
-        with self.assertRaisesRegex(AssertionError, "trusted-main condition drifted"):
-            _assert_authority_job_contract(broken_authority)
-
-        status = _workflow_job_contract(workflow, "multigenre-native-release-status")
-        broken_status = copy.deepcopy(status)
-        broken_status["if"] = "success()"
-        with self.assertRaisesRegex(AssertionError, "always"):
-            _assert_status_job_contract(broken_status)
-
-        broken_status = copy.deepcopy(status)
-        status_step = _step_by_name(
-            broken_status,
-            "Enforce hosted native release status truth table",
-        )
-        status_step["run"] = status_step["run"].replace(
-            'authority_result="${{ needs.multigenre-hosted-native-release-authority.result }}"',
-            'authority_result="success"',
-        )
-        with self.assertRaisesRegex(AssertionError, "authority_result"):
-            _assert_status_job_contract(broken_status)
 
     def test_ci_forbids_untrusted_hosted_release_topologies(self) -> None:
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")

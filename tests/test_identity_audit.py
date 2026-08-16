@@ -610,54 +610,10 @@ class IdentityAuditTests(unittest.TestCase):
     ) -> None:
         from scripts.generate_identity_allowlist import REVIEWED_ADDITIONS
 
-        source_test = Path(__file__).resolve().parents[1] / "tests/test_multigenre_release_gate.py"
         key = ("tests/test_multigenre_release_gate.py", "rpg-world-forge")
-        policy = REVIEWED_ADDITIONS[key]
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            target = root / key[0]
-            target.parent.mkdir()
-            target.write_bytes(source_test.read_bytes())
-            _write_allowlist(
-                root,
-                [
-                    {
-                        "category": policy.category,
-                        "justification": policy.justification,
-                        "path": key[0],
-                        "pattern": key[1],
-                    }
-                ],
-            )
-
-            result = audit_identities(root)
-            document = json.loads(
-                (root / "contracts/legacy-identity-allowlist.json").read_text(encoding="utf-8")
-            )
-            self.assertEqual(1, result.occurrences)
-            self.assertEqual(
-                {
-                    "category": "regression_fixture",
-                    "justification": (
-                        "Proves the trusted hosted old/new repository condition in release gate CI."
-                    ),
-                    "offsets": [23516],
-                    "path": key[0],
-                    "pattern": key[1],
-                },
-                {
-                    field: document["entries"][0][field]
-                    for field in ("category", "justification", "offsets", "path", "pattern")
-                },
-            )
-
-            copied = root / "tests/test_multigenre_release_gate_copy.py"
-            copied.write_bytes(source_test.read_bytes())
-            with self.assertRaisesRegex(
-                IdentityAuditError,
-                "unallowlisted legacy identity.*test_multigenre_release_gate_copy",
-            ):
-                audit_identities(root)
+        self.assertNotIn(key, REVIEWED_ADDITIONS)
+        source_test = Path(__file__).resolve().parents[1] / key[0]
+        self.assertNotIn(key[1].encode("utf-8"), source_test.read_bytes())
 
     def test_directory_swap_and_restore_cannot_hide_identity_references(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
