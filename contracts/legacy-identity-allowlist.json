@@ -2909,10 +2909,10 @@
     },
     {
       "category": "legacy_contract",
-      "file_sha256": "cbae97f77239e8551a5557f0ad791c8c16a4f42b336f1f8faaae0b5d2eda030f",
+      "file_sha256": "c54122f934476edb7b34804b20b0ff49c3e5522dc37e52f89e5bf2e642eb796f",
       "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
       "offsets": [
-        14703
+        14829
       ],
       "path": "src/worldforge/studio/workspaces.py",
       "pattern": "rpg-world-forge"
@@ -3574,31 +3574,31 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "3b30b8302d1f95c0cad957b0756aa34c040e258aa741353b4543f8a7be369fd8",
+      "file_sha256": "5e1f63305476444a2e94174d411a61065de852c62df38f81ce3a5262da747c03",
       "justification": "Exercises retained Studio protocol and compatibility behavior.",
       "offsets": [
-        1562,
-        19586
+        1669,
+        19693
       ],
       "path": "tests/test_studio_creation_service_v3.py",
       "pattern": "rpg-world-forge"
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "11878530429ff06cae807c2602296952b3a66d94c5dbb95fb384743aefb319a6",
+      "file_sha256": "919774218052183306044d2e93ae3498f7af32cda223f26347c3255ac9f9df67",
       "justification": "Exercises retained Studio protocol and compatibility behavior.",
       "offsets": [
-        7915,
-        9220,
-        9818,
-        10143,
-        11909,
-        78447,
-        79206,
-        80682,
-        81223,
-        82044,
-        82849
+        7946,
+        9251,
+        9849,
+        10174,
+        11940,
+        81278,
+        82037,
+        83513,
+        84054,
+        84875,
+        85680
       ],
       "path": "tests/test_studio_creation_v3.py",
       "pattern": "rpg-world-forge"
@@ -3701,10 +3701,10 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "e9bb27fa860618f144fe6ff189a6bfe96e07fb2955b7c756777d1bee363401e8",
+      "file_sha256": "44668a2da733568b853fd0ef238172ba03e05ae74654e8ff04dff4de5317419e",
       "justification": "Regression evidence preserves legacy identity input and reader behavior.",
       "offsets": [
-        15711
+        15710
       ],
       "path": "tests/test_studio_workspaces_jobs.py",
       "pattern": "rpg-world-forge"

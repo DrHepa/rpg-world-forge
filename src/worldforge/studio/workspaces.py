@@ -102,7 +102,7 @@ class _WindowsRelativeDirectoryApi(_WindowsTreeApi):
         return info
 
     def open_anchor(self, anchor: Path, *, context: str) -> int:
-        result = self.open_path_directory(anchor)
+        result = self.open_path_directory(anchor, share=self._FILE_SHARE_ALL)
         try:
             self.state(result, context=context, directory=True)
         except BaseException:
@@ -180,6 +180,8 @@ def _open_windows_ancestry(
     *,
     context: str,
 ) -> tuple[list[int], tuple[tuple[int, int], ...]]:
+    if len(path.parts) <= 1:
+        raise ValueError(f"{context} cannot be the filesystem root")
     handles: list[int] = []
     identities: list[tuple[int, int]] = []
     try:

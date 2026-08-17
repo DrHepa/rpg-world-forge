@@ -38,7 +38,7 @@ class StudioWorkspacesAndJobsTests(unittest.TestCase):
             workspaces_module._WindowsRelativeDirectoryApi._FILE_OPEN_FOR_BACKUP_INTENT,
         )
 
-    def test_windows_workspace_anchor_blocks_delete_for_runner_temp_ancestors(self) -> None:
+    def test_windows_workspace_anchor_allows_delete_only_at_external_drive_anchor(self) -> None:
         api = object.__new__(workspaces_module._WindowsRelativeDirectoryApi)
         api._invalid_handle = ctypes.c_void_p(-1).value
         captured: list[tuple[str, int, int, int, int]] = []
@@ -63,8 +63,8 @@ class StudioWorkspacesAndJobsTests(unittest.TestCase):
         self.assertEqual(1, len(captured))
         path, _access, share, disposition, flags = captured[0]
         self.assertEqual(str(anchor), path)
-        self.assertEqual(0x00000001 | 0x00000002, share)
-        self.assertFalse(share & 0x00000004)  # FILE_SHARE_DELETE
+        self.assertEqual(api._FILE_SHARE_ALL, share)
+        self.assertTrue(share & 0x00000004)  # FILE_SHARE_DELETE
         self.assertEqual(api._OPEN_EXISTING, disposition)
         self.assertTrue(flags & api._FILE_FLAG_OPEN_REPARSE_POINT)
         self.assertTrue(flags & api._FILE_FLAG_BACKUP_SEMANTICS)

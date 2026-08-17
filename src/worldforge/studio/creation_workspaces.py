@@ -85,6 +85,45 @@ _CREATION_PHASES = (
     "cleanup_authorized",
 )
 _CREATION_PHASE_INDEX = {phase: index for index, phase in enumerate(_CREATION_PHASES)}
+_SAFE_SCAFFOLD_REASON_CODE_FALLBACK = "creation_scaffold_failed"
+_SAFE_SCAFFOLD_REASON_CODE_MAX = 64
+_SAFE_SCAFFOLD_REASON_CODES = frozenset(
+    {
+        _SAFE_SCAFFOLD_REASON_CODE_FALLBACK,
+        "creation_scaffold_inputs_invalid",
+        "creation_scaffold_recovery_required",
+    }
+)
+
+
+def _is_safe_reason_code(value: str) -> bool:
+    return (
+        0 < len(value) <= _SAFE_SCAFFOLD_REASON_CODE_MAX
+        and value[0].islower()
+        and value.isascii()
+        and all(
+            character.islower() or character.isdigit() or character == "_" for character in value
+        )
+    )
+
+
+def _bounded_scaffold_failure_details(
+    exc: CreationScaffoldError,
+    *,
+    phase: str,
+) -> dict[str, str]:
+    reason_code = exc.reason_code
+    if (
+        not isinstance(reason_code, str)
+        or not _is_safe_reason_code(reason_code)
+        or reason_code not in _SAFE_SCAFFOLD_REASON_CODES
+    ):
+        reason_code = _SAFE_SCAFFOLD_REASON_CODE_FALLBACK
+    if phase not in _CREATION_PHASE_INDEX:
+        phase = "before_publication"
+    return {"reason_code": reason_code, "phase": phase}
+
+
 _PHASE_REPORT_FIELDS = frozenset(
     {
         "format",
@@ -938,6 +977,21 @@ class CreationWorkspaceManager:
                     runtime_support_intent=parsed["runtime_support_intent"],
                     asset_content_mode=parsed["asset_content_mode"],
                 )
+            except CreationScaffoldError as exc:
+                if root.exists() or root.is_symlink():
+                    self._mark_recovery_if_reserved(grant)
+                else:
+                    try:
+                        _remove_journal(journal_path, history, journal_identity)
+                    except StudioError:
+                        pass
+                    else:
+                        self._release_owned_attempt(parsed, grant)
+                raise StudioError(
+                    "invalid_state",
+                    "Creation failed before workspace registration",
+                    details=_bounded_scaffold_failure_details(exc, phase=journal_phase),
+                ) from exc
             except BaseException as exc:
                 if root.exists() or root.is_symlink():
                     self._mark_recovery_if_reserved(grant)

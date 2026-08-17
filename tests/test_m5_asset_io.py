@@ -8,7 +8,7 @@ import stat
 import tempfile
 import unittest
 from collections.abc import Callable
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -775,6 +775,71 @@ class AssetIOTests(unittest.TestCase):
         self.assertEqual(91, api.create_directory(73, "temporary-stage"))
         self.assertEqual(api._DELETE, captured[0]["access"] & api._DELETE)
         self.assertEqual(0, captured[0]["share"] & api._SHARE_DELETE)
+
+    def test_windows_output_ancestry_shares_delete_only_for_external_anchor(self) -> None:
+        api = object.__new__(asset_io_module._WindowsPublicationApi)
+        api.nt_status_to_dos_error = lambda _status: 317
+        api._state = lambda *_args, **_kwargs: SimpleNamespace(
+            st_mode=stat.S_IFDIR,
+            st_dev=11,
+            st_ino=len(opened_handles),
+            st_file_attributes=0,
+        )
+        opened_handles: list[int] = []
+        create_file_shares: list[int] = []
+        relative_shares: list[int] = []
+
+        def create_file(
+            _path: str,
+            _access: int,
+            share: int,
+            _security: object,
+            _disposition: int,
+            _flags: int,
+            _template: object,
+        ) -> int:
+            create_file_shares.append(share)
+            opened_handles.append(41)
+            return 41
+
+        def nt_create_file(
+            opened: object,
+            _access: int,
+            _attributes: object,
+            _io_status: object,
+            _allocation: object,
+            _file_attributes: int,
+            share: int,
+            _disposition: int,
+            _options: int,
+            _ea_buffer: object,
+            _ea_length: int,
+        ) -> int:
+            relative_shares.append(share)
+            handle = 50 + len(relative_shares)
+            opened_handles.append(handle)
+            ctypes.cast(opened, ctypes.POINTER(ctypes.c_void_p)).contents.value = handle
+            return 0
+
+        api._create_file_w = create_file
+        api.nt_create_file = nt_create_file
+
+        handles, identities = api.open_ancestry(PureWindowsPath("X:/forge/project"), create=True)
+
+        self.assertEqual([41, 51, 52], handles)
+        self.assertEqual(3, len(identities))
+        self.assertEqual(
+            [api._SHARE_READ | api._SHARE_WRITE | api._SHARE_DELETE],
+            create_file_shares,
+        )
+        self.assertEqual([api._SHARE_READ | api._SHARE_WRITE] * 2, relative_shares)
+
+    def test_windows_output_ancestry_rejects_root_only_parent(self) -> None:
+        api = object.__new__(asset_io_module._WindowsPublicationApi)
+        api._create_file_w = lambda *_args: self.fail("root-only anchor must not be opened")
+
+        with self.assertRaisesRegex(AssetContractError, "filesystem root"):
+            api.open_ancestry(PureWindowsPath("X:/"), create=True)
 
     def test_windows_failed_temporary_cleanup_targets_only_the_retained_handle(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

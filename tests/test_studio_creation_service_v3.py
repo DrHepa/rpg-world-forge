@@ -15,7 +15,7 @@ from worldforge.creation_contracts import (
     load_creation_project,
 )
 from worldforge.creation_route import CreationRouteError
-from worldforge.creation_scaffold import create_creation_project
+from worldforge.creation_scaffold import CreationScaffoldError, create_creation_project
 from worldforge.creation_workflow import load_creation_workflow_status
 from worldforge.integrity import canonical_json_bytes
 from worldforge.phase_report_v3 import (
@@ -30,6 +30,7 @@ from worldforge.studio.contracts import (
     creation_changeset_record_hash,
     validate_studio_protocol_envelope,
 )
+from worldforge.studio.creation_workspaces import _bounded_scaffold_failure_details
 from worldforge.studio.errors import StudioError
 from worldforge.studio.service import StudioService, serve
 from worldforge.studio.storage import StudioStore
@@ -666,6 +667,122 @@ class StudioCreationServiceV3Tests(unittest.TestCase):
             finally:
                 service.close()
                 service.store.close()
+
+    def test_creation_workspace_create_reports_bounded_scaffold_failure_details(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            sensitive = str(base / "native" / "secret")
+            service = StudioService(StudioStore(base / "studio"))
+            try:
+                grant = service.handle(
+                    _request(
+                        "creation_root_grant.create",
+                        {
+                            "grant_id": "grant_bounded_scaffold",
+                            "role": "new_target",
+                            "display_name": "Bounded scaffold",
+                            "path": str(base / "created-project"),
+                            "expected_project_hash": None,
+                        },
+                        request_id="grant",
+                    )
+                )["result"]["grant"]
+
+                with (
+                    patch(
+                        "worldforge.studio.creation_workspaces.create_creation_project",
+                        side_effect=CreationScaffoldError(
+                            f"native publication failed at {sensitive}",
+                            reason_code="creation_scaffold_recovery_required",
+                        ),
+                    ),
+                    self.assertRaises(StudioError) as raised,
+                ):
+                    service.handle(
+                        _request(
+                            "creation_workspace.create",
+                            {
+                                "workspace_id": "workspace_bounded_scaffold",
+                                "grant_id": grant["grant_id"],
+                                "expected_grant_generation": grant["generation"],
+                                "project_kind": "universe_library",
+                                "project_id": "bounded_scaffold",
+                                "title": "Bounded scaffold",
+                                "default_locale": "en",
+                                "project_version": "0.1.0",
+                            },
+                            request_id="create",
+                        )
+                    )
+
+                self.assertEqual("invalid_state", raised.exception.code)
+                self.assertEqual(
+                    "Creation failed before workspace registration",
+                    raised.exception.message,
+                )
+                self.assertEqual(
+                    {
+                        "reason_code": "creation_scaffold_recovery_required",
+                        "phase": "before_publication",
+                    },
+                    raised.exception.details,
+                )
+                self.assertNotIn(sensitive, json.dumps(raised.exception.details, sort_keys=True))
+                self.assertNotIn(sensitive, raised.exception.message)
+            finally:
+                service.close()
+                service.store.close()
+
+    def test_creation_workspace_scaffold_failure_details_reject_untrusted_reason_codes(
+        self,
+    ) -> None:
+        sensitive = "/tmp/native/secret"
+        cases: tuple[object, ...] = (
+            sensitive,
+            r"C:\native\secret",
+            "creation_scaffold_recovery_required/../../secret",
+            "creation_scaffold_recovery_required_é",
+            "creation_scaffold_" + ("x" * 128),
+            "creation_scaffold_unknown",
+            123,
+        )
+        for reason_code in cases:
+            with self.subTest(reason_code=reason_code):
+                error = CreationScaffoldError("native publication failed")
+                error.reason_code = reason_code  # type: ignore[assignment]
+
+                details = _bounded_scaffold_failure_details(error, phase="not_a_phase")
+
+                self.assertEqual(
+                    {
+                        "reason_code": "creation_scaffold_failed",
+                        "phase": "before_publication",
+                    },
+                    details,
+                )
+                encoded = json.dumps(details, sort_keys=True)
+                self.assertNotIn(sensitive, encoded)
+                self.assertNotIn("secret", encoded)
+                self.assertNotIn("é", encoded)
+
+    def test_creation_workspace_scaffold_failure_details_preserve_canonical_reason_codes(
+        self,
+    ) -> None:
+        for reason_code in (
+            "creation_scaffold_failed",
+            "creation_scaffold_inputs_invalid",
+            "creation_scaffold_recovery_required",
+        ):
+            with self.subTest(reason_code=reason_code):
+                details = _bounded_scaffold_failure_details(
+                    CreationScaffoldError("safe", reason_code=reason_code),
+                    phase="cleanup_authorized",
+                )
+
+                self.assertEqual(
+                    {"reason_code": reason_code, "phase": "cleanup_authorized"},
+                    details,
+                )
 
     def test_changeset_filesystem_errors_do_not_leak_native_store_paths(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

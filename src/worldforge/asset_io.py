@@ -612,7 +612,7 @@ class _WindowsPublicationApi:
             | self._FILE_TRAVERSE
             | self._FILE_READ_ATTRIBUTES
             | self._SYNCHRONIZE,
-            self._SHARE_READ | self._SHARE_WRITE,
+            self._SHARE_READ | self._SHARE_WRITE | self._SHARE_DELETE,
             None,
             self._OPEN_EXISTING,
             self._FILE_FLAG_BACKUP_SEMANTICS | self._FILE_FLAG_OPEN_REPARSE_POINT,
@@ -734,6 +734,8 @@ class _WindowsPublicationApi:
         *,
         create: bool,
     ) -> tuple[list[int], tuple[tuple[int, int], ...]]:
+        if len(path.parts) <= 1:
+            raise AssetContractError("Windows filesystem root output parent is unsupported")
         handles: list[int] = []
         identities: list[tuple[int, int]] = []
         try:

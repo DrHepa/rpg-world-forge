@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import json
 import os
@@ -7,7 +8,7 @@ import sqlite3
 import stat
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest import mock
 
 from isoworld.content.file_stat import FileStat, WindowsFileStat, path_file_stat
@@ -835,6 +836,88 @@ class StudioCreationV3WorkspaceTests(unittest.TestCase):
                 self.assertTrue(target.is_dir())
                 self.assertEqual("new_project", workspace["project"]["id"])
                 self.assertEqual("consumed", grants.get("grant_target")["state"])
+
+    def test_windows_workspace_ancestry_shares_delete_only_for_external_anchor(self) -> None:
+        from worldforge.studio import workspaces
+
+        api = object.__new__(workspaces._WindowsRelativeDirectoryApi)
+        api._invalid_handle = ctypes.c_void_p(-1).value
+        create_file_shares: list[int] = []
+        relative_shares: list[int] = []
+
+        def fake_state(handle: int, *, context: str, directory: bool) -> FileStat:
+            del context, directory
+            return WindowsFileStat(
+                st_mode=stat.S_IFDIR,
+                st_dev=23,
+                st_ino=handle,
+                st_nlink=1,
+                st_size=0,
+                st_mtime_ns=0,
+                st_ctime_ns=0,
+                st_file_attributes=0,
+            )
+
+        def create_file(
+            _path: str,
+            _access: int,
+            share: int,
+            _security: object,
+            _disposition: int,
+            _flags: int,
+            _template: object,
+        ) -> int:
+            create_file_shares.append(share)
+            return 41
+
+        def nt_create_file(
+            opened: object,
+            _access: int,
+            _attributes: object,
+            _io_status: object,
+            _allocation: object,
+            _file_attributes: int,
+            share: int,
+            _disposition: int,
+            _options: int,
+            _ea_buffer: object,
+            _ea_length: int,
+        ) -> int:
+            relative_shares.append(share)
+            handle = 50 + len(relative_shares)
+            ctypes.cast(opened, ctypes.POINTER(ctypes.c_void_p)).contents.value = handle
+            return 0
+
+        api.state = fake_state
+        api._create_file = create_file
+        api._nt_create_file = nt_create_file
+
+        handles, identities = workspaces._open_windows_ancestry(
+            api,
+            PureWindowsPath("X:/forge/project"),
+            context="creation root",
+        )
+
+        self.assertEqual([41, 51, 52], handles)
+        self.assertEqual(((23, 41), (23, 51), (23, 52)), identities)
+        self.assertEqual([api._FILE_SHARE_ALL], create_file_shares)
+        self.assertEqual(
+            [api._FILE_SHARE_READ | api._FILE_SHARE_WRITE] * 2,
+            relative_shares,
+        )
+
+    def test_windows_workspace_ancestry_rejects_root_only_directory(self) -> None:
+        from worldforge.studio import workspaces
+
+        api = object.__new__(workspaces._WindowsRelativeDirectoryApi)
+        api.open_anchor = lambda *_args, **_kwargs: self.fail("root-only anchor must not be opened")
+
+        with self.assertRaisesRegex(ValueError, "filesystem root"):
+            workspaces._open_windows_ancestry(
+                api,
+                PureWindowsPath("X:/"),
+                context="creation root",
+            )
 
     def test_visible_created_target_requires_exact_recovery_and_retry(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

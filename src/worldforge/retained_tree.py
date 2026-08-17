@@ -1240,11 +1240,11 @@ class _WindowsTreeApi:
         ):
             raise RetainedTreeError("Windows returned an invalid tree path component")
 
-    def open_path_directory(self, path: Path) -> int:
+    def open_path_directory(self, path: Path, *, share: int | None = None) -> int:
         handle = self._create_file(
             str(path),
             self._FILE_LIST_DIRECTORY | self._FILE_READ_ATTRIBUTES | self._SYNCHRONIZE,
-            self._FILE_SHARE_MODE,
+            self._FILE_SHARE_MODE if share is None else share,
             None,
             self._OPEN_EXISTING,
             self._FILE_FLAG_OPEN_REPARSE_POINT | self._FILE_FLAG_BACKUP_SEMANTICS,
