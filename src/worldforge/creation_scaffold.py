@@ -59,6 +59,32 @@ class CreationScaffoldError(ValueError):
         super().__init__(detail)
 
 
+_CREATION_SCAFFOLD_OPERATION_DETAILS = {
+    "creation_scaffold_stage_create_failed": "creation scaffold stage creation failed",
+    "creation_scaffold_stage_write_failed": "creation scaffold stage write failed",
+    "creation_scaffold_stage_flush_failed": "creation scaffold stage flush failed",
+    "creation_scaffold_stage_verify_failed": "creation scaffold stage verification failed",
+    "creation_scaffold_publish_failed": (
+        "creation project target already exists or publication failed"
+    ),
+    "creation_scaffold_published_verify_failed": (
+        "published creation scaffold verification failed"
+    ),
+    "creation_scaffold_parent_flush_failed": "creation scaffold parent flush failed",
+    "creation_scaffold_finalize_failed": "creation scaffold finalization failed",
+}
+CREATION_SCAFFOLD_OPERATION_REASON_CODES = frozenset(_CREATION_SCAFFOLD_OPERATION_DETAILS)
+
+
+def _operation_failure(reason_code: str, _cause: BaseException) -> CreationScaffoldError:
+    if reason_code not in CREATION_SCAFFOLD_OPERATION_REASON_CODES:
+        raise AssertionError("unknown creation scaffold operation failure")
+    return CreationScaffoldError(
+        _CREATION_SCAFFOLD_OPERATION_DETAILS[reason_code],
+        reason_code=reason_code,
+    )
+
+
 @dataclass(frozen=True)
 class CreationScaffoldFacets:
     """Closed initial facets used by every generic creation entry point."""
@@ -1205,25 +1231,34 @@ def create_creation_project(
         )
     except RepositoryBoundaryError as exc:
         raise CreationScaffoldError(str(exc)) from exc
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    parent_identity = directory_identity(
-        destination.parent,
-        context="creation scaffold parent",
-    )
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        parent_identity = directory_identity(
+            destination.parent,
+            context="creation scaffold parent",
+        )
+    except (DirectoryPublishError, OSError) as exc:
+        raise _operation_failure("creation_scaffold_stage_create_failed", exc) from exc
     stage = destination.parent / (f".{destination.name}.creation-stage-{uuid.uuid4().hex}")
     stage_identity: tuple[int, int] | None = None
     published = False
+    operation_reason = "creation_scaffold_stage_create_failed"
     try:
         with create_retained_stage(
             stage,
             expected_parent_identity=parent_identity,
         ) as writer:
             stage_identity = writer.identity
+            operation_reason = "creation_scaffold_stage_write_failed"
             for relative in sorted(files, key=lambda item: item.encode("utf-8")):
                 writer.write_file(relative, files[relative])
+            operation_reason = "creation_scaffold_stage_flush_failed"
             writer.fsync()
+            operation_reason = "creation_scaffold_stage_verify_failed"
             _verify_exact_tree(stage, files)
             writer.require_binding()
+            operation_reason = "creation_scaffold_finalize_failed"
+        operation_reason = "creation_scaffold_publish_failed"
         with publish_directory_noreplace(
             stage,
             destination,
@@ -1232,13 +1267,21 @@ def create_creation_project(
         ) as published_identity:
             if published_identity != stage_identity:
                 raise CreationScaffoldError("published creation root identity changed")
+            operation_reason = "creation_scaffold_published_verify_failed"
             _verify_exact_tree(destination, files)
+            operation_reason = "creation_scaffold_parent_flush_failed"
             fsync_directory(destination.parent, context="creation scaffold parent")
+            operation_reason = "creation_scaffold_finalize_failed"
         published = True
+    except CreationScaffoldError as exc:
+        if exc.reason_code in CREATION_SCAFFOLD_OPERATION_REASON_CODES or exc.reason_code in {
+            "creation_scaffold_inputs_invalid",
+            "creation_scaffold_recovery_required",
+        }:
+            raise
+        raise _operation_failure(operation_reason, exc) from exc
     except (DirectoryPublishError, FileExistsError, OSError) as exc:
-        raise CreationScaffoldError(
-            f"creation project target already exists or publication failed: {exc}"
-        ) from exc
+        raise _operation_failure(operation_reason, exc) from exc
     finally:
         if not published and stage_identity is not None and stage.exists():
             primary = sys.exception()
@@ -1270,9 +1313,15 @@ def create_creation_project(
                         f"creation scaffold cleanup retained evidence: {cleanup_error}"
                     )
                 else:
-                    raise CreationScaffoldError(
-                        f"creation scaffold cleanup failed: {cleanup_error}"
+                    raise _operation_failure(
+                        "creation_scaffold_finalize_failed",
+                        cleanup_error,
                     ) from cleanup_error
-    if directory_identity(destination, context="published creation root") != stage_identity:
-        raise CreationScaffoldError("published creation root identity changed after verification")
+    try:
+        final_identity = directory_identity(destination, context="published creation root")
+    except (DirectoryPublishError, OSError) as exc:
+        raise _operation_failure("creation_scaffold_finalize_failed", exc) from exc
+    if final_identity != stage_identity:
+        mismatch = CreationScaffoldError("published creation root identity changed")
+        raise _operation_failure("creation_scaffold_finalize_failed", mismatch) from mismatch
     return destination / "project.json"

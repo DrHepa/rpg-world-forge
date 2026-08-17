@@ -25,6 +25,59 @@ from worldforge.asset_io import (
 )
 
 
+class _PosixBackedWindowsStageApi:
+    """Exercise Windows retained-stage call contracts with real POSIX descriptors."""
+
+    def __init__(self) -> None:
+        self.creations: list[tuple[str, str, bool]] = []
+
+    def create_directory(
+        self,
+        parent: int,
+        name: str,
+        *,
+        request_delete: bool = True,
+    ) -> int:
+        self.creations.append(("directory", name, request_delete))
+        os.mkdir(name, mode=0o700, dir_fd=parent)
+        return os.open(
+            name,
+            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent,
+        )
+
+    def create_file(
+        self,
+        parent: int,
+        name: str,
+        *,
+        request_delete: bool = True,
+    ) -> int:
+        self.creations.append(("file", name, request_delete))
+        return os.open(
+            name,
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=parent,
+        )
+
+    @staticmethod
+    def duplicate_to_descriptor(handle: int, *, writable: bool) -> int:
+        if not writable:
+            raise AssertionError("retained stage files must stay writable until sealed")
+        return os.dup(handle)
+
+    @staticmethod
+    def flush_handle(handle: int, *, context: str) -> None:
+        if not context:
+            raise AssertionError("durability context must be explicit")
+        os.fsync(handle)
+
+    @staticmethod
+    def close(handle: int) -> None:
+        os.close(handle)
+
+
 class AssetIOTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "requires POSIX retained descriptors")
     def test_identity_atomic_replace_flushes_staged_dentry_before_exchange(self) -> None:
@@ -774,6 +827,39 @@ class AssetIOTests(unittest.TestCase):
         captured.clear()
         self.assertEqual(91, api.create_directory(73, "temporary-stage"))
         self.assertEqual(api._DELETE, captured[0]["access"] & api._DELETE)
+        self.assertEqual(0, captured[0]["share"] & api._SHARE_DELETE)
+
+    def test_windows_file_creation_can_pin_names_without_requesting_delete(self) -> None:
+        api = object.__new__(asset_io_module._WindowsPublicationApi)
+        captured: list[dict[str, int]] = []
+
+        def open_relative(
+            _parent: int,
+            _name: str,
+            **arguments: int | str,
+        ) -> int:
+            captured.append(
+                {key: value for key, value in arguments.items() if isinstance(value, int)}
+            )
+            return 91
+
+        api._open_relative = open_relative
+        api._state = lambda *_args, **_kwargs: SimpleNamespace(st_nlink=1, st_size=0)
+
+        self.assertEqual(
+            91,
+            api.create_file(73, "trusted-evidence.json", request_delete=False),
+        )
+        self.assertEqual(1, len(captured))
+        self.assertEqual(0, captured[0]["access"] & api._DELETE)
+        self.assertEqual(api._SHARE_READ, captured[0]["share"])
+        self.assertEqual(0, captured[0]["share"] & api._SHARE_DELETE)
+        self.assertEqual(api._FILE_CREATE, captured[0]["disposition"])
+
+        captured.clear()
+        self.assertEqual(91, api.create_file(73, "temporary-stage.json"))
+        self.assertEqual(api._DELETE, captured[0]["access"] & api._DELETE)
+        self.assertEqual(api._SHARE_READ, captured[0]["share"])
         self.assertEqual(0, captured[0]["share"] & api._SHARE_DELETE)
 
     def test_windows_output_ancestry_shares_delete_only_for_external_anchor(self) -> None:

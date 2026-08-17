@@ -11,8 +11,13 @@ import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
+from isoworld.content.file_stat import descriptor_file_stat
+from tests.test_m5_asset_io import _PosixBackedWindowsStageApi
+from worldforge import creation_scaffold as creation_scaffold_module
+from worldforge import directory_publish as directory_publish_module
 from worldforge import generic_assetpack as generic_assetpack_module
 from worldforge.__main__ import _resolve_generic_assetpack_cli_source, main
 from worldforge.creation_contracts import (
@@ -227,6 +232,281 @@ def _generic_report(
 
 
 class CreationScaffoldAndRoutingTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "posix", "requires POSIX descriptor-backed Windows seam")
+    def test_windows_retained_stage_omits_delete_while_named_verification_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            stage = root / ".creation-stage"
+            parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            info = root.stat()
+            parent_identity = (info.st_dev, info.st_ino)
+            api = _PosixBackedWindowsStageApi()
+            parent = SimpleNamespace(
+                parent_fd=None,
+                windows_api=api,
+                windows_parent_handle=parent_fd,
+                identities=(parent_identity,),
+                assert_current=lambda: None,
+            )
+
+            @contextlib.contextmanager
+            def open_parent(_path: Path):
+                yield parent
+
+            files = {"source/manifest.json": b"{}\n"}
+            try:
+                with (
+                    mock.patch.object(
+                        directory_publish_module,
+                        "open_verified_output_parent",
+                        side_effect=open_parent,
+                    ),
+                    mock.patch.object(
+                        directory_publish_module,
+                        "windows_handle_file_stat",
+                        side_effect=descriptor_file_stat,
+                    ),
+                    directory_publish_module.create_retained_stage(
+                        stage,
+                        expected_parent_identity=parent_identity,
+                    ) as writer,
+                ):
+                    writer.write_file("source/manifest.json", files["source/manifest.json"])
+                    writer.fsync()
+                    creation_scaffold_module._verify_exact_tree(stage, files)  # noqa: SLF001
+                    writer.require_binding()
+                    self.assertEqual(
+                        files["source/manifest.json"],
+                        (stage / "source/manifest.json").read_bytes(),
+                    )
+            finally:
+                os.close(parent_fd)
+
+            self.assertEqual(
+                [
+                    ("directory", stage.name, False),
+                    ("directory", "source", False),
+                    ("file", "manifest.json", False),
+                ],
+                api.creations,
+            )
+
+    def test_scaffold_stage_write_failure_has_a_bounded_reason_and_no_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "bounded-stage-write"
+            cleanup = mock.Mock()
+            with (
+                mock.patch.object(
+                    directory_publish_module.RetainedStageWriter,
+                    "write_file",
+                    side_effect=directory_publish_module.DirectoryPublishError(
+                        r"private path C:\Users\runner"
+                    ),
+                ),
+                mock.patch.object(
+                    creation_scaffold_module,
+                    "quarantine_and_remove_verified_directory",
+                    cleanup,
+                ),
+                self.assertRaises(CreationScaffoldError) as raised,
+            ):
+                create_creation_project(
+                    target,
+                    project_id="bounded_stage_write",
+                    title="Bounded stage write",
+                )
+
+            self.assertEqual(
+                "creation_scaffold_stage_write_failed",
+                raised.exception.reason_code,
+            )
+            self.assertEqual("creation scaffold stage write failed", raised.exception.detail)
+            self.assertFalse(target.exists())
+            self.assertEqual(1, cleanup.call_count)
+            self.assertEqual(target.parent, cleanup.call_args.args[0].parent)
+            self.assertIsInstance(cleanup.call_args.args[1], tuple)
+            self.assertIn("verify", cleanup.call_args.kwargs)
+
+    def test_scaffold_publish_failure_cleans_exact_stage_transactionally(self) -> None:
+        @contextlib.contextmanager
+        def fail_publish(*_args: object, **_kwargs: object):
+            raise directory_publish_module.DirectoryPublishError(r"private path C:\Users\runner")
+            yield
+
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "bounded-publish"
+            cleanup = mock.Mock()
+            with (
+                mock.patch.object(
+                    creation_scaffold_module,
+                    "publish_directory_noreplace",
+                    side_effect=fail_publish,
+                ),
+                mock.patch.object(
+                    creation_scaffold_module,
+                    "quarantine_and_remove_verified_directory",
+                    cleanup,
+                ),
+                self.assertRaises(CreationScaffoldError) as raised,
+            ):
+                create_creation_project(
+                    target,
+                    project_id="bounded_publish",
+                    title="Bounded publish",
+                )
+
+            self.assertEqual(
+                "creation_scaffold_publish_failed",
+                raised.exception.reason_code,
+            )
+            self.assertEqual(
+                "creation project target already exists or publication failed",
+                raised.exception.detail,
+            )
+            self.assertFalse(target.exists())
+            self.assertEqual(1, cleanup.call_count)
+            self.assertEqual(target.parent, cleanup.call_args.args[0].parent)
+            self.assertIsInstance(cleanup.call_args.args[1], tuple)
+            self.assertIn("verify", cleanup.call_args.kwargs)
+
+    def test_scaffold_operation_failures_classify_every_bounded_boundary(self) -> None:
+        cases = {
+            "creation_scaffold_stage_create_failed": "creation scaffold stage creation failed",
+            "creation_scaffold_stage_write_failed": "creation scaffold stage write failed",
+            "creation_scaffold_stage_flush_failed": "creation scaffold stage flush failed",
+            "creation_scaffold_stage_verify_failed": (
+                "creation scaffold stage verification failed"
+            ),
+            "creation_scaffold_publish_failed": (
+                "creation project target already exists or publication failed"
+            ),
+            "creation_scaffold_published_verify_failed": (
+                "published creation scaffold verification failed"
+            ),
+            "creation_scaffold_parent_flush_failed": ("creation scaffold parent flush failed"),
+            "creation_scaffold_finalize_failed": "creation scaffold finalization failed",
+        }
+        real_verify = creation_scaffold_module._verify_exact_tree  # noqa: SLF001
+        real_directory_identity = creation_scaffold_module.directory_identity
+
+        @contextlib.contextmanager
+        def fail_context(*_args: object, **_kwargs: object):
+            raise directory_publish_module.DirectoryPublishError(r"private path C:\Users\runner")
+            yield
+
+        for expected_reason, expected_detail in cases.items():
+            with self.subTest(reason_code=expected_reason):
+                with tempfile.TemporaryDirectory() as temp:
+                    target = Path(temp) / expected_reason
+
+                    def fail_published_verify(
+                        root: Path,
+                        files: dict[str, bytes],
+                        target: Path = target,
+                    ) -> None:
+                        if root == target:
+                            raise directory_publish_module.DirectoryPublishError(
+                                r"private path C:\Users\runner"
+                            )
+                        real_verify(root, files)
+
+                    def fail_final_identity(path: Path, *, context: str) -> tuple[int, int]:
+                        if context == "published creation root":
+                            raise directory_publish_module.DirectoryPublishError(
+                                r"private path C:\Users\runner"
+                            )
+                        return real_directory_identity(path, context=context)
+
+                    with contextlib.ExitStack() as stack:
+                        stack.enter_context(
+                            mock.patch.object(
+                                creation_scaffold_module,
+                                "quarantine_and_remove_verified_directory",
+                            )
+                        )
+                        if expected_reason == "creation_scaffold_stage_create_failed":
+                            stack.enter_context(
+                                mock.patch.object(
+                                    creation_scaffold_module,
+                                    "create_retained_stage",
+                                    side_effect=fail_context,
+                                )
+                            )
+                        elif expected_reason == "creation_scaffold_stage_write_failed":
+                            stack.enter_context(
+                                mock.patch.object(
+                                    directory_publish_module.RetainedStageWriter,
+                                    "write_file",
+                                    side_effect=directory_publish_module.DirectoryPublishError(
+                                        r"private path C:\Users\runner"
+                                    ),
+                                )
+                            )
+                        elif expected_reason == "creation_scaffold_stage_flush_failed":
+                            stack.enter_context(
+                                mock.patch.object(
+                                    directory_publish_module.RetainedStageWriter,
+                                    "fsync",
+                                    side_effect=directory_publish_module.DirectoryPublishError(
+                                        r"private path C:\Users\runner"
+                                    ),
+                                )
+                            )
+                        elif expected_reason == "creation_scaffold_stage_verify_failed":
+                            stack.enter_context(
+                                mock.patch.object(
+                                    creation_scaffold_module,
+                                    "_verify_exact_tree",
+                                    side_effect=directory_publish_module.DirectoryPublishError(
+                                        r"private path C:\Users\runner"
+                                    ),
+                                )
+                            )
+                        elif expected_reason == "creation_scaffold_publish_failed":
+                            stack.enter_context(
+                                mock.patch.object(
+                                    creation_scaffold_module,
+                                    "publish_directory_noreplace",
+                                    side_effect=fail_context,
+                                )
+                            )
+                        elif expected_reason == "creation_scaffold_published_verify_failed":
+                            stack.enter_context(
+                                mock.patch.object(
+                                    creation_scaffold_module,
+                                    "_verify_exact_tree",
+                                    side_effect=fail_published_verify,
+                                )
+                            )
+                        elif expected_reason == "creation_scaffold_parent_flush_failed":
+                            stack.enter_context(
+                                mock.patch.object(
+                                    creation_scaffold_module,
+                                    "fsync_directory",
+                                    side_effect=directory_publish_module.DirectoryPublishError(
+                                        r"private path C:\Users\runner"
+                                    ),
+                                )
+                            )
+                        else:
+                            stack.enter_context(
+                                mock.patch.object(
+                                    creation_scaffold_module,
+                                    "directory_identity",
+                                    side_effect=fail_final_identity,
+                                )
+                            )
+                        with self.assertRaises(CreationScaffoldError) as raised:
+                            create_creation_project(
+                                target,
+                                project_id="bounded_boundary",
+                                title="Bounded boundary",
+                            )
+
+                    self.assertEqual(expected_reason, raised.exception.reason_code)
+                    self.assertEqual(expected_detail, raised.exception.detail)
+                    self.assertNotIn("Users", raised.exception.detail)
+
     def test_scaffold_is_transactional_valid_and_exclusively_published(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

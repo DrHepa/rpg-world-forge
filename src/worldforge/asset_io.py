@@ -817,15 +817,25 @@ class _WindowsPublicationApi:
             raise
         return result
 
-    def create_file(self, parent: int, name: str) -> int:
+    def create_file(
+        self,
+        parent: int,
+        name: str,
+        *,
+        request_delete: bool = True,
+    ) -> int:
+        access = (
+            self._GENERIC_READ
+            | self._GENERIC_WRITE
+            | self._FILE_READ_ATTRIBUTES
+            | self._SYNCHRONIZE
+        )
+        if request_delete:
+            access |= self._DELETE
         result = self._open_relative(
             parent,
             name,
-            access=self._GENERIC_READ
-            | self._GENERIC_WRITE
-            | self._DELETE
-            | self._FILE_READ_ATTRIBUTES
-            | self._SYNCHRONIZE,
+            access=access,
             disposition=self._FILE_CREATE,
             share=self._SHARE_READ,
             options=self._FILE_NON_DIRECTORY_FILE,

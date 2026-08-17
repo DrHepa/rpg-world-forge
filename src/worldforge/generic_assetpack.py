@@ -2923,7 +2923,11 @@ class _AnchoredStageWriter:
                             "assetpack_stage_unsafe",
                             "Windows retained stage API is unavailable",
                         )
-                    native = api.create_directory(parent_native, part)
+                    native = api.create_directory(
+                        parent_native,
+                        part,
+                        request_delete=False,
+                    )
                     opened = windows_handle_file_stat(native)
                     self._windows_directories[child] = native
             except (AssetContractError, OSError) as exc:
@@ -2971,7 +2975,11 @@ class _AnchoredStageWriter:
                         "assetpack_stage_unsafe",
                         "Windows retained stage API is unavailable",
                     )
-                native = api.create_file(parent_native, relative_path.name)
+                native = api.create_file(
+                    parent_native,
+                    relative_path.name,
+                    request_delete=False,
+                )
                 descriptor = api.duplicate_to_descriptor(native, writable=True)
             opened = descriptor_file_stat(descriptor)
             if (
@@ -3149,7 +3157,11 @@ def _create_anchored_stage(
                     "assetpack_stage_unsafe",
                     "Windows retained stage API is unavailable",
                 )
-            root_native = api.create_directory(parent_handle, stage.name)
+            root_native = api.create_directory(
+                parent_handle,
+                stage.name,
+                request_delete=False,
+            )
             orphan_native = root_native
             orphan_close = api.close
             opened = windows_handle_file_stat(root_native)

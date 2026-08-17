@@ -21,6 +21,7 @@ from worldforge.creation_contracts import (
 )
 from worldforge.creation_readiness import CreationReadinessError, build_creation_readiness
 from worldforge.creation_scaffold import (
+    CREATION_SCAFFOLD_OPERATION_REASON_CODES,
     CreationScaffoldError,
     create_creation_project,
     normalize_creation_scaffold_facets,
@@ -92,6 +93,7 @@ _SAFE_SCAFFOLD_REASON_CODES = frozenset(
         _SAFE_SCAFFOLD_REASON_CODE_FALLBACK,
         "creation_scaffold_inputs_invalid",
         "creation_scaffold_recovery_required",
+        *CREATION_SCAFFOLD_OPERATION_REASON_CODES,
     }
 )
 

@@ -16,7 +16,9 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from unittest import mock
 
+from isoworld.content.file_stat import descriptor_file_stat
 from scripts.generate_generic_assetpack_schema import build_schema
+from tests.test_m5_asset_io import _PosixBackedWindowsStageApi
 from tests.test_multigenre_asset_processing import _build_processing_chain
 from tests.test_multigenre_asset_production import _media_matrix_cases
 from worldforge import asset_io as asset_io_module
@@ -837,6 +839,58 @@ class GenericAssetpackTests(unittest.TestCase):
         )
         self.assertEqual(17, api.create_file(11, "journal.json"))
         api._open_relative.assert_called_once()  # noqa: SLF001
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX descriptor-backed Windows seam")
+    def test_windows_assetpack_stage_omits_delete_while_exact_snapshot_runs(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="world-forge-d3-windows-stage-") as temporary:
+            root = Path(temporary)
+            stage = root / ".sealed.assetpack-stage"
+            parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            info = root.stat()
+            parent_identity = (info.st_dev, info.st_ino)
+            api = _PosixBackedWindowsStageApi()
+            parent = mock.Mock(unsafe=True)
+            parent.parent_fd = None
+            parent.windows_api = api
+            parent.windows_parent_handle = parent_fd
+            parent.identities = (parent_identity,)
+            parent.assert_current.side_effect = lambda: None
+            lock = mock.Mock(unsafe=True)
+            lock.parent = parent
+            lock.require_binding.side_effect = lambda: None
+            payload = b"sealed fixture\n"
+
+            try:
+                with (
+                    mock.patch.object(
+                        assetpack_module,
+                        "windows_handle_file_stat",
+                        side_effect=descriptor_file_stat,
+                    ),
+                    assetpack_module._create_anchored_stage(  # noqa: SLF001
+                        stage,
+                        lock,
+                        expected_parent_identity=parent_identity,
+                        publication_hook=None,
+                    ) as writer,
+                ):
+                    writer.write_file("assets/fixture.bin", payload)
+                    writer.fsync()
+                    snapshot = assetpack_module._snapshot_exact_tree(stage)  # noqa: SLF001
+                    writer.require_binding()
+                    self.assertEqual({"assets/fixture.bin"}, set(snapshot.files))
+                    self.assertEqual(payload, (stage / "assets/fixture.bin").read_bytes())
+            finally:
+                os.close(parent_fd)
+
+            self.assertEqual(
+                [
+                    ("directory", stage.name, False),
+                    ("directory", "assets", False),
+                    ("file", "fixture.bin", False),
+                ],
+                api.creations,
+            )
 
     def test_windows_retained_cleanup_opens_stage_relative_to_parent(self) -> None:
         kernel32 = mock.Mock()

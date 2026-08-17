@@ -182,7 +182,11 @@ class RetainedStageWriter:
                 api = self.parent.windows_api
                 if api is None:
                     raise DirectoryPublishError("Windows retained stage API is unavailable")
-                native = api.create_directory(parent_native, part)
+                native = api.create_directory(
+                    parent_native,
+                    part,
+                    request_delete=False,
+                )
                 opened = windows_handle_file_stat(native)
                 self._windows_directories[child] = native
             if is_link_or_reparse(opened) or not stat.S_ISDIR(opened.st_mode):
@@ -228,7 +232,11 @@ class RetainedStageWriter:
                 api = self.parent.windows_api
                 if api is None:
                     raise DirectoryPublishError("Windows retained stage API is unavailable")
-                native = api.create_file(parent_native, relative_path.name)
+                native = api.create_file(
+                    parent_native,
+                    relative_path.name,
+                    request_delete=False,
+                )
                 descriptor = api.duplicate_to_descriptor(native, writable=True)
             opened = descriptor_file_stat(descriptor)
             if (
@@ -384,7 +392,11 @@ def create_retained_stage(
                 parent_handle = parent.windows_parent_handle
                 if api is None or parent_handle is None:
                     raise DirectoryPublishError("Windows retained stage API is unavailable")
-                root_native = api.create_directory(parent_handle, stage.name)
+                root_native = api.create_directory(
+                    parent_handle,
+                    stage.name,
+                    request_delete=False,
+                )
                 orphan_native = root_native
                 orphan_close = api.close
                 opened = windows_handle_file_stat(root_native)

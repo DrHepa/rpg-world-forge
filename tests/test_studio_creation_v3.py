@@ -12,6 +12,7 @@ from pathlib import Path, PureWindowsPath
 from unittest import mock
 
 from isoworld.content.file_stat import FileStat, WindowsFileStat, path_file_stat
+from worldforge import creation_scaffold as creation_scaffold_module
 from worldforge.creation_contracts import canonical_creation_hash, load_creation_project
 from worldforge.creation_scaffold import CreationScaffoldError, create_creation_project
 from worldforge.creation_workflow import (
@@ -27,6 +28,7 @@ from worldforge.phase_report_v3 import (
 )
 from worldforge.repository_boundary import FORGE_ROOT
 from worldforge.scaffold import create_world_project
+from worldforge.studio import creation_workspaces as creation_workspaces_module
 from worldforge.studio.contracts import (
     METHODS,
     METHODS_V2,
@@ -377,6 +379,61 @@ class StudioCreationV3StorageTests(unittest.TestCase):
 
 
 class StudioCreationV3WorkspaceTests(unittest.TestCase):
+    def test_scaffold_failure_telemetry_projects_only_closed_operation_codes(self) -> None:
+        operation_codes = frozenset(
+            {
+                "creation_scaffold_stage_create_failed",
+                "creation_scaffold_stage_write_failed",
+                "creation_scaffold_stage_flush_failed",
+                "creation_scaffold_stage_verify_failed",
+                "creation_scaffold_publish_failed",
+                "creation_scaffold_published_verify_failed",
+                "creation_scaffold_parent_flush_failed",
+                "creation_scaffold_finalize_failed",
+            }
+        )
+        self.assertEqual(
+            operation_codes,
+            creation_scaffold_module.CREATION_SCAFFOLD_OPERATION_REASON_CODES,
+        )
+        for reason_code in sorted(operation_codes):
+            with self.subTest(reason_code=reason_code):
+                details = creation_workspaces_module._bounded_scaffold_failure_details(  # noqa: SLF001
+                    CreationScaffoldError(
+                        r"private failure at C:\Users\runner\project",
+                        reason_code=reason_code,
+                    ),
+                    phase="before_publication",
+                )
+                self.assertEqual(
+                    {"reason_code": reason_code, "phase": "before_publication"},
+                    details,
+                )
+
+    def test_scaffold_failure_telemetry_rejects_hostile_codes_and_phases(self) -> None:
+        hostile_codes: tuple[object, ...] = (
+            r"C:\Users\runner\project",
+            "../private_project",
+            "creation_scaffold_échec",
+            "x" * 65,
+            7,
+        )
+        for reason_code in hostile_codes:
+            with self.subTest(reason_code=reason_code):
+                error = CreationScaffoldError("sensitive path")
+                error.reason_code = reason_code  # type: ignore[assignment]
+                details = creation_workspaces_module._bounded_scaffold_failure_details(  # noqa: SLF001
+                    error,
+                    phase=r"C:\private\journal",
+                )
+                self.assertEqual(
+                    {
+                        "reason_code": "creation_scaffold_failed",
+                        "phase": "before_publication",
+                    },
+                    details,
+                )
+
     def test_existing_root_registration_is_pathless_revision_bound_and_read_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
