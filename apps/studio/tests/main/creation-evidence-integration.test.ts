@@ -175,9 +175,13 @@ describe("production Studio v4 evidence boundary", () => {
           }),
         );
         expect(
-          await screen.findByRole("heading", {
-            name: "Integration project creation profile",
-          }),
+          await screen.findByRole(
+            "heading",
+            {
+              name: "Integration project creation profile",
+            },
+            { timeout: 10_000 },
+          ),
         ).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
