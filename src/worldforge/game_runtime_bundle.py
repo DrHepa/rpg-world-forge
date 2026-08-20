@@ -40,6 +40,7 @@ from worldforge.directory_publish import (
     DirectoryPublishError,
     DirectoryPublishIndeterminateError,
     DirectoryPublishRecoveryRequiredError,
+    RetainedStageWriter,
     append_append_only_journal,
     create_append_only_journal,
     create_retained_stage,
@@ -89,6 +90,7 @@ from worldforge.generic_runtime import (
     RUNTIME_SUPPORT_REPORT_FORMAT,
     RuntimeContractError,
     _capture_runtime_files,
+    _RuntimeStageReadCapability,
     build_runtime_support_report,
     capture_trusted_runtime_snapshot_files,
     resolve_runtime_adapter,
@@ -1508,6 +1510,7 @@ def _capture_bundle_tree(
     *,
     hook: _VerificationHook | None,
     retained_root_fd: int | None = None,
+    stage_capability: _RuntimeStageReadCapability | None = None,
 ) -> tuple[dict[str, bytes], _PhysicalTree]:
     before = (
         _physical_tree(root)
@@ -1521,6 +1524,7 @@ def _capture_bundle_tree(
             root,
             _verification_hook=hook,
             _retained_root_fd=retained_root_fd,
+            _stage_capability=stage_capability,
         )
     except RuntimeContractError as exc:
         _fail("game_runtime_bundle_tree_changed", str(exc))
@@ -1735,14 +1739,31 @@ def verify_game_runtime_bundle(
     *,
     expected_content_hash: str | None = None,
     _verification_hook: _VerificationHook | None = None,
+    _retained_stage_writer: RetainedStageWriter | None = None,
 ) -> VerifiedGameRuntimeBundle:
     """Integrally verify an exact runtime-only pre-execution bundle tree."""
 
     root_path = Path(os.path.abspath(os.fspath(root)))
     try:
+        stage_capability: _RuntimeStageReadCapability | None = None
+        if _retained_stage_writer is not None:
+            if (
+                type(_retained_stage_writer) is not RetainedStageWriter
+                or _retained_stage_writer.stage != root_path
+            ):
+                _fail(
+                    "game_runtime_bundle_stage_capability_invalid",
+                    "retained stage writer does not bind the verified root",
+                )
+            _retained_stage_writer.require_binding()
+            stage_capability = _RuntimeStageReadCapability(
+                root=root_path,
+                require_binding=_retained_stage_writer.require_binding,
+            )
         files, tree = _capture_bundle_tree(
             root_path,
             hook=_verification_hook,
+            stage_capability=stage_capability,
         )
         manifest = _decode_canonical(
             files,
@@ -2021,6 +2042,8 @@ def verify_game_runtime_bundle(
                 "game_runtime_bundle_notice_mismatch",
                 "bundle legal notice paths are not unique",
             )
+        if _retained_stage_writer is not None:
+            _retained_stage_writer.require_binding()
         return VerifiedGameRuntimeBundle(
             root_path,
             manifest,
@@ -3142,9 +3165,11 @@ def _publish_game_runtime_bundle(
                 for relative in ordered_files:
                     writer.write_file(relative, files[relative])
                 writer.fsync()
+                writer.require_binding()
                 verified_stage = verify_game_runtime_bundle(
                     stage,
                     expected_content_hash=manifest["content_hash"],
+                    _retained_stage_writer=writer,
                 )
                 try:
                     _journal_matches_verified(journal, verified_stage)

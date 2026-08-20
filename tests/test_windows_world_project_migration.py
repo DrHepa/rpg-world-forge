@@ -44,9 +44,12 @@ class _FakeWindowsNativeApi:
         self.retain_name_after_disposition = False
         self.verification_handles: set[int] = set()
         self.fail_close_names: set[str] = set()
+        self.fail_close_handles: set[int] = set()
         self.legacy_identity_reads = 0
         self.disposition_attempted = False
+        self.disposed_names: list[str] = []
         self.fail_rename_once = False
+        self.after_sealed_retention_read: str | None = None
 
     def _open(
         self,
@@ -172,7 +175,7 @@ class _FakeWindowsNativeApi:
         entry = self.handles[handle]
         if len(entry.payload) > limit:
             raise ValueError(context)
-        return (
+        result = (
             BoundFileBytes(
                 entry.payload,
                 entry.identity,
@@ -181,6 +184,24 @@ class _FakeWindowsNativeApi:
             ),
             self._links(entry),
         )
+        if (
+            context.startswith("sealed Windows migration entry ")
+            and context.endswith(".exchange")
+            and self.after_sealed_retention_read is not None
+        ):
+            name = self.open_names[handle]
+            if self.after_sealed_retention_read == "disappear":
+                del self.entries[name]
+            elif self.after_sealed_retention_read == "swap":
+                self.entries[name] = _FakeWindowsFile(
+                    b'{"unrelated":true}\n',
+                    (7, 909),
+                    9_000,
+                )
+            else:
+                raise AssertionError(self.after_sealed_retention_read)
+            self.after_sealed_retention_read = None
+        return result
 
     def strict_entry_info(self, handle: int, *, context: str):
         entry = self.handles[handle]
@@ -272,15 +293,25 @@ class _FakeWindowsNativeApi:
     def dispose_ex(self, handle: int) -> None:
         self.disposition_attempted = True
         entry = self.handles[handle]
+        opened_name = self.open_names[handle]
+        if self.entries.get(opened_name) is not entry:
+            from worldforge.asset_io import AssetContractError
+
+            raise AssetContractError("injected FileDispositionInfoEx error 5 for a stale open name")
         retained = [name for name, candidate in self.entries.items() if candidate is entry]
         if len(retained) != 1:
             raise AssertionError(retained)
         if not self.retain_name_after_disposition:
-            del self.entries[retained[0]]
+            del self.entries[opened_name]
+        self.disposed_names.append(opened_name)
         self.events.append("dispose-ex")
 
     def close(self, handle: int) -> None:
         self.events.append(f"close:{handle}")
+        if handle in self.fail_close_handles:
+            from worldforge.asset_io import AssetContractError
+
+            raise AssetContractError("injected retained source close failure")
         if self.disposition_attempted and self.fail_close_after_disposition:
             from worldforge.asset_io import AssetContractError
 
@@ -1555,6 +1586,144 @@ class WindowsProjectMigrationPolicyTests(unittest.TestCase):
 
         self.assertEqual({"project.json"}, set(native.entries))
         self.assertIn("dispose-ex", native.events)
+
+    def test_source_retention_cleanup_reopens_the_exact_exchange_link(self) -> None:
+        from worldforge.windows_project_migration import (
+            WindowsProjectCommitApi,
+            commit_windows_project,
+        )
+
+        source = b'{"format_version":2}\n'
+        target = b'{"format_version":3}\n'
+        source_hash = __import__("hashlib").sha256(source).hexdigest()
+        for recovery in (False, True):
+            with self.subTest(recovery=recovery):
+                operation_id = ("8" if recovery else "7") * 64
+                retention_name = f".project.json.migration.{operation_id}.exchange"
+                native = _FakeWindowsNativeApi(source)
+                if recovery:
+                    retained = native.entries["project.json"]
+                    native.entries[retention_name] = retained
+                    native.entries["project.json"] = _FakeWindowsFile(
+                        target,
+                        (7, 202),
+                        2_500,
+                    )
+                lease = _FakeWindowsLease(native)
+                adapter = WindowsProjectCommitApi(
+                    lease,
+                    operation_id=operation_id,
+                    source_identity=(7, 101),
+                    source_sha256=source_hash,
+                    source_change_time_ns=1_000,
+                    target_payload=target,
+                )
+                commit_windows_project(adapter, retain_seal=True)
+                old_source_handle = adapter.source_seal_handle
+                target_handle = adapter.target_seal_handle
+                assert old_source_handle is not None
+                assert target_handle is not None
+                expected_old_name = retention_name if recovery else "project.json"
+                self.assertEqual(expected_old_name, native.open_names[old_source_handle])
+
+                adapter.delete_durable_source_retention()
+
+                self.assertIsNone(adapter.source_seal_handle)
+                self.assertEqual(target_handle, adapter.target_seal_handle)
+                self.assertIn(target_handle, native.handles)
+                self.assertNotIn(old_source_handle, native.handles)
+                self.assertEqual([retention_name], native.disposed_names)
+                self.assertEqual({"project.json"}, set(native.entries))
+                self.assertEqual(target, native.entries["project.json"].payload)
+                self.assertTrue(
+                    any(
+                        contract == (retention_name, True, True, False, False, True)
+                        for contract in native.open_contracts
+                    )
+                )
+                adapter.release_source_seal()
+
+    def test_source_retention_cleanup_failures_never_dispose_an_unbound_name(
+        self,
+    ) -> None:
+        from worldforge.windows_project_migration import (
+            WindowsMigrationOutcomeIndeterminate,
+            WindowsProjectCommitApi,
+            commit_windows_project,
+        )
+
+        source = b'{"format_version":2}\n'
+        target = b'{"format_version":3}\n'
+        source_hash = __import__("hashlib").sha256(source).hexdigest()
+        for recovery in (False, True):
+            for boundary in ("close", "open", "disappear", "swap", "ancestry"):
+                with self.subTest(recovery=recovery, boundary=boundary):
+                    operation_id = ("a" if recovery else "9") * 64
+                    retention_name = f".project.json.migration.{operation_id}.exchange"
+                    native = _FakeWindowsNativeApi(source)
+                    if recovery:
+                        retained = native.entries["project.json"]
+                        native.entries[retention_name] = retained
+                        native.entries["project.json"] = _FakeWindowsFile(
+                            target,
+                            (7, 202),
+                            2_500,
+                        )
+                    lease = _FakeWindowsLease(native)
+                    adapter = WindowsProjectCommitApi(
+                        lease,
+                        operation_id=operation_id,
+                        source_identity=(7, 101),
+                        source_sha256=source_hash,
+                        source_change_time_ns=1_000,
+                        target_payload=target,
+                    )
+                    commit_windows_project(adapter, retain_seal=True)
+                    old_source_handle = adapter.source_seal_handle
+                    target_handle = adapter.target_seal_handle
+                    assert old_source_handle is not None
+                    assert target_handle is not None
+                    if boundary == "close":
+                        native.fail_close_handles.add(old_source_handle)
+                    elif boundary == "open":
+                        native.fail_sealed_name = retention_name
+                    elif boundary in {"disappear", "swap"}:
+                        native.after_sealed_retention_read = boundary
+                    else:
+                        lease.fail_assertion_at = lease.assertions + 3
+
+                    with self.assertRaises(WindowsMigrationOutcomeIndeterminate):
+                        adapter.delete_durable_source_retention()
+
+                    self.assertEqual([], native.disposed_names)
+                    self.assertEqual(target, native.entries["project.json"].payload)
+                    self.assertEqual(target_handle, adapter.target_seal_handle)
+                    self.assertIn(target_handle, native.handles)
+                    if boundary == "close":
+                        self.assertEqual(old_source_handle, adapter.source_seal_handle)
+                        self.assertIn(f"close:{old_source_handle}", native.events)
+                    elif boundary == "open":
+                        self.assertIsNone(adapter.source_seal_handle)
+                    elif boundary == "disappear":
+                        self.assertNotIn(retention_name, native.entries)
+                        self.assertIsNone(native.after_sealed_retention_read)
+                    elif boundary == "swap":
+                        self.assertEqual(
+                            b'{"unrelated":true}\n',
+                            native.entries[retention_name].payload,
+                        )
+                        self.assertIsNone(native.after_sealed_retention_read)
+                    else:
+                        assert lease.fail_assertion_at is not None
+                        self.assertGreaterEqual(
+                            lease.assertions,
+                            lease.fail_assertion_at,
+                        )
+
+                    native.fail_close_handles.clear()
+                    native.fail_sealed_name = None
+                    lease.fail_assertion_at = None
+                    adapter.release_source_seal()
 
     def test_only_exact_visible_source_seal_shares_delete_among_sealed_opens(self) -> None:
         from worldforge.windows_project_migration import (

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import ctypes
 import hashlib
 import io
 import json
@@ -14,8 +15,11 @@ from pathlib import Path
 from unittest import mock
 
 from scripts.generate_game_runtime_bundle_schema import build_schema
+from worldforge import game_runtime_bundle as game_runtime_bundle_module
+from worldforge import generic_runtime
 from worldforge.__main__ import _resolve_generic_assetpack_cli_source, main
 from worldforge.creation_contracts import canonical_creation_hash, read_creation_object
+from worldforge.directory_publish import DirectoryPublishError, RetainedStageWriter
 from worldforge.game_runtime_bundle import (
     GAME_RUNTIME_BUNDLE_FORMAT,
     GAME_RUNTIME_BUNDLE_MANIFEST,
@@ -167,6 +171,240 @@ def _replace_manifest_file(
 
 
 class GameRuntimeBundleContractTests(unittest.TestCase):
+    def test_windows_runtime_stage_capability_adds_only_write_sharing(self) -> None:
+        root = Path("C:/retained/stage")
+        capability = generic_runtime._RuntimeStageReadCapability(  # noqa: SLF001
+            root=root,
+            require_binding=lambda: None,
+        )
+        expected_access = (
+            generic_runtime._WindowsRuntimeTreeApi._FILE_LIST_DIRECTORY  # noqa: SLF001
+            | generic_runtime._WindowsRuntimeTreeApi._FILE_READ_ATTRIBUTES  # noqa: SLF001
+            | generic_runtime._WindowsRuntimeTreeApi._SYNCHRONIZE  # noqa: SLF001
+        )
+        for active_capability, expected_share in (
+            (None, 0x00000001),
+            (capability, 0x00000003),
+        ):
+            with self.subTest(stage=active_capability is not None):
+                calls: list[tuple[str, int, int]] = []
+                api = object.__new__(generic_runtime._WindowsRuntimeTreeApi)  # noqa: SLF001
+                api._invalid_handle = -1  # noqa: SLF001
+                api._share_mode = api._share_mode_for(active_capability)  # noqa: SLF001
+
+                def create_file(
+                    _path: str,
+                    access: int,
+                    share: int,
+                    *_args: object,
+                    observed_calls: list[tuple[str, int, int]] = calls,
+                ) -> int:
+                    observed_calls.append(("path", access, share))
+                    return 91
+
+                def nt_create_file(
+                    output: object,
+                    access: int,
+                    _attributes: object,
+                    _io_status: object,
+                    _allocation: object,
+                    _file_attributes: int,
+                    share: int,
+                    _disposition: int,
+                    _options: int,
+                    _ea: object,
+                    _ea_length: int,
+                    observed_calls: list[tuple[str, int, int]] = calls,
+                ) -> int:
+                    ctypes.cast(output, ctypes.POINTER(ctypes.c_void_p))[0] = 92
+                    observed_calls.append(("relative", access, share))
+                    return 0
+
+                api._create_file = create_file  # type: ignore[attr-defined]  # noqa: SLF001
+                api._nt_create_file = nt_create_file  # type: ignore[attr-defined]  # noqa: SLF001
+
+                self.assertEqual(91, api.open_path_directory(root.parent))
+                relative, status = api._nt_open(  # noqa: SLF001
+                    91,
+                    root.name,
+                    directory=True,
+                )
+                self.assertEqual((92, 0), (relative, status))
+                relative_file, file_status = api._nt_open(  # noqa: SLF001
+                    91,
+                    "payload.bin",
+                    directory=False,
+                )
+                self.assertEqual((92, 0), (relative_file, file_status))
+                self.assertEqual(
+                    [
+                        ("path", expected_access, expected_share),
+                        ("relative", expected_access, expected_share),
+                        ("relative", expected_access, expected_share),
+                    ],
+                    calls,
+                )
+                self.assertTrue(all(access & 0x40000000 == 0 for _, access, _ in calls))
+                self.assertTrue(all(share & 0x00000004 == 0 for _, _, share in calls))
+
+    def test_runtime_stage_capability_is_root_bound_and_mutation_sensitive(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-runtime-stage-capability-") as temporary:
+            root = Path(temporary) / "stage"
+            root.mkdir()
+            (root / "kernel.py").write_bytes(b"VALUE = 1\n")
+            binding_checks: list[int] = []
+            capability = generic_runtime._RuntimeStageReadCapability(  # noqa: SLF001
+                root=root,
+                require_binding=lambda: binding_checks.append(len(binding_checks) + 1),
+            )
+
+            captured = generic_runtime._capture_runtime_files(  # noqa: SLF001
+                root,
+                _stage_capability=capability,
+            )
+
+            self.assertEqual(b"VALUE = 1\n", captured["gamepack_runtime/kernel.py"])
+            self.assertEqual([1, 2], binding_checks)
+
+            crossed = generic_runtime._RuntimeStageReadCapability(  # noqa: SLF001
+                root=root / "other",
+                require_binding=lambda: None,
+            )
+            with self.assertRaisesRegex(
+                generic_runtime.RuntimeContractError,
+                "runtime_snapshot_root_invalid",
+            ):
+                generic_runtime._capture_runtime_files(  # noqa: SLF001
+                    root,
+                    _stage_capability=crossed,
+                )
+
+            mutation_checks = 0
+
+            def reject_mutation() -> None:
+                nonlocal mutation_checks
+                mutation_checks += 1
+                if mutation_checks == 2:
+                    raise DirectoryPublishError("retained stage binding changed")
+
+            mutation_capability = generic_runtime._RuntimeStageReadCapability(  # noqa: SLF001
+                root=root,
+                require_binding=reject_mutation,
+            )
+            with self.assertRaisesRegex(DirectoryPublishError, "binding changed"):
+                generic_runtime._capture_runtime_files(  # noqa: SLF001
+                    root,
+                    _stage_capability=mutation_capability,
+                )
+            self.assertEqual(2, mutation_checks)
+
+    def test_bundle_verifier_accepts_stage_capability_only_from_its_writer(self) -> None:
+        class _CaptureStopped(RuntimeError):
+            pass
+
+        with tempfile.TemporaryDirectory(prefix="wf-runtime-stage-scope-") as temporary:
+            root = Path(temporary) / "stage"
+            root.mkdir()
+            writer = object.__new__(RetainedStageWriter)
+            writer.stage = root
+            require_binding = mock.Mock()
+            writer.require_binding = require_binding  # type: ignore[method-assign]
+            observed: list[object | None] = []
+
+            def stop_capture(
+                _root: Path,
+                *,
+                hook: object,
+                retained_root_fd: int | None = None,
+                stage_capability: object | None = None,
+            ) -> object:
+                del hook, retained_root_fd
+                observed.append(stage_capability)
+                raise _CaptureStopped
+
+            with (
+                mock.patch.object(
+                    game_runtime_bundle_module,
+                    "_capture_bundle_tree",
+                    side_effect=stop_capture,
+                ),
+                self.assertRaises(_CaptureStopped),
+            ):
+                verify_game_runtime_bundle(
+                    root,
+                    _retained_stage_writer=writer,
+                )
+            self.assertEqual(1, require_binding.call_count)
+            self.assertEqual(1, len(observed))
+            capability = observed[0]
+            self.assertIsInstance(
+                capability,
+                generic_runtime._RuntimeStageReadCapability,  # noqa: SLF001
+            )
+            assert isinstance(capability, generic_runtime._RuntimeStageReadCapability)  # noqa: SLF001
+            self.assertEqual(root, capability.root)
+
+            with (
+                mock.patch.object(
+                    game_runtime_bundle_module,
+                    "_capture_bundle_tree",
+                    side_effect=stop_capture,
+                ),
+                self.assertRaises(_CaptureStopped),
+            ):
+                verify_game_runtime_bundle(root)
+            self.assertIsNone(observed[-1])
+
+            with self.assertRaisesRegex(
+                GameRuntimeBundleError,
+                "game_runtime_bundle_stage_capability_invalid",
+            ):
+                verify_game_runtime_bundle(
+                    root / "crossed",
+                    _retained_stage_writer=writer,
+                )
+
+    def test_publication_scopes_stage_capability_away_from_published_verification(
+        self,
+    ) -> None:
+        observed: list[tuple[Path, object | None]] = []
+        original = game_runtime_bundle_module._capture_bundle_tree
+
+        def capture(
+            root: Path,
+            *,
+            hook: object,
+            retained_root_fd: int | None = None,
+            stage_capability: object | None = None,
+        ) -> object:
+            observed.append((root, stage_capability))
+            return original(
+                root,
+                hook=hook,
+                retained_root_fd=retained_root_fd,
+                stage_capability=stage_capability,
+            )
+
+        with tempfile.TemporaryDirectory(prefix="wf-runtime-stage-call-scope-") as temporary:
+            root = Path(temporary)
+            with mock.patch.object(
+                game_runtime_bundle_module,
+                "_capture_bundle_tree",
+                side_effect=capture,
+            ):
+                verified = _build_bundle("abstract-puzzle", root)
+            try:
+                destination = verified.root
+            finally:
+                verified.close()
+
+        stage_calls = [item for item in observed if item[1] is not None]
+        self.assertEqual(1, len(stage_calls))
+        self.assertTrue(stage_calls[0][0].name.startswith(".abstract-puzzle-runtime-bundle."))
+        self.assertTrue(
+            any(path == destination and capability is None for path, capability in observed)
+        )
+
     def test_object_input_api_matches_path_input_bytes_and_hashes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

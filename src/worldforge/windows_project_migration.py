@@ -671,12 +671,23 @@ class WindowsProjectCommitApi:
             raise WindowsMigrationOutcomeIndeterminate(
                 "Windows migration source retention is not sealed for cleanup"
             )
-        if classify_windows_commit_observation(self.observe()) != "committed":
-            raise WindowsMigrationOutcomeIndeterminate(
-                "Windows migration state changed before source-retention cleanup"
-            )
         mutated = False
         try:
+            if classify_windows_commit_observation(self.observe()) != "committed":
+                raise WindowsMigrationOutcomeIndeterminate(
+                    "Windows migration state changed before source-retention cleanup"
+                )
+            self.api.close(handle)
+            self.source_seal_handle = None
+            handle = self._open_seal(
+                self.source_retention_name,
+                delete=True,
+            )
+            self.source_seal_handle = handle
+            if classify_windows_commit_observation(self.observe()) != "committed":
+                raise WindowsMigrationOutcomeIndeterminate(
+                    "Windows migration state changed after retaining the cleanup link"
+                )
             self.api.dispose_ex(handle)
             mutated = True
             self.api.close(handle)
@@ -690,7 +701,7 @@ class WindowsProjectCommitApi:
                 )
         except WindowsMigrationOutcomeIndeterminate:
             raise
-        except (AssetContractError, OSError) as exc:
+        except (AssetContractError, OSError, RuntimeError, ValueError) as exc:
             detail = "after disposition" if mutated else "before disposition"
             raise WindowsMigrationOutcomeIndeterminate(
                 "world_project_migration_outcome_indeterminate: "

@@ -70,6 +70,15 @@ MAX_RUNTIME_TREE_BYTES = 32 * 1024 * 1024
 MAX_RUNTIME_ITEMS = 256
 MAX_RUNTIME_TEXT = 4096
 
+
+@dataclass(frozen=True, slots=True)
+class _RuntimeStageReadCapability:
+    """Bind the Windows write-sharing exception to one retained private stage."""
+
+    root: Path
+    require_binding: Callable[[], None]
+
+
 _IDENTITY_FIELDS = frozenset({"format", "format_version", "id", "content_hash"})
 _FORMAT_VERSION_FIELDS = frozenset({"format", "versions"})
 _RUNTIME_API_FIELDS = frozenset({"id", "version"})
@@ -1440,6 +1449,7 @@ class _WindowsRuntimeTreeApi:
     _FILE_READ_ATTRIBUTES = 0x00000080
     _SYNCHRONIZE = 0x00100000
     _FILE_SHARE_READ = 0x00000001
+    _FILE_SHARE_WRITE = 0x00000002
     _OPEN_EXISTING = 3
     _FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
     _FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
@@ -1457,10 +1467,15 @@ class _WindowsRuntimeTreeApi:
     _STATUS_NOT_A_DIRECTORY = 0xC0000103
     _QUERY_BUFFER_BYTES = 64 * 1024
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        stage_capability: _RuntimeStageReadCapability | None = None,
+    ) -> None:
         win_dll = getattr(ctypes, "WinDLL", None)
         if os.name != "nt" or win_dll is None:
             raise OSError("native Windows runtime tree APIs are unavailable")
+        self._share_mode = self._share_mode_for(stage_capability)
         self._kernel32 = win_dll("kernel32", use_last_error=True)
         self._ntdll = win_dll("ntdll", use_last_error=True)
         self._invalid_handle = ctypes.c_void_p(-1).value
@@ -1536,6 +1551,21 @@ class _WindowsRuntimeTreeApi:
         self._rtl_nt_status_to_dos_error.argtypes = [ctypes.c_long]
         self._rtl_nt_status_to_dos_error.restype = ctypes.c_ulong
 
+    @classmethod
+    def _share_mode_for(
+        cls,
+        stage_capability: _RuntimeStageReadCapability | None,
+    ) -> int:
+        if (
+            stage_capability is not None
+            and type(stage_capability) is not _RuntimeStageReadCapability
+        ):
+            raise TypeError("runtime stage capability has an invalid type")
+        share = cls._FILE_SHARE_READ
+        if stage_capability is not None:
+            share |= cls._FILE_SHARE_WRITE
+        return share
+
     @staticmethod
     def _unsigned_status(status: int) -> int:
         return ctypes.c_uint32(status).value
@@ -1569,7 +1599,7 @@ class _WindowsRuntimeTreeApi:
         handle = self._create_file(
             str(path),
             self._FILE_LIST_DIRECTORY | self._FILE_READ_ATTRIBUTES | self._SYNCHRONIZE,
-            self._FILE_SHARE_READ,
+            self._share_mode,
             None,
             self._OPEN_EXISTING,
             self._FILE_FLAG_OPEN_REPARSE_POINT | self._FILE_FLAG_BACKUP_SEMANTICS,
@@ -1628,7 +1658,7 @@ class _WindowsRuntimeTreeApi:
                 ctypes.byref(io_status),
                 None,
                 0,
-                self._FILE_SHARE_READ,
+                self._share_mode,
                 self._FILE_OPEN,
                 options,
                 None,
@@ -1894,8 +1924,9 @@ def _capture_runtime_files_windows(
     root: Path,
     *,
     hook: _RuntimeTreeHook | None,
+    stage_capability: _RuntimeStageReadCapability | None,
 ) -> dict[str, bytes]:
-    api = _WindowsRuntimeTreeApi()
+    api = _WindowsRuntimeTreeApi(stage_capability=stage_capability)
     handles: list[int] = []
     retained_directories: list[_RetainedRuntimeDirectory] = []
     retained_files: list[_RetainedRuntimeFile] = []
@@ -2147,6 +2178,7 @@ def _capture_runtime_files(
     package_name: str = "gamepack_runtime",
     _verification_hook: _RuntimeTreeHook | None = None,
     _retained_root_fd: int | None = None,
+    _stage_capability: _RuntimeStageReadCapability | None = None,
 ) -> dict[str, bytes]:
     if package_name not in {"gamepack_runtime", "gamepack_raylib_2d"}:
         _fail(
@@ -2154,6 +2186,16 @@ def _capture_runtime_files(
             "runtime package identity is not code-owned",
         )
     root = Path(os.path.abspath(os.fspath(root)))
+    if _stage_capability is not None:
+        if (
+            type(_stage_capability) is not _RuntimeStageReadCapability
+            or _stage_capability.root != root
+        ):
+            _fail(
+                "runtime_snapshot_root_invalid",
+                "runtime stage capability does not bind the requested root",
+            )
+        _stage_capability.require_binding()
     if os.name == "nt":
         if _retained_root_fd is not None:
             _fail(
@@ -2163,6 +2205,7 @@ def _capture_runtime_files(
         captured = _capture_runtime_files_windows(
             root,
             hook=_verification_hook,
+            stage_capability=_stage_capability,
         )
     else:
         captured = _capture_runtime_files_posix(
@@ -2170,6 +2213,8 @@ def _capture_runtime_files(
             hook=_verification_hook,
             retained_root_fd=_retained_root_fd,
         )
+    if _stage_capability is not None:
+        _stage_capability.require_binding()
     if package_name == "gamepack_runtime":
         return captured
     prefix = "gamepack_runtime/"
