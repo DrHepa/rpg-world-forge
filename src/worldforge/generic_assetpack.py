@@ -15,6 +15,11 @@ from types import MappingProxyType
 from typing import Any
 
 from isoworld.content.portability import is_portable_path_component
+from worldforge._publication_identity import (
+    PublicationIdentityCodecError,
+    decode_publication_identity,
+    encode_publication_identity,
+)
 from worldforge.asset_io import (
     AssetContractError,
     PinnedOutputParent,
@@ -167,7 +172,6 @@ _MANIFEST_FIELDS = frozenset(
         "content_hash",
     }
 )
-_DIRECTORY_IDENTITY_FIELDS = frozenset({"device", "inode"})
 _JOURNAL_FIELDS = frozenset(
     {
         "format",
@@ -2363,8 +2367,11 @@ def _destination_lock(
                 api.close(native_handle)
 
 
-def _identity_document(identity: DirectoryIdentity) -> dict[str, int]:
-    return {"device": identity[0], "inode": identity[1]}
+def _identity_document(identity: DirectoryIdentity) -> dict[str, int | str]:
+    try:
+        return encode_publication_identity(identity, windows=os.name == "nt")
+    except PublicationIdentityCodecError as exc:
+        _fail("assetpack_journal_invalid", str(exc))
 
 
 def _checked_parent_identity(
@@ -2402,12 +2409,10 @@ def _identity_from_document(
     value: object,
     context: str,
 ) -> DirectoryIdentity:
-    identity = _object(value, context)
-    _exact_keys(identity, _DIRECTORY_IDENTITY_FIELDS, context)
-    return (
-        _integer(identity.get("device"), f"{context}.device", minimum=0),
-        _integer(identity.get("inode"), f"{context}.inode", minimum=0),
-    )
+    try:
+        return decode_publication_identity(value, context=context)
+    except PublicationIdentityCodecError as exc:
+        _fail("assetpack_journal_invalid", str(exc))
 
 
 def _journal_document(

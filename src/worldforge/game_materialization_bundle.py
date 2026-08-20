@@ -14,6 +14,11 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
+from worldforge._publication_identity import (
+    PublicationIdentityCodecError,
+    decode_publication_identity,
+    encode_publication_identity,
+)
 from worldforge.creation_contracts import (
     CreationContractError,
     _decode_creation_object,
@@ -165,7 +170,6 @@ _LINEAGE_FIELDS = frozenset(
 )
 _LEGAL_FIELDS = frozenset({"bundle_license"})
 _FILE_FIELDS = frozenset({"path", "sha256", "size_bytes"})
-_DIRECTORY_IDENTITY_FIELDS = frozenset({"device", "inode"})
 _JOURNAL_FIELDS = frozenset(
     {
         "format",
@@ -1437,19 +1441,17 @@ def _destination_lock(destination: Path) -> Iterator[_DestinationLock]:
             os.close(descriptor)
 
 
-def _identity_document(identity: DirectoryIdentity) -> dict[str, int]:
-    return {"device": identity[0], "inode": identity[1]}
+def _identity_document(identity: DirectoryIdentity) -> dict[str, int | str]:
+    try:
+        return encode_publication_identity(identity, windows=os.name == "nt")
+    except PublicationIdentityCodecError as exc:
+        _fail("game_materialization_bundle_journal_invalid", str(exc))
 
 
 def _identity_from_document(value: object, *, context: str) -> DirectoryIdentity:
     try:
-        identity = _object(value, context)
-        _exact_keys(identity, _DIRECTORY_IDENTITY_FIELDS, context)
-        return (
-            _integer(identity.get("device"), f"{context}.device", minimum=0),
-            _integer(identity.get("inode"), f"{context}.inode", minimum=0),
-        )
-    except CreationContractError as exc:
+        return decode_publication_identity(value, context=context)
+    except PublicationIdentityCodecError as exc:
         _fail("game_materialization_bundle_journal_invalid", str(exc))
 
 

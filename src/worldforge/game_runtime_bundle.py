@@ -17,6 +17,11 @@ from types import MappingProxyType
 from typing import Any
 
 from isoworld.content.portability import is_portable_path_component
+from worldforge._publication_identity import (
+    PublicationIdentityCodecError,
+    decode_publication_identity,
+    encode_publication_identity,
+)
 from worldforge.creation_contracts import (
     CreationContractError,
     _decode_creation_object,
@@ -203,7 +208,6 @@ _JOURNAL_FIELDS = frozenset(
         "manifest_size_bytes",
     }
 )
-_DIRECTORY_IDENTITY_FIELDS = frozenset({"device", "inode"})
 
 _CONTRACT_PATHS = {
     "gamepack": "contracts/gamepack.json",
@@ -2151,21 +2155,19 @@ def _destination_lock(destination: Path) -> Iterator[_DestinationLock]:
             os.close(descriptor)
 
 
-def _identity_document(identity: DirectoryIdentity) -> dict[str, int]:
-    return {"device": identity[0], "inode": identity[1]}
+def _identity_document(identity: DirectoryIdentity) -> dict[str, int | str]:
+    try:
+        return encode_publication_identity(identity, windows=os.name == "nt")
+    except PublicationIdentityCodecError as exc:
+        _fail("game_runtime_bundle_journal_invalid", str(exc))
 
 
 def _identity_from_document(value: object) -> DirectoryIdentity:
-    identity = _object(value, "runtime bundle publication journal.stage_identity")
-    _exact_keys(
-        identity,
-        _DIRECTORY_IDENTITY_FIELDS,
-        "runtime bundle publication journal.stage_identity",
-    )
-    return (
-        _integer(identity.get("device"), "journal.stage_identity.device", minimum=0),
-        _integer(identity.get("inode"), "journal.stage_identity.inode", minimum=0),
-    )
+    context = "runtime bundle publication journal.stage_identity"
+    try:
+        return decode_publication_identity(value, context=context)
+    except PublicationIdentityCodecError as exc:
+        _fail("game_runtime_bundle_journal_invalid", str(exc))
 
 
 def _journal_document(
