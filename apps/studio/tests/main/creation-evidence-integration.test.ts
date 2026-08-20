@@ -26,6 +26,7 @@ const repoRoot = path.resolve(
   "../../../..",
 );
 const python = findTestPython();
+const RENDERER_BOUNDARY_TIMEOUT_MS = 10_000;
 const services: ForgeServiceSupervisor[] = [];
 const temporaryRoots: string[] = [];
 
@@ -180,22 +181,27 @@ describe("production Studio v4 evidence boundary", () => {
             {
               name: "Integration project creation profile",
             },
-            { timeout: 10_000 },
+            { timeout: RENDERER_BOUNDARY_TIMEOUT_MS },
           ),
         ).toBeInTheDocument();
 
         fireEvent.click(screen.getByRole("tab", { name: "Assets" }));
-        expect(
-          await screen.findByRole("heading", { name: "Asset evidence" }),
-        ).toBeInTheDocument();
-        await waitFor(() => {
-          expect(screen.queryByText("Loading creation evidence…")).not.toBeInTheDocument();
-        });
+        await waitFor(
+          () => {
+            expect(
+              screen.getByRole("heading", { name: "Asset evidence" }),
+            ).toBeInTheDocument();
+            expect(
+              screen.queryByText("Loading active creation evidence…"),
+            ).not.toBeInTheDocument();
+          },
+          { timeout: RENDERER_BOUNDARY_TIMEOUT_MS },
+        );
         expect(document.body.textContent).not.toContain(temporary);
 
         fireEvent.click(screen.getByRole("tab", { name: "Compatibility" }));
         expect(
-          await screen.findByRole("heading", { name: "Runtime compatibility evidence" }),
+          screen.getByRole("heading", { name: "Runtime compatibility evidence" }),
         ).toBeInTheDocument();
         expect(document.body.textContent).not.toContain(temporary);
 
