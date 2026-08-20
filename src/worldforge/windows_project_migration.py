@@ -202,6 +202,8 @@ def _read_windows_entry(
     handle: int | None = None
     try:
         try:
+            # Observation handles are short-lived and intentionally share delete;
+            # only retained sealed handles enforce the replacement share contract.
             handle = api.open_existing_file_strict(
                 parent_handle,
                 name,
@@ -429,6 +431,7 @@ class WindowsProjectCommitApi:
         name: str,
         *,
         delete: bool,
+        share_delete: bool = False,
         expected_change_time_ns: int | None = None,
     ) -> int:
         handle = self.api.open_existing_file_strict(
@@ -436,6 +439,7 @@ class WindowsProjectCommitApi:
             name,
             sealed=True,
             delete=delete,
+            share_delete=share_delete,
             write=True,
         )
         try:
@@ -470,6 +474,7 @@ class WindowsProjectCommitApi:
                 self.source_seal_handle = self._open_seal(
                     "project.json",
                     delete=True,
+                    share_delete=True,
                     expected_change_time_ns=(
                         self.source_change_time_ns
                         if observation.visible_link_count == 1 and observation.retained_role is None

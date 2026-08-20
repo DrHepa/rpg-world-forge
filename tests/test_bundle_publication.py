@@ -20,7 +20,11 @@ from worldforge.bundle import (
     export_runtime_bundle,
     import_runtime_bundle,
 )
-from worldforge.directory_publish import DirectoryPublishError, publish_directory_noreplace
+from worldforge.directory_publish import (
+    DirectoryPublishError,
+    DirectoryPublishIndeterminateError,
+    publish_directory_noreplace,
+)
 from worldforge.game_scaffold import create_game_project
 
 
@@ -1292,6 +1296,8 @@ class BundlePublicationTests(unittest.TestCase):
                 }
             )
             handles: dict[int, Path] = {}
+            open_handles: set[int] = set()
+            handle_contracts: dict[int, tuple[int, int]] = {}
             source_handle: int | None = None
             create_calls: list[tuple[object, ...]] = []
             fake_handle_stat_calls: list[int] = []
@@ -1317,12 +1323,53 @@ class BundlePublicationTests(unittest.TestCase):
                 def __call__(self, *args: object) -> int:
                     nonlocal source_handle
                     create_calls.append(args)
-                    handle = -(0x1000 + len(handles))
                     path = Path(str(args[0]))
+                    access = int(args[1])
+                    share = int(args[2])
+                    resolved = destination if path == stage and not stage.exists() else path
+                    for opened_handle in open_handles:
+                        opened_path = handles[opened_handle]
+                        opened_resolved = (
+                            destination
+                            if opened_path == stage and not stage.exists()
+                            else opened_path
+                        )
+                        if opened_resolved != resolved:
+                            continue
+                        opened_access, opened_share = handle_contracts[opened_handle]
+                        read_mask = 0x80000000 | 0x00000001 | 0x00000020 | 0x00000080
+                        write_mask = 0x40000000
+                        delete_mask = 0x00010000
+                        compatible = (
+                            (not opened_access & read_mask or share & 0x00000001)
+                            and (not opened_access & write_mask or share & 0x00000002)
+                            and (not opened_access & delete_mask or share & 0x00000004)
+                            and (not access & read_mask or opened_share & 0x00000001)
+                            and (not access & write_mask or opened_share & 0x00000002)
+                            and (not access & delete_mask or opened_share & 0x00000004)
+                        )
+                        if not compatible:
+                            raise OSError(32, "injected Windows sharing violation")
+                    handle = -(0x1000 + len(handles))
                     handles[handle] = path
+                    handle_contracts[handle] = (access, share)
+                    open_handles.add(handle)
                     if path == stage and source_handle is None:
                         source_handle = handle
                     return handle
+
+            class CloseHandle:
+                argtypes: object = None
+                restype: object = None
+
+                def __call__(self, handle: object) -> int:
+                    value = int(getattr(handle, "value", handle))
+                    if value not in open_handles and value >= 1 << 63:
+                        value -= 1 << 64
+                    if value not in open_handles:
+                        return 0
+                    open_handles.remove(value)
+                    return 1
 
             class Rename:
                 argtypes: object = None
@@ -1332,12 +1379,15 @@ class BundlePublicationTests(unittest.TestCase):
                     stage.rename(destination)
                     return 1
 
+            create_file = CreateFile()
+            close_handle = CloseHandle()
+
             def load_dll(name: str, **_kwargs: object) -> object:
                 if name == "kernel32":
                     return SimpleNamespace(
-                        CreateFileW=CreateFile(),
+                        CreateFileW=create_file,
                         FlushFileBuffers=WindowsCall(1),
-                        CloseHandle=WindowsCall(1),
+                        CloseHandle=close_handle,
                     )
                 if name == "ntdll":
                     return SimpleNamespace(
@@ -1460,6 +1510,16 @@ class BundlePublicationTests(unittest.TestCase):
                     source_identity=stage_identity,
                     parent_identity=parent_identity,
                 ):
+                    verifier_root_handle = create_file(
+                        str(destination),
+                        0x001000A1,
+                        0x00000001 | 0x00000002,
+                        None,
+                        3,
+                        0x02000000 | 0x00200000,
+                        None,
+                    )
+                    self.assertEqual(1, close_handle(verifier_root_handle))
                     with bundle_module.verify_runtime_bundle(
                         destination,
                         expected_bundle_hash=manifest["bundle_hash"],
@@ -1478,6 +1538,203 @@ class BundlePublicationTests(unittest.TestCase):
             self.assertGreater(len(post_seal_calls), 0)
             self.assertTrue(all(call[1] == 0x00100081 for call in post_seal_calls))
             self.assertTrue(all(call[2] == 0x00000001 for call in post_seal_calls))
+            destination_root_calls = [
+                call for call in create_calls if Path(str(call[0])) == destination
+            ]
+            self.assertGreaterEqual(len(destination_root_calls), 2)
+            self.assertTrue(all(call[1] == 0x001000A1 for call in destination_root_calls))
+            self.assertTrue(all(call[2] == 0x00000003 for call in destination_root_calls))
+            self.assertEqual(set(), open_handles)
+
+    def test_windows_root_handoff_fails_closed_at_close_open_and_aba_boundaries(self) -> None:
+        for boundary, detail in (
+            ("close", "release the rename handle"),
+            ("open", "retain the published destination"),
+            ("aba", "prove the exact published identity"),
+        ):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as directory:
+                parent = Path(directory)
+                destination = parent / "published"
+                destination.mkdir()
+                payload = destination / "payload.bin"
+                payload.write_bytes(b"retained payload")
+                replacement = parent / "replacement"
+                replacement.mkdir()
+                (replacement / "other.bin").write_bytes(b"replacement")
+
+                root_state = directory_publish_module.path_file_stat(destination)
+                parent_state = directory_publish_module.path_file_stat(parent)
+                payload_state = directory_publish_module.path_file_stat(payload)
+                replacement_state = directory_publish_module.path_file_stat(replacement)
+                expected_tree = directory_publish_module._windows_tree_snapshot(  # noqa: SLF001
+                    destination
+                )
+                expected_root_state = directory_publish_module._windows_tree_state(  # noqa: SLF001
+                    root_state
+                )
+                expected_fingerprint = directory_publish_module._windows_tree_fingerprint(  # noqa: SLF001
+                    destination,
+                    expected_root_state=expected_root_state,
+                    expected_tree=expected_tree,
+                )
+                handle_states = {
+                    10: root_state,
+                    20: payload_state,
+                    30: parent_state,
+                }
+                close_attempts: list[int] = []
+                open_attempts: list[Path] = []
+                retained_ref = SimpleNamespace(value=None)
+
+                def close_handle(
+                    handle: object,
+                    *,
+                    attempts: list[int] = close_attempts,
+                    selected_boundary: str = boundary,
+                ) -> int:
+                    value = int(getattr(handle, "value", handle))
+                    attempts.append(value)
+                    root_attempts = sum(attempt == 10 for attempt in attempts)
+                    return int(
+                        not (selected_boundary == "close" and value == 10 and root_attempts == 1)
+                    )
+
+                def open_published_root(
+                    path: Path,
+                    *,
+                    attempts: list[Path] = open_attempts,
+                    selected_boundary: str = boundary,
+                    states: dict[int, object] = handle_states,
+                    original_state: object = root_state,
+                    changed_state: object = replacement_state,
+                    retained_box: SimpleNamespace = retained_ref,
+                ) -> int:
+                    attempts.append(path)
+                    active = retained_box.value
+                    self.assertIsNotNone(active)
+                    self.assertEqual(
+                        [20],
+                        [item.handle for item in active.payload_handles],
+                    )
+                    if selected_boundary == "open":
+                        raise OSError(32, "injected destination root open failure")
+                    states[40] = changed_state if selected_boundary == "aba" else original_state
+                    return 40
+
+                retained = directory_publish_module._WindowsRetainedTree(  # noqa: SLF001
+                    source=parent / ".private-stage",
+                    source_identity=directory_publish_module.file_identity(root_state),
+                    parent_identity=directory_publish_module.file_identity(parent_state),
+                    source_handle=10,
+                    parent_handle=30,
+                    payload_handles=[
+                        directory_publish_module._WindowsPayloadHandle(  # noqa: SLF001
+                            relative="payload.bin",
+                            handle=20,
+                            directory=False,
+                            expected=directory_publish_module._windows_tree_state(  # noqa: SLF001
+                                payload_state
+                            ),
+                        )
+                    ],
+                    expected_tree=expected_tree,
+                    expected_root_state=expected_root_state,
+                    expected_fingerprint=expected_fingerprint,
+                    open_tree_entry=lambda _path, _directory, _writable: 0,
+                    open_published_root=open_published_root,
+                    flush_file_buffers=lambda _handle: 1,
+                    close_handle=close_handle,
+                    nt_set_information=lambda *_args: 0,
+                    nt_status_to_dos_error=lambda status: status,
+                    flush_parent=lambda _path, _identity, _context: None,
+                    namespace_mutated=True,
+                )
+                retained_ref.value = retained
+
+                with (
+                    patch.object(
+                        directory_publish_module.file_stat_module,
+                        "_windows_handle_stat",
+                        side_effect=lambda handle, states=handle_states: states[handle],
+                    ),
+                    patch.object(
+                        directory_publish_module.ctypes,
+                        "get_last_error",
+                        return_value=32,
+                        create=True,
+                    ),
+                    self.assertRaisesRegex(DirectoryPublishIndeterminateError, detail),
+                ):
+                    retained._handoff_published_root(destination)  # noqa: SLF001
+
+                self.assertEqual([20], [item.handle for item in retained.payload_handles])
+                self.assertEqual([10], close_attempts)
+                self.assertEqual([] if boundary == "close" else [destination], open_attempts)
+                if boundary == "close":
+                    self.assertEqual(10, retained.source_handle)
+                retained.close()
+                self.assertIsNone(retained.source_handle)
+                self.assertEqual(
+                    [10, 10] if boundary == "close" else [10],
+                    [attempt for attempt in close_attempts if attempt == 10],
+                )
+
+    def test_windows_empty_tree_is_rejected_before_namespace_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            stage = parent / ".private-stage"
+            destination = parent / "published"
+            stage.mkdir()
+
+            root_state = directory_publish_module.path_file_stat(stage)
+            parent_state = directory_publish_module.path_file_stat(parent)
+            handle_states = {10: root_state, 30: parent_state}
+            rename_attempts: list[Path] = []
+
+            def rename_stage(*_args: object) -> int:
+                rename_attempts.append(destination)
+                stage.rename(destination)
+                return 0
+
+            retained = directory_publish_module._WindowsRetainedTree(  # noqa: SLF001
+                source=stage,
+                source_identity=directory_publish_module.file_identity(root_state),
+                parent_identity=directory_publish_module.file_identity(parent_state),
+                source_handle=10,
+                parent_handle=30,
+                payload_handles=[],
+                expected_tree={},
+                expected_root_state=directory_publish_module._windows_tree_state(  # noqa: SLF001
+                    root_state
+                ),
+                expected_fingerprint=None,
+                open_tree_entry=lambda _path, _directory, _writable: 0,
+                open_published_root=lambda _path: 40,
+                flush_file_buffers=lambda _handle: 1,
+                close_handle=lambda _handle: 1,
+                nt_set_information=rename_stage,
+                nt_status_to_dos_error=lambda status: status,
+                flush_parent=lambda _path, _identity, _context: None,
+            )
+
+            with (
+                patch.object(
+                    directory_publish_module.file_stat_module,
+                    "_windows_handle_stat",
+                    side_effect=lambda handle: handle_states[handle],
+                ),
+                self.assertRaisesRegex(
+                    DirectoryPublishError,
+                    "requires at least one retained descendant before rename",
+                ),
+            ):
+                retained.rename_noreplace(destination)
+
+            self.assertEqual([], rename_attempts)
+            self.assertTrue(stage.is_dir())
+            self.assertFalse(destination.exists())
+            self.assertFalse(retained.namespace_mutated)
+            retained.close()
 
     @unittest.skipUnless(
         sys.platform.startswith("linux") and os.name == "posix",

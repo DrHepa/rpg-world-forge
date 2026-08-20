@@ -1716,13 +1716,14 @@ class _WindowsRetainedTree:
     source: Path
     source_identity: DirectoryIdentity
     parent_identity: DirectoryIdentity
-    source_handle: int
+    source_handle: int | None
     parent_handle: int
     payload_handles: list[_WindowsPayloadHandle]
     expected_tree: dict[str, _WindowsTreeState]
     expected_root_state: _WindowsTreeState
     expected_fingerprint: _WindowsTreeFingerprint | None
     open_tree_entry: Callable[[Path, bool, bool], int]
+    open_published_root: Callable[[Path], int]
     flush_file_buffers: Callable[[ctypes.c_void_p], int]
     close_handle: Callable[[ctypes.c_void_p], int]
     nt_set_information: Callable[[ctypes.c_void_p, object, object, int, int], int]
@@ -1731,9 +1732,16 @@ class _WindowsRetainedTree:
     namespace_mutated: bool = False
     namespace_outcome_ambiguous: bool = False
 
+    def _require_source_handle(self, *, context: str) -> int:
+        if self.source_handle is None:
+            raise DirectoryPublishError(f"{context} source handle is unavailable")
+        return self.source_handle
+
     def _require_root_handles(self, *, context: str) -> None:
         _require_expected_directory(
-            file_stat_module._windows_handle_stat(self.source_handle),  # noqa: SLF001
+            file_stat_module._windows_handle_stat(  # noqa: SLF001
+                self._require_source_handle(context=context)
+            ),
             self.source_identity,
             context=f"{context} source",
         )
@@ -1817,7 +1825,10 @@ class _WindowsRetainedTree:
             raise DirectoryPublishError(
                 "Windows publication payload tree changed during durable flush"
             )
-        self._flush_handle(self.source_handle, "Windows publication stage")
+        self._flush_handle(
+            self._require_source_handle(context="durable Windows publication stage"),
+            "Windows publication stage",
+        )
         self.flush_parent(
             self.source.parent,
             self.parent_identity,
@@ -1916,12 +1927,95 @@ class _WindowsRetainedTree:
                 "Published Windows payload tree changed while retaining seal handles"
             )
 
+    def _handoff_published_root(self, destination: Path) -> DirectoryIdentity:
+        if not self.payload_handles:
+            raise DirectoryPublishIndeterminateError(
+                "Windows directory publication root handoff requires a retained descendant"
+            )
+        self._require_published_binding(
+            destination,
+            context="pre-handoff Windows publication",
+        )
+        self._require_payload_handles(context="pre-handoff Windows publication")
+        if _windows_tree_snapshot(destination) != self.expected_tree:
+            raise DirectoryPublishIndeterminateError(
+                "Published Windows payload tree changed before root-handle handoff"
+            )
+        if (
+            self.expected_fingerprint is None
+            or _windows_tree_fingerprint(
+                destination,
+                expected_root_state=self.expected_root_state,
+                expected_tree=self.expected_tree,
+            )
+            != self.expected_fingerprint
+        ):
+            raise DirectoryPublishIndeterminateError(
+                "Published Windows payload fingerprint changed before root-handle handoff"
+            )
+
+        rename_handle = self._require_source_handle(context="Windows publication root handoff")
+        if not self.close_handle(ctypes.c_void_p(rename_handle)):
+            error = ctypes.get_last_error()
+            raise DirectoryPublishIndeterminateError(
+                "Windows directory publication root handoff could not release the "
+                f"rename handle: {_windows_error_detail(error)}"
+            )
+        self.source_handle = None
+        try:
+            handed_off = self.open_published_root(destination)
+        except BaseException as exc:
+            raise DirectoryPublishIndeterminateError(
+                "Windows directory publication root handoff could not retain the "
+                "published destination"
+            ) from exc
+        self.source_handle = handed_off
+        try:
+            opened = file_stat_module._windows_handle_stat(handed_off)  # noqa: SLF001
+            if _windows_tree_state(opened) != self.expected_root_state:
+                raise DirectoryPublishError(
+                    "Published Windows root identity changed during handle handoff"
+                )
+            self._require_published_binding(
+                destination,
+                context="handed-off Windows publication",
+            )
+            self._require_payload_handles(context="handed-off Windows publication")
+            if _windows_tree_snapshot(destination) != self.expected_tree:
+                raise DirectoryPublishError(
+                    "Published Windows payload tree changed during root-handle handoff"
+                )
+            if (
+                _windows_tree_fingerprint(
+                    destination,
+                    expected_root_state=self.expected_root_state,
+                    expected_tree=self.expected_tree,
+                )
+                != self.expected_fingerprint
+            ):
+                raise DirectoryPublishError(
+                    "Published Windows payload fingerprint changed during root-handle handoff"
+                )
+            return file_identity(opened)
+        except BaseException as exc:
+            if isinstance(exc, DirectoryPublishIndeterminateError):
+                raise
+            raise DirectoryPublishIndeterminateError(
+                "Windows directory publication root handoff could not prove the exact "
+                "published identity"
+            ) from exc
+
     def rename_noreplace(self, destination: Path) -> DirectoryIdentity:
         if self.source.parent != destination.parent:
             raise DirectoryPublishError("Windows directory publication must stay within one parent")
         if not destination.is_absolute():
             raise DirectoryPublishError(
                 "Windows directory publication destination must be absolute"
+            )
+        if not self.expected_tree:
+            raise DirectoryPublishError(
+                "Windows directory publication requires at least one retained "
+                "descendant before rename"
             )
         self.flush_payload_tree()
         if self.expected_fingerprint is None:
@@ -1950,7 +2044,9 @@ class _WindowsRetainedTree:
             status = ctypes.c_int32(
                 int(
                     self.nt_set_information(
-                        ctypes.c_void_p(self.source_handle),
+                        ctypes.c_void_p(
+                            self._require_source_handle(context="Windows directory rename")
+                        ),
                         ctypes.byref(io_status),
                         buffer,
                         len(buffer),
@@ -2021,9 +2117,12 @@ class _WindowsRetainedTree:
                     "Published Windows payload tree changed during verification"
                 )
             published_info = file_stat_module._windows_handle_stat(  # noqa: SLF001
-                self.source_handle
+                self._require_source_handle(context="published Windows directory")
             )
-            self._flush_handle(self.source_handle, "published Windows directory")
+            self._flush_handle(
+                self._require_source_handle(context="published Windows directory"),
+                "published Windows directory",
+            )
             self.flush_parent(
                 destination.parent,
                 self.parent_identity,
@@ -2049,7 +2148,13 @@ class _WindowsRetainedTree:
                 raise DirectoryPublishError(
                     "Published Windows payload fingerprint changed during durable flush"
                 )
-            return file_identity(published_info)
+            published_identity = file_identity(published_info)
+            handed_off_identity = self._handoff_published_root(destination)
+            if handed_off_identity != published_identity:
+                raise DirectoryPublishIndeterminateError(
+                    "Published Windows root identity changed during handle handoff"
+                )
+            return handed_off_identity
         except BaseException as exc:
             if isinstance(exc, DirectoryPublishIndeterminateError):
                 raise
@@ -2110,10 +2215,14 @@ class _WindowsRetainedTree:
             self._close_payload_handles(context="Windows publication payload handle cleanup")
         except DirectoryPublishError as exc:
             cleanup_error = exc
+        source_handle = self.source_handle
+        self.source_handle = None
         for handle, context in (
-            (self.source_handle, "Windows publication source handle cleanup"),
+            (source_handle, "Windows publication source handle cleanup"),
             (self.parent_handle, "Windows publication parent handle cleanup"),
         ):
+            if handle is None:
+                continue
             if not self.close_handle(ctypes.c_void_p(handle)):
                 error = ctypes.get_last_error()
                 detail = f"{context} failed: {_windows_error_detail(error)}"
@@ -3253,6 +3362,28 @@ def _open_windows_retained_tree(
             )
         return int(handle)
 
+    def open_published_root(path: Path) -> int:
+        handle = create_file(
+            str(path),
+            # FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_READ_ATTRIBUTES |
+            # SYNCHRONIZE. The rename handle has already been durably flushed;
+            # caller verification receives only this least-privilege root seal.
+            0x00000001 | 0x00000020 | 0x00000080 | 0x00100000,
+            # Permit read/write consumers while continuing to deny delete
+            # sharing so the published root cannot be replaced.
+            0x00000001 | 0x00000002,
+            None,
+            3,
+            0x02000000 | 0x00200000,
+            None,
+        )
+        if handle in {None, invalid_handle}:
+            error = ctypes.get_last_error()
+            raise DirectoryPublishError(
+                f"Could not retain published Windows root {path}: {_windows_error_detail(error)}"
+            )
+        return int(handle)
+
     source_handle: int | None = None
     parent_handle: int | None = None
     payload_handles: list[_WindowsPayloadHandle] = []
@@ -3318,6 +3449,7 @@ def _open_windows_retained_tree(
             expected_root_state=expected_root_state,
             expected_fingerprint=None,
             open_tree_entry=open_tree_entry,
+            open_published_root=open_published_root,
             flush_file_buffers=flush_file_buffers,
             close_handle=close_handle,
             nt_set_information=nt_set_information,

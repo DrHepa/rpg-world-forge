@@ -3711,12 +3711,12 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "7f8deacd6785324d8970c8cc68baa63b7ae2a7e894d4e11392ea01da5eb59932",
+      "file_sha256": "1d9221a6e2acd35c5a0e692deb5d6901397bedafa6b0a6987c2ce9ab311a0c0c",
       "justification": "Exercises retained v2 project identity and native Windows migration rejection/commit-forward behavior.",
       "offsets": [
-        28102,
-        32587,
-        35539
+        30902,
+        35387,
+        38339
       ],
       "path": "tests/test_windows_world_project_migration.py",
       "pattern": "rpg-world-forge"

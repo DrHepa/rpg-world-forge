@@ -28,6 +28,10 @@ class _FakeWindowsNativeApi:
         self.handles: dict[int, _FakeWindowsFile] = {}
         self.open_names: dict[int, str] = {}
         self.handle_write_access: dict[int, bool] = {}
+        self.handle_delete_access: dict[int, bool] = {}
+        self.handle_share_write: dict[int, bool] = {}
+        self.handle_share_delete: dict[int, bool] = {}
+        self.open_contracts: list[tuple[str, bool, bool, bool, bool, bool]] = []
         self.next_handle = 10
         self.next_identity = 200
         self.events: list[str] = []
@@ -44,7 +48,15 @@ class _FakeWindowsNativeApi:
         self.disposition_attempted = False
         self.fail_rename_once = False
 
-    def _open(self, name: str, *, write: bool = False) -> int:
+    def _open(
+        self,
+        name: str,
+        *,
+        write: bool = False,
+        delete: bool = False,
+        share_write: bool = True,
+        share_delete: bool = False,
+    ) -> int:
         try:
             entry = self.entries[name]
         except KeyError as exc:
@@ -54,7 +66,33 @@ class _FakeWindowsNativeApi:
         self.handles[handle] = entry
         self.open_names[handle] = name
         self.handle_write_access[handle] = write
+        self.handle_delete_access[handle] = delete
+        self.handle_share_write[handle] = share_write
+        self.handle_share_delete[handle] = share_delete
         return handle
+
+    def _require_share_compatible(
+        self,
+        entry: _FakeWindowsFile,
+        *,
+        write: bool,
+        delete: bool,
+        share_write: bool,
+        share_delete: bool,
+    ) -> None:
+        from worldforge.asset_io import AssetContractError
+
+        for handle, opened in self.handles.items():
+            if opened is not entry:
+                continue
+            if write and not self.handle_share_write[handle]:
+                raise AssetContractError("injected Windows sharing violation for write access")
+            if delete and not self.handle_share_delete[handle]:
+                raise AssetContractError("injected Windows sharing violation for delete access")
+            if self.handle_write_access[handle] and not share_write:
+                raise AssetContractError("injected Windows sharing violation for shared write")
+            if self.handle_delete_access[handle] and not share_delete:
+                raise AssetContractError("injected Windows sharing violation for shared delete")
 
     def _links(self, entry: _FakeWindowsFile) -> int:
         return sum(value is entry for value in self.entries.values())
@@ -84,9 +122,11 @@ class _FakeWindowsNativeApi:
         share_delete: bool = False,
         write: bool = False,
     ) -> int:
+        share_write = not (sealed or delete or write)
         self.events.append(
             f"open:{name}:sealed={sealed}:delete={delete}:share_delete={share_delete}:write={write}"
         )
+        self.open_contracts.append((name, sealed, delete, share_write, share_delete, write))
         if sealed and name == self.fail_sealed_name:
             from worldforge.windows_project_migration import WindowsMigrationStateError
 
@@ -96,7 +136,22 @@ class _FakeWindowsNativeApi:
                 self.entries[name].change_time_ns += 1
         if share_delete and self.fail_absence_open:
             raise RuntimeError("injected absence verification failure")
-        handle = self._open(name, write=write)
+        entry = self.entries.get(name)
+        if entry is not None:
+            self._require_share_compatible(
+                entry,
+                write=write,
+                delete=delete,
+                share_write=share_write,
+                share_delete=share_delete,
+            )
+        handle = self._open(
+            name,
+            write=write,
+            delete=delete,
+            share_write=share_write,
+            share_delete=share_delete,
+        )
         if share_delete:
             self.verification_handles.add(handle)
         return handle
@@ -195,6 +250,15 @@ class _FakeWindowsNativeApi:
 
             raise AssetContractError("injected FileRenameInfoEx failure")
         entry = self.handles[handle]
+        destination = self.entries.get(destination_name)
+        if destination is not None:
+            for opened_handle, opened_entry in self.handles.items():
+                if opened_entry is destination and not self.handle_share_delete[opened_handle]:
+                    from worldforge.asset_io import AssetContractError
+
+                    raise AssetContractError(
+                        "injected Windows sharing violation 32 for destination replacement"
+                    )
         source_name = next(
             name
             for name, candidate in self.entries.items()
@@ -228,6 +292,9 @@ class _FakeWindowsNativeApi:
         self.handles.pop(handle, None)
         self.open_names.pop(handle, None)
         self.handle_write_access.pop(handle, None)
+        self.handle_delete_access.pop(handle, None)
+        self.handle_share_write.pop(handle, None)
+        self.handle_share_delete.pop(handle, None)
 
 
 class _FakeWindowsLease:
@@ -1488,6 +1555,78 @@ class WindowsProjectMigrationPolicyTests(unittest.TestCase):
 
         self.assertEqual({"project.json"}, set(native.entries))
         self.assertIn("dispose-ex", native.events)
+
+    def test_only_exact_visible_source_seal_shares_delete_among_sealed_opens(self) -> None:
+        from worldforge.windows_project_migration import (
+            WindowsProjectCommitApi,
+            commit_windows_project,
+        )
+
+        source = b'{"format_version":2}\n'
+        target = b'{"format_version":3}\n'
+        native = _FakeWindowsNativeApi(source)
+        adapter = WindowsProjectCommitApi(
+            _FakeWindowsLease(native),
+            operation_id="e" * 64,
+            source_identity=(7, 101),
+            source_sha256=__import__("hashlib").sha256(source).hexdigest(),
+            source_change_time_ns=1_000,
+            target_payload=target,
+        )
+
+        commit_windows_project(adapter, retain_seal=True)
+
+        sealed = [contract for contract in native.open_contracts if contract[1]]
+        self.assertIn(
+            ("project.json", True, True, False, True, True),
+            sealed,
+        )
+        self.assertTrue(all(not contract[3] for contract in sealed))
+        self.assertEqual(
+            [("project.json", True, True, False, True, True)],
+            [contract for contract in sealed if contract[4]],
+        )
+        observations = [contract for contract in native.open_contracts if not contract[1]]
+        self.assertGreater(len(observations), 0)
+        self.assertTrue(any(contract[4] for contract in observations))
+        adapter.delete_durable_source_retention()
+        adapter.release_source_seal()
+
+    def test_committed_recovery_seals_never_share_delete_or_write(self) -> None:
+        from worldforge.windows_project_migration import (
+            WindowsProjectCommitApi,
+            commit_windows_project,
+        )
+
+        source = b'{"format_version":2}\n'
+        target = b'{"format_version":3}\n'
+        operation_id = "f" * 64
+        retention_name = f".project.json.migration.{operation_id}.exchange"
+        native = _FakeWindowsNativeApi(source)
+        retained = native.entries["project.json"]
+        native.entries[retention_name] = retained
+        native.entries["project.json"] = _FakeWindowsFile(target, (7, 202), 2_500)
+        adapter = WindowsProjectCommitApi(
+            _FakeWindowsLease(native),
+            operation_id=operation_id,
+            source_identity=(7, 101),
+            source_sha256=__import__("hashlib").sha256(source).hexdigest(),
+            source_change_time_ns=1_000,
+            target_payload=target,
+        )
+
+        commit_windows_project(adapter, retain_seal=True)
+
+        sealed = [contract for contract in native.open_contracts if contract[1]]
+        self.assertEqual(
+            {
+                ("project.json", True, False, False, False, True),
+                (retention_name, True, True, False, False, True),
+            },
+            set(sealed),
+        )
+        adapter.delete_durable_source_retention()
+        adapter.release_source_seal()
 
     def test_native_adapter_recovers_after_retention_and_rename_boundaries(self) -> None:
         from worldforge.windows_project_migration import (
