@@ -36,6 +36,7 @@ from worldforge.directory_publish import (
     DirectoryPublishError,
     DirectoryPublishIndeterminateError,
     DirectoryPublishRecoveryRequiredError,
+    RetainedStageWriter,
     append_append_only_journal,
     create_append_only_journal,
     create_retained_stage,
@@ -62,10 +63,13 @@ from worldforge.game_runtime_bundle import (
     GameRuntimeBundleError,
     _capture_bundle_tree,
     _expected_directories,
+    _verify_game_runtime_bundle_with_stage_capability,
     verify_game_runtime_bundle,
 )
 from worldforge.generic_runtime import (
     RuntimeContractError,
+    _create_runtime_stage_read_capability,
+    _RuntimeStageReadCapability,
     validate_runtime_adapter_document,
     validate_runtime_snapshot_document,
 )
@@ -1074,16 +1078,83 @@ def _decode_canonical(
         _fail("game_materialization_bundle_contract_invalid", f"{path}: {exc}")
 
 
+def _materialization_stage_read_capability(
+    writer: object,
+    *,
+    expected_stage: Path,
+    capability_root: Path,
+) -> _RuntimeStageReadCapability:
+    def require_stage_binding() -> None:
+        try:
+            RetainedStageWriter._require_active_binding(  # noqa: SLF001
+                writer,
+                expected_stage=expected_stage,
+            )
+        except DirectoryPublishError as exc:
+            _fail("game_materialization_bundle_stage_capability_invalid", str(exc))
+
+    require_stage_binding()
+    return _create_runtime_stage_read_capability(
+        root=capability_root,
+        require_binding=require_stage_binding,
+    )
+
+
+def _verify_nested_runtime_bundle_from_retained_materialization_stage(
+    nested_root: str | Path,
+    *,
+    expected_content_hash: str,
+    expected_outer_stage: str | Path,
+    _retained_stage_writer: RetainedStageWriter,
+) -> object:
+    outer_stage = Path(os.path.abspath(os.fspath(expected_outer_stage)))
+    nested_root_path = Path(os.path.abspath(os.fspath(nested_root)))
+    if nested_root_path != outer_stage / _RUNTIME_BUNDLE_ROOT:
+        _fail(
+            "game_materialization_bundle_stage_capability_invalid",
+            "nested runtime bundle root does not bind the materialization stage",
+        )
+    stage_capability = _materialization_stage_read_capability(
+        _retained_stage_writer,
+        expected_stage=outer_stage,
+        capability_root=nested_root_path,
+    )
+    try:
+        nested = _verify_game_runtime_bundle_with_stage_capability(
+            nested_root_path,
+            expected_content_hash=expected_content_hash,
+            _stage_capability=stage_capability,
+        )
+    finally:
+        stage_capability.require_binding()
+    stage_capability.require_binding()
+    return nested
+
+
 def verify_game_materialization_bundle(
     root: str | Path,
     *,
     expected_content_hash: str | None = None,
     expected_parent_identity: DirectoryIdentity | None = None,
+    _retained_stage_writer: RetainedStageWriter | None = None,
 ) -> VerifiedGameMaterializationBundle:
     root_path = Path(os.path.abspath(os.fspath(root)))
     _require_expected_parent_identity(root_path.parent, expected_parent_identity)
     try:
-        files, tree = _capture_bundle_tree(root_path, hook=None)
+        stage_capability = None
+        if _retained_stage_writer is not None:
+            stage_capability = _materialization_stage_read_capability(
+                _retained_stage_writer,
+                expected_stage=root_path,
+                capability_root=root_path,
+            )
+        files, tree = _capture_bundle_tree(
+            root_path,
+            hook=None,
+            stage_capability=stage_capability,
+        )
+        if stage_capability is not None:
+            stage_capability.require_binding()
     except GameRuntimeBundleError as exc:
         _fail("game_materialization_bundle_tree_invalid", str(exc))
     manifest = _decode_canonical(
@@ -1134,10 +1205,18 @@ def verify_game_materialization_bundle(
 
     nested_root = root_path / _RUNTIME_BUNDLE_ROOT
     try:
-        nested = verify_game_runtime_bundle(
-            nested_root,
-            expected_content_hash=manifest["runtime_bundle"]["manifest"]["content_hash"],
-        )
+        if _retained_stage_writer is not None:
+            nested = _verify_nested_runtime_bundle_from_retained_materialization_stage(
+                nested_root,
+                expected_content_hash=manifest["runtime_bundle"]["manifest"]["content_hash"],
+                expected_outer_stage=root_path,
+                _retained_stage_writer=_retained_stage_writer,
+            )
+        else:
+            nested = verify_game_runtime_bundle(
+                nested_root,
+                expected_content_hash=manifest["runtime_bundle"]["manifest"]["content_hash"],
+            )
     except GameRuntimeBundleError as exc:
         _fail("game_materialization_bundle_nested_runtime_invalid", str(exc))
     try:
@@ -2312,6 +2391,7 @@ def build_game_materialization_bundle(
                 stage,
                 expected_content_hash=str(manifest["content_hash"]),
                 expected_parent_identity=parent_identity,
+                _retained_stage_writer=writer,
             ) as verified_stage:
                 _journal_matches_verified(journal, verified_stage)
                 writer.require_binding()

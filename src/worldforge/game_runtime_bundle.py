@@ -91,6 +91,7 @@ from worldforge.generic_runtime import (
     RuntimeContractError,
     _capture_runtime_files,
     _create_runtime_stage_read_capability,
+    _runtime_stage_read_capability_valid,
     _RuntimeStageReadCapability,
     build_runtime_support_report,
     capture_trusted_runtime_snapshot_files,
@@ -1767,11 +1768,47 @@ def verify_game_runtime_bundle(
                 root=root_path,
                 require_binding=require_stage_binding,
             )
+        return _verify_game_runtime_bundle_with_stage_capability(
+            root_path,
+            expected_content_hash=expected_content_hash,
+            _verification_hook=_verification_hook,
+            _stage_capability=stage_capability,
+        )
+    except GameRuntimeBundleError:
+        raise
+    except (CreationContractError, DirectoryPublishError) as exc:
+        _fail("game_runtime_bundle_invalid", str(exc))
+
+
+def _verify_game_runtime_bundle_with_stage_capability(
+    root: str | Path,
+    *,
+    expected_content_hash: str | None = None,
+    _verification_hook: _VerificationHook | None = None,
+    _stage_capability: _RuntimeStageReadCapability | None = None,
+) -> VerifiedGameRuntimeBundle:
+    """Private runtime verifier path for proof-bound retained-stage reads."""
+
+    root_path = Path(os.path.abspath(os.fspath(root)))
+    try:
+        stage_capability = _stage_capability
+        if stage_capability is not None:
+            if (
+                not _runtime_stage_read_capability_valid(stage_capability)
+                or stage_capability.root != root_path
+            ):
+                _fail(
+                    "game_runtime_bundle_stage_capability_invalid",
+                    "runtime stage capability does not bind the requested root",
+                )
+            stage_capability.require_binding()
         files, tree = _capture_bundle_tree(
             root_path,
             hook=_verification_hook,
             stage_capability=stage_capability,
         )
+        if stage_capability is not None:
+            stage_capability.require_binding()
         manifest = _decode_canonical(
             files,
             GAME_RUNTIME_BUNDLE_MANIFEST,
@@ -2049,8 +2086,8 @@ def verify_game_runtime_bundle(
                 "game_runtime_bundle_notice_mismatch",
                 "bundle legal notice paths are not unique",
             )
-        if _retained_stage_writer is not None:
-            require_stage_binding()
+        if stage_capability is not None:
+            stage_capability.require_binding()
         return VerifiedGameRuntimeBundle(
             root_path,
             manifest,

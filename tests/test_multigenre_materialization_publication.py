@@ -6,8 +6,17 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest import mock
 
+import worldforge.game_materialization_bundle as game_materialization_bundle
+import worldforge.game_runtime_bundle as game_runtime_bundle
+import worldforge.generic_runtime as generic_runtime
 from tests.test_multigenre_materialization_contracts import _runtime_bundle
+from worldforge.directory_publish import (
+    DirectoryPublishError,
+    RetainedStageWriter,
+    create_retained_stage,
+)
 from worldforge.game_materialization_bundle import (
     GAME_MATERIALIZATION_BUNDLE_MANIFEST,
     GameMaterializationBundleError,
@@ -19,6 +28,337 @@ from worldforge.game_materialization_bundle import (
 
 
 class GameMaterializationBundlePublicationTests(unittest.TestCase):
+    def test_verifier_accepts_stage_capability_only_from_its_writer(self) -> None:
+        class _CaptureStopped(RuntimeError):
+            pass
+
+        with tempfile.TemporaryDirectory(prefix="wf-materialization-stage-scope-") as temporary:
+            root = Path(temporary) / "stage"
+            observed: list[object | None] = []
+
+            def stop_capture(
+                _root: Path,
+                *,
+                hook: object | None,
+                retained_root_fd: int | None = None,
+                stage_capability: object | None = None,
+            ) -> object:
+                self.assertIsNone(hook)
+                self.assertIsNone(retained_root_fd)
+                observed.append(stage_capability)
+                raise _CaptureStopped
+
+            forged = object.__new__(RetainedStageWriter)
+            forged.stage = root
+            forged.require_binding = lambda: None  # type: ignore[method-assign]
+            with (
+                mock.patch.object(
+                    game_materialization_bundle,
+                    "_capture_bundle_tree",
+                    side_effect=stop_capture,
+                ),
+                self.assertRaisesRegex(
+                    GameMaterializationBundleError,
+                    "game_materialization_bundle_stage_capability_invalid",
+                ),
+            ):
+                game_materialization_bundle.verify_game_materialization_bundle(
+                    root,
+                    _retained_stage_writer=forged,
+                )
+
+            with create_retained_stage(root) as writer:
+                with (
+                    mock.patch.object(
+                        game_materialization_bundle,
+                        "_capture_bundle_tree",
+                        side_effect=stop_capture,
+                    ),
+                    self.assertRaises(_CaptureStopped),
+                ):
+                    game_materialization_bundle.verify_game_materialization_bundle(
+                        root,
+                        _retained_stage_writer=writer,
+                    )
+                with self.assertRaisesRegex(
+                    GameMaterializationBundleError,
+                    "game_materialization_bundle_stage_capability_invalid",
+                ):
+                    game_materialization_bundle.verify_game_materialization_bundle(
+                        root / "crossed",
+                        _retained_stage_writer=writer,
+                    )
+
+            self.assertEqual(1, len(observed))
+            capability = observed[0]
+            self.assertIsInstance(
+                capability,
+                generic_runtime._RuntimeStageReadCapability,  # noqa: SLF001
+            )
+            assert isinstance(capability, generic_runtime._RuntimeStageReadCapability)  # noqa: SLF001
+            self.assertEqual(root, capability.root)
+            share_mode = generic_runtime._WindowsRuntimeTreeApi._share_mode_for(  # noqa: SLF001
+                capability
+            )
+            self.assertEqual(0x00000003, share_mode)
+            self.assertEqual(0, share_mode & 0x00000004)
+
+            with self.assertRaisesRegex(
+                GameMaterializationBundleError,
+                "game_materialization_bundle_stage_capability_invalid",
+            ):
+                game_materialization_bundle.verify_game_materialization_bundle(
+                    root,
+                    _retained_stage_writer=writer,
+                )
+
+            with (
+                mock.patch.object(
+                    game_materialization_bundle,
+                    "_capture_bundle_tree",
+                    side_effect=stop_capture,
+                ),
+                self.assertRaises(_CaptureStopped),
+            ):
+                game_materialization_bundle.verify_game_materialization_bundle(root)
+            self.assertIsNone(observed[-1])
+
+            with self.assertRaisesRegex(
+                GameMaterializationBundleError,
+                "game_materialization_bundle_stage_capability_invalid",
+            ):
+                game_materialization_bundle.verify_game_materialization_bundle(
+                    root,
+                    _retained_stage_writer=object(),  # type: ignore[arg-type]
+                )
+
+    def test_verifier_rechecks_retained_stage_binding_after_capture(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-materialization-stage-mutation-") as temporary:
+            root = Path(temporary) / "stage"
+            mutation_checks = 0
+            real_authority = RetainedStageWriter._require_active_binding  # noqa: SLF001
+
+            def reject_post_capture_mutation(
+                writer: object,
+                *,
+                expected_stage: Path,
+            ) -> None:
+                nonlocal mutation_checks
+                mutation_checks += 1
+                real_authority(writer, expected_stage=expected_stage)
+                if mutation_checks == 2:
+                    raise DirectoryPublishError("retained stage binding changed")
+
+            def capture_with_post_check(
+                _root: Path,
+                *,
+                hook: object | None,
+                retained_root_fd: int | None = None,
+                stage_capability: object | None = None,
+            ) -> object:
+                self.assertIsNone(hook)
+                self.assertIsNone(retained_root_fd)
+                assert isinstance(stage_capability, generic_runtime._RuntimeStageReadCapability)  # noqa: SLF001
+                stage_capability.require_binding()
+                raise AssertionError("post-capture mutation was not rejected")
+
+            with create_retained_stage(root) as writer:
+                with (
+                    mock.patch.object(
+                        RetainedStageWriter,
+                        "_require_active_binding",
+                        side_effect=reject_post_capture_mutation,
+                    ),
+                    mock.patch.object(
+                        game_materialization_bundle,
+                        "_capture_bundle_tree",
+                        side_effect=capture_with_post_check,
+                    ),
+                    self.assertRaisesRegex(
+                        GameMaterializationBundleError,
+                        "game_materialization_bundle_stage_capability_invalid",
+                    ),
+                ):
+                    game_materialization_bundle.verify_game_materialization_bundle(
+                        root,
+                        _retained_stage_writer=writer,
+                    )
+            self.assertEqual(2, mutation_checks)
+
+    def test_verifier_scopes_nested_runtime_capture_to_retained_subroot(self) -> None:
+        class _NestedStopped(RuntimeError):
+            pass
+
+        with tempfile.TemporaryDirectory(prefix="wf-materialization-nested-stage-") as temporary:
+            root = Path(temporary)
+            with _runtime_bundle("abstract-puzzle", root) as runtime_bundle:
+                manifest, payloads = (
+                    game_materialization_bundle.build_game_materialization_bundle_manifest(
+                        runtime_bundle_root=runtime_bundle.root,
+                    )
+                )
+            stage = root / "stage"
+            manifest_payload = game_materialization_bundle.serialize_game_materialization_bundle(
+                manifest
+            )
+            all_files = {
+                GAME_MATERIALIZATION_BUNDLE_MANIFEST: manifest_payload,
+                **payloads,
+            }
+            tree = game_runtime_bundle._PhysicalTree(  # noqa: SLF001
+                root_state=(1, 2, 0o40700, 1, 0, 10, 10),
+                files=frozenset(all_files),
+                directories=frozenset(
+                    game_materialization_bundle._expected_directories(tuple(all_files))  # noqa: SLF001
+                ),
+            )
+            observed: list[tuple[Path, object | None]] = []
+
+            def stop_nested(root_arg: str | Path, **kwargs: object) -> object:
+                observed.append(
+                    (
+                        Path(os.path.abspath(os.fspath(root_arg))),
+                        kwargs.get("_stage_capability"),
+                    )
+                )
+                raise _NestedStopped
+
+            with create_retained_stage(stage) as writer:
+                with (
+                    mock.patch.object(
+                        game_materialization_bundle,
+                        "_capture_bundle_tree",
+                        return_value=(all_files, tree),
+                    ),
+                    mock.patch.object(
+                        game_materialization_bundle,
+                        "_verify_game_runtime_bundle_with_stage_capability",
+                        side_effect=stop_nested,
+                    ),
+                    self.assertRaises(_NestedStopped),
+                ):
+                    game_materialization_bundle.verify_game_materialization_bundle(
+                        stage,
+                        _retained_stage_writer=writer,
+                    )
+
+            self.assertEqual(1, len(observed))
+            nested_root, capability = observed[0]
+            self.assertEqual(stage / "runtime-bundle", nested_root)
+            self.assertIsInstance(
+                capability,
+                generic_runtime._RuntimeStageReadCapability,  # noqa: SLF001
+            )
+            assert isinstance(capability, generic_runtime._RuntimeStageReadCapability)  # noqa: SLF001
+            self.assertEqual(nested_root, capability.root)
+
+    def test_runtime_public_verifier_rejects_raw_stage_capability(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-runtime-raw-cap-public-") as temporary:
+            root = Path(temporary) / "runtime-bundle"
+            capability = generic_runtime._create_runtime_stage_read_capability(  # noqa: SLF001
+                root=root,
+                require_binding=lambda: None,
+            )
+
+            def reject_raw_capability(*_args: object, **_kwargs: object) -> object:
+                raise AssertionError("raw stage capability reached public runtime capture")
+
+            with (
+                mock.patch.object(
+                    game_runtime_bundle,
+                    "_capture_bundle_tree",
+                    side_effect=reject_raw_capability,
+                ),
+                self.assertRaises(TypeError),
+            ):
+                game_runtime_bundle.verify_game_runtime_bundle(
+                    root,
+                    _stage_capability=capability,
+                )
+
+    def test_nested_runtime_helper_requires_active_outer_retained_writer(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-materialization-nested-helper-") as temporary:
+            root = Path(temporary)
+            outer_stage = root / "stage"
+            nested_root = outer_stage / "runtime-bundle"
+
+            forged = object.__new__(RetainedStageWriter)
+            forged.stage = outer_stage
+            forged.require_binding = lambda: None  # type: ignore[method-assign]
+
+            for writer, expected_stage in (
+                (forged, outer_stage),
+                (object(), outer_stage),
+            ):
+                with self.subTest(writer=type(writer).__name__):
+                    with self.assertRaisesRegex(
+                        GameMaterializationBundleError,
+                        "game_materialization_bundle_stage_capability_invalid",
+                    ):
+                        game_materialization_bundle._verify_nested_runtime_bundle_from_retained_materialization_stage(  # noqa: SLF001
+                            nested_root,
+                            expected_content_hash="0" * 64,
+                            expected_outer_stage=expected_stage,
+                            _retained_stage_writer=writer,
+                        )
+
+            with create_retained_stage(outer_stage) as writer:
+                with self.assertRaisesRegex(
+                    GameMaterializationBundleError,
+                    "game_materialization_bundle_stage_capability_invalid",
+                ):
+                    game_materialization_bundle._verify_nested_runtime_bundle_from_retained_materialization_stage(  # noqa: SLF001
+                        nested_root,
+                        expected_content_hash="0" * 64,
+                        expected_outer_stage=outer_stage / "crossed",
+                        _retained_stage_writer=writer,
+                    )
+
+            with self.assertRaisesRegex(
+                GameMaterializationBundleError,
+                "game_materialization_bundle_stage_capability_invalid",
+            ):
+                game_materialization_bundle._verify_nested_runtime_bundle_from_retained_materialization_stage(  # noqa: SLF001
+                    nested_root,
+                    expected_content_hash="0" * 64,
+                    expected_outer_stage=outer_stage,
+                    _retained_stage_writer=writer,
+                )
+
+    def test_publication_scopes_stage_capability_to_private_verification_only(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-materialization-stage-calls-") as temporary:
+            root = Path(temporary)
+            destination = root / "bundle"
+            with _runtime_bundle("abstract-puzzle", root) as runtime_bundle:
+                original = game_materialization_bundle.verify_game_materialization_bundle
+                with mock.patch.object(
+                    game_materialization_bundle,
+                    "verify_game_materialization_bundle",
+                    wraps=original,
+                ) as verify_calls:
+                    verified = game_materialization_bundle.build_game_materialization_bundle(
+                        destination,
+                        runtime_bundle_root=runtime_bundle.root,
+                    )
+                    verified.close()
+
+            stage_calls = [
+                call
+                for call in verify_calls.call_args_list
+                if call.kwargs.get("_retained_stage_writer") is not None
+            ]
+            self.assertEqual(1, len(stage_calls))
+            writer = stage_calls[0].kwargs["_retained_stage_writer"]
+            self.assertIs(type(writer), RetainedStageWriter)
+            self.assertEqual(Path(os.path.abspath(stage_calls[0].args[0])), writer.stage)
+            strict_destination_calls = [
+                call
+                for call in verify_calls.call_args_list
+                if Path(os.path.abspath(call.args[0])) == destination
+                and call.kwargs.get("_retained_stage_writer") is None
+            ]
+            self.assertGreaterEqual(len(strict_destination_calls), 2)
+
     def test_concurrent_identical_publishers_fail_closed_then_converge_on_retry(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wf-materialization-concurrent-") as temporary:
             root = Path(temporary)
