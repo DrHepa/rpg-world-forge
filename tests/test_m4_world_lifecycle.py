@@ -1252,7 +1252,7 @@ class BumpWorldVersionTests(unittest.TestCase):
                     )
 
             self.assertIn(raised.exception.winerror, {5, 32})
-            self.assertFalse(lock_path.exists())
+            _assert_retained_lifecycle_lock(self, root)
             self.assertFalse(displaced_path.exists())
             for path, payload in before.items():
                 self.assertEqual(payload, path.read_bytes(), path)
