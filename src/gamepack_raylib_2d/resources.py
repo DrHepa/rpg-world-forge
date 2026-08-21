@@ -175,7 +175,10 @@ def _read_regular(path: Path, relative: str) -> bytes:
             _fail("bundle_tree_unsafe", f"{relative} is linked, special, or oversized")
         descriptor = os.open(
             path,
-            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+            os.O_RDONLY
+            | getattr(os, "O_BINARY", 0)
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
         )
         try:
             retained_before = descriptor_file_stat(descriptor)

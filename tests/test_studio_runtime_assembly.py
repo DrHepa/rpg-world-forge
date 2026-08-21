@@ -858,7 +858,7 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
         )
         forge_file_count = len(forge_files)
         exact_inventory = 4_522 + len(codex_target["inventory"]) + forge_file_count + 3
-        self.assertEqual((len(codex_target["inventory"]), forge_file_count), (6, 1_321))
+        self.assertEqual((len(codex_target["inventory"]), forge_file_count), (6, 1_322))
         paths = {item.path for item in forge_files}
         site_packages = "runtime/python/linux-x64/lib/python3.12/site-packages"
         expected_new_paths = {
@@ -1027,7 +1027,7 @@ class StudioRuntimeAssemblyTest(unittest.TestCase):
             },
         }
         self.assertLessEqual(expected_new_paths, paths)
-        self.assertEqual(exact_inventory, 5_852)
+        self.assertEqual(exact_inventory, 5_853)
         generated_content_modes_path = (
             f"{site_packages}/worldforge/generated_creation_content_modes.py"
         )

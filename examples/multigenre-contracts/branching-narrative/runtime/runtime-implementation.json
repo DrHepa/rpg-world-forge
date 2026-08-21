@@ -4,7 +4,7 @@
     "adapter_version": "1.1.0",
     "content_hash": "4d0d0a8d9c17eccc2f040a2275e487cf0a21a5af63a8cbfda90811f2dbfc599b"
   },
-  "content_hash": "fc2ba3a8ba4a3b66f71fd72a23c21d2f3cedfd1a6842cde2dfbf569d2dd3753d",
+  "content_hash": "2e987c89bbf38e1d7c864c121bbcbaabd983fa5b04b957eb9ab331af3be437bd",
   "entry_points": [
     {
       "module": "gamepack_raylib_2d.app",
@@ -29,7 +29,7 @@
   ],
   "format": "world-forge.runtime_implementation",
   "format_version": 1,
-  "implementation_id": "runtime_implementation_b1893fbdb91d28dcb72f3052a8a5ad2203850e92",
+  "implementation_id": "runtime_implementation_6c1e938eff3c4656a2c804631e4ca58f663c4b22",
   "materialization_policy": {
     "immutable_runtime": true,
     "runtime_ai": false,
@@ -103,8 +103,8 @@
         },
         {
           "path": "resources.py",
-          "sha256": "c092edef283f5763ea235ab8843832e14644d987f1413d9531fe0f37e87343fc",
-          "size_bytes": 47441
+          "sha256": "86236d0121381f78181af2b073e5d32b474dfc328c788da1646772d9e32df78d",
+          "size_bytes": 47506
         },
         {
           "path": "types.py",
@@ -115,7 +115,7 @@
       "package": "gamepack_raylib_2d",
       "role": "raylib_2d_adapter",
       "source_prefix": "gamepack_raylib_2d",
-      "tree_hash": "12a84f115908308c20b37c8866f57e833d30bc3bc9b325be6ea76c4cdc4d9356"
+      "tree_hash": "38f350652d5cc8e5a42ee462c936ebf0d7e37c3b2148c3d86ac4c0ea3f1ffd78"
     },
     {
       "classification": "immutable_runtime_source",
@@ -228,8 +228,8 @@
     "version": "1.0.0"
   },
   "snapshot": {
-    "content_hash": "b1c94cac79ced1107f87174fcb367eec6ae832f089bb43e24d21dc618568b4bf",
-    "snapshot_id": "runtime_snapshot_002ec4f5a0da3b1f306eec02e163f28a72d628a0",
-    "tree_hash": "a24ccaa35dc17ef40de3434b954c92f303906fae140905e1e75f778e9748c596"
+    "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+    "snapshot_id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4",
+    "tree_hash": "8592acb2878542b603673545e32aa733cea5be68ce2a112425dd71a6d300702e"
   }
 }

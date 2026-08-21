@@ -39,8 +39,8 @@
       "size_bytes": 28748
     }
   ],
-  "composition_id": "runtime_composition_b378850799890a8db800f4b68bfcee7b3af7ece5",
-  "content_hash": "7a5d2f0aaa6ff0f5f68643c868adfd8fef4947d999b0bcc9a0d245bf538a1994",
+  "composition_id": "runtime_composition_96a1dccea8112fa62287553685d259b5b77be42e",
+  "content_hash": "9ae6fa3b0a508b956111b78c3a3ef874c7cb2455d0178a9e1272303483cb2f6d",
   "format": "world-forge.game_runtime_composition",
   "format_version": 1,
   "gamepack": {
@@ -66,15 +66,15 @@
     }
   ],
   "registry": {
-    "content_hash": "b8f22310fe80765ae1750404214ee159dda10b8f99b2e567ed8725929c474aba",
+    "content_hash": "9485e28a864328cca5a4a3bc21fe8569ae160459130917175b25caf119b87570",
     "format": "world-forge.runtime_adapter_registry",
     "format_version": 1,
-    "id": "runtime_registry_ec71747b963dd32c3cecda799592ff0ee6087061"
+    "id": "runtime_registry_3881369ef21309239e243d7f9535be05831ebaa8"
   },
   "runtime_snapshot": {
-    "content_hash": "b1c94cac79ced1107f87174fcb367eec6ae832f089bb43e24d21dc618568b4bf",
+    "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
     "format": "world-forge.game_runtime_snapshot",
     "format_version": 1,
-    "id": "runtime_snapshot_002ec4f5a0da3b1f306eec02e163f28a72d628a0"
+    "id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4"
   }
 }

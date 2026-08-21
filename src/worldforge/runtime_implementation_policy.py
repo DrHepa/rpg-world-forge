@@ -8,13 +8,13 @@ TRUSTED_ADAPTER_HASHES = {
 }
 
 TRUSTED_SNAPSHOT_IDENTITY = {
-    "snapshot_id": "runtime_snapshot_002ec4f5a0da3b1f306eec02e163f28a72d628a0",
-    "content_hash": "b1c94cac79ced1107f87174fcb367eec6ae832f089bb43e24d21dc618568b4bf",
-    "tree_hash": "a24ccaa35dc17ef40de3434b954c92f303906fae140905e1e75f778e9748c596",
+    "snapshot_id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4",
+    "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+    "tree_hash": "8592acb2878542b603673545e32aa733cea5be68ce2a112425dd71a6d300702e",
 }
 
 TRUSTED_PACKAGE_TREE_HASHES = {
-    "gamepack_raylib_2d": "12a84f115908308c20b37c8866f57e833d30bc3bc9b325be6ea76c4cdc4d9356",
+    "gamepack_raylib_2d": "38f350652d5cc8e5a42ee462c936ebf0d7e37c3b2148c3d86ac4c0ea3f1ffd78",
     "gamepack_runtime": "62798f17fcb0e9b07883e4b9632e18bf828725119b658d4d7a0496fbe6edfb9c",
 }
 

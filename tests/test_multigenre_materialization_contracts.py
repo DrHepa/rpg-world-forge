@@ -794,11 +794,11 @@ class MaterializationContractTests(unittest.TestCase):
         expected = {
             "snapshot.json": (
                 5889,
-                "b1c94cac79ced1107f87174fcb367eec6ae832f089bb43e24d21dc618568b4bf",
+                "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
             ),
             "registry.json": (
                 8178,
-                "b8f22310fe80765ae1750404214ee159dda10b8f99b2e567ed8725929c474aba",
+                "9485e28a864328cca5a4a3bc21fe8569ae160459130917175b25caf119b87570",
             ),
         }
         for relative, (size_bytes, content_hash) in expected.items():

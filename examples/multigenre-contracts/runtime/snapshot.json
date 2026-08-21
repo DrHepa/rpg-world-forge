@@ -13,7 +13,7 @@
       "id": "gamepack_raylib_2d_text"
     }
   ],
-  "content_hash": "b1c94cac79ced1107f87174fcb367eec6ae832f089bb43e24d21dc618568b4bf",
+  "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
   "files": [
     {
       "path": "descriptors/gamepack_raylib_2d_puzzle@1.1.0.json",
@@ -87,8 +87,8 @@
     },
     {
       "path": "gamepack_raylib_2d/resources.py",
-      "sha256": "c092edef283f5763ea235ab8843832e14644d987f1413d9531fe0f37e87343fc",
-      "size_bytes": 47441
+      "sha256": "86236d0121381f78181af2b073e5d32b474dfc328c788da1646772d9e32df78d",
+      "size_bytes": 47506
     },
     {
       "path": "gamepack_raylib_2d/types.py",
@@ -167,6 +167,6 @@
     "id": "gamepack_runtime",
     "version": "1.0.0"
   },
-  "snapshot_id": "runtime_snapshot_002ec4f5a0da3b1f306eec02e163f28a72d628a0",
-  "tree_hash": "a24ccaa35dc17ef40de3434b954c92f303906fae140905e1e75f778e9748c596"
+  "snapshot_id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4",
+  "tree_hash": "8592acb2878542b603673545e32aa733cea5be68ce2a112425dd71a6d300702e"
 }

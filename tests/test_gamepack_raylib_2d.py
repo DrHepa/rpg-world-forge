@@ -175,6 +175,38 @@ class FixedStepAndInputTests(RaylibAdapterTestCase):
 
 
 class RuntimeBundleResourceTests(RaylibAdapterTestCase):
+    def test_regular_binary_assets_request_binary_descriptor_mode(self) -> None:
+        from gamepack_raylib_2d import resources
+
+        payload = b"\x89PNG\r\n\x1a\n" + b"retained payload after ctrl-z"
+        asset = self.root / "binary-mode.png"
+        asset.write_bytes(payload)
+        binary_flag = 1 << 30
+        requested_flags: list[int] = []
+        real_open = os.open
+
+        def tracked_open(path: os.PathLike[str] | str, flags: int, mode: int = 0o777) -> int:
+            requested_flags.append(flags)
+            return real_open(path, flags & ~binary_flag, mode)
+
+        with (
+            mock.patch.object(resources.os, "O_BINARY", binary_flag, create=True),
+            mock.patch.object(resources.os, "open", side_effect=tracked_open),
+        ):
+            self.assertEqual(
+                resources._read_regular(asset, "assetpack/assets/ui/board.png"),
+                payload,
+            )
+
+        self.assertEqual(len(requested_flags), 1)
+        flags = requested_flags[0]
+        self.assertEqual(flags & binary_flag, binary_flag)
+        self.assertFalse(flags & os.O_WRONLY)
+        self.assertFalse(flags & os.O_RDWR)
+        for platform_flag in (getattr(os, "O_CLOEXEC", 0), getattr(os, "O_NOFOLLOW", 0)):
+            if platform_flag:
+                self.assertEqual(flags & platform_flag, platform_flag)
+
     def test_exact_bundle_assets_load_with_dimensions_hashes_and_font_deduplication(
         self,
     ) -> None:

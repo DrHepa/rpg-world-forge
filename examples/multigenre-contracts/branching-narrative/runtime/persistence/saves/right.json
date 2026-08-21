@@ -15,22 +15,22 @@
       "version": "1.0.0"
     },
     "runtime_bundle": {
-      "content_hash": "c1d27383c0f816135f637c4ae0345741f65a563c8b99a7556734c11f08f48f31",
+      "content_hash": "d9f0f3a6100a30f712c4d6438decd406572161dda0f0184b4d4007e42b2f83af",
       "format": "world-forge.game_runtime_bundle",
       "format_version": 1,
-      "id": "game_runtime_bundle_72bfb9be044f4742627750e64edc459d93efbe4f6cd38047"
+      "id": "game_runtime_bundle_fb46e4c000e594518f8fab30536eca3b67b2adeada99a496"
     },
     "runtime_composition": {
-      "content_hash": "7a5d2f0aaa6ff0f5f68643c868adfd8fef4947d999b0bcc9a0d245bf538a1994",
+      "content_hash": "9ae6fa3b0a508b956111b78c3a3ef874c7cb2455d0178a9e1272303483cb2f6d",
       "format": "world-forge.game_runtime_composition",
       "format_version": 1,
-      "id": "runtime_composition_b378850799890a8db800f4b68bfcee7b3af7ece5"
+      "id": "runtime_composition_96a1dccea8112fa62287553685d259b5b77be42e"
     }
   },
-  "content_hash": "d859d8edbe71ac8092065799b94582210927c0abd32ff6d007a21b2b548d30c9",
+  "content_hash": "f3426e06f703956bbbb75ce9a4e331df3efb5120c6ff39fc71a019c82d761bda",
   "format": "world-forge.game_save",
   "format_version": 1,
-  "save_id": "game_save_065b7d858c223f7467e5a7ca46cc7f51d86bf183520acff7",
+  "save_id": "game_save_d7752cc416ee9998edc204fd26ea702e2e31f9b30f68797d",
   "state": {
     "classification": {
       "ending_ids": [

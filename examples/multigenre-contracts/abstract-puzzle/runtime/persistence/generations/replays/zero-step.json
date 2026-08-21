@@ -1,5 +1,5 @@
 {
-  "content_hash": "c43d610ba9b95afd0205a7312439b916bca4d771eb567636da0d70ff50006f79",
+  "content_hash": "77b80c5ad5dec638866a27104fe1ab1e99ea2bfbee62b23aacf09df1e3af591f",
   "format": "world-forge.persistence_generation",
   "format_version": 1,
   "kind": "replay",
@@ -22,16 +22,16 @@
         "version": "1.0.0"
       },
       "runtime_bundle": {
-        "content_hash": "a31c78621f8b824bce53faed5626d716e10a280c367449e811d62d0e359fb374",
+        "content_hash": "515efc19804b4c0e2ef10b4de76028409e8fc2795444f6ffa2c7d3c0e4febf5e",
         "format": "world-forge.game_runtime_bundle",
         "format_version": 1,
-        "id": "game_runtime_bundle_8e671ce34a653c62d12cb67dae47a73a7708fa3feca425b0"
+        "id": "game_runtime_bundle_dcd032fc00dc4b674334f0170b24cdd61267746fa1e95f8b"
       },
       "runtime_composition": {
-        "content_hash": "c1dfd0f58d00b245fcd68aee83f25c0bb7a0dfc4b38a5f3abddbe3c35b015451",
+        "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
         "format": "world-forge.game_runtime_composition",
         "format_version": 1,
-        "id": "runtime_composition_a0b24f677435859d28937c9e97cf6af44c2d2b2b"
+        "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
       }
     },
     "classification": {
@@ -42,16 +42,16 @@
       "recovery_action_ids": [],
       "terminal": false
     },
-    "content_hash": "0cca5a7fdd92fec97bf1a8443cc07f314aaf91b6e4c6bd823c7d39bea67806ea",
+    "content_hash": "71ff7e9e0a5dac19bdebc155203bf9e169fce97aa6c252032cb8a8610fd287be",
     "final_state_hash": "0e45dbe418fea6b992d47cc9099d83a733c57ea64ae2c994d2d1e225f9a14bad",
     "format": "world-forge.game_replay",
     "format_version": 1,
     "initial_state_hash": "0e45dbe418fea6b992d47cc9099d83a733c57ea64ae2c994d2d1e225f9a14bad",
-    "replay_id": "game_replay_876f6367caa14a80ce1ff46100e2fa94c52679324b2b8e45",
+    "replay_id": "game_replay_5e7fba87350f6939bb7fa418fa9adaedf56e598d8a720e27",
     "steps": [],
     "trace_hash": "4430e7786edc0f8419f02e909c15422ebf572287a58132d8f6f33250ce053121"
   },
-  "payload_hash": "0cca5a7fdd92fec97bf1a8443cc07f314aaf91b6e4c6bd823c7d39bea67806ea",
+  "payload_hash": "71ff7e9e0a5dac19bdebc155203bf9e169fce97aa6c252032cb8a8610fd287be",
   "sequence": 0,
   "slot": "zero-step"
 }

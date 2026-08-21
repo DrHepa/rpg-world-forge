@@ -3644,7 +3644,7 @@
     },
     {
       "category": "regression_fixture",
-      "file_sha256": "46a3c07803cce7438a2e820d5e4b9395afb6c4612dbf57319dda9070a27c815c",
+      "file_sha256": "611ed6093d582172cc678232335ec01ce06aeec910de947f36fa64bd75e941a9",
       "justification": "Regression evidence preserves legacy identity input and reader behavior.",
       "offsets": [
         35709,
