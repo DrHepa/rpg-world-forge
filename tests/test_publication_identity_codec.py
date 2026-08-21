@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from gamepack_runtime import game_package as game_package_contract_module
+from gamepack_runtime.distribution import canonical_contract_hash
 from worldforge import game_materialization_bundle as materialization_module
+from worldforge import game_package as game_package_module
 from worldforge import game_runtime_bundle as runtime_module
 from worldforge import generic_assetpack as assetpack_module
+from worldforge import standalone_game as standalone_module
 from worldforge._publication_identity import (
     PublicationIdentityCodecError,
     decode_publication_identity,
@@ -107,6 +112,101 @@ def _windows_journal_documents(
         runtime,
         (assetpack_destination, materialization_destination, runtime_destination),
     )
+
+
+def _standalone_journal_document(
+    *, state: str, windows: bool, destination: Path = Path("standalone")
+) -> dict[str, object]:
+    digest = "b" * 64
+    operation_id = "1" * 32
+    stage_identity = None if state == "intent" else MAX_WINDOWS_IDENTITY
+    parent_identity = MAX_WINDOWS_IDENTITY if windows else (123, 456)
+    with patch.object(os, "name", "nt" if windows else "posix"):
+        return standalone_module._journal_document(  # noqa: SLF001
+            operation_id=operation_id,
+            state=state,
+            stage=Path(f".{destination.name}.standalone-stage-{operation_id}"),
+            destination=destination,
+            parent_identity=parent_identity,
+            stage_identity=stage_identity if windows else (789, 101112),
+            manifest={"content_hash": digest},
+            lock={"content_hash": digest, "tree_hash": digest},
+            materialization_hash=digest,
+        )
+
+
+def _game_package_journal_document(
+    *, state: str, windows: bool, destination: Path = Path("extracted-game")
+) -> dict[str, object]:
+    digest = "c" * 64
+    operation_id = "2" * 32
+    stage_identity = None if state == "intent" else MAX_WINDOWS_IDENTITY
+    parent_identity = MAX_WINDOWS_IDENTITY if windows else (123, 456)
+    manifest_payload = b'{"manifest":"payload"}'
+    lock_payload = b'{"lock":"payload"}'
+    files_inventory = [
+        {
+            "path": game_package_module.GAME_MANIFEST_PATH,
+            "sha256": hashlib.sha256(manifest_payload).hexdigest(),
+            "size_bytes": len(manifest_payload),
+        },
+        {
+            "path": game_package_module.GAME_LOCK_PATH,
+            "sha256": hashlib.sha256(lock_payload).hexdigest(),
+            "size_bytes": len(lock_payload),
+        },
+    ]
+    lineage = {
+        "gamepack_hash": digest,
+        "assetpack_hash": digest,
+        "runtime_snapshot_hash": digest,
+        "runtime_composition_hash": digest,
+        "runtime_bundle_hash": digest,
+    }
+    standalone_game = {
+        "format": "world-forge.standalone_game",
+        "format_version": 1,
+        "game_id": "identity_test_game",
+        "content_hash": digest,
+    }
+    payload_lock = {
+        "format": "world-forge.standalone_game_lock",
+        "format_version": 1,
+        "id": "identity_test_lock",
+        "content_hash": digest,
+        "tree_hash": digest,
+    }
+    seed = game_package_contract_module._package_id_seed(  # noqa: SLF001
+        game_id="identity_test_game",
+        lineage=lineage,
+        standalone_game=standalone_game,
+        payload_lock=payload_lock,
+        files=files_inventory,
+    )
+    package_manifest = {
+        "format": "world-forge.game_package",
+        "format_version": 1,
+        "package_id": "game_package_" + canonical_contract_hash(seed)[:40],
+        **seed,
+        "content_hash": "",
+    }
+    package_manifest["content_hash"] = canonical_contract_hash(package_manifest)
+    files = {
+        game_package_module.GAME_MANIFEST_PATH: manifest_payload,
+        game_package_module.GAME_LOCK_PATH: lock_payload,
+    }
+    with patch.object(os, "name", "nt" if windows else "posix"):
+        return game_package_module._journal_document(  # noqa: SLF001
+            operation_id=operation_id,
+            state=state,
+            stage=Path(f".{destination.name}.game-package-stage-{operation_id}"),
+            destination=destination,
+            parent_identity=parent_identity,
+            stage_identity=stage_identity if windows else (789, 101112),
+            archive_sha256=digest,
+            package_manifest=package_manifest,
+            files=files,
+        )
 
 
 class PublicationIdentityCodecTests(unittest.TestCase):
@@ -297,10 +397,154 @@ class PublicationJournalIdentityIntegrationTests(unittest.TestCase):
             with self.subTest(reader=reader.__module__), self.assertRaises(error):
                 reader(*args, **kwargs)
 
+    def test_standalone_and_package_journal_writers_encode_max_width_windows_identity(self) -> None:
+        expected = {
+            "volume_serial": "ffffffffffffffff",
+            "file_id": "ffffffffffffffffffffffffffffffff",
+        }
+
+        standalone = _standalone_journal_document(state="copying", windows=True)
+        package = _game_package_journal_document(state="copying", windows=True)
+
+        self.assertEqual(expected, standalone["parent_identity"])
+        self.assertEqual(expected, standalone["stage_identity"])
+        self.assertEqual(expected, package["parent_identity"])
+        self.assertEqual(expected, package["stage_identity"])
+        self.assertEqual(
+            MAX_WINDOWS_IDENTITY,
+            decode_publication_identity(standalone["stage_identity"]),
+        )
+        self.assertEqual(
+            MAX_WINDOWS_IDENTITY,
+            decode_publication_identity(package["stage_identity"]),
+        )
+
+    def test_standalone_and_package_journals_strictly_roundtrip_windows_identity(self) -> None:
+        standalone = self._strict_roundtrip(
+            _standalone_journal_document(state="copying", windows=True)
+        )
+        package = self._strict_roundtrip(
+            _game_package_journal_document(state="copying", windows=True)
+        )
+
+        self.assertEqual(
+            MAX_WINDOWS_IDENTITY,
+            decode_publication_identity(standalone["parent_identity"]),
+        )
+        self.assertEqual(
+            MAX_WINDOWS_IDENTITY,
+            decode_publication_identity(standalone["stage_identity"]),
+        )
+        self.assertEqual(
+            MAX_WINDOWS_IDENTITY,
+            decode_publication_identity(package["parent_identity"]),
+        )
+        self.assertEqual(
+            MAX_WINDOWS_IDENTITY,
+            decode_publication_identity(package["stage_identity"]),
+        )
+
+    def test_standalone_and_package_readers_reject_bad_identity_shapes(self) -> None:
+        malformed = (
+            {"volume_serial": "FFFFFFFFFFFFFFFF", "file_id": "f" * 32},
+            {"volume_serial": "f" * 16, "file_id": "f" * 32, "extra": 0},
+            {"volume_serial": "f" * 16, "inode": 1},
+            {"device": 2**53, "inode": 1},
+            {"device": 1, "inode": 2**53},
+        )
+        cases = (
+            (
+                standalone_module._identity_from_document,
+                standalone_module.StandaloneGameError,
+            ),
+            (
+                game_package_module._identity_from_document,
+                game_package_module.WorldForgeGamePackageError,
+            ),
+        )
+
+        for value in malformed:
+            for reader, error in cases:
+                with (
+                    self.subTest(value=value, reader=reader.__module__),
+                    self.assertRaises(error),
+                ):
+                    reader(value, context="journal.stage_identity")
+
+    def test_standalone_and_package_posix_journal_identity_bytes_remain_stable(self) -> None:
+        standalone = _standalone_journal_document(state="copying", windows=False)
+        package = _game_package_journal_document(state="copying", windows=False)
+
+        self.assertEqual(
+            b'{\n  "device": 123,\n  "inode": 456\n}\n',
+            canonical_json_bytes(standalone["parent_identity"]),
+        )
+        self.assertEqual(
+            b'{\n  "device": 789,\n  "inode": 101112\n}\n',
+            canonical_json_bytes(standalone["stage_identity"]),
+        )
+        self.assertEqual(
+            b'{\n  "device": 123,\n  "inode": 456\n}\n',
+            canonical_json_bytes(package["parent_identity"]),
+        )
+        self.assertEqual(
+            b'{\n  "device": 789,\n  "inode": 101112\n}\n',
+            canonical_json_bytes(package["stage_identity"]),
+        )
+
+    def test_standalone_and_package_append_and_reread_windows_transition(self) -> None:
+        modules_and_factories = (
+            (standalone_module, _standalone_journal_document, "standalone"),
+            (game_package_module, _game_package_journal_document, "extracted-game"),
+        )
+
+        with tempfile.TemporaryDirectory(prefix="wf-standalone-package-identity-") as temporary:
+            root = Path(temporary)
+            for module, factory, destination_name in modules_and_factories:
+                destination = root / destination_name
+                intent_document = factory(
+                    state="intent",
+                    windows=True,
+                    destination=destination,
+                )
+                copying_document = factory(
+                    state="copying",
+                    windows=True,
+                    destination=destination,
+                )
+                with patch.object(
+                    module,
+                    "_optional_directory_identity",
+                    return_value=MAX_WINDOWS_IDENTITY,
+                ):
+                    identity = module._write_journal(  # noqa: SLF001
+                        destination,
+                        intent_document,
+                        create=True,
+                    )
+                    module._write_journal(  # noqa: SLF001
+                        destination,
+                        copying_document,
+                        create=False,
+                        expected_document=intent_document,
+                        expected_identity=identity,
+                    )
+                    loaded = module._read_journal(destination)  # noqa: SLF001
+
+                self.assertIsNotNone(loaded)
+                assert loaded is not None
+                self.assertEqual(copying_document, loaded[0])
+                self.assertEqual(
+                    MAX_WINDOWS_IDENTITY,
+                    decode_publication_identity(loaded[0]["stage_identity"]),
+                )
+
     def test_journal_versions_remain_private_v1(self) -> None:
         self.assertEqual(1, assetpack_module.GENERIC_ASSETPACK_JOURNAL_VERSION)
         self.assertEqual(1, materialization_module.GAME_MATERIALIZATION_BUNDLE_JOURNAL_VERSION)
         self.assertEqual(1, runtime_module.GAME_RUNTIME_BUNDLE_JOURNAL_VERSION)
+        self.assertEqual(1, standalone_module._JOURNAL_VERSION)  # noqa: SLF001
+        self.assertEqual(1, game_package_module._JOURNAL_VERSION)  # noqa: SLF001
 
 
 if __name__ == "__main__":

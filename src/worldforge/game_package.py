@@ -38,6 +38,11 @@ from gamepack_runtime.persistence_io import (
     held_persistence_lock,
     publish_bytes_noreplace,
 )
+from worldforge._publication_identity import (
+    PublicationIdentityCodecError,
+    decode_publication_identity,
+    encode_publication_identity,
+)
 from worldforge.asset_io import AssetContractError, open_verified_output_parent
 from worldforge.directory_publish import (
     DirectoryIdentity,
@@ -531,8 +536,11 @@ def _destination_lock(
         _fail(reason, str(exc))
 
 
-def _identity_document(identity: DirectoryIdentity) -> dict[str, int]:
-    return {"device": identity[0], "inode": identity[1]}
+def _identity_document(identity: DirectoryIdentity) -> dict[str, int | str]:
+    try:
+        return encode_publication_identity(identity, windows=os.name == "nt")
+    except PublicationIdentityCodecError:
+        _fail("game_package_journal_invalid", "journal identity is invalid")
 
 
 def _identity_from_document(
@@ -540,16 +548,13 @@ def _identity_from_document(
     *,
     context: str = "stage",
 ) -> DirectoryIdentity:
-    if (
-        type(value) is not dict
-        or set(value) != {"device", "inode"}
-        or type(value.get("device")) is not int
-        or type(value.get("inode")) is not int
-        or value["device"] < 0
-        or value["inode"] < 0
-    ):
+    try:
+        return decode_publication_identity(
+            value,
+            context=f"{context} identity",
+        )
+    except PublicationIdentityCodecError:
         _fail("game_package_journal_invalid", f"{context} identity is invalid")
-    return value["device"], value["inode"]
 
 
 def _destination_path_hash(destination: Path) -> str:
