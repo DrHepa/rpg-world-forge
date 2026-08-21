@@ -69,14 +69,54 @@ MAX_RUNTIME_FILE_BYTES = 4 * 1024 * 1024
 MAX_RUNTIME_TREE_BYTES = 32 * 1024 * 1024
 MAX_RUNTIME_ITEMS = 256
 MAX_RUNTIME_TEXT = 4096
+_RUNTIME_STAGE_READ_CAPABILITY_PROOF = object()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class _RuntimeStageReadCapability:
     """Bind the Windows write-sharing exception to one retained private stage."""
 
     root: Path
     require_binding: Callable[[], None]
+    _proof: object
+
+    def __init__(
+        self,
+        proof: object,
+        *,
+        root: Path,
+        require_binding: Callable[[], None],
+    ) -> None:
+        if (
+            proof is not _RUNTIME_STAGE_READ_CAPABILITY_PROOF
+            or not isinstance(root, Path)
+            or not callable(require_binding)
+        ):
+            raise TypeError("runtime stage capability construction is invalid")
+        object.__setattr__(self, "root", root)
+        object.__setattr__(self, "require_binding", require_binding)
+        object.__setattr__(self, "_proof", proof)
+
+
+def _create_runtime_stage_read_capability(
+    *,
+    root: Path,
+    require_binding: Callable[[], None],
+) -> _RuntimeStageReadCapability:
+    return _RuntimeStageReadCapability(
+        _RUNTIME_STAGE_READ_CAPABILITY_PROOF,
+        root=root,
+        require_binding=require_binding,
+    )
+
+
+def _runtime_stage_read_capability_valid(value: object) -> bool:
+    return (
+        type(value) is _RuntimeStageReadCapability
+        and getattr(value, "_proof", None) is _RUNTIME_STAGE_READ_CAPABILITY_PROOF
+        and isinstance(getattr(value, "root", None), Path)
+        and callable(getattr(value, "require_binding", None))
+    )
 
 
 _IDENTITY_FIELDS = frozenset({"format", "format_version", "id", "content_hash"})
@@ -1556,9 +1596,8 @@ class _WindowsRuntimeTreeApi:
         cls,
         stage_capability: _RuntimeStageReadCapability | None,
     ) -> int:
-        if (
-            stage_capability is not None
-            and type(stage_capability) is not _RuntimeStageReadCapability
+        if stage_capability is not None and not _runtime_stage_read_capability_valid(
+            stage_capability
         ):
             raise TypeError("runtime stage capability has an invalid type")
         share = cls._FILE_SHARE_READ
@@ -2188,7 +2227,7 @@ def _capture_runtime_files(
     root = Path(os.path.abspath(os.fspath(root)))
     if _stage_capability is not None:
         if (
-            type(_stage_capability) is not _RuntimeStageReadCapability
+            not _runtime_stage_read_capability_valid(_stage_capability)
             or _stage_capability.root != root
         ):
             _fail(

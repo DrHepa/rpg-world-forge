@@ -41,6 +41,7 @@ from worldforge.directory_publish import (
     DirectoryIdentity,
     DirectoryPublishError,
     DirectoryPublishIndeterminateError,
+    RetainedStageWriter,
     append_append_only_journal,
     create_append_only_journal,
     create_retained_stage,
@@ -60,6 +61,8 @@ from worldforge.game_runtime_bundle import (
 from worldforge.generic_runtime import (
     RuntimeContractError,
     _capture_runtime_files,
+    _create_runtime_stage_read_capability,
+    _RuntimeStageReadCapability,
     build_builtin_runtime_adapters,
     build_runtime_evidence,
     build_runtime_support_report,
@@ -636,7 +639,11 @@ class _TreeSnapshot:
     directories: frozenset[str]
 
 
-def _capture_tree(root: Path) -> _TreeSnapshot:
+def _capture_tree(
+    root: Path,
+    *,
+    _stage_capability: _RuntimeStageReadCapability | None = None,
+) -> _TreeSnapshot:
     identity: DirectoryIdentity | None = None
 
     def capture_root_identity(event: str, _relative: str | None) -> None:
@@ -649,10 +656,17 @@ def _capture_tree(root: Path) -> _TreeSnapshot:
             _fail("evidence_tree_unsafe", str(exc))
 
     try:
-        prefixed = _capture_runtime_files(
-            root,
-            _verification_hook=capture_root_identity,
-        )
+        if _stage_capability is None:
+            prefixed = _capture_runtime_files(
+                root,
+                _verification_hook=capture_root_identity,
+            )
+        else:
+            prefixed = _capture_runtime_files(
+                root,
+                _verification_hook=capture_root_identity,
+                _stage_capability=_stage_capability,
+            )
     except (RuntimeContractError, DirectoryPublishError) as exc:
         _fail("evidence_tree_unsafe", str(exc))
     if identity is None:
@@ -814,11 +828,33 @@ def verify_headless_evidence_set(
     *,
     bundle_root: str | Path,
     expected_content_hash: str | None = None,
+    _retained_stage_writer: RetainedStageWriter | None = None,
 ) -> VerifiedHeadlessEvidenceSet:
     root_path = Path(os.path.abspath(os.fspath(root)))
     bundle = verify_game_runtime_bundle(bundle_root)
     try:
-        tree = _capture_tree(root_path)
+        stage_capability: _RuntimeStageReadCapability | None = None
+        if _retained_stage_writer is not None:
+            writer = _retained_stage_writer
+
+            def require_stage_binding() -> None:
+                try:
+                    RetainedStageWriter._require_active_binding(  # noqa: SLF001
+                        writer,
+                        expected_stage=root_path,
+                    )
+                except DirectoryPublishError as exc:
+                    _fail("evidence_stage_capability_invalid", str(exc))
+
+            require_stage_binding()
+            stage_capability = _create_runtime_stage_read_capability(
+                root=root_path,
+                require_binding=require_stage_binding,
+            )
+        tree = _capture_tree(
+            root_path,
+            _stage_capability=stage_capability,
+        )
         files = tree.files
         manifest = validate_headless_evidence_set_document(
             _decode_canonical(
@@ -948,6 +984,8 @@ def verify_headless_evidence_set(
             or manifest["support"] != _support_reference(support)
         ):
             _fail("evidence_support_mismatch", "support report differs from exact evidence")
+        if _retained_stage_writer is not None:
+            require_stage_binding()
         return VerifiedHeadlessEvidenceSet(
             root_path,
             manifest,
@@ -956,7 +994,14 @@ def verify_headless_evidence_set(
         )
     except GenericHeadlessError:
         raise
-    except (GameRuntimeBundleError, GameLogicError, RuntimeContractError) as exc:
+    except (
+        DirectoryPublishError,
+        GameRuntimeBundleError,
+        GameLogicError,
+        RuntimeContractError,
+    ) as exc:
+        if isinstance(exc, DirectoryPublishError):
+            _fail("evidence_tree_unsafe", str(exc))
         reason = getattr(exc, "reason_code", "evidence_invalid")
         detail = getattr(exc, "detail", str(exc))
         _fail(reason, detail)
@@ -1024,6 +1069,7 @@ def build_headless_evidence_tree(
                 destination_path,
                 bundle_root=bundle_root,
                 expected_content_hash=manifest["content_hash"],
+                _retained_stage_writer=writer,
             )
             try:
                 if (
@@ -1147,6 +1193,7 @@ def publish_headless_evidence_tree(
                     publication_stage,
                     bundle_root=bundle_root,
                     expected_content_hash=expected_content_hash,
+                    _retained_stage_writer=writer,
                 )
                 try:
                     if (
@@ -1612,6 +1659,7 @@ def build_headless_evidence_set(
                     stage,
                     bundle_root=bundle_root,
                     expected_content_hash=manifest["content_hash"],
+                    _retained_stage_writer=writer,
                 )
                 try:
                     if checked_stage.root_identity != stage_identity:

@@ -16,6 +16,7 @@ from pathlib import Path
 from unittest import mock
 
 import worldforge.generic_headless as generic_headless
+import worldforge.generic_runtime as generic_runtime
 from gamepack_runtime import GameLogicError
 from gamepack_runtime.headless import (
     GAME_EXECUTION_SCRIPT_FORMAT,
@@ -33,7 +34,12 @@ from scripts.generate_generic_headless_schemas import build_schemas
 from tests.test_multigenre_game_runtime_bundle import _build_bundle
 from worldforge.__main__ import main
 from worldforge.creation_contracts import canonical_creation_hash
-from worldforge.directory_publish import directory_identity
+from worldforge.directory_publish import (
+    DirectoryPublishError,
+    RetainedStageWriter,
+    create_retained_stage,
+    directory_identity,
+)
 from worldforge.generic_headless import (
     HEADLESS_EVIDENCE_COMMIT,
     HEADLESS_EVIDENCE_SET_FORMAT,
@@ -711,6 +717,305 @@ class GenericHeadlessExecutionTests(unittest.TestCase):
                 snapshot.root_identity,
                 directory_identity(root, context="replacement evidence root"),
             )
+
+    def test_retained_stage_capability_is_root_bound_and_mutation_sensitive(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-headless-stage-capability-") as temporary:
+            root = Path(temporary) / "stage"
+            root.mkdir()
+            (root / "a.txt").write_bytes(b"retained\n")
+            binding_checks: list[int] = []
+            capability = generic_runtime._create_runtime_stage_read_capability(  # noqa: SLF001
+                root=root,
+                require_binding=lambda: binding_checks.append(len(binding_checks) + 1),
+            )
+
+            snapshot = generic_headless._capture_tree(  # noqa: SLF001
+                root,
+                _stage_capability=capability,
+            )
+
+            self.assertEqual(b"retained\n", snapshot.files["a.txt"])
+            self.assertEqual([1, 2], binding_checks)
+            share_mode = generic_runtime._WindowsRuntimeTreeApi._share_mode_for(  # noqa: SLF001
+                capability
+            )
+            self.assertEqual(0x00000003, share_mode)
+            self.assertEqual(0, share_mode & 0x00000004)
+
+            crossed = generic_runtime._create_runtime_stage_read_capability(  # noqa: SLF001
+                root=root / "other",
+                require_binding=lambda: None,
+            )
+            with self.assertRaisesRegex(GenericHeadlessError, "evidence_tree_unsafe"):
+                generic_headless._capture_tree(  # noqa: SLF001
+                    root,
+                    _stage_capability=crossed,
+                )
+
+            mutation_checks = 0
+
+            def reject_mutation() -> None:
+                nonlocal mutation_checks
+                mutation_checks += 1
+                if mutation_checks == 2:
+                    raise DirectoryPublishError("retained stage binding changed")
+
+            mutation_capability = generic_runtime._create_runtime_stage_read_capability(  # noqa: SLF001
+                root=root,
+                require_binding=reject_mutation,
+            )
+            with self.assertRaisesRegex(GenericHeadlessError, "evidence_tree_unsafe"):
+                generic_headless._capture_tree(  # noqa: SLF001
+                    root,
+                    _stage_capability=mutation_capability,
+                )
+            self.assertEqual(2, mutation_checks)
+
+    def test_evidence_verifier_accepts_stage_capability_only_from_its_writer(
+        self,
+    ) -> None:
+        class _CaptureStopped(RuntimeError):
+            pass
+
+        with tempfile.TemporaryDirectory(prefix="wf-headless-stage-scope-") as temporary:
+            root = Path(temporary) / "stage"
+            observed: list[object | None] = []
+
+            def stop_capture(
+                _root: Path,
+                *,
+                _stage_capability: object | None = None,
+            ) -> object:
+                observed.append(_stage_capability)
+                raise _CaptureStopped
+
+            bundle = mock.Mock()
+            forged = object.__new__(RetainedStageWriter)
+            forged.stage = root
+            forged.require_binding = lambda: None  # type: ignore[method-assign]
+            with (
+                mock.patch.object(
+                    generic_headless,
+                    "verify_game_runtime_bundle",
+                    return_value=bundle,
+                ),
+                mock.patch.object(
+                    generic_headless,
+                    "_capture_tree",
+                    side_effect=stop_capture,
+                ),
+                self.assertRaisesRegex(
+                    GenericHeadlessError,
+                    "evidence_stage_capability_invalid",
+                ),
+            ):
+                verify_headless_evidence_set(
+                    root,
+                    bundle_root=root,
+                    _retained_stage_writer=forged,
+                )
+
+            with create_retained_stage(root) as writer:
+                with (
+                    mock.patch.object(
+                        generic_headless,
+                        "verify_game_runtime_bundle",
+                        return_value=bundle,
+                    ),
+                    mock.patch.object(
+                        generic_headless,
+                        "_capture_tree",
+                        side_effect=stop_capture,
+                    ),
+                    self.assertRaises(_CaptureStopped),
+                ):
+                    verify_headless_evidence_set(
+                        root,
+                        bundle_root=root,
+                        _retained_stage_writer=writer,
+                    )
+                with (
+                    mock.patch.object(
+                        generic_headless,
+                        "verify_game_runtime_bundle",
+                        return_value=bundle,
+                    ),
+                    self.assertRaisesRegex(
+                        GenericHeadlessError,
+                        "evidence_stage_capability_invalid",
+                    ),
+                ):
+                    verify_headless_evidence_set(
+                        root / "crossed",
+                        bundle_root=root,
+                        _retained_stage_writer=writer,
+                    )
+
+            self.assertEqual(1, len(observed))
+            capability = observed[0]
+            self.assertIsInstance(
+                capability,
+                generic_runtime._RuntimeStageReadCapability,  # noqa: SLF001
+            )
+            assert isinstance(capability, generic_runtime._RuntimeStageReadCapability)  # noqa: SLF001
+            self.assertEqual(root, capability.root)
+
+            with (
+                mock.patch.object(
+                    generic_headless,
+                    "verify_game_runtime_bundle",
+                    return_value=bundle,
+                ),
+                self.assertRaisesRegex(
+                    GenericHeadlessError,
+                    "evidence_stage_capability_invalid",
+                ),
+            ):
+                verify_headless_evidence_set(
+                    root,
+                    bundle_root=root,
+                    _retained_stage_writer=writer,
+                )
+
+            with (
+                mock.patch.object(
+                    generic_headless,
+                    "verify_game_runtime_bundle",
+                    return_value=bundle,
+                ),
+                mock.patch.object(
+                    generic_headless,
+                    "_capture_tree",
+                    side_effect=stop_capture,
+                ),
+                self.assertRaises(_CaptureStopped),
+            ):
+                verify_headless_evidence_set(root, bundle_root=root)
+            self.assertIsNone(observed[-1])
+
+            with (
+                mock.patch.object(
+                    generic_headless,
+                    "verify_game_runtime_bundle",
+                    return_value=bundle,
+                ),
+                self.assertRaisesRegex(
+                    GenericHeadlessError,
+                    "evidence_stage_capability_invalid",
+                ),
+            ):
+                verify_headless_evidence_set(
+                    root,
+                    bundle_root=root,
+                    _retained_stage_writer=object(),  # type: ignore[arg-type]
+                )
+
+    def test_publication_scopes_exactly_three_stage_capabilities(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-headless-stage-calls-") as temporary:
+            root = Path(temporary)
+            bundle, script = self._build_script("abstract-puzzle", root)
+            bundle_root = bundle.root
+            bundle.close()
+            script_bytes = serialize_game_execution_script(script)
+            script_path = root / "script.json"
+            script_path.write_bytes(script_bytes)
+            worker = root / "worker-evidence"
+            published = root / "published-evidence"
+            direct = root / "direct-evidence"
+            original = generic_headless.verify_headless_evidence_set
+            with (
+                mock.patch(
+                    "gamepack_runtime.headless._native_machine",
+                    return_value="x86_64",
+                ),
+                mock.patch.object(
+                    generic_headless,
+                    "verify_headless_evidence_set",
+                    wraps=original,
+                ) as verify_calls,
+            ):
+                worker_verified = generic_headless.build_headless_evidence_tree(
+                    worker,
+                    bundle_root=bundle_root,
+                    script_bytes=script_bytes,
+                )
+                worker_manifest = worker_verified.manifest
+                worker_identity = worker_verified.root_identity
+                worker_verified.close()
+                published_verified = generic_headless.publish_headless_evidence_tree(
+                    worker,
+                    published,
+                    bundle_root=bundle_root,
+                    expected_content_hash=worker_manifest["content_hash"],
+                    expected_tree_hash=worker_manifest["tree_hash"],
+                    expected_source_identity=worker_identity,
+                )
+                published_verified.close()
+                direct_verified = build_headless_evidence_set(
+                    direct,
+                    bundle_root=bundle_root,
+                    script_path=script_path,
+                )
+                direct_verified.close()
+
+            stage_calls = [
+                call
+                for call in verify_calls.call_args_list
+                if call.kwargs.get("_retained_stage_writer") is not None
+            ]
+            self.assertEqual(3, len(stage_calls))
+            for call in stage_calls:
+                writer = call.kwargs["_retained_stage_writer"]
+                self.assertIs(type(writer), RetainedStageWriter)
+                self.assertEqual(Path(os.path.abspath(call.args[0])), writer.stage)
+            for final_root in (worker, published, direct):
+                self.assertTrue(
+                    any(
+                        Path(os.path.abspath(call.args[0])) == final_root
+                        and call.kwargs.get("_retained_stage_writer") is None
+                        for call in verify_calls.call_args_list
+                    )
+                )
+
+            mutation_checks = 0
+            real_authority = RetainedStageWriter._require_active_binding  # noqa: SLF001
+
+            def reject_post_capture_mutation(
+                writer: object,
+                *,
+                expected_stage: Path,
+            ) -> None:
+                nonlocal mutation_checks
+                mutation_checks += 1
+                real_authority(writer, expected_stage=expected_stage)
+                if mutation_checks == 4:
+                    raise DirectoryPublishError("retained stage binding changed")
+
+            with (
+                mock.patch(
+                    "gamepack_runtime.headless._native_machine",
+                    return_value="x86_64",
+                ),
+                mock.patch.object(
+                    RetainedStageWriter,
+                    "_require_active_binding",
+                    side_effect=reject_post_capture_mutation,
+                ),
+                self.assertRaisesRegex(
+                    GenericHeadlessError,
+                    "evidence_stage_capability_invalid",
+                ),
+            ):
+                generic_headless.build_headless_evidence_tree(
+                    root / "mutated-evidence",
+                    bundle_root=bundle_root,
+                    script_bytes=script_bytes,
+                )
+            self.assertEqual(4, mutation_checks)
 
     def test_ready_publication_journal_recovers_exact_identity(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wf-headless-recovery-") as temporary:

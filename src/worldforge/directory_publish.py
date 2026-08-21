@@ -37,6 +37,7 @@ from worldforge.file_stat import windows_handle_file_stat
 DirectoryIdentity = tuple[int, int]
 RetainedStageHook = Callable[[str, str | None], None]
 RetainedDirectoryVerifier = Callable[[Path, int | None], None]
+_RETAINED_STAGE_WRITER_PROOF = object()
 
 
 class DirectoryPublishError(OSError):
@@ -68,6 +69,7 @@ class RetainedStageWriter:
 
     def __init__(
         self,
+        proof: object,
         stage: Path,
         parent: PinnedOutputParent,
         *,
@@ -76,6 +78,9 @@ class RetainedStageWriter:
         require_guard: Callable[[], None],
         hook: RetainedStageHook | None,
     ) -> None:
+        if proof is not _RETAINED_STAGE_WRITER_PROOF:
+            raise TypeError("RetainedStageWriter is created only by create_retained_stage")
+        self._proof: object | None = proof
         self.stage = stage
         self.parent = parent
         self.identity = root_identity
@@ -99,6 +104,23 @@ class RetainedStageWriter:
             tuple[int, tuple[int, int, int, int, int, int, int]],
         ] = {}
         self._closed = False
+
+    @staticmethod
+    def _require_active_binding(
+        value: object,
+        *,
+        expected_stage: Path,
+    ) -> None:
+        """Require one genuine, active writer without trusting instance overrides."""
+
+        if (
+            type(value) is not RetainedStageWriter
+            or getattr(value, "_proof", None) is not _RETAINED_STAGE_WRITER_PROOF
+            or getattr(value, "_closed", None) is not False
+            or getattr(value, "stage", None) != expected_stage
+        ):
+            raise DirectoryPublishError("Retained stage writer authority is invalid or inactive")
+        RetainedStageWriter.require_binding(value)
 
     def _hook(self, event: str, relative: str | None = None) -> None:
         if self._hook_callback is not None:
@@ -346,6 +368,7 @@ class RetainedStageWriter:
                     except AssetContractError as exc:
                         errors.append(exc)
         self._closed = True
+        self._proof = None
         if errors:
             raise DirectoryPublishError(f"Could not release retained stage handles: {errors[0]}")
 
@@ -411,6 +434,7 @@ def create_retained_stage(
             ):
                 raise DirectoryPublishError("New retained stage root has an unsafe identity")
             writer = RetainedStageWriter(
+                _RETAINED_STAGE_WRITER_PROOF,
                 stage,
                 parent,
                 root_native=root_native,

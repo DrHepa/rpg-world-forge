@@ -90,6 +90,7 @@ from worldforge.generic_runtime import (
     RUNTIME_SUPPORT_REPORT_FORMAT,
     RuntimeContractError,
     _capture_runtime_files,
+    _create_runtime_stage_read_capability,
     _RuntimeStageReadCapability,
     build_runtime_support_report,
     capture_trusted_runtime_snapshot_files,
@@ -1745,20 +1746,26 @@ def verify_game_runtime_bundle(
 
     root_path = Path(os.path.abspath(os.fspath(root)))
     try:
-        stage_capability: _RuntimeStageReadCapability | None = None
+        stage_capability = None
         if _retained_stage_writer is not None:
-            if (
-                type(_retained_stage_writer) is not RetainedStageWriter
-                or _retained_stage_writer.stage != root_path
-            ):
-                _fail(
-                    "game_runtime_bundle_stage_capability_invalid",
-                    "retained stage writer does not bind the verified root",
-                )
-            _retained_stage_writer.require_binding()
-            stage_capability = _RuntimeStageReadCapability(
+            writer = _retained_stage_writer
+
+            def require_stage_binding() -> None:
+                try:
+                    RetainedStageWriter._require_active_binding(  # noqa: SLF001
+                        writer,
+                        expected_stage=root_path,
+                    )
+                except DirectoryPublishError as exc:
+                    _fail(
+                        "game_runtime_bundle_stage_capability_invalid",
+                        str(exc),
+                    )
+
+            require_stage_binding()
+            stage_capability = _create_runtime_stage_read_capability(
                 root=root_path,
-                require_binding=_retained_stage_writer.require_binding,
+                require_binding=require_stage_binding,
             )
         files, tree = _capture_bundle_tree(
             root_path,
@@ -2043,7 +2050,7 @@ def verify_game_runtime_bundle(
                 "bundle legal notice paths are not unique",
             )
         if _retained_stage_writer is not None:
-            _retained_stage_writer.require_binding()
+            require_stage_binding()
         return VerifiedGameRuntimeBundle(
             root_path,
             manifest,

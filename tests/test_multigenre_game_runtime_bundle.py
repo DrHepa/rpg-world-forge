@@ -19,7 +19,11 @@ from worldforge import game_runtime_bundle as game_runtime_bundle_module
 from worldforge import generic_runtime
 from worldforge.__main__ import _resolve_generic_assetpack_cli_source, main
 from worldforge.creation_contracts import canonical_creation_hash, read_creation_object
-from worldforge.directory_publish import DirectoryPublishError, RetainedStageWriter
+from worldforge.directory_publish import (
+    DirectoryPublishError,
+    RetainedStageWriter,
+    create_retained_stage,
+)
 from worldforge.game_runtime_bundle import (
     GAME_RUNTIME_BUNDLE_FORMAT,
     GAME_RUNTIME_BUNDLE_MANIFEST,
@@ -173,7 +177,7 @@ def _replace_manifest_file(
 class GameRuntimeBundleContractTests(unittest.TestCase):
     def test_windows_runtime_stage_capability_adds_only_write_sharing(self) -> None:
         root = Path("C:/retained/stage")
-        capability = generic_runtime._RuntimeStageReadCapability(  # noqa: SLF001
+        capability = generic_runtime._create_runtime_stage_read_capability(  # noqa: SLF001
             root=root,
             require_binding=lambda: None,
         )
@@ -247,13 +251,19 @@ class GameRuntimeBundleContractTests(unittest.TestCase):
                 self.assertTrue(all(access & 0x40000000 == 0 for _, access, _ in calls))
                 self.assertTrue(all(share & 0x00000004 == 0 for _, _, share in calls))
 
+        forged = object.__new__(generic_runtime._RuntimeStageReadCapability)  # noqa: SLF001
+        object.__setattr__(forged, "root", root)
+        object.__setattr__(forged, "require_binding", lambda: None)
+        with self.assertRaisesRegex(TypeError, "invalid"):
+            generic_runtime._WindowsRuntimeTreeApi._share_mode_for(forged)  # noqa: SLF001
+
     def test_runtime_stage_capability_is_root_bound_and_mutation_sensitive(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wf-runtime-stage-capability-") as temporary:
             root = Path(temporary) / "stage"
             root.mkdir()
             (root / "kernel.py").write_bytes(b"VALUE = 1\n")
             binding_checks: list[int] = []
-            capability = generic_runtime._RuntimeStageReadCapability(  # noqa: SLF001
+            capability = generic_runtime._create_runtime_stage_read_capability(  # noqa: SLF001
                 root=root,
                 require_binding=lambda: binding_checks.append(len(binding_checks) + 1),
             )
@@ -266,7 +276,7 @@ class GameRuntimeBundleContractTests(unittest.TestCase):
             self.assertEqual(b"VALUE = 1\n", captured["gamepack_runtime/kernel.py"])
             self.assertEqual([1, 2], binding_checks)
 
-            crossed = generic_runtime._RuntimeStageReadCapability(  # noqa: SLF001
+            crossed = generic_runtime._create_runtime_stage_read_capability(  # noqa: SLF001
                 root=root / "other",
                 require_binding=lambda: None,
             )
@@ -287,7 +297,7 @@ class GameRuntimeBundleContractTests(unittest.TestCase):
                 if mutation_checks == 2:
                     raise DirectoryPublishError("retained stage binding changed")
 
-            mutation_capability = generic_runtime._RuntimeStageReadCapability(  # noqa: SLF001
+            mutation_capability = generic_runtime._create_runtime_stage_read_capability(  # noqa: SLF001
                 root=root,
                 require_binding=reject_mutation,
             )
@@ -304,11 +314,6 @@ class GameRuntimeBundleContractTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory(prefix="wf-runtime-stage-scope-") as temporary:
             root = Path(temporary) / "stage"
-            root.mkdir()
-            writer = object.__new__(RetainedStageWriter)
-            writer.stage = root
-            require_binding = mock.Mock()
-            writer.require_binding = require_binding  # type: ignore[method-assign]
             observed: list[object | None] = []
 
             def stop_capture(
@@ -322,19 +327,55 @@ class GameRuntimeBundleContractTests(unittest.TestCase):
                 observed.append(stage_capability)
                 raise _CaptureStopped
 
+            forged = object.__new__(RetainedStageWriter)
+            forged.stage = root
+            forged.require_binding = lambda: None  # type: ignore[method-assign]
             with (
                 mock.patch.object(
                     game_runtime_bundle_module,
                     "_capture_bundle_tree",
                     side_effect=stop_capture,
                 ),
-                self.assertRaises(_CaptureStopped),
+                self.assertRaisesRegex(
+                    GameRuntimeBundleError,
+                    "game_runtime_bundle_stage_capability_invalid",
+                ),
             ):
                 verify_game_runtime_bundle(
                     root,
-                    _retained_stage_writer=writer,
+                    _retained_stage_writer=forged,
                 )
-            self.assertEqual(1, require_binding.call_count)
+            with self.assertRaisesRegex(
+                GameRuntimeBundleError,
+                "game_runtime_bundle_stage_capability_invalid",
+            ):
+                verify_game_runtime_bundle(
+                    root,
+                    _retained_stage_writer=object(),  # type: ignore[arg-type]
+                )
+
+            with create_retained_stage(root) as writer:
+                with (
+                    mock.patch.object(
+                        game_runtime_bundle_module,
+                        "_capture_bundle_tree",
+                        side_effect=stop_capture,
+                    ),
+                    self.assertRaises(_CaptureStopped),
+                ):
+                    verify_game_runtime_bundle(
+                        root,
+                        _retained_stage_writer=writer,
+                    )
+                with self.assertRaisesRegex(
+                    GameRuntimeBundleError,
+                    "game_runtime_bundle_stage_capability_invalid",
+                ):
+                    verify_game_runtime_bundle(
+                        root / "crossed",
+                        _retained_stage_writer=writer,
+                    )
+
             self.assertEqual(1, len(observed))
             capability = observed[0]
             self.assertIsInstance(
@@ -343,6 +384,15 @@ class GameRuntimeBundleContractTests(unittest.TestCase):
             )
             assert isinstance(capability, generic_runtime._RuntimeStageReadCapability)  # noqa: SLF001
             self.assertEqual(root, capability.root)
+
+            with self.assertRaisesRegex(
+                GameRuntimeBundleError,
+                "game_runtime_bundle_stage_capability_invalid",
+            ):
+                verify_game_runtime_bundle(
+                    root,
+                    _retained_stage_writer=writer,
+                )
 
             with (
                 mock.patch.object(
@@ -354,15 +404,6 @@ class GameRuntimeBundleContractTests(unittest.TestCase):
             ):
                 verify_game_runtime_bundle(root)
             self.assertIsNone(observed[-1])
-
-            with self.assertRaisesRegex(
-                GameRuntimeBundleError,
-                "game_runtime_bundle_stage_capability_invalid",
-            ):
-                verify_game_runtime_bundle(
-                    root / "crossed",
-                    _retained_stage_writer=writer,
-                )
 
     def test_publication_scopes_stage_capability_away_from_published_verification(
         self,
