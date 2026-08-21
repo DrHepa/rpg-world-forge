@@ -13,7 +13,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import worldforge.generic_runtime as generic_runtime
+import worldforge.standalone_game as standalone_game_module
 from gamepack_runtime.distribution import (
+    GAME_LOCK_PATH,
+    GAME_MANIFEST_PATH,
+    PLATFORM_LOCK_PATH,
+    RUNTIME_BUNDLE_ROOT,
     canonical_contract_bytes,
     canonical_contract_hash,
 )
@@ -22,6 +28,11 @@ from gamepack_runtime.headless import (
     serialize_game_execution_script,
 )
 from tests.test_multigenre_materialization_contracts import _fixture, _runtime_bundle
+from worldforge.directory_publish import (
+    DirectoryPublishError,
+    RetainedStageWriter,
+    create_retained_stage,
+)
 from worldforge.game_materialization_bundle import build_game_materialization_bundle
 from worldforge.integrity import canonical_json_bytes
 from worldforge.repository_boundary import repository_kind
@@ -118,6 +129,241 @@ def _ready_materialization(name: str, root: Path):
 
 
 class StandaloneMaterializationTests(unittest.TestCase):
+    def test_standalone_verifier_scopes_nested_runtime_capture_to_retained_subroot(
+        self,
+    ) -> None:
+        class _NestedStopped(RuntimeError):
+            pass
+
+        with tempfile.TemporaryDirectory(prefix="wf-standalone-nested-stage-") as temporary:
+            root = Path(temporary)
+            with _ready_materialization("abstract-puzzle", root) as source:
+                payload, manifest, lock, platform = standalone_game_module._build_payload(  # noqa: SLF001
+                    source
+                )
+            stage = root / "stage"
+            all_files = {
+                GAME_MANIFEST_PATH: canonical_contract_bytes(manifest),
+                GAME_LOCK_PATH: canonical_contract_bytes(lock),
+                PLATFORM_LOCK_PATH: canonical_contract_bytes(platform),
+                **payload,
+            }
+            observed: list[tuple[Path, object | None]] = []
+
+            def stop_nested(root_arg: str | Path, **kwargs: object) -> object:
+                observed.append(
+                    (
+                        Path(os.path.abspath(os.fspath(root_arg))),
+                        kwargs.get("_stage_capability"),
+                    )
+                )
+                raise _NestedStopped
+
+            with create_retained_stage(stage) as writer:
+                for relative, payload_bytes in all_files.items():
+                    writer.write_file(relative, payload_bytes)
+                writer.fsync()
+                with (
+                    mock.patch.object(
+                        standalone_game_module,
+                        "_verify_game_runtime_bundle_with_stage_capability",
+                        side_effect=stop_nested,
+                        create=True,
+                    ),
+                    self.assertRaises(_NestedStopped),
+                ):
+                    verify_standalone_game(
+                        stage,
+                        expected_content_hash=manifest["content_hash"],
+                        _retained_stage_writer=writer,
+                    )
+
+            self.assertEqual(1, len(observed))
+            nested_root, capability = observed[0]
+            self.assertEqual(stage / RUNTIME_BUNDLE_ROOT, nested_root)
+            self.assertIsInstance(
+                capability,
+                generic_runtime._RuntimeStageReadCapability,  # noqa: SLF001
+            )
+            assert isinstance(capability, generic_runtime._RuntimeStageReadCapability)  # noqa: SLF001
+            self.assertEqual(nested_root, capability.root)
+            share_mode = generic_runtime._WindowsRuntimeTreeApi._share_mode_for(  # noqa: SLF001
+                capability
+            )
+            self.assertEqual(0x00000003, share_mode)
+            self.assertEqual(0, share_mode & 0x00000004)
+
+    def test_standalone_verifier_requires_active_outer_stage_writer(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-standalone-stage-authority-") as temporary:
+            root = Path(temporary)
+            with _ready_materialization("abstract-puzzle", root) as source:
+                payload, manifest, lock, platform = standalone_game_module._build_payload(  # noqa: SLF001
+                    source
+                )
+            stage = root / "stage"
+            all_files = {
+                GAME_MANIFEST_PATH: canonical_contract_bytes(manifest),
+                GAME_LOCK_PATH: canonical_contract_bytes(lock),
+                PLATFORM_LOCK_PATH: canonical_contract_bytes(platform),
+                **payload,
+            }
+            with create_retained_stage(stage) as writer:
+                for relative, payload_bytes in all_files.items():
+                    writer.write_file(relative, payload_bytes)
+                writer.fsync()
+                crossed = root / "crossed-stage"
+                shutil.copytree(stage, crossed)
+
+                forged = object.__new__(RetainedStageWriter)
+                forged.stage = stage
+                forged.require_binding = lambda: None  # type: ignore[method-assign]
+                for candidate, root_arg in (
+                    (forged, stage),
+                    (object(), stage),
+                    (writer, crossed),
+                ):
+                    with self.subTest(candidate=type(candidate).__name__, root=root_arg):
+                        with self.assertRaisesRegex(
+                            StandaloneGameError,
+                            "standalone_game_stage_capability_invalid",
+                        ):
+                            verify_standalone_game(
+                                root_arg,
+                                _retained_stage_writer=candidate,  # type: ignore[arg-type]
+                            )
+
+            with self.assertRaisesRegex(
+                StandaloneGameError,
+                "standalone_game_stage_capability_invalid",
+            ):
+                verify_standalone_game(stage, _retained_stage_writer=writer)
+
+    def test_standalone_nested_runtime_rechecks_writer_after_verification(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-standalone-nested-mutation-") as temporary:
+            root = Path(temporary)
+            outer_stage = root / "stage"
+            nested_root = outer_stage / RUNTIME_BUNDLE_ROOT
+            mutation_checks = 0
+            real_authority = RetainedStageWriter._require_active_binding  # noqa: SLF001
+
+            def reject_post_nested_mutation(
+                writer: object,
+                *,
+                expected_stage: Path,
+            ) -> None:
+                nonlocal mutation_checks
+                mutation_checks += 1
+                real_authority(writer, expected_stage=expected_stage)
+                if mutation_checks == 2:
+                    raise DirectoryPublishError("retained standalone stage changed")
+
+            class VerifiedNested:
+                manifest = {}
+                files = {}
+
+                def close(self) -> None:
+                    pass
+
+            with create_retained_stage(outer_stage) as writer:
+                with (
+                    mock.patch.object(
+                        RetainedStageWriter,
+                        "_require_active_binding",
+                        side_effect=reject_post_nested_mutation,
+                    ),
+                    mock.patch.object(
+                        standalone_game_module,
+                        "_verify_game_runtime_bundle_with_stage_capability",
+                        return_value=VerifiedNested(),
+                    ) as nested_verify,
+                    self.assertRaisesRegex(
+                        StandaloneGameError,
+                        "standalone_game_stage_capability_invalid",
+                    ),
+                ):
+                    standalone_game_module._verify_nested_runtime_bundle_from_retained_standalone_stage(  # noqa: SLF001
+                        nested_root,
+                        expected_content_hash="0" * 64,
+                        expected_outer_stage=outer_stage,
+                        _retained_stage_writer=writer,
+                    )
+
+            nested_verify.assert_called_once()
+            self.assertEqual(2, mutation_checks)
+
+    def test_standalone_nested_runtime_rejects_wrong_retained_subroot(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-standalone-nested-cross-root-") as temporary:
+            root = Path(temporary)
+            outer_stage = root / "stage"
+            wrong_nested_root = outer_stage / "wrong-runtime-bundle"
+
+            with create_retained_stage(outer_stage) as writer:
+                with (
+                    mock.patch.object(
+                        standalone_game_module,
+                        "_verify_game_runtime_bundle_with_stage_capability",
+                        side_effect=AssertionError("wrong nested root reached runtime verifier"),
+                    ),
+                    self.assertRaisesRegex(
+                        StandaloneGameError,
+                        "standalone_game_stage_capability_invalid",
+                    ),
+                ):
+                    standalone_game_module._verify_nested_runtime_bundle_from_retained_standalone_stage(  # noqa: SLF001
+                        wrong_nested_root,
+                        expected_content_hash="0" * 64,
+                        expected_outer_stage=outer_stage,
+                        _retained_stage_writer=writer,
+                    )
+
+    def test_public_standalone_verifier_rejects_raw_stage_capability(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-standalone-raw-cap-public-") as temporary:
+            root = Path(temporary) / "stage"
+            capability = generic_runtime._create_runtime_stage_read_capability(  # noqa: SLF001
+                root=root / RUNTIME_BUNDLE_ROOT,
+                require_binding=lambda: None,
+            )
+            with self.assertRaises(TypeError):
+                verify_standalone_game(
+                    root,
+                    _stage_capability=capability,  # type: ignore[call-arg]
+                )
+
+    def test_materialization_scopes_stage_capability_to_private_verification_only(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-standalone-stage-calls-") as temporary:
+            root = Path(temporary)
+            target = root / "game"
+            with _ready_materialization("abstract-puzzle", root) as source:
+                original = standalone_game_module.verify_standalone_game
+                with mock.patch.object(
+                    standalone_game_module,
+                    "verify_standalone_game",
+                    wraps=original,
+                ) as verify_calls:
+                    verified = materialize_game(source.root, target)
+                    verified.close()
+
+            stage_calls = [
+                call
+                for call in verify_calls.call_args_list
+                if call.kwargs.get("_retained_stage_writer") is not None
+            ]
+            self.assertEqual(1, len(stage_calls))
+            writer = stage_calls[0].kwargs["_retained_stage_writer"]
+            self.assertIs(type(writer), RetainedStageWriter)
+            self.assertEqual(Path(os.path.abspath(stage_calls[0].args[0])), writer.stage)
+            strict_destination_calls = [
+                call
+                for call in verify_calls.call_args_list
+                if Path(os.path.abspath(call.args[0])) == target
+                and call.kwargs.get("_retained_stage_writer") is None
+            ]
+            self.assertGreaterEqual(len(strict_destination_calls), 2)
+
     def test_package_launcher_keeps_its_argument_parser_boundary(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wf-package-launcher-parser-") as temporary:
             script = Path(temporary) / "scripts/package_game.py"

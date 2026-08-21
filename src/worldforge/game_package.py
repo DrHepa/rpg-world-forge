@@ -1737,6 +1737,7 @@ def extract_game_package(
                     verified_stage = verify_standalone_game(
                         stage,
                         expected_content_hash=package_manifest["standalone_game"]["content_hash"],
+                        _retained_stage_writer=writer,
                     )
                 except StandaloneGameError as exc:
                     _fail("game_package_extraction_failed", str(exc))

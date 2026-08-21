@@ -51,6 +51,7 @@ from worldforge.directory_publish import (
     DirectoryPublishError,
     DirectoryPublishIndeterminateError,
     DirectoryPublishRecoveryRequiredError,
+    RetainedStageWriter,
     append_append_only_journal,
     create_append_only_journal,
     create_retained_stage,
@@ -76,7 +77,12 @@ from worldforge.game_materialization_bundle import (
 from worldforge.game_runtime_bundle import (
     GAME_RUNTIME_BUNDLE_MANIFEST,
     GameRuntimeBundleError,
+    _verify_game_runtime_bundle_with_stage_capability,
     verify_game_runtime_bundle,
+)
+from worldforge.generic_runtime import (
+    _create_runtime_stage_read_capability,
+    _RuntimeStageReadCapability,
 )
 from worldforge.repository_boundary import FORGE_ROOT, repository_kind
 from worldforge.runtime_implementation import (
@@ -529,11 +535,65 @@ def require_standalone_materialization_source(
     return verified
 
 
+def _standalone_runtime_stage_read_capability(
+    writer: object,
+    *,
+    expected_stage: Path,
+    capability_root: Path,
+) -> _RuntimeStageReadCapability:
+    def require_stage_binding() -> None:
+        try:
+            RetainedStageWriter._require_active_binding(  # noqa: SLF001
+                writer,
+                expected_stage=expected_stage,
+            )
+        except DirectoryPublishError as exc:
+            _fail("standalone_game_stage_capability_invalid", str(exc))
+
+    require_stage_binding()
+    return _create_runtime_stage_read_capability(
+        root=capability_root,
+        require_binding=require_stage_binding,
+    )
+
+
+def _verify_nested_runtime_bundle_from_retained_standalone_stage(
+    nested_root: str | Path,
+    *,
+    expected_content_hash: str,
+    expected_outer_stage: str | Path,
+    _retained_stage_writer: RetainedStageWriter,
+) -> object:
+    outer_stage = Path(os.path.abspath(os.fspath(expected_outer_stage)))
+    nested_root_path = Path(os.path.abspath(os.fspath(nested_root)))
+    if nested_root_path != outer_stage / RUNTIME_BUNDLE_ROOT:
+        _fail(
+            "standalone_game_stage_capability_invalid",
+            "nested runtime bundle root does not bind the standalone stage",
+        )
+    stage_capability = _standalone_runtime_stage_read_capability(
+        _retained_stage_writer,
+        expected_stage=outer_stage,
+        capability_root=nested_root_path,
+    )
+    try:
+        nested = _verify_game_runtime_bundle_with_stage_capability(
+            nested_root_path,
+            expected_content_hash=expected_content_hash,
+            _stage_capability=stage_capability,
+        )
+    finally:
+        stage_capability.require_binding()
+    stage_capability.require_binding()
+    return nested
+
+
 def verify_standalone_game(
     root: str | Path,
     *,
     expected_content_hash: str | None = None,
     expected_root_identity: DirectoryIdentity | None = None,
+    _retained_stage_writer: RetainedStageWriter | None = None,
 ) -> VerifiedStandaloneGame:
     root_path = Path(os.path.abspath(os.fspath(root)))
     try:
@@ -583,10 +643,19 @@ def verify_standalone_game(
             "standalone game manifest does not match the expected hash",
         )
     try:
-        nested = verify_game_runtime_bundle(
-            root_path / RUNTIME_BUNDLE_ROOT,
-            expected_content_hash=manifest["lineage"]["runtime_bundle_hash"],
-        )
+        runtime_root = root_path / RUNTIME_BUNDLE_ROOT
+        if _retained_stage_writer is not None:
+            nested = _verify_nested_runtime_bundle_from_retained_standalone_stage(
+                runtime_root,
+                expected_content_hash=manifest["lineage"]["runtime_bundle_hash"],
+                expected_outer_stage=root_path,
+                _retained_stage_writer=_retained_stage_writer,
+            )
+        else:
+            nested = verify_game_runtime_bundle(
+                runtime_root,
+                expected_content_hash=manifest["lineage"]["runtime_bundle_hash"],
+            )
     except GameRuntimeBundleError as exc:
         _fail("standalone_game_runtime_bundle_invalid", str(exc))
     try:
@@ -1985,6 +2054,7 @@ def materialize_game(
                 verified_stage = verify_standalone_game(
                     stage,
                     expected_content_hash=manifest["content_hash"],
+                    _retained_stage_writer=writer,
                 )
                 try:
                     _journal_matches_game(journal, verified_stage, destination_path)

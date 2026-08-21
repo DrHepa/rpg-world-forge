@@ -22,6 +22,7 @@ from collections.abc import Callable
 from pathlib import Path
 from unittest import mock
 
+import worldforge.game_package as game_package_module
 from gamepack_runtime.distribution import (
     GAME_LOCK_PATH,
     GAME_MANIFEST_PATH,
@@ -42,6 +43,7 @@ from gamepack_runtime.persistence_io import (
     publish_bytes_noreplace,
 )
 from tests.test_multigenre_standalone_materialization import _ready_materialization
+from worldforge.directory_publish import RetainedStageWriter
 from worldforge.game_package import (
     WorldForgeGamePackageError,
     extract_game_package,
@@ -106,6 +108,43 @@ def _reseal_package_manifest(document: dict[str, object]) -> None:
 
 
 class GenericGamePackageTests(unittest.TestCase):
+    def test_extraction_scopes_standalone_stage_capability_to_private_verification_only(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(prefix="wf-package-extract-stage-calls-") as temporary:
+            root = Path(temporary)
+            destination = root / "extracted"
+            with _standalone("abstract-puzzle", root) as (game, _verified):
+                package_path = root / "puzzle.wfgame"
+                built = build_game_package_from_standalone(game)
+                package_path.write_bytes(built.archive_bytes)
+
+            original = game_package_module.verify_standalone_game
+            with mock.patch.object(
+                game_package_module,
+                "verify_standalone_game",
+                wraps=original,
+            ) as verify_calls:
+                verified = extract_game_package(package_path, destination)
+                verified.close()
+
+            stage_calls = [
+                call
+                for call in verify_calls.call_args_list
+                if call.kwargs.get("_retained_stage_writer") is not None
+            ]
+            self.assertEqual(1, len(stage_calls))
+            writer = stage_calls[0].kwargs["_retained_stage_writer"]
+            self.assertIs(type(writer), RetainedStageWriter)
+            self.assertEqual(Path(os.path.abspath(stage_calls[0].args[0])), writer.stage)
+            strict_destination_calls = [
+                call
+                for call in verify_calls.call_args_list
+                if Path(os.path.abspath(call.args[0])) == destination
+                and call.kwargs.get("_retained_stage_writer") is None
+            ]
+            self.assertGreaterEqual(len(strict_destination_calls), 2)
+
     def test_cli_surfaces_return_closed_machine_readable_reports(self) -> None:
         from worldforge.__main__ import main
 
