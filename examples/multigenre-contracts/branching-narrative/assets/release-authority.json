@@ -1,6 +1,6 @@
 {
   "authority": {
-    "artifact_snapshot_hash": "b126d4dc04779edff702cdd51cfb2bcfcdd708b2d4c286b1cd8d21f3b1e6323d",
+    "artifact_snapshot_hash": "14dcd23efe66e0f0989429f57ac5439d3cdab1de522a7dfce344fda7d1a3a9a5",
     "producer_job_id": "fixture-branching-narrative-release",
     "producer_operation": "asset.release.authorize",
     "producer_output_position": 0,
@@ -11,23 +11,23 @@
   },
   "blockers": [],
   "candidate_assetpack": {
-    "content_hash": "701172c30368f4402374933c0e90de4eb728598ffa6183d5ceaa4e0fbe311d92",
+    "content_hash": "aefa3e6f22552df744ee3ce18863f95cde5dfa5bf86782f42364a895bc360996",
     "format": "world-forge.assetpack",
     "format_version": 1,
-    "id": "assetpack_2fa07ae6550c8579f94dc75d60c7076434dfb9a60186f339"
+    "id": "assetpack_4906b6a39e5e46d35bf40715881eca85469825c38991da02"
   },
   "candidate_manifest": {
-    "content_hash": "5295588e1c29c550301ff101a775c9a073cfe4690e41919d77b6dfcca54f6968",
+    "content_hash": "222f9f7e12dacdc1f58b967472186fc04c740194bb041ee207c1599000be8007",
     "format": "world-forge.asset_manifest",
     "format_version": 1,
     "id": "branching_narrative_asset_manifest"
   },
-  "content_hash": "158d97f37a2ab8cbe822c8b67fb21d745221098433a2e6b9880a10c7962e7fd6",
+  "content_hash": "1000154fc8595a8770eb2ed326418298d10b065858fd9c7f82905efda7862a79",
   "format": "world-forge.asset_release_authority",
   "format_version": 1,
   "qa_reviews": [
     {
-      "content_hash": "4a164a0409f77a489d6784b2ada1df29a20be93c8e6d7f30e08e794ff4d2df01",
+      "content_hash": "9979c061e9785e723ec1921f976d56edb8e271041c2b105c6897f5f6c3affdb4",
       "format": "world-forge.asset_qa_review_receipt",
       "format_version": 1,
       "id": "branching_narrative_font_qa_review"

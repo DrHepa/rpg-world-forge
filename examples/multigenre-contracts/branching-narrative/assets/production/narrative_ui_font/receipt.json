@@ -9,7 +9,7 @@
     "format_version": 1,
     "id": "asset_subject_efe08b26fd743010caa1e27f472b67300594df87e3b955da"
   },
-  "content_hash": "302cd0ba724b01d2ed8333845f28042e93155750288959428567a33967432971",
+  "content_hash": "ad1bc33a9600c92f9f3dec8ce72dc227863e981d460a99b7c5fde700dc76257b",
   "executed_toolchain": {
     "operation_id": "generate_font",
     "production_class": "procedural_offline",
@@ -21,13 +21,13 @@
     "completed_evidence_hash": "916c6661bb9caab827aee0995c9eac207e3fa9643259fb25640ea90d9de24686",
     "sanitized_log_hashes": [
       "0653c2019c88c258c9b68d648124d61c2a5172d84973b5b759fdab856860ee9a",
-      "2374d20c720bca0b5b7ffc217ac48ed17d457994afeec3222541ba8942e6da53",
       "a1aecc0883c7fd0153aecdb75a5ed6567665ba50f4adfc87350e424997121014",
       "a28ba11e72b75a857b4b37e42a16c3ba74dd188d084c83a49be8cf241e6142db",
+      "c3fc0de562eb6ce8f0bfc87e3537941ad21c6b66b97d3343174ff1081fe54358",
       "ceebdc9033fa0d1e5b6321f4029555b01f8ed4cc9c27fc595a79d0333e538b00",
       "d7b89c0f08d6ba8d91c6585553a1e555215fd5063fb60d699bc2f93220626d65"
     ],
-    "started_evidence_hash": "1c43e0720146f9039935f7d18393340303c6524865f37177692ccbfe6e5d0970"
+    "started_evidence_hash": "8c8e314b9e68642ee8990bce52b536c86153d304963490557f457c1ad442d236"
   },
   "failure_reasons": [],
   "format": "world-forge.asset_production_receipt",
@@ -68,7 +68,7 @@
   "production_class": "procedural_offline",
   "receipt_id": "narrative_ui_font_receipt",
   "request": {
-    "content_hash": "6ae7b43a97edadaf6488542fe9d37ad40cf9ca3f15a2b12e10435df1dabc6168",
+    "content_hash": "61421a3932fd9c8ae15d0271766bce1db66fc7362628bb206ce845b51e97b5b5",
     "format": "world-forge.asset_production_request",
     "format_version": 1,
     "id": "narrative_ui_font_production"
@@ -80,10 +80,10 @@
     ]
   },
   "specification": {
-    "content_hash": "c4f43e0b3946a41d06acdb5d38592e46cd639ac7a4186131ef1a59581059e06c",
+    "content_hash": "9025166a64c632c39544d3af7fd7aac4e0dd02747f1d8412812d215d5953d046",
     "format": "world-forge.asset_spec",
     "format_version": 1,
-    "id": "asset_spec_33a7372ab32b16c2841f4319ca650431650f26b2eb864d96"
+    "id": "asset_spec_5662fcc080fbbc98ad86c6afb23de46ffcad7e12eeaa6131"
   },
   "status": "completed",
   "style": {

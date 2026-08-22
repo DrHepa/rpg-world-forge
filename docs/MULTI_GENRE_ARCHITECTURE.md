@@ -759,11 +759,14 @@ The abstract-puzzle proof uses a deterministic high-contrast PNG. The branching
 narrative proof uses a project-authored readable 5x7 outline TTF. Printable
 ASCII maps to distinct glyph IDs, blank space remains blank with advance,
 non-space outlines are bounded and nonblank, critical lookalike pairs differ,
-and pinned Pillow rendered masks cover every fixture string. The glyph design
-and emitted font bytes are CC0-1.0 while the generator stays MIT. Both have
-specification, request, receipt, human selection evidence, exact provenance and
-license evidence, deterministic processing, retained-byte QA, and a
-release-readiness manifest. They remain unsealed authoring artifacts. A bounded
+and deterministic authored-design masks cover every fixture string under the
+versioned `narrative-fixture-design-mask-evidence-v2` domain. Pillow rendering
+is only an explicit BASIC-layout diagnostic smoke, not release hash evidence
+and not dependent on RAQM availability. The glyph design and emitted font bytes
+are CC0-1.0 while the generator stays MIT. Both have specification, request,
+receipt, human selection evidence, exact provenance and license evidence,
+deterministic processing, retained-byte QA with opaque sorted evidence hashes,
+and a release-readiness manifest. They remain unsealed authoring artifacts. A bounded
 integration matrix additionally proves complete D2a chains for PNG, atlas
 PNG/JSON, WAV, TTF, OTF, paired GLSL, schema JSON, GLB, and paired GLB. The
 matrix covers all four production classes and both source-input states, and

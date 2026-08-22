@@ -1026,12 +1026,12 @@
     },
     {
       "category": "legacy_contract",
-      "file_sha256": "fd7b08de9d5f75e536f355d4cad7df8d685bf85437d53501fba16a6c8dab5a70",
+      "file_sha256": "6eef504c44cfeeaee93e7e66425a1ab4b8275b656eb35afce1ee9cf7094498ca",
       "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
       "offsets": [
-        17115,
-        17154,
-        35584
+        17467,
+        17506,
+        35936
       ],
       "path": "docs/ASSET_PIPELINE.md",
       "pattern": "rpg-world-forge"
@@ -1069,15 +1069,15 @@
     },
     {
       "category": "legacy_contract",
-      "file_sha256": "6937afd1ea8418001cf34d00ca1c4355a3aae0138ea94f6254353c146d5cab19",
+      "file_sha256": "86d76df425ef8b2f2cad3df91739c01847e63cd8f0437bf2c34a6f1d605eb1f1",
       "justification": "Published legacy format, schema, protocol, or storage identity remains immutable.",
       "offsets": [
         1031,
         1058,
         20838,
         33000,
-        46423,
-        49509
+        46670,
+        49756
       ],
       "path": "docs/MULTI_GENRE_ARCHITECTURE.md",
       "pattern": "rpg-world-forge"

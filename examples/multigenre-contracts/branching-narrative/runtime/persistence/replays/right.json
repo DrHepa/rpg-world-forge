@@ -15,16 +15,16 @@
       "version": "1.0.0"
     },
     "runtime_bundle": {
-      "content_hash": "40f35127e1dea436d05766f4d77a68766cd096d0db7eb20c7f0c39c5ac838c0f",
+      "content_hash": "bde898861c0866aa6a1aeead52e020aa64c29d01344a026942475a0ca7da5b86",
       "format": "world-forge.game_runtime_bundle",
       "format_version": 1,
-      "id": "game_runtime_bundle_e0567b163d38cc3782b9dc879e07d542e8f283b120ac3aa2"
+      "id": "game_runtime_bundle_7dad587d19bacc7defd14aca6a3e3d5389d2b9dd6108eb41"
     },
     "runtime_composition": {
-      "content_hash": "d84191936167d3bbae66c75676ec84736d493eb933ebd219fcf1255fd2e90486",
+      "content_hash": "e14aedb8fa4089900fc936b590d1c0e6fb858ab3d1a3dd16ec1817d1e2fc9e49",
       "format": "world-forge.game_runtime_composition",
       "format_version": 1,
-      "id": "runtime_composition_92741f00f242c9c6312486ec9b145f2be2cdd7e2"
+      "id": "runtime_composition_60b6ffd996c8567c0a34d619f7e01de317e0aa4b"
     }
   },
   "classification": {
@@ -39,12 +39,12 @@
     "recovery_action_ids": [],
     "terminal": true
   },
-  "content_hash": "165b08d37295b158cfc015d0673dc704757205fa82e66ef553916b1ecc635bef",
+  "content_hash": "0e1cf51c93b8cac0abd9781f95308e820a073353cbecfbfd683a11b9e5140f26",
   "final_state_hash": "a91e46da8e98f6b24bc1add282a76463426477e08d5ab7a0cca5d2df27e23a89",
   "format": "world-forge.game_replay",
   "format_version": 1,
   "initial_state_hash": "d36c421fcde1dac5f68bc059902364d5216106f1057e891ab1984aea96204093",
-  "replay_id": "game_replay_02c615ae4ecc7222e820cbd50bc09dbcdbad4d232c79f2b2",
+  "replay_id": "game_replay_9d532a0e28b08bee666c470c60430aefdc94edba7fa4dcfd",
   "steps": [
     {
       "action_id": "choose_right",

@@ -7,12 +7,12 @@
   },
   "compatibility_status": "partially_supported",
   "composition": {
-    "content_hash": "d84191936167d3bbae66c75676ec84736d493eb933ebd219fcf1255fd2e90486",
+    "content_hash": "e14aedb8fa4089900fc936b590d1c0e6fb858ab3d1a3dd16ec1817d1e2fc9e49",
     "format": "world-forge.game_runtime_composition",
     "format_version": 1,
-    "id": "runtime_composition_92741f00f242c9c6312486ec9b145f2be2cdd7e2"
+    "id": "runtime_composition_60b6ffd996c8567c0a34d619f7e01de317e0aa4b"
   },
-  "content_hash": "9fc3d84258e1eb4d7fc63251500cf89d16ca98bb08a64642061936881090ed0a",
+  "content_hash": "6a3db78e1a455dddb2d3522a241d105abebdeda751ea38cde8f4ddc69ff97860",
   "dimensions": {
     "adapter": "declared",
     "assets": "sealed",
@@ -174,6 +174,6 @@
     "packaging_evidence_missing",
     "save_replay_evidence_missing"
   ],
-  "report_id": "runtime_support_5c2a3f84776ea950468508d8122c5b13efb226ad",
+  "report_id": "runtime_support_72a3dc46bcbed187fd2db192780da6ffdb4ba5b3",
   "supported": false
 }

@@ -790,9 +790,9 @@ class GenericAssetAuthorityTests(unittest.TestCase):
                 5826,
             ),
             "branching-narrative": (
-                "cd66e3b4d338bfe8588348ec660cbc6892f7af0a2cb9def8809d823bda88a612",
+                "9829d73019d19ee7579c8444794d52ceb93ff9b916b1111ef1e54ba03b381dd1",
                 4360,
-                "fe8161f168a4e3cefe0a9c2d91c16d9cb20e77e98713191bb30e9ea17968395d",
+                "6ab08b81201b108d02b06fdd221189493ba40b4904bdfc068440d7ce74fb4eb5",
                 6050,
             ),
             "action-framing": (

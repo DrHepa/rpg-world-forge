@@ -12,12 +12,12 @@
     "id": "asset_inventory_aad1ff36087fa98580e94a50251becee8573446a82f94644"
   },
   "assetpack": {
-    "content_hash": "701172c30368f4402374933c0e90de4eb728598ffa6183d5ceaa4e0fbe311d92",
+    "content_hash": "aefa3e6f22552df744ee3ce18863f95cde5dfa5bf86782f42364a895bc360996",
     "format": "world-forge.assetpack",
     "format_version": 1,
-    "id": "assetpack_2fa07ae6550c8579f94dc75d60c7076434dfb9a60186f339",
+    "id": "assetpack_4906b6a39e5e46d35bf40715881eca85469825c38991da02",
     "inventory_hash": "1e9be232a798b147cd4b61d66f28debdb9875c432ce5f80b962c8f854931b1ed",
-    "root_hash": "97529a8323772ffe48f31aad2f0ac72465b1bbfc517b8b4a3cfa7af465466fe8"
+    "root_hash": "c87bd710a0e72b2657ec962e4c40195b0adbb56669c4005232fa54b77d23fb87"
   },
   "bindings": [
     {
@@ -39,8 +39,8 @@
       "size_bytes": 28748
     }
   ],
-  "composition_id": "runtime_composition_92741f00f242c9c6312486ec9b145f2be2cdd7e2",
-  "content_hash": "d84191936167d3bbae66c75676ec84736d493eb933ebd219fcf1255fd2e90486",
+  "composition_id": "runtime_composition_60b6ffd996c8567c0a34d619f7e01de317e0aa4b",
+  "content_hash": "e14aedb8fa4089900fc936b590d1c0e6fb858ab3d1a3dd16ec1817d1e2fc9e49",
   "format": "world-forge.game_runtime_composition",
   "format_version": 1,
   "gamepack": {

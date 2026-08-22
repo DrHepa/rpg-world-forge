@@ -12,27 +12,27 @@
     "id": "asset_inventory_aad1ff36087fa98580e94a50251becee8573446a82f94644"
   },
   "asset_release_authority": {
-    "content_hash": "158d97f37a2ab8cbe822c8b67fb21d745221098433a2e6b9880a10c7962e7fd6",
+    "content_hash": "1000154fc8595a8770eb2ed326418298d10b065858fd9c7f82905efda7862a79",
     "format": "world-forge.asset_release_authority",
     "format_version": 1,
     "id": "branching_narrative_asset_release"
   },
   "assetpack": {
-    "content_hash": "701172c30368f4402374933c0e90de4eb728598ffa6183d5ceaa4e0fbe311d92",
+    "content_hash": "aefa3e6f22552df744ee3ce18863f95cde5dfa5bf86782f42364a895bc360996",
     "format": "world-forge.assetpack",
     "format_version": 1,
-    "id": "assetpack_2fa07ae6550c8579f94dc75d60c7076434dfb9a60186f339",
+    "id": "assetpack_4906b6a39e5e46d35bf40715881eca85469825c38991da02",
     "inventory_hash": "1e9be232a798b147cd4b61d66f28debdb9875c432ce5f80b962c8f854931b1ed",
-    "root_hash": "97529a8323772ffe48f31aad2f0ac72465b1bbfc517b8b4a3cfa7af465466fe8"
+    "root_hash": "c87bd710a0e72b2657ec962e4c40195b0adbb56669c4005232fa54b77d23fb87"
   },
-  "authority_id": "runtime_authority_1395d98f81947b27671cfa882d318cea44558c0c",
+  "authority_id": "runtime_authority_723486103f17790ae947ac7a8d3c3ce3eee27fe7",
   "composition": {
-    "content_hash": "d84191936167d3bbae66c75676ec84736d493eb933ebd219fcf1255fd2e90486",
+    "content_hash": "e14aedb8fa4089900fc936b590d1c0e6fb858ab3d1a3dd16ec1817d1e2fc9e49",
     "format": "world-forge.game_runtime_composition",
     "format_version": 1,
-    "id": "runtime_composition_92741f00f242c9c6312486ec9b145f2be2cdd7e2"
+    "id": "runtime_composition_60b6ffd996c8567c0a34d619f7e01de317e0aa4b"
   },
-  "content_hash": "72656cfe9b80443b3595bbf9b66dd8441c5f4a202c56b8c1cf9ba640d164abc5",
+  "content_hash": "5ae6c2534a453ffc506722c496fe70db7395715e694b50ff3a36164604a8af7a",
   "format": "world-forge.runtime_support_authority",
   "format_version": 1,
   "gamepack": {
@@ -68,10 +68,10 @@
   },
   "runtime_support_report": {
     "compatibility_status": "partially_supported",
-    "content_hash": "9fc3d84258e1eb4d7fc63251500cf89d16ca98bb08a64642061936881090ed0a",
+    "content_hash": "6a3db78e1a455dddb2d3522a241d105abebdeda751ea38cde8f4ddc69ff97860",
     "format": "world-forge.runtime_support_report",
     "format_version": 1,
-    "id": "runtime_support_5c2a3f84776ea950468508d8122c5b13efb226ad",
+    "id": "runtime_support_72a3dc46bcbed187fd2db192780da6ffdb4ba5b3",
     "packaging_status": "unverified",
     "release_status": "blocked",
     "supported": false

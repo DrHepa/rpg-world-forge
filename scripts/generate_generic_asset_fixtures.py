@@ -130,10 +130,7 @@ ASSET_FIXTURES: dict[str, dict[str, Any]] = {
             "Choice and ending text use the same reviewed font bytes.",
             "Critical pairs O/0, I/l/1, S/5, B/8, Z/2 and G/6 remain visually distinct.",
             "Every non-space printable ASCII glyph has a bounded nonblank outline.",
-            (
-                "Every source-locale fixture string matches its pinned Pillow 12.3.0 "
-                "rendered-mask evidence."
-            ),
+            "Every source-locale fixture string matches its deterministic design-mask evidence.",
             "Printable ASCII U+0020-U+007E maps one code point to one distinct nonzero glyph ID.",
             "Space has a positive advance and no visible outline.",
         ),
@@ -221,26 +218,14 @@ NARRATIVE_FONT_FIXTURE_STRINGS = (
     "Right ending",
     "Select one authored option.",
 )
-NARRATIVE_FONT_RENDERED_MASK_SHA256 = {
-    "A visible choice": "8f971702da519edeab147fcc217945251863028335c887438a897c6be6572152",
-    "Branching Narrative": "468375697409d4df14a44e95649dccb1e776d2e2628d8e3caeb09d19af2044f7",
-    "Choose the left symbol": ("b285bf83bd34286a55920fde65482df4bbc2d82676b07f65a6669a8089aa82c9"),
-    "Choose the right symbol": ("6389324dcccbba43c2c1637b9b1e2239e0d8492458a7c4de4ff8de2881aebbf4"),
-    "Left ending": "926ab20f4811031ea84732b354388072b89193187498c09a102a62802d5a8c40",
-    "Neutral authored branching-choice logic": (
-        "fcdbe0ec07786eff6381730f05ff7c6c83fc748c787c09b0e89fcb10891b213b"
-    ),
-    "Neutral branching units": ("aafcb5c2a2d1d5c1fb352c871b44321ea309368c05140a3c4de920ff6319f6a1"),
-    "Right ending": "dc2cb33f53acb41c55950d195800f47d5aa0f9202e234cff97b942898edb969a",
-    "Select one authored option.": (
-        "965456cf83ac73a429befe60de4dee702f14ed276453e1fac247d34c3406909e"
-    ),
-}
+NARRATIVE_FONT_DESIGN_MASK_VERSION = "narrative-design-mask-v2"
+_NARRATIVE_FONT_ADVANCE = 600
+_NARRATIVE_FONT_LSB = 50
 _NARRATIVE_FONT_ACCEPTANCE_CRITERIA = (
     "Choice and ending text use the same reviewed font bytes.",
     ("Critical pairs O/0, I/l/1, S/5, B/8, Z/2 and G/6 remain visually distinct."),
     "Every non-space printable ASCII glyph has a bounded nonblank outline.",
-    ("Every source-locale fixture string matches its pinned Pillow 12.3.0 rendered-mask evidence."),
+    ("Every source-locale fixture string matches its deterministic design-mask evidence."),
     ("Printable ASCII U+0020-U+007E maps one code point to one distinct nonzero glyph ID."),
     "Space has a positive advance and no visible outline.",
 )
@@ -344,6 +329,23 @@ _NARRATIVE_GLYPH_ROWS = {
     "|": ("00100", "00100", "00100", "00000", "00100", "00100", "00100"),
     "}": ("11000", "00100", "00100", "00011", "00100", "00100", "11000"),
     "~": ("00000", "00000", "01001", "10110", "00000", "00000", "00000"),
+}
+
+
+NARRATIVE_FONT_DESIGN_MASK_SHA256 = {
+    "A visible choice": "00d87e226f12d354144a3e7e4f63b93d7d201acb0b380410b9f319ce0bb6666e",
+    "Branching Narrative": "edf34c5706e06229a621efff28e10345c9bf99541620aa009ee88d853d8a91f7",
+    "Choose the left symbol": "3e8e9bcc199067d231a03ea72410833128b95c0593e526dda5271ee47d6dc5c2",
+    "Choose the right symbol": "3700c0f607fcc756a744af1be67c9c4941fbfe751f61ec863c06e340da7edcbc",
+    "Left ending": "1255b70e4150c7d2ce9bea4cfca50bd65516361929a69152e9ffdb63de97a13d",
+    "Neutral authored branching-choice logic": (
+        "2ef090ee70898fbaef53009f3a73f5a4fb8cc8e19f287fe62e7c2bc1fcd49ca2"
+    ),
+    "Neutral branching units": ("60e874a8c8ecfc1be7964f05ddecb2f35900c86d8f42e976d515020415b4eee9"),
+    "Right ending": "8d901f2a2d6fb66991ae55d1268764f2c060ba66f90d4cc1a0cba7c26f6865f0",
+    "Select one authored option.": (
+        "df81b0f68e8f98802bf4874eaca3989b2e8fb827ae1311df6b2e03570bb63e5f"
+    ),
 }
 
 
@@ -601,28 +603,247 @@ def _narrative_design_mask(text: str) -> bytes:
     return "\n".join(lines).encode("ascii")
 
 
-def _narrative_rendered_mask_manifest(font_payload: bytes) -> bytes:
-    import PIL
+def _printable_ascii_characters() -> tuple[str, ...]:
+    return tuple(chr(codepoint) for codepoint in range(0x20, 0x7F))
+
+
+def _validate_narrative_font_sources() -> None:
+    # Invalid/missing/blank/malformed glyphs fail here.
+    # Otherwise, valid authored glyph revisions rotate evidence; stale fixtures fail --check.
+    # Deliberate source revisions must regenerate TTF/design fixture authority.
+    expected = _printable_ascii_characters()
+    if tuple(sorted(_NARRATIVE_GLYPH_ROWS, key=ord)) != expected:
+        raise ValueError("narrative glyph source must exactly cover printable ASCII")
+    fixture_missing = sorted(
+        {character for text in NARRATIVE_FONT_FIXTURE_STRINGS for character in text}
+        - set(_NARRATIVE_GLYPH_ROWS),
+        key=ord,
+    )
+    if fixture_missing:
+        formatted = ", ".join(f"U+{ord(character):04X}" for character in fixture_missing)
+        raise ValueError(f"narrative fixture character coverage is incomplete: {formatted}")
+    for character in expected:
+        rows = _NARRATIVE_GLYPH_ROWS[character]
+        if len(rows) != 7 or any(len(row) != 5 or set(row) - {"0", "1"} for row in rows):
+            raise ValueError("narrative glyph source must be an exact 5x7 binary grid")
+        nonblank = any("1" in row for row in rows)
+        if character == " ":
+            if nonblank:
+                raise ValueError("narrative space glyph source must be blank")
+        elif not nonblank:
+            raise ValueError(f"narrative non-space glyph source is blank: U+{ord(character):04X}")
+
+
+def _sfnt_table_records(font_payload: bytes) -> dict[str, tuple[int, int, int]]:
+    if len(font_payload) < 12:
+        raise ValueError("narrative TTF is truncated")
+    table_count = struct.unpack_from(">H", font_payload, 4)[0]
+    records: dict[str, tuple[int, int, int]] = {}
+    for index in range(table_count):
+        tag, checksum, offset, length = struct.unpack_from(
+            ">4sIII",
+            font_payload,
+            12 + index * 16,
+        )
+        name = tag.decode("ascii")
+        if offset + length > len(font_payload):
+            raise ValueError(f"narrative TTF table escapes font bytes: {name}")
+        table_data = bytearray(font_payload[offset : offset + length])
+        if name == "head":
+            struct.pack_into(">I", table_data, 8, 0)
+        if sfnt_checksum(table_data) != checksum:
+            raise ValueError(f"narrative TTF table checksum drift: {name}")
+        records[name] = (checksum, offset, length)
+    return records
+
+
+def _narrative_format4_mapping(
+    font_payload: bytes,
+    records: dict[str, tuple[int, int, int]],
+) -> dict[int, int]:
+    _checksum, cmap_offset, _cmap_length = records["cmap"]
+    _version, count = struct.unpack_from(">HH", font_payload, cmap_offset)
+    for index in range(count):
+        platform, encoding, relative = struct.unpack_from(
+            ">HHI",
+            font_payload,
+            cmap_offset + 4 + index * 8,
+        )
+        subtable = cmap_offset + relative
+        if (
+            platform == 3
+            and encoding == 1
+            and struct.unpack_from(">H", font_payload, subtable)[0] == 4
+        ):
+            break
+    else:
+        raise ValueError("narrative TTF has no Windows Unicode BMP format 4 cmap")
+    length = struct.unpack_from(">H", font_payload, subtable + 2)[0]
+    if subtable + length > len(font_payload):
+        raise ValueError("narrative TTF format 4 cmap exceeds font bytes")
+    segment_count = struct.unpack_from(">H", font_payload, subtable + 6)[0] // 2
+    end_offset = subtable + 14
+    start_offset = end_offset + segment_count * 2 + 2
+    delta_offset = start_offset + segment_count * 2
+    range_offset = delta_offset + segment_count * 2
+    ends = struct.unpack_from(f">{segment_count}H", font_payload, end_offset)
+    starts = struct.unpack_from(f">{segment_count}H", font_payload, start_offset)
+    deltas = struct.unpack_from(f">{segment_count}H", font_payload, delta_offset)
+    ranges = struct.unpack_from(f">{segment_count}H", font_payload, range_offset)
+    mapping: dict[int, int] = {}
+    for segment, (start, end, delta, relative) in enumerate(
+        zip(starts, ends, deltas, ranges, strict=True)
+    ):
+        if start == end == 0xFFFF:
+            continue
+        for codepoint in range(start, end + 1):
+            if relative == 0:
+                mapping[codepoint] = (codepoint + delta) & 0xFFFF
+            else:
+                word = range_offset + segment * 2 + relative + (codepoint - start) * 2
+                glyph_id = struct.unpack_from(">H", font_payload, word)[0]
+                mapping[codepoint] = (glyph_id + delta) & 0xFFFF if glyph_id else 0
+    return mapping
+
+
+def _loca_offsets(
+    font_payload: bytes,
+    records: dict[str, tuple[int, int, int]],
+    glyph_count: int,
+) -> tuple[int, ...]:
+    _checksum, head_offset, _head_length = records["head"]
+    _checksum, loca_offset, _loca_length = records["loca"]
+    loca_format = struct.unpack_from(">h", font_payload, head_offset + 50)[0]
+    if loca_format == 0:
+        return tuple(
+            value * 2
+            for value in struct.unpack_from(f">{glyph_count + 1}H", font_payload, loca_offset)
+        )
+    return struct.unpack_from(f">{glyph_count + 1}I", font_payload, loca_offset)
+
+
+def _validate_narrative_ttf_binding(font_payload: bytes) -> None:
+    _validate_narrative_font_sources()
+    if font_payload != _narrative_ttf():
+        raise ValueError("narrative font payload is not bound to generated TTF source")
+    if sfnt_checksum(font_payload) != 0xB1B0AFBA:
+        raise ValueError("narrative TTF SFNT checksum drift")
+    records = _sfnt_table_records(font_payload)
+    required_tables = {
+        "OS/2",
+        "cmap",
+        "glyf",
+        "head",
+        "hhea",
+        "hmtx",
+        "loca",
+        "maxp",
+        "name",
+        "post",
+    }
+    if set(records) != required_tables:
+        raise ValueError("narrative TTF table set drift")
+    _checksum, maxp_offset, _maxp_length = records["maxp"]
+    glyph_count = struct.unpack_from(">H", font_payload, maxp_offset + 4)[0]
+    expected_characters = _printable_ascii_characters()
+    if glyph_count != len(expected_characters) + 1:
+        raise ValueError("narrative TTF glyph count drift")
+    mapping = _narrative_format4_mapping(font_payload, records)
+    expected_mapping = {
+        ord(character): index + 1 for index, character in enumerate(expected_characters)
+    }
+    if mapping != expected_mapping:
+        raise ValueError("narrative TTF cmap drift")
+    _checksum, hmtx_offset, _hmtx_length = records["hmtx"]
+    _checksum, glyf_offset, _glyf_length = records["glyf"]
+    offsets = _loca_offsets(font_payload, records, glyph_count)
+    expected_glyphs = (
+        ("11111", "10001", "10101", "10101", "10101", "10001", "11111"),
+        *(_NARRATIVE_GLYPH_ROWS[character] for character in expected_characters),
+    )
+    for glyph_id, rows in enumerate(expected_glyphs):
+        advance, lsb = struct.unpack_from(">Hh", font_payload, hmtx_offset + glyph_id * 4)
+        expected_lsb = 0 if glyph_id == 1 else _NARRATIVE_FONT_LSB
+        if advance != _NARRATIVE_FONT_ADVANCE or lsb != expected_lsb:
+            raise ValueError("narrative TTF hmtx drift")
+        expected_glyph, _point_count, _contour_count = _bitmap_outline_glyph(rows)
+        actual_glyph = font_payload[
+            glyf_offset + offsets[glyph_id] : glyf_offset + offsets[glyph_id + 1]
+        ]
+        if actual_glyph != expected_glyph:
+            raise ValueError("narrative TTF glyf drift")
+
+
+def _narrative_pillow_basic_smoke(font_payload: bytes) -> dict[str, int | str]:
     from PIL import ImageFont
 
-    if PIL.__version__ != "12.3.0":
-        raise ValueError("narrative font QA requires pinned Pillow 12.3.0")
-    font = ImageFont.truetype(io.BytesIO(font_payload), 24)
-    observed: dict[str, str] = {}
+    font = ImageFont.truetype(
+        io.BytesIO(font_payload),
+        24,
+        layout_engine=ImageFont.Layout.BASIC,
+    )
+    widths: list[int] = []
+    heights: list[int] = []
     for text in NARRATIVE_FONT_FIXTURE_STRINGS:
+        left, top, right, bottom = font.getbbox(text)
+        width = right - left
+        height = bottom - top
         rendered = font.getmask(text, mode="L")
         mask = bytes(rendered)
-        if rendered.size[0] < 1 or rendered.size[1] < 1 or not any(mask):
+        if width < 1 or height < 1 or rendered.size[0] < 1 or rendered.size[1] < 1 or not any(mask):
             raise ValueError(f"narrative font produced a blank fixture string: {text}")
-        observed[text] = hashlib.sha256(struct.pack(">II", *rendered.size) + mask).hexdigest()
-    if observed != NARRATIVE_FONT_RENDERED_MASK_SHA256:
-        raise ValueError("narrative font rendered masks do not match pinned QA evidence")
-    return b"\n".join(
-        f"{text}:{observed[text]}".encode("ascii") for text in NARRATIVE_FONT_FIXTURE_STRINGS
+        if rendered.size[0] < len(text) * 2 or rendered.size[1] < 4:
+            raise ValueError(f"narrative font rendered extent is too small: {text}")
+        widths.append(width)
+        heights.append(height)
+    return {
+        "layout_engine": "BASIC",
+        "fixture_count": len(NARRATIVE_FONT_FIXTURE_STRINGS),
+        "min_width": min(widths),
+        "max_width": max(widths),
+        "min_height": min(heights),
+        "max_height": max(heights),
+    }
+
+
+def _narrative_design_mask_evidence_manifest(font_payload: bytes) -> str:
+    _validate_narrative_ttf_binding(font_payload)
+    observed: dict[str, str] = {}
+    manifest_lines: list[bytes] = []
+    for text in NARRATIVE_FONT_FIXTURE_STRINGS:
+        width = len(text) * _NARRATIVE_FONT_ADVANCE
+        height = 7
+        mask = _narrative_design_mask(text)
+        if width < 1 or not any(mask.replace(b"0", b"").replace(b"\n", b"")):
+            raise ValueError(f"narrative font produced a blank design fixture string: {text}")
+        digest = hashlib.sha256(struct.pack(">II", width, height) + mask).hexdigest()
+        observed[text] = digest
+        manifest_lines.append(
+            json.dumps(
+                {
+                    "advance": _NARRATIVE_FONT_ADVANCE,
+                    "height": height,
+                    "sha256": digest,
+                    "text": text,
+                    "version": NARRATIVE_FONT_DESIGN_MASK_VERSION,
+                    "width": width,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        )
+    if observed != NARRATIVE_FONT_DESIGN_MASK_SHA256:
+        raise ValueError("narrative font design masks do not match pinned QA evidence")
+    return _evidence_hash(
+        "narrative-fixture-design-mask-evidence-v2",
+        _evidence_hash("font-bytes-v1", font_payload).encode("ascii"),
+        b"\n".join(manifest_lines),
     )
 
 
 def _narrative_qa_evidence(font_payload: bytes) -> tuple[str, ...]:
+    _validate_narrative_ttf_binding(font_payload)
+    _narrative_pillow_basic_smoke(font_payload)
     critical_pairs = ("O0", "Il", "I1", "l1", "S5", "B8", "Z2", "G6")
     design_source = "\n".join(
         f"{ord(character):02X}:{'/'.join(rows)}"
@@ -632,7 +853,6 @@ def _narrative_qa_evidence(font_payload: bytes) -> tuple[str, ...]:
         f"{ord(character):02X}:{'/'.join(_NARRATIVE_GLYPH_ROWS[character])}".encode("ascii")
         for character in (chr(codepoint) for codepoint in range(0x21, 0x7F))
     )
-    fixture_masks = _narrative_rendered_mask_manifest(font_payload)
     font_bytes = _evidence_hash("font-bytes-v1", font_payload)
     cmap = _evidence_hash("printable-ascii-cmap-v1", design_source)
     blank_space = _evidence_hash(
@@ -646,7 +866,7 @@ def _narrative_qa_evidence(font_payload: bytes) -> tuple[str, ...]:
             pair.encode("ascii") + b":" + _narrative_design_mask(pair) for pair in critical_pairs
         ),
     )
-    fixture_strings = _evidence_hash("fixture-string-mask-source-v1", fixture_masks)
+    fixture_strings = _narrative_design_mask_evidence_manifest(font_payload)
     return (
         font_bytes,
         critical,
@@ -1378,9 +1598,8 @@ def _assemble_sfnt(tables: dict[str, bytes]) -> bytes:
 
 
 def _narrative_ttf() -> bytes:
-    expected_characters = tuple(chr(codepoint) for codepoint in range(0x20, 0x7F))
-    if tuple(sorted(_NARRATIVE_GLYPH_ROWS, key=ord)) != expected_characters:
-        raise ValueError("narrative glyph source must exactly cover printable ASCII")
+    _validate_narrative_font_sources()
+    expected_characters = _printable_ascii_characters()
 
     notdef_rows = (
         "11111",
@@ -1417,16 +1636,16 @@ def _narrative_ttf() -> bytes:
     os2 = struct.pack(
         ">HhHHH11h",
         0,
-        600,
+        _NARRATIVE_FONT_ADVANCE,
         400,
         5,
         0,
         650,
-        600,
+        _NARRATIVE_FONT_ADVANCE,
         0,
         75,
         650,
-        600,
+        _NARRATIVE_FONT_ADVANCE,
         0,
         350,
         50,
@@ -1480,7 +1699,7 @@ def _narrative_ttf() -> bytes:
             800,
             -200,
             0,
-            600,
+            _NARRATIVE_FONT_ADVANCE,
             0,
             70,
             530,
@@ -1495,7 +1714,8 @@ def _narrative_ttf() -> bytes:
             glyph_count,
         ),
         "hmtx": b"".join(
-            struct.pack(">Hh", 600, 0 if index == 1 else 50) for index in range(glyph_count)
+            struct.pack(">Hh", _NARRATIVE_FONT_ADVANCE, 0 if index == 1 else _NARRATIVE_FONT_LSB)
+            for index in range(glyph_count)
         ),
         "loca": struct.pack(f">{len(offsets)}I", *offsets),
         "maxp": struct.pack(

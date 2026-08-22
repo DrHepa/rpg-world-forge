@@ -12,10 +12,14 @@ from unittest import mock
 from PIL import ImageFont
 
 from scripts.generate_generic_asset_fixtures import (
+    _NARRATIVE_FONT_ADVANCE,
+    _NARRATIVE_GLYPH_ROWS,
+    NARRATIVE_FONT_DESIGN_MASK_SHA256,
+    NARRATIVE_FONT_DESIGN_MASK_VERSION,
     NARRATIVE_FONT_FIXTURE_STRINGS,
-    NARRATIVE_FONT_RENDERED_MASK_SHA256,
+    _narrative_design_mask_evidence_manifest,
+    _narrative_pillow_basic_smoke,
     _narrative_qa_evidence,
-    _narrative_rendered_mask_manifest,
     _narrative_ttf,
     build_fixture_documents,
 )
@@ -125,14 +129,80 @@ def _fixture_strings() -> tuple[str, ...]:
 
 
 class NarrativeFixtureFontTests(unittest.TestCase):
-    def test_rendered_mask_evidence_requires_the_audited_pillow_version(self) -> None:
-        import PIL
+    def test_design_mask_vectors_are_literal_and_do_not_recompute_from_source(self) -> None:
+        source = (ROOT / "scripts" / "generate_generic_asset_fixtures.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn(
+            "NARRATIVE_FONT_DESIGN_MASK_SHA256 = _narrative_design_mask_sha256()",
+            source,
+        )
+        self.assertEqual(
+            NARRATIVE_FONT_DESIGN_MASK_SHA256,
+            {
+                "A visible choice": (
+                    "00d87e226f12d354144a3e7e4f63b93d7d201acb0b380410b9f319ce0bb6666e"
+                ),
+                "Branching Narrative": (
+                    "edf34c5706e06229a621efff28e10345c9bf99541620aa009ee88d853d8a91f7"
+                ),
+                "Choose the left symbol": (
+                    "3e8e9bcc199067d231a03ea72410833128b95c0593e526dda5271ee47d6dc5c2"
+                ),
+                "Choose the right symbol": (
+                    "3700c0f607fcc756a744af1be67c9c4941fbfe751f61ec863c06e340da7edcbc"
+                ),
+                "Left ending": "1255b70e4150c7d2ce9bea4cfca50bd65516361929a69152e9ffdb63de97a13d",
+                "Neutral authored branching-choice logic": (
+                    "2ef090ee70898fbaef53009f3a73f5a4fb8cc8e19f287fe62e7c2bc1fcd49ca2"
+                ),
+                "Neutral branching units": (
+                    "60e874a8c8ecfc1be7964f05ddecb2f35900c86d8f42e976d515020415b4eee9"
+                ),
+                "Right ending": "8d901f2a2d6fb66991ae55d1268764f2c060ba66f90d4cc1a0cba7c26f6865f0",
+                "Select one authored option.": (
+                    "df81b0f68e8f98802bf4874eaca3989b2e8fb827ae1311df6b2e03570bb63e5f"
+                ),
+            },
+        )
 
+    def test_release_evidence_uses_versioned_design_masks_not_pillow_rasters(self) -> None:
+        payload = _narrative_ttf()
+        baseline = _narrative_qa_evidence(payload)
+        self.assertEqual(NARRATIVE_FONT_DESIGN_MASK_VERSION, "narrative-design-mask-v2")
+        self.assertIn(
+            _narrative_design_mask_evidence_manifest(payload),
+            baseline,
+        )
         with (
-            mock.patch.object(PIL, "__version__", "12.3.1"),
-            self.assertRaisesRegex(ValueError, "pinned Pillow 12.3.0"),
+            mock.patch("PIL.ImageFont.FreeTypeFont.getmask", side_effect=AssertionError("raster")),
+            mock.patch(
+                "scripts.generate_generic_asset_fixtures._narrative_pillow_basic_smoke",
+                return_value={"layout_engine": "BASIC"},
+            ),
         ):
-            _narrative_rendered_mask_manifest(_narrative_ttf())
+            self.assertEqual(_narrative_qa_evidence(payload), baseline)
+
+    def test_pillow_basic_smoke_uses_explicit_basic_and_is_not_hash_authoritative(self) -> None:
+        captured: dict[str, object] = {}
+        original_truetype = ImageFont.truetype
+
+        def capture_layout(*args: object, **kwargs: object) -> ImageFont.FreeTypeFont:
+            captured["layout_engine"] = kwargs.get("layout_engine")
+            return original_truetype(*args, **kwargs)
+
+        with mock.patch("PIL.ImageFont.truetype", side_effect=capture_layout):
+            smoke = _narrative_pillow_basic_smoke(_narrative_ttf())
+        self.assertIs(captured["layout_engine"], ImageFont.Layout.BASIC)
+        self.assertEqual(smoke["layout_engine"], "BASIC")
+        self.assertEqual(smoke["fixture_count"], len(NARRATIVE_FONT_FIXTURE_STRINGS))
+        self.assertGreater(smoke["max_width"], smoke["min_width"])
+
+    def test_raqm_availability_and_default_layout_cannot_change_release_evidence(self) -> None:
+        payload = _narrative_ttf()
+        baseline = _narrative_qa_evidence(payload)
+        with mock.patch.object(ImageFont.core, "HAVE_RAQM", not ImageFont.core.HAVE_RAQM):
+            self.assertEqual(_narrative_qa_evidence(payload), baseline)
 
     def test_printable_ascii_has_distinct_glyph_ids_and_sane_outlines(self) -> None:
         payload = _narrative_ttf()
@@ -184,19 +254,136 @@ class NarrativeFixtureFontTests(unittest.TestCase):
         for left, right in CRITICAL_PAIRS:
             self.assertNotEqual(masks[left], masks[right], f"{left}/{right}")
 
-    def test_every_branching_fixture_string_has_a_stable_nonblank_rendered_mask(self) -> None:
+    def test_every_branching_fixture_string_has_a_stable_nonblank_design_mask(self) -> None:
         fixture_strings = _fixture_strings()
         self.assertEqual(fixture_strings, NARRATIVE_FONT_FIXTURE_STRINGS)
-        font = ImageFont.truetype(io.BytesIO(_narrative_ttf()), 24)
         hashes: dict[str, str] = {}
         for text in fixture_strings:
-            size, mask = _mask(font, text)
-            self.assertGreater(size[0], 0, text)
-            self.assertGreater(size[1], 0, text)
-            self.assertTrue(any(mask), text)
-            hashes[text] = hashlib.sha256(struct.pack(">II", *size) + mask).hexdigest()
-        self.assertEqual(hashes, NARRATIVE_FONT_RENDERED_MASK_SHA256)
+            width = len(text) * _NARRATIVE_FONT_ADVANCE
+            height = 7
+            mask = b"\n".join(
+                b"0".join(
+                    _NARRATIVE_GLYPH_ROWS[character][row].encode("ascii") for character in text
+                )
+                for row in range(height)
+            )
+            self.assertEqual((width, height), (len(text) * _NARRATIVE_FONT_ADVANCE, 7))
+            self.assertIn(b"1", mask, text)
+            hashes[text] = hashlib.sha256(struct.pack(">II", width, height) + mask).hexdigest()
+        self.assertEqual(hashes, NARRATIVE_FONT_DESIGN_MASK_SHA256)
         self.assertEqual(len(hashes), len(set(hashes.values())))
+
+    def test_release_evidence_fails_on_glyph_cmap_advance_fixture_or_missing_smoke(self) -> None:
+        payload = _narrative_ttf()
+        with mock.patch.dict(
+            _NARRATIVE_GLYPH_ROWS,
+            {"A": ("11111", "10001", "11111", "10001", "10001", "10001", "10001")},
+        ):
+            with self.assertRaisesRegex(ValueError, "design masks"):
+                _narrative_qa_evidence(_narrative_ttf())
+        mutated_cmap = bytearray(payload)
+        cmap_offset, _length = _tables(payload)["cmap"]
+        mutated_cmap[cmap_offset + 31] ^= 0x01
+        with self.assertRaisesRegex(ValueError, "generated TTF source"):
+            _narrative_qa_evidence(bytes(mutated_cmap))
+        with mock.patch("scripts.generate_generic_asset_fixtures._NARRATIVE_FONT_ADVANCE", 601):
+            with self.assertRaisesRegex(ValueError, "design masks"):
+                _narrative_qa_evidence(_narrative_ttf())
+        with mock.patch(
+            "scripts.generate_generic_asset_fixtures.NARRATIVE_FONT_FIXTURE_STRINGS",
+            (*NARRATIVE_FONT_FIXTURE_STRINGS, "Added fixture ☃"),
+        ):
+            with self.assertRaisesRegex(ValueError, "fixture character coverage"):
+                _narrative_qa_evidence(payload)
+        with mock.patch(
+            "scripts.generate_generic_asset_fixtures._narrative_pillow_basic_smoke",
+            side_effect=AssertionError("smoke removed"),
+        ):
+            with self.assertRaisesRegex(AssertionError, "smoke removed"):
+                _narrative_qa_evidence(payload)
+
+    def test_release_evidence_fail_closes_on_all_printable_source_shape(self) -> None:
+        payload = _narrative_ttf()
+        with mock.patch.dict(
+            _NARRATIVE_GLYPH_ROWS,
+            {"~": ("00000", "00000", "00000", "00000", "00000", "00000", "00000")},
+        ):
+            with self.assertRaisesRegex(ValueError, r"non-space glyph source is blank: U\+007E"):
+                _narrative_qa_evidence(_narrative_ttf())
+        missing_tilde = dict(_NARRATIVE_GLYPH_ROWS)
+        del missing_tilde["~"]
+        with mock.patch.dict(_NARRATIVE_GLYPH_ROWS, missing_tilde, clear=True):
+            with self.assertRaisesRegex(ValueError, "printable ASCII"):
+                _narrative_qa_evidence(payload)
+        with mock.patch.dict(_NARRATIVE_GLYPH_ROWS, {"~": ("00000",) * 6}):
+            with self.assertRaisesRegex(ValueError, "exact 5x7"):
+                _narrative_qa_evidence(payload)
+
+    def test_release_evidence_fail_closes_on_ttf_hmtx_glyf_and_checksum_drift(self) -> None:
+        payload = _narrative_ttf()
+        tables = _tables(payload)
+        hmtx_offset, _hmtx_length = tables["hmtx"]
+        mutated_hmtx = bytearray(payload)
+        mutated_hmtx[hmtx_offset] ^= 0x01
+        with self.assertRaisesRegex(ValueError, "generated TTF source"):
+            _narrative_qa_evidence(bytes(mutated_hmtx))
+
+        mapping = _format4_mapping(payload, tables)
+        glyph = mapping[ord("~")]
+        glyf_offset, _glyf_length = tables["glyf"]
+        glyph_start = glyf_offset + len(_glyph_bytes(payload, tables, 0))
+        for glyph_id in range(1, glyph):
+            glyph_start += len(_glyph_bytes(payload, tables, glyph_id))
+        mutated_glyf = bytearray(payload)
+        mutated_glyf[glyph_start + 10] ^= 0x01
+        with self.assertRaisesRegex(ValueError, "generated TTF source"):
+            _narrative_qa_evidence(bytes(mutated_glyf))
+
+        head_offset, _head_length = tables["head"]
+        mutated_checksum = bytearray(payload)
+        mutated_checksum[head_offset + 8] ^= 0x01
+        with self.assertRaisesRegex(ValueError, "generated TTF source"):
+            _narrative_qa_evidence(bytes(mutated_checksum))
+
+    def test_valid_nonfixture_glyph_revision_rotates_evidence_without_direct_rejection(
+        self,
+    ) -> None:
+        source = (ROOT / "scripts" / "generate_generic_asset_fixtures.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("valid authored glyph revisions rotate evidence", source)
+        baseline_ttf = _narrative_ttf()
+        baseline_evidence = _narrative_qa_evidence(baseline_ttf)
+        baseline_design = _narrative_design_mask_evidence_manifest(baseline_ttf)
+        pinned_vectors = dict(NARRATIVE_FONT_DESIGN_MASK_SHA256)
+        revised_tilde = ("00000", "00000", "10010", "01101", "00000", "00000", "00000")
+        with mock.patch.dict(_NARRATIVE_GLYPH_ROWS, {"~": revised_tilde}):
+            revised_ttf = _narrative_ttf()
+            revised_evidence = _narrative_qa_evidence(revised_ttf)
+            revised_design = _narrative_design_mask_evidence_manifest(revised_ttf)
+            self.assertNotEqual(revised_ttf, baseline_ttf)
+            self.assertNotEqual(revised_evidence, baseline_evidence)
+            self.assertNotEqual(revised_design, baseline_design)
+            self.assertEqual(NARRATIVE_FONT_DESIGN_MASK_SHA256, pinned_vectors)
+            with tempfile.TemporaryDirectory(prefix="world-forge-font-drift-") as temp:
+                generated = build_fixture_documents(
+                    "branching-narrative",
+                    artifact_root=Path(temp),
+                )
+        drifted = [
+            path.relative_to(ROOT).as_posix()
+            for path, _document, payload in generated
+            if path.exists() and path.read_bytes() != payload
+        ]
+        self.assertIn(
+            "examples/multigenre-contracts/branching-narrative/assets/production/"
+            "narrative_ui_font/candidates/narrative-ui.ttf",
+            drifted,
+        )
+        self.assertIn(
+            "examples/multigenre-contracts/branching-narrative/assets/manifest.json",
+            drifted,
+        )
 
     def test_font_and_full_fixture_lineage_are_deterministic_across_roots(self) -> None:
         first = _narrative_ttf()
