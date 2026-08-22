@@ -3538,7 +3538,7 @@ def _raise_native_evidence_publish_failure(
     if primary_native_detail:
         _fail(
             failure[0],
-            f"{primary_native_detail}; diagnostics: {failure[0]}",
+            f"{primary_native_detail}; diagnostics: native_evidence_publisher_failed",
         )
     _fail(*failure)
 
@@ -3722,7 +3722,7 @@ def run_release_gate(
     if status == "failed":
         detail = primary_native_detail or ", ".join(failures)
         if evidence_publish_failure is not None:
-            detail = f"{detail}; diagnostics: {evidence_publish_failure[0]}"
+            detail = f"{detail}; diagnostics: native_evidence_publisher_failed"
         elif github_output_path is not None:
             raise _TrustedNativeEvidenceFailure(
                 "native_required_incomplete",
@@ -3835,7 +3835,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             ),
             file=sys.stderr,
         )
-        return 0
+        return 1
     except (MultigenreReleaseError, OSError, ValueError) as exc:
         reason = getattr(exc, "reason_code", "multigenre_release_failed")
         print(

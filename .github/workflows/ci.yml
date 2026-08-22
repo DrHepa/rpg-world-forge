@@ -143,6 +143,14 @@ jobs:
           path: ${{ steps.native_release_verify.outputs.release_row_path }}
           if-no-files-found: error
           retention-days: 90
+      - name: Upload parent-attested native smoke diagnostics
+        if: always() && steps.native_release_verify.outcome == 'failure' && steps.native_release_verify.outputs.native_smoke_evidence_published == 'true' && steps.native_release_verify.outputs.native_smoke_evidence_path != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: multigenre-native-diagnostics-Linux-py3.12
+          path: ${{ steps.native_release_verify.outputs.native_smoke_evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
 
   ubuntu-py311-compat-native:
     name: Ubuntu Python 3.11 compatibility native gates
@@ -201,6 +209,14 @@ jobs:
         with:
           name: multigenre-release-Linux-py3.11
           path: ${{ steps.native_release_verify.outputs.release_row_path }}
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload parent-attested native smoke diagnostics
+        if: always() && steps.native_release_verify.outcome == 'failure' && steps.native_release_verify.outputs.native_smoke_evidence_published == 'true' && steps.native_release_verify.outputs.native_smoke_evidence_path != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: multigenre-native-diagnostics-Linux-py3.11
+          path: ${{ steps.native_release_verify.outputs.native_smoke_evidence_path }}
           if-no-files-found: error
           retention-days: 90
 
@@ -358,6 +374,14 @@ jobs:
           path: ${{ steps.native_release_verify.outputs.release_row_path }}
           if-no-files-found: error
           retention-days: 90
+      - name: Upload parent-attested native smoke diagnostics
+        if: always() && steps.native_release_verify.outcome == 'failure' && steps.native_release_verify.outputs.native_smoke_evidence_published == 'true' && steps.native_release_verify.outputs.native_smoke_evidence_path != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: multigenre-native-diagnostics-Windows-py3.12
+          path: ${{ steps.native_release_verify.outputs.native_smoke_evidence_path }}
+          if-no-files-found: error
+          retention-days: 90
       - name: Cleanup strict external Windows native work root
         if: always()
         shell: pwsh
@@ -466,6 +490,14 @@ jobs:
         with:
           name: multigenre-release-Windows-py3.11
           path: ${{ steps.native_release_verify.outputs.release_row_path }}
+          if-no-files-found: error
+          retention-days: 90
+      - name: Upload parent-attested native smoke diagnostics
+        if: always() && steps.native_release_verify.outcome == 'failure' && steps.native_release_verify.outputs.native_smoke_evidence_published == 'true' && steps.native_release_verify.outputs.native_smoke_evidence_path != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: multigenre-native-diagnostics-Windows-py3.11
+          path: ${{ steps.native_release_verify.outputs.native_smoke_evidence_path }}
           if-no-files-found: error
           retention-days: 90
       - name: Cleanup strict external Windows native work root

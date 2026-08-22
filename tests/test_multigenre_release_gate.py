@@ -2510,7 +2510,7 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
     def test_prewritten_rogue_github_outputs_cannot_authorize_upload(self) -> None:
         gate = _load_gate()
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        self.assertNotIn("Upload native smoke diagnostics", workflow)
+        self.assertIn("Upload parent-attested native smoke diagnostics", workflow)
         with tempfile.TemporaryDirectory(prefix="wf-native-github-preclaim-") as temporary:
             root = Path(temporary)
             output = root / "github-output"
@@ -2531,7 +2531,7 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
             ):
                 gate._publish_native_smoke_github_output(output, evidence_root, release_row)
 
-            self.assertNotIn("native_smoke_evidence_path", workflow)
+            self.assertNotIn("path: native-smoke-evidence", workflow)
 
     def test_ci_native_main_does_not_forward_a_child_discoverable_report_path(self) -> None:
         gate = _load_gate()
@@ -2563,7 +2563,7 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
             self.assertEqual(0, return_code)
             self.assertIsNone(run_gate.call_args.kwargs["report_path"])
 
-    def test_main_normalizes_only_parent_attested_native_failure_for_later_enforcement(
+    def test_main_fails_closed_after_parent_attested_native_failure(
         self,
     ) -> None:
         gate = _load_gate()
@@ -2595,7 +2595,7 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
                     ]
                 )
 
-            self.assertEqual(0, return_code)
+            self.assertEqual(1, return_code)
 
     @unittest.skipUnless(os.name == "posix", "POSIX descendant mutation containment")
     def test_native_smoke_kills_post_exit_mutator_before_tree_validation(self) -> None:
@@ -3110,7 +3110,7 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
                 )
             self.assertEqual(reason, caught.exception.reason_code)
             self.assertIn(primary, str(caught.exception))
-            self.assertIn(f"diagnostics: {reason}", str(caught.exception))
+            self.assertIn("diagnostics: native_evidence_publisher_failed", str(caught.exception))
         self.assertIn(
             "_raise_native_evidence_publish_failure(",
             inspect.getsource(gate.run_release_gate),
@@ -3497,6 +3497,37 @@ class MultigenreReleaseGateContractTests(unittest.TestCase):
             4, workflow.count("Verify exact generic release lineage with native raylib")
         )
         self.assertEqual(4, workflow.count("Upload exact native evidence row"))
+        self.assertEqual(4, workflow.count("Upload parent-attested native smoke diagnostics"))
+        for job_id, artifact_name in (
+            ("ubuntu-py312-core", "multigenre-native-diagnostics-Linux-py3.12"),
+            ("ubuntu-py311-compat-native", "multigenre-native-diagnostics-Linux-py3.11"),
+            ("windows-py312-release", "multigenre-native-diagnostics-Windows-py3.12"),
+            ("windows-py311-compat-native", "multigenre-native-diagnostics-Windows-py3.11"),
+        ):
+            with self.subTest(job_id=job_id):
+                job = _workflow_job_block(workflow, job_id)
+                self.assertIn(
+                    "      - name: Upload parent-attested native smoke diagnostics\n"
+                    "        if: always() && steps.native_release_verify.outcome == 'failure' && "
+                    "steps.native_release_verify.outputs.native_smoke_evidence_published == "
+                    "'true' && steps.native_release_verify.outputs."
+                    "native_smoke_evidence_path != ''\n"
+                    "        uses: actions/upload-artifact@"
+                    "ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2\n"
+                    "        with:\n"
+                    f"          name: {artifact_name}\n"
+                    "          path: ${{ steps.native_release_verify.outputs."
+                    "native_smoke_evidence_path }}\n"
+                    "          if-no-files-found: error\n"
+                    "          retention-days: 90\n",
+                    job,
+                )
+                self.assertIn(
+                    "steps.native_release_verify.outcome == 'success' && "
+                    "steps.native_release_verify.outputs.release_row_published == 'true'",
+                    job,
+                )
+                self.assertNotIn("path: native-smoke-evidence", job)
         self.assertIn("Download Linux Python 3.11 native evidence", workflow)
         self.assertIn("Download Linux Python 3.12 native evidence", workflow)
         self.assertIn("Download Windows Python 3.11 native evidence", workflow)

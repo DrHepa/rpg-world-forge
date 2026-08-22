@@ -250,6 +250,7 @@ def _studio_environment_contract_errors(workflow: str) -> tuple[str, ...]:
         "Verify exact generic release lineage with native raylib",
         "Run bounded full unittest suite once",
         "Upload exact native evidence row",
+        "Upload parent-attested native smoke diagnostics",
     )
     windows_steps = [(name or "").strip() for name, _step in _workflow_steps(windows_studio)]
     expected_windows_step_names = (
@@ -271,6 +272,7 @@ def _studio_environment_contract_errors(workflow: str) -> tuple[str, ...]:
         "Download, attest, and install the locked raylib wheel",
         "Verify exact generic release lineage with native raylib",
         "Upload exact native evidence row",
+        "Upload parent-attested native smoke diagnostics",
         "Cleanup strict external Windows native work root",
     )
     for job_id, step_names, expected_step_names in (
@@ -290,6 +292,9 @@ def _studio_environment_contract_errors(workflow: str) -> tuple[str, ...]:
         "Set up Python": "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
         "Set up Node": f"actions/setup-node@{SETUP_NODE_SHA}",
         "Upload exact native evidence row": (
+            "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
+        ),
+        "Upload parent-attested native smoke diagnostics": (
             "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02"
         ),
     }
@@ -410,6 +415,9 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
         checkout_identity = "actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
         self.assertEqual(checkout.count(checkout_identity), 1)
         npm_step = _workflow_step(linux_job, "Install audited toolchain and Forge")
+        native_diagnostics_step = _workflow_step(
+            linux_job, "Upload parent-attested native smoke diagnostics"
+        )
 
         def replace_first_verify(command: str) -> str:
             return workflow.replace(
@@ -484,6 +492,17 @@ class M6ReleaseReadinessContractTests(unittest.TestCase):
                     npm_step,
                     "      - name: Install audited toolchain and Forge\n"
                     f"        uses: attacker/action@{'b' * 40}\n",
+                    1,
+                ),
+                "ubuntu-py312-core:studio_step_kind",
+            ),
+            "attacker native diagnostics action": (
+                workflow.replace(
+                    native_diagnostics_step,
+                    native_diagnostics_step.replace(
+                        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+                        f"attacker/upload-artifact@{'c' * 40}",
+                    ),
                     1,
                 ),
                 "ubuntu-py312-core:studio_step_kind",

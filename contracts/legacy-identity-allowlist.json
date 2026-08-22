@@ -12,14 +12,14 @@
     },
     {
       "category": "migration",
-      "file_sha256": "d3b54901cde73280dbf308a783b67c5db9cc179db2e5aa10fddaf289bdf311e9",
+      "file_sha256": "12c0acbea5ad177e46ccd2c1d2c91008740816450f3fa00781cdcf2e23ad077a",
       "justification": "Restricts the hosted native authority workflow old/new repository bridge to trusted main pushes and the stable GitHub repository ID.",
       "offsets": [
-        35510,
-        37030,
-        38507,
-        39032,
-        41538
+        37910,
+        39430,
+        40907,
+        41432,
+        43938
       ],
       "path": ".github/workflows/ci.yml",
       "pattern": "rpg-world-forge"
