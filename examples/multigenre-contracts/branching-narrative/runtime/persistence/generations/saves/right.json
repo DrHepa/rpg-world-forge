@@ -1,5 +1,5 @@
 {
-  "content_hash": "405839e6422ef267bfc31bef057c58390d4c54d929ae79d60102582a2126aba6",
+  "content_hash": "5ccc757994f4d5bc8999b407415332a55440750557daed720a4ca11452fbc96c",
   "format": "world-forge.persistence_generation",
   "format_version": 1,
   "kind": "save",
@@ -22,22 +22,22 @@
         "version": "1.0.0"
       },
       "runtime_bundle": {
-        "content_hash": "d9f0f3a6100a30f712c4d6438decd406572161dda0f0184b4d4007e42b2f83af",
+        "content_hash": "40f35127e1dea436d05766f4d77a68766cd096d0db7eb20c7f0c39c5ac838c0f",
         "format": "world-forge.game_runtime_bundle",
         "format_version": 1,
-        "id": "game_runtime_bundle_fb46e4c000e594518f8fab30536eca3b67b2adeada99a496"
+        "id": "game_runtime_bundle_e0567b163d38cc3782b9dc879e07d542e8f283b120ac3aa2"
       },
       "runtime_composition": {
-        "content_hash": "9ae6fa3b0a508b956111b78c3a3ef874c7cb2455d0178a9e1272303483cb2f6d",
+        "content_hash": "d84191936167d3bbae66c75676ec84736d493eb933ebd219fcf1255fd2e90486",
         "format": "world-forge.game_runtime_composition",
         "format_version": 1,
-        "id": "runtime_composition_96a1dccea8112fa62287553685d259b5b77be42e"
+        "id": "runtime_composition_92741f00f242c9c6312486ec9b145f2be2cdd7e2"
       }
     },
-    "content_hash": "f3426e06f703956bbbb75ce9a4e331df3efb5120c6ff39fc71a019c82d761bda",
+    "content_hash": "df0dc100772815210c0a2bf3642d93b4393d6a1ea200789a96c4af7c0d4130bc",
     "format": "world-forge.game_save",
     "format_version": 1,
-    "save_id": "game_save_d7752cc416ee9998edc204fd26ea702e2e31f9b30f68797d",
+    "save_id": "game_save_d48dab4c43bc3f34f454234d018bdb7679fc1b8c1f891901",
     "state": {
       "classification": {
         "ending_ids": [
@@ -62,7 +62,7 @@
       "saved_hash": "a91e46da8e98f6b24bc1add282a76463426477e08d5ab7a0cca5d2df27e23a89"
     }
   },
-  "payload_hash": "f3426e06f703956bbbb75ce9a4e331df3efb5120c6ff39fc71a019c82d761bda",
+  "payload_hash": "df0dc100772815210c0a2bf3642d93b4393d6a1ea200789a96c4af7c0d4130bc",
   "sequence": 0,
   "slot": "right"
 }

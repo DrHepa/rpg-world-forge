@@ -13,7 +13,7 @@
       "id": "gamepack_raylib_2d_text"
     }
   ],
-  "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+  "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
   "files": [
     {
       "path": "descriptors/gamepack_raylib_2d_puzzle@1.1.0.json",
@@ -142,8 +142,8 @@
     },
     {
       "path": "gamepack_runtime/persistence_io.py",
-      "sha256": "45189acb9d0c5cd26b5ba0abb80851825bf95268360f647e5934f49c800fd7d3",
-      "size_bytes": 113482
+      "sha256": "6fb386a8e3ef6944ceba73f94b902d22d97eb3f7bcb5c0a900b4b04a57eee944",
+      "size_bytes": 121575
     },
     {
       "path": "gamepack_runtime/runtime_io.py",
@@ -167,6 +167,6 @@
     "id": "gamepack_runtime",
     "version": "1.0.0"
   },
-  "snapshot_id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4",
-  "tree_hash": "8592acb2878542b603673545e32aa733cea5be68ce2a112425dd71a6d300702e"
+  "snapshot_id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d",
+  "tree_hash": "884173a779c807d15bdce3d1ca6b94c1d9606622e7fc099c76790afca3c5d634"
 }

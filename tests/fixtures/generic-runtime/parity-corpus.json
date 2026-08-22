@@ -1513,15 +1513,15 @@
             }
           }
         ],
-        "content_hash": "aa8da1b69fcfca1ed97fb2fe9155ef041193735ceaac26435af7d2eda15e560d",
+        "content_hash": "99aee714009ed9719fc622c3f70d478f5abadfb695b4bfe5908c16e5d5044646",
         "format": "world-forge.runtime_adapter_registry",
         "format_version": 1,
-        "registry_id": "runtime_registry_25ffd0fab99d3a3d5e48633d1932b4f61c22b4ee",
+        "registry_id": "runtime_registry_8dd6c6173e574baf5cd5946371ae635f222b0fe5",
         "runtime_snapshot": {
-          "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+          "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
           "format": "world-forge.game_runtime_snapshot",
           "format_version": 1,
-          "id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4"
+          "id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d"
         }
       },
       "kind": "generic-runtime-adapter-registry"
@@ -1543,7 +1543,7 @@
             "id": "gamepack_raylib_2d_text"
           }
         ],
-        "content_hash": "ca7c72641ed9671afd3c61d1d0c8b7f5ccc3e8306000204c73b34c661cf2e40c",
+        "content_hash": "41a5af6059d977d4bdd8cb10fb05651c88d5de514efbdba94d0a3d41e6b53f81",
         "files": [
           {
             "path": "gamepack_runtime/session.py",
@@ -1562,8 +1562,8 @@
           },
           {
             "path": "gamepack_runtime/persistence_io.py",
-            "sha256": "45189acb9d0c5cd26b5ba0abb80851825bf95268360f647e5934f49c800fd7d3",
-            "size_bytes": 113482
+            "sha256": "6fb386a8e3ef6944ceba73f94b902d22d97eb3f7bcb5c0a900b4b04a57eee944",
+            "size_bytes": 121575
           },
           {
             "path": "gamepack_runtime/persistence_generation.py",
@@ -1697,8 +1697,8 @@
           "id": "gamepack_runtime",
           "version": "1.0.0"
         },
-        "snapshot_id": "runtime_snapshot_8d4d71611f87ce4784b30c3ecc01b8267bc09a56",
-        "tree_hash": "c81ee6910fa410f961d9a8d616bf813ea93290587b9badd331d6c8bad68ee5da"
+        "snapshot_id": "runtime_snapshot_0e9338661d68d891332c49b83526f85830815e75",
+        "tree_hash": "a93159d337bb7a8fbf8a9b8344adf3098a827b71966294f2fa3bfd51744d2294"
       },
       "kind": "game-runtime-snapshot"
     },
@@ -1719,7 +1719,7 @@
             "id": "gamepack_raylib_2d_text"
           }
         ],
-        "content_hash": "f57cee85d5cd58c80e9d59f0c14897e1cc40d744f53cb2baa18e765d9f4710b6",
+        "content_hash": "99bc2e535d675edc0230b6f5ce5b3abb9bad4087a0b3d0ebbb5b3a5432c1e3a7",
         "files": [
           {
             "path": "descriptors/gamepack_raylib_2d_puzzle@1.1.0.json",
@@ -1848,8 +1848,8 @@
           },
           {
             "path": "gamepack_runtime/persistence_io.py",
-            "sha256": "45189acb9d0c5cd26b5ba0abb80851825bf95268360f647e5934f49c800fd7d3",
-            "size_bytes": 113482
+            "sha256": "6fb386a8e3ef6944ceba73f94b902d22d97eb3f7bcb5c0a900b4b04a57eee944",
+            "size_bytes": 121575
           },
           {
             "path": "gamepack_runtime/runtime_io.py",
@@ -1873,8 +1873,8 @@
           "id": "gamepack_runtime",
           "version": "1.0.0"
         },
-        "snapshot_id": "runtime_snapshot_c5c5904f75a2b0eddecef6a73fdfe2c92e73ff93",
-        "tree_hash": "6148bc27182c245602cf8bca54ffe670f5ea7497db9a8c330ee65977ef5b4348"
+        "snapshot_id": "runtime_snapshot_6e75a8410b5a06a332ea486b1d622a6510d3a2bb",
+        "tree_hash": "40af0bc89171d24806511b7b1dd10460ac56024379e50c6d964ea062d47c3cf1"
       },
       "kind": "game-runtime-snapshot"
     },
@@ -1895,7 +1895,7 @@
             "id": "gamepack_raylib_2d_text"
           }
         ],
-        "content_hash": "6d264ac9177071b7b407e3bbf90ffc2d3349343435ff9dc145548bf114c82474",
+        "content_hash": "3a68198e48c0e86c272d29d9a780eff5b9a3a0c84b44eab712e80a39fcd788b6",
         "files": [
           {
             "path": "descriptors/gamepack_raylib_2d_puzzle@1.1.0.json",
@@ -2069,8 +2069,8 @@
           },
           {
             "path": "gamepack_runtime/persistence_io.py",
-            "sha256": "45189acb9d0c5cd26b5ba0abb80851825bf95268360f647e5934f49c800fd7d3",
-            "size_bytes": 113482
+            "sha256": "6fb386a8e3ef6944ceba73f94b902d22d97eb3f7bcb5c0a900b4b04a57eee944",
+            "size_bytes": 121575
           },
           {
             "path": "gamepack_runtime/runtime_io.py",
@@ -2094,8 +2094,8 @@
           "id": "gamepack_runtime",
           "version": "1.0.0"
         },
-        "snapshot_id": "runtime_snapshot_0cbc079027048458a48a26232eea6289ac9d79b7",
-        "tree_hash": "3d085be6bbb58ace52cd385902e66ad50ab89c86ca5bcb7e8462b2e4f8668e98"
+        "snapshot_id": "runtime_snapshot_8c433628193392fe38e93803bacfe1b5ae96b6a4",
+        "tree_hash": "982fb1daaba74b6a8edf12990892855d7bc55fb0f2e2fa42393af2d85943e80d"
       },
       "kind": "game-runtime-snapshot"
     },
@@ -2133,8 +2133,8 @@
             "size_bytes": 1374
           }
         ],
-        "composition_id": "runtime_composition_b2286a7b8630b5d777304a44f425ec93ef246c45",
-        "content_hash": "5c3d1da1b8c9790b423ec159e28997c18a8b3139aaf286020fefdc26d7b81ea8",
+        "composition_id": "runtime_composition_26903d2f47f239f7fe11872507256cbf99a05553",
+        "content_hash": "6c0e8e8d8394fe12e1ecc147846b82e8fd08fdc41f98f03cca87c539e92f8ac5",
         "format": "world-forge.game_runtime_composition",
         "format_version": 1,
         "gamepack": {
@@ -2160,16 +2160,16 @@
           }
         ],
         "registry": {
-          "content_hash": "9485e28a864328cca5a4a3bc21fe8569ae160459130917175b25caf119b87570",
+          "content_hash": "bdcad2819eab97f134c200af4cb3faa4db1c648e6bf4723cccbd795d31c6acbf",
           "format": "world-forge.runtime_adapter_registry",
           "format_version": 1,
-          "id": "runtime_registry_3881369ef21309239e243d7f9535be05831ebaa8"
+          "id": "runtime_registry_bb9e516289b3f150d730e2adac7746553359496b"
         },
         "runtime_snapshot": {
-          "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+          "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
           "format": "world-forge.game_runtime_snapshot",
           "format_version": 1,
-          "id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4"
+          "id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d"
         }
       },
       "kind": "game-runtime-composition"
@@ -2208,8 +2208,8 @@
             "size_bytes": 1374
           }
         ],
-        "composition_id": "runtime_composition_d710713a404243c82763642c831b56bfc0fa0556",
-        "content_hash": "117a76590f24d5f015edb0e52405d6f6f98ce518e7f45c25190a08a1aaa87c61",
+        "composition_id": "runtime_composition_5c481a20ca847fccff43fe6eb0be2be90644e20b",
+        "content_hash": "d26c9ed4054f1ecd9bd58c5a99d144c88198f4e81d9f3ffc1d549c9bac7e81ce",
         "format": "world-forge.game_runtime_composition",
         "format_version": 1,
         "gamepack": {
@@ -2235,16 +2235,16 @@
           }
         ],
         "registry": {
-          "content_hash": "9485e28a864328cca5a4a3bc21fe8569ae160459130917175b25caf119b87570",
+          "content_hash": "bdcad2819eab97f134c200af4cb3faa4db1c648e6bf4723cccbd795d31c6acbf",
           "format": "world-forge.runtime_adapter_registry",
           "format_version": 1,
-          "id": "runtime_registry_3881369ef21309239e243d7f9535be05831ebaa8"
+          "id": "runtime_registry_bb9e516289b3f150d730e2adac7746553359496b"
         },
         "runtime_snapshot": {
-          "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+          "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
           "format": "world-forge.game_runtime_snapshot",
           "format_version": 1,
-          "id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4"
+          "id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d"
         }
       },
       "kind": "game-runtime-composition"
@@ -2292,8 +2292,8 @@
             "size_bytes": 28748
           }
         ],
-        "composition_id": "runtime_composition_046470c39ae9c3e8f0202000eeba3963aca28057",
-        "content_hash": "48e1cae8a5e40e0ef6afc219bbeb13f0ed9e14fcfaa38ba009f2925aba2092a9",
+        "composition_id": "runtime_composition_649ae76b97c809012957c5cf9e0c592cd82800d2",
+        "content_hash": "56e820b3bd42d73da948632ed847468429c7a823be06084591a3ecd95274ebdc",
         "format": "world-forge.game_runtime_composition",
         "format_version": 1,
         "gamepack": {
@@ -2319,16 +2319,16 @@
           }
         ],
         "registry": {
-          "content_hash": "9485e28a864328cca5a4a3bc21fe8569ae160459130917175b25caf119b87570",
+          "content_hash": "bdcad2819eab97f134c200af4cb3faa4db1c648e6bf4723cccbd795d31c6acbf",
           "format": "world-forge.runtime_adapter_registry",
           "format_version": 1,
-          "id": "runtime_registry_3881369ef21309239e243d7f9535be05831ebaa8"
+          "id": "runtime_registry_bb9e516289b3f150d730e2adac7746553359496b"
         },
         "runtime_snapshot": {
-          "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+          "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
           "format": "world-forge.game_runtime_snapshot",
           "format_version": 1,
-          "id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4"
+          "id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d"
         }
       },
       "kind": "game-runtime-composition"
@@ -2367,8 +2367,8 @@
             "size_bytes": 16777217
           }
         ],
-        "composition_id": "runtime_composition_c76f87e7d9ce8e3772557252d15259c72e1c61b8",
-        "content_hash": "42fe4fe3d202f9164e4db4f81405a6276486462d6a2fec3d7838bdbc9b85daa2",
+        "composition_id": "runtime_composition_79495cb8622fdbdb93ae28c2053d1e2b6ecc0d17",
+        "content_hash": "9691d1fb3665dd6a90774e2f90bc5e7239ec20330ce30cd50ae80ace8b7e1ec5",
         "format": "world-forge.game_runtime_composition",
         "format_version": 1,
         "gamepack": {
@@ -2394,16 +2394,16 @@
           }
         ],
         "registry": {
-          "content_hash": "9485e28a864328cca5a4a3bc21fe8569ae160459130917175b25caf119b87570",
+          "content_hash": "bdcad2819eab97f134c200af4cb3faa4db1c648e6bf4723cccbd795d31c6acbf",
           "format": "world-forge.runtime_adapter_registry",
           "format_version": 1,
-          "id": "runtime_registry_3881369ef21309239e243d7f9535be05831ebaa8"
+          "id": "runtime_registry_bb9e516289b3f150d730e2adac7746553359496b"
         },
         "runtime_snapshot": {
-          "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+          "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
           "format": "world-forge.game_runtime_snapshot",
           "format_version": 1,
-          "id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4"
+          "id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d"
         }
       },
       "kind": "game-runtime-composition"
@@ -2448,13 +2448,13 @@
           }
         ],
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "740126e086da8d50aff24aa2172befa0ea8044b3c351d34254871c5d9b422102",
-        "evidence_id": "runtime_evidence_e620d5d035b7090b7c1f1c10c05205e5cb6b9051",
+        "content_hash": "4241ca3a96b88eefac856c3b648fe3db6e5fb44bbc29b8aff0a68a826c8af45d",
+        "evidence_id": "runtime_evidence_b457384199e6754741cdac593fae6ea35b14247e",
         "execution_status": "native_verified",
         "format": "world-forge.runtime_evidence",
         "format_version": 1,
@@ -2509,13 +2509,13 @@
           }
         ],
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "b55221825ff3c66faaa29c117768ce97f7bf03651aa265a985852911110cea44",
-        "evidence_id": "runtime_evidence_742f32fb3a85791fb910884e8ae41b65d9bfd60c",
+        "content_hash": "4529043b84cdb2539aa5232f825254dca5f5fb59a5a259829dc4086342c85ef6",
+        "evidence_id": "runtime_evidence_1f300af3a578153a3f6ca2286efa27a12d498553",
         "execution_status": "native_verified",
         "format": "world-forge.runtime_evidence",
         "format_version": 1,
@@ -2570,13 +2570,13 @@
           }
         ],
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "231a6cf8f4ac4d86515d05fdbbc6f1b591561c12578a49e026fb2610df714194",
-        "evidence_id": "runtime_evidence_8b511b951f5144f58bb010a3ea77d6c4e0cc2b2f",
+        "content_hash": "f14e668a88593401fb54dd6402ef4e4d42e873e4b4b5486289952c81c69d59cc",
+        "evidence_id": "runtime_evidence_64db34b877fb33977098c245f923850a73c1da15",
         "execution_status": "native_verified",
         "format": "world-forge.runtime_evidence",
         "format_version": 1,
@@ -2631,13 +2631,13 @@
           }
         ],
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "de79eda0961519c05002919e06bd573efc488954344f47cb7faed42656849b61",
-        "evidence_id": "runtime_evidence_a4cf0152ea6ab8743fb4a935373d5dd7fe427a62",
+        "content_hash": "ceb6a0bbb5af0487e51cdb7784f23620f050921b8cb6a790d01f41338537843a",
+        "evidence_id": "runtime_evidence_19d2194de6a00a1226785ba55465c32ee65526cd",
         "execution_status": "native_verified",
         "format": "world-forge.runtime_evidence",
         "format_version": 1,
@@ -2663,12 +2663,12 @@
         },
         "compatibility_status": "partially_supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "9c58561ca716050bf55d939ed863c3387b1e17c08a7f62ea4c22b3117c69ead2",
+        "content_hash": "389dafcd0ffb73dde392b8b057e54541ef4723ff136df0ec774068cd2e8b729b",
         "dimensions": {
           "adapter": "declared",
           "assets": "sealed",
@@ -2830,7 +2830,7 @@
           "packaging_evidence_missing",
           "save_replay_evidence_missing"
         ],
-        "report_id": "runtime_support_5b5a918084897055d3b68039fb25aa4ae52f39bc",
+        "report_id": "runtime_support_f740357708e6e7bfc2ed1c837a2e7b11c496bb8d",
         "supported": false
       },
       "kind": "generic-runtime-support-report"
@@ -2846,12 +2846,12 @@
         },
         "compatibility_status": "partially_supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "279d991b6b28881440d25677a12e1574008b21b4cf38e28f71e3f77f52b8fca5",
+        "content_hash": "f25eda483addb37763acc74217838536293f916b19ae92451d366a289e3509db",
         "dimensions": {
           "adapter": "declared",
           "assets": "sealed",
@@ -3014,7 +3014,7 @@
           "save_replay_evidence_missing",
           "adapter_not_verified"
         ],
-        "report_id": "runtime_support_7fad221c86141148b13a7293f0ee1f2242a744b1",
+        "report_id": "runtime_support_2c49b1f582fe2d5f22121063bd7a3f0f34b4d092",
         "supported": false
       },
       "kind": "generic-runtime-support-report"
@@ -3030,12 +3030,12 @@
         },
         "compatibility_status": "partially_supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "16850bcf125ab957cc1569bae633767eeca2481f103197cde710836d7cc4e918",
+        "content_hash": "2832e1f89ad3641fc7b7b803efdedeb235c4d2eb78365e1c7ad6ed36a1e43d09",
         "dimensions": {
           "adapter": "declared",
           "assets": "sealed",
@@ -3044,7 +3044,7 @@
           "execution": [
             {
               "evidence_ids": [
-                "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d"
+                "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -3057,7 +3057,7 @@
             },
             {
               "evidence_ids": [
-                "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+                "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -3074,11 +3074,11 @@
         },
         "evidence": [
           {
-            "content_hash": "2f7d975ae2ca12cc29e271735001fe46b7e13256e1fbe5fd8eb73b074a3b7856",
+            "content_hash": "71797ff840a3d690f0d41bec8f353988a69c36047cea588542a902edbceae1a1",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7",
+            "id": "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -3095,11 +3095,11 @@
             }
           },
           {
-            "content_hash": "e881d5fc9d0f5f596fe1f41742d27d23bb6c1b35afb8bb1ccb511e7950124cfa",
+            "content_hash": "1d86ba4c6f7bdf775a4f61b108458fac0341b5efe6f30f39e3d902d3df325b0e",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
+            "id": "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -3240,7 +3240,7 @@
         "reason_codes": [
           "adapter_not_verified"
         ],
-        "report_id": "runtime_support_3c7876e2adcc425becefb822f4128a5d355ec791",
+        "report_id": "runtime_support_c85caeb290270b30bd61a3464b55a9dfe1554adf",
         "supported": false
       },
       "kind": "generic-runtime-support-report"
@@ -3256,12 +3256,12 @@
         },
         "compatibility_status": "partially_supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "67eb47f63c3d15a0030b20c5b07779dbcfdc12e4b32a3661c1164d329e94ae03",
+        "content_hash": "3b74d2f5d84d7140b3abbc502675de4e0b03f0c2aabe479455b49f6591df87f7",
         "dimensions": {
           "adapter": "declared",
           "assets": "sealed",
@@ -3270,7 +3270,7 @@
           "execution": [
             {
               "evidence_ids": [
-                "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+                "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -3283,7 +3283,7 @@
             },
             {
               "evidence_ids": [
-                "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d"
+                "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -3300,11 +3300,11 @@
         },
         "evidence": [
           {
-            "content_hash": "e881d5fc9d0f5f596fe1f41742d27d23bb6c1b35afb8bb1ccb511e7950124cfa",
+            "content_hash": "1d86ba4c6f7bdf775a4f61b108458fac0341b5efe6f30f39e3d902d3df325b0e",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
+            "id": "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -3321,11 +3321,11 @@
             }
           },
           {
-            "content_hash": "2f7d975ae2ca12cc29e271735001fe46b7e13256e1fbe5fd8eb73b074a3b7856",
+            "content_hash": "71797ff840a3d690f0d41bec8f353988a69c36047cea588542a902edbceae1a1",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7",
+            "id": "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -3466,7 +3466,7 @@
         "reason_codes": [
           "adapter_not_verified"
         ],
-        "report_id": "runtime_support_78501aea136efa23383c4c503ae9141d353b9828",
+        "report_id": "runtime_support_94cfe451361454855759b9e7cd895b925a2a6209",
         "supported": false
       },
       "kind": "generic-runtime-support-report"
@@ -3482,12 +3482,12 @@
         },
         "compatibility_status": "supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "c7b357037df69fc1e305198284b298cd03259780bc7f8ec3769bab6add4a525a",
+        "content_hash": "79fce75fa840317db5111740fa987bada5af7f4c639ab3365f7c56722b1d5d22",
         "dimensions": {
           "adapter": "verified",
           "assets": "sealed",
@@ -3496,7 +3496,7 @@
           "execution": [
             {
               "evidence_ids": [
-                "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d"
+                "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -3509,7 +3509,7 @@
             },
             {
               "evidence_ids": [
-                "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+                "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -3526,11 +3526,11 @@
         },
         "evidence": [
           {
-            "content_hash": "e881d5fc9d0f5f596fe1f41742d27d23bb6c1b35afb8bb1ccb511e7950124cfa",
+            "content_hash": "1d86ba4c6f7bdf775a4f61b108458fac0341b5efe6f30f39e3d902d3df325b0e",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
+            "id": "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -3547,11 +3547,11 @@
             }
           },
           {
-            "content_hash": "2f7d975ae2ca12cc29e271735001fe46b7e13256e1fbe5fd8eb73b074a3b7856",
+            "content_hash": "71797ff840a3d690f0d41bec8f353988a69c36047cea588542a902edbceae1a1",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7",
+            "id": "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -3571,8 +3571,8 @@
         "features": [
           {
             "evidence_ids": [
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7",
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d"
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc",
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781"
             ],
             "feature_id": "logic:deterministic_actions",
             "reason_codes": [],
@@ -3580,8 +3580,8 @@
           },
           {
             "evidence_ids": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "feature_id": "logic:finite_state",
             "reason_codes": [],
@@ -3613,8 +3613,8 @@
             ],
             "mechanic_id": "restart_mechanic",
             "native_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "presentation_hook_ids": [
               "board_feedback"
@@ -3638,8 +3638,8 @@
             },
             "status": "supported_current",
             "test_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ]
           },
           {
@@ -3662,8 +3662,8 @@
             ],
             "mechanic_id": "swap_mechanic",
             "native_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "presentation_hook_ids": [
               "board_feedback",
@@ -3689,14 +3689,14 @@
             },
             "status": "supported_current",
             "test_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ]
           }
         ],
         "missing_capabilities": [],
         "reason_codes": [],
-        "report_id": "runtime_support_73eadd792a7ff23f1ee2613af3bc3372604effe2",
+        "report_id": "runtime_support_556c62732ed8c48c9482e85187a80e01ef44ae65",
         "supported": true
       },
       "kind": "generic-runtime-support-report"
@@ -3712,12 +3712,12 @@
         },
         "compatibility_status": "supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "61dc4388b7f76febcaf01edb7ced245935d1c069f9c76e5546fa653e08c565cc",
+        "content_hash": "8eef476f0f0a692bf9eee2b2a9e02709900915f84fbfa212fc41beffe8da9fe7",
         "dimensions": {
           "adapter": "verified",
           "assets": "sealed",
@@ -3726,7 +3726,7 @@
           "execution": [
             {
               "evidence_ids": [
-                "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d"
+                "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -3739,7 +3739,7 @@
             },
             {
               "evidence_ids": [
-                "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+                "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -3756,11 +3756,11 @@
         },
         "evidence": [
           {
-            "content_hash": "e881d5fc9d0f5f596fe1f41742d27d23bb6c1b35afb8bb1ccb511e7950124cfa",
+            "content_hash": "1d86ba4c6f7bdf775a4f61b108458fac0341b5efe6f30f39e3d902d3df325b0e",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
+            "id": "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -3777,11 +3777,11 @@
             }
           },
           {
-            "content_hash": "2f7d975ae2ca12cc29e271735001fe46b7e13256e1fbe5fd8eb73b074a3b7856",
+            "content_hash": "71797ff840a3d690f0d41bec8f353988a69c36047cea588542a902edbceae1a1",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7",
+            "id": "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -3801,8 +3801,8 @@
         "features": [
           {
             "evidence_ids": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "feature_id": "logic:deterministic_actions",
             "reason_codes": [],
@@ -3810,8 +3810,8 @@
           },
           {
             "evidence_ids": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "feature_id": "logic:finite_state",
             "reason_codes": [],
@@ -3843,8 +3843,8 @@
             ],
             "mechanic_id": "restart_mechanic",
             "native_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "presentation_hook_ids": [
               "board_feedback"
@@ -3889,8 +3889,8 @@
             ],
             "mechanic_id": "swap_mechanic",
             "native_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "presentation_hook_ids": [
               "board_feedback",
@@ -3916,14 +3916,14 @@
             },
             "status": "supported_current",
             "test_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ]
           }
         ],
         "missing_capabilities": [],
         "reason_codes": [],
-        "report_id": "runtime_support_a37ffbf6a63a9ab599ea71ed88f43961f3f45c4e",
+        "report_id": "runtime_support_026ecf813b1aa6377649bd383ae6721211fac514",
         "supported": true
       },
       "kind": "generic-runtime-support-report"
@@ -3939,12 +3939,12 @@
         },
         "compatibility_status": "supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "edfd71754855ccaf301c07affeec4aae1208bb84b587fb2d3f9a80b13673aba9",
+        "content_hash": "126c36e1f6aaffa2b6bcb463d809c245ea93e21dbd8d3828f0d43f4080e2d631",
         "dimensions": {
           "adapter": "verified",
           "assets": "sealed",
@@ -3964,7 +3964,7 @@
             },
             {
               "evidence_ids": [
-                "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+                "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -3981,11 +3981,11 @@
         },
         "evidence": [
           {
-            "content_hash": "e881d5fc9d0f5f596fe1f41742d27d23bb6c1b35afb8bb1ccb511e7950124cfa",
+            "content_hash": "1d86ba4c6f7bdf775a4f61b108458fac0341b5efe6f30f39e3d902d3df325b0e",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
+            "id": "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -4002,11 +4002,11 @@
             }
           },
           {
-            "content_hash": "2f7d975ae2ca12cc29e271735001fe46b7e13256e1fbe5fd8eb73b074a3b7856",
+            "content_hash": "71797ff840a3d690f0d41bec8f353988a69c36047cea588542a902edbceae1a1",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7",
+            "id": "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -4026,8 +4026,8 @@
         "features": [
           {
             "evidence_ids": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "feature_id": "logic:deterministic_actions",
             "reason_codes": [],
@@ -4035,8 +4035,8 @@
           },
           {
             "evidence_ids": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "feature_id": "logic:finite_state",
             "reason_codes": [],
@@ -4068,8 +4068,8 @@
             ],
             "mechanic_id": "restart_mechanic",
             "native_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "presentation_hook_ids": [
               "board_feedback"
@@ -4093,8 +4093,8 @@
             },
             "status": "supported_current",
             "test_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ]
           },
           {
@@ -4117,8 +4117,8 @@
             ],
             "mechanic_id": "swap_mechanic",
             "native_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "presentation_hook_ids": [
               "board_feedback",
@@ -4144,14 +4144,14 @@
             },
             "status": "supported_current",
             "test_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ]
           }
         ],
         "missing_capabilities": [],
         "reason_codes": [],
-        "report_id": "runtime_support_1a1ac472ae12dc47fc036d2ef7e040bd3385529a",
+        "report_id": "runtime_support_0f7d238dc6a505e953c8fb6d4abe39eea57b8bf3",
         "supported": true
       },
       "kind": "generic-runtime-support-report"
@@ -4167,12 +4167,12 @@
         },
         "compatibility_status": "supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "98370fecd26d64582ef9c1ebb71c2c82a89e4110bda9223cc1a5d6aa2998a798",
+        "content_hash": "1a94f34942c89fc3e691e26557544f650d55247c29183f489b54481c90841af2",
         "dimensions": {
           "adapter": "verified",
           "assets": "sealed",
@@ -4316,7 +4316,7 @@
         ],
         "missing_capabilities": [],
         "reason_codes": [],
-        "report_id": "runtime_support_91ccf53907bd1309e55174dddaf34cf9619b1392",
+        "report_id": "runtime_support_d24895b96890a696df81f2e2598e8401587503ab",
         "supported": true
       },
       "kind": "generic-runtime-support-report"
@@ -4332,12 +4332,12 @@
         },
         "compatibility_status": "partially_supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "481b0fda7208329411cf0044b6a25a847bbde5978516dad073f56db4a0868074",
+        "content_hash": "463d61b5418a8e7158f9adbc0f152a21b906feee1d7319594af4988b17a699b0",
         "dimensions": {
           "adapter": "declared",
           "assets": "sealed",
@@ -4496,7 +4496,7 @@
           "packaging_evidence_missing",
           "save_replay_evidence_missing"
         ],
-        "report_id": "runtime_support_07480f24f0d3aca41568837ddd428d1f3cb53ec5",
+        "report_id": "runtime_support_6dd63d6d240d7972332faca6a9056b0d3c5ab840",
         "supported": false
       },
       "kind": "generic-runtime-support-report"
@@ -4512,12 +4512,12 @@
         },
         "compatibility_status": "partially_supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "c2fe785889265c75e340e9087fdbaad0958f993ff2c2f078121c39a606c4aae6",
+        "content_hash": "31bb092583ab08fc41238d841ea2233403fcee2994004fe7f3d506c814c71477",
         "dimensions": {
           "adapter": "declared",
           "assets": "sealed",
@@ -4679,7 +4679,7 @@
           "packaging_evidence_missing",
           "save_replay_evidence_missing"
         ],
-        "report_id": "runtime_support_b57538a4e825069a97c26f7071356a825be05f1a",
+        "report_id": "runtime_support_4873ec7f650c3a518482185ebcde84785fb4bc48",
         "supported": false
       },
       "kind": "generic-runtime-support-report"
@@ -5132,15 +5132,15 @@
             }
           }
         ],
-        "content_hash": "9485e28a864328cca5a4a3bc21fe8569ae160459130917175b25caf119b87570",
+        "content_hash": "bdcad2819eab97f134c200af4cb3faa4db1c648e6bf4723cccbd795d31c6acbf",
         "format": "world-forge.runtime_adapter_registry",
         "format_version": 1,
-        "registry_id": "runtime_registry_3881369ef21309239e243d7f9535be05831ebaa8",
+        "registry_id": "runtime_registry_bb9e516289b3f150d730e2adac7746553359496b",
         "runtime_snapshot": {
-          "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+          "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
           "format": "world-forge.game_runtime_snapshot",
           "format_version": 1,
-          "id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4"
+          "id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d"
         }
       },
       "kind": "generic-runtime-adapter-registry"
@@ -5162,7 +5162,7 @@
             "id": "gamepack_raylib_2d_text"
           }
         ],
-        "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+        "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
         "files": [
           {
             "path": "descriptors/gamepack_raylib_2d_puzzle@1.1.0.json",
@@ -5291,8 +5291,8 @@
           },
           {
             "path": "gamepack_runtime/persistence_io.py",
-            "sha256": "45189acb9d0c5cd26b5ba0abb80851825bf95268360f647e5934f49c800fd7d3",
-            "size_bytes": 113482
+            "sha256": "6fb386a8e3ef6944ceba73f94b902d22d97eb3f7bcb5c0a900b4b04a57eee944",
+            "size_bytes": 121575
           },
           {
             "path": "gamepack_runtime/runtime_io.py",
@@ -5316,8 +5316,8 @@
           "id": "gamepack_runtime",
           "version": "1.0.0"
         },
-        "snapshot_id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4",
-        "tree_hash": "8592acb2878542b603673545e32aa733cea5be68ce2a112425dd71a6d300702e"
+        "snapshot_id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d",
+        "tree_hash": "884173a779c807d15bdce3d1ca6b94c1d9606622e7fc099c76790afca3c5d634"
       },
       "kind": "game-runtime-snapshot"
     },
@@ -5355,8 +5355,8 @@
             "size_bytes": 1374
           }
         ],
-        "composition_id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c",
-        "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+        "composition_id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4",
+        "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
         "format": "world-forge.game_runtime_composition",
         "format_version": 1,
         "gamepack": {
@@ -5382,16 +5382,16 @@
           }
         ],
         "registry": {
-          "content_hash": "9485e28a864328cca5a4a3bc21fe8569ae160459130917175b25caf119b87570",
+          "content_hash": "bdcad2819eab97f134c200af4cb3faa4db1c648e6bf4723cccbd795d31c6acbf",
           "format": "world-forge.runtime_adapter_registry",
           "format_version": 1,
-          "id": "runtime_registry_3881369ef21309239e243d7f9535be05831ebaa8"
+          "id": "runtime_registry_bb9e516289b3f150d730e2adac7746553359496b"
         },
         "runtime_snapshot": {
-          "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
+          "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
           "format": "world-forge.game_runtime_snapshot",
           "format_version": 1,
-          "id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4"
+          "id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d"
         }
       },
       "kind": "game-runtime-composition"
@@ -5436,13 +5436,13 @@
           }
         ],
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "e881d5fc9d0f5f596fe1f41742d27d23bb6c1b35afb8bb1ccb511e7950124cfa",
-        "evidence_id": "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
+        "content_hash": "1d86ba4c6f7bdf775a4f61b108458fac0341b5efe6f30f39e3d902d3df325b0e",
+        "evidence_id": "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc",
         "execution_status": "native_verified",
         "format": "world-forge.runtime_evidence",
         "format_version": 1,
@@ -5468,12 +5468,12 @@
         },
         "compatibility_status": "partially_supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "e8a32a962cb924c5d089d2216ed79ea81559814a3c22fa356c7b8c7ed91dff57",
+        "content_hash": "89e6fdbb6f7829bca4b3e6459621f2459f2870a4bad9c976c603c2d4f9950a8f",
         "dimensions": {
           "adapter": "declared",
           "assets": "sealed",
@@ -5635,7 +5635,7 @@
           "packaging_evidence_missing",
           "save_replay_evidence_missing"
         ],
-        "report_id": "runtime_support_5e51a985c423d33ceb58dea0c532bee3055930ab",
+        "report_id": "runtime_support_aef5450a1068f89dbce1afb5a9e0304539c04c74",
         "supported": false
       },
       "kind": "generic-runtime-support-report"
@@ -5651,12 +5651,12 @@
         },
         "compatibility_status": "partially_supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "3fce0d54b23d93e4d7959d62f67b7dd8d773c43d2ca5709fd977a9619eba6456",
+        "content_hash": "cffb9d5e2816d0c8490a56e7d4fa31cb7a5b8c4d425640be0d04e1fb612cfc6a",
         "dimensions": {
           "adapter": "declared",
           "assets": "sealed",
@@ -5665,7 +5665,7 @@
           "execution": [
             {
               "evidence_ids": [
-                "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d"
+                "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -5678,7 +5678,7 @@
             },
             {
               "evidence_ids": [
-                "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+                "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -5695,11 +5695,11 @@
         },
         "evidence": [
           {
-            "content_hash": "e881d5fc9d0f5f596fe1f41742d27d23bb6c1b35afb8bb1ccb511e7950124cfa",
+            "content_hash": "1d86ba4c6f7bdf775a4f61b108458fac0341b5efe6f30f39e3d902d3df325b0e",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
+            "id": "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -5716,11 +5716,11 @@
             }
           },
           {
-            "content_hash": "2f7d975ae2ca12cc29e271735001fe46b7e13256e1fbe5fd8eb73b074a3b7856",
+            "content_hash": "71797ff840a3d690f0d41bec8f353988a69c36047cea588542a902edbceae1a1",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7",
+            "id": "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -5861,7 +5861,7 @@
         "reason_codes": [
           "adapter_not_verified"
         ],
-        "report_id": "runtime_support_b0f6670cb9aaadb7af4316463018645c72575bc8",
+        "report_id": "runtime_support_255b61d095d673853e0be810082fdde0736dcdf8",
         "supported": false
       },
       "kind": "generic-runtime-support-report"
@@ -5877,12 +5877,12 @@
         },
         "compatibility_status": "supported",
         "composition": {
-          "content_hash": "fdfcb466e86d88647349e2c8b2af1af161c6269cf255bbfa18c5c547bc2549a9",
+          "content_hash": "7af7f865db773b8d7b7d6a433dd1e66ecb8b535ac78f04346b7617538448bccd",
           "format": "world-forge.game_runtime_composition",
           "format_version": 1,
-          "id": "runtime_composition_805d3558408b72f7b68e33a39761c2fbf773629c"
+          "id": "runtime_composition_41cbfbeef64032b7d5af9275ccd0a953560a80b4"
         },
-        "content_hash": "376fb01735547ba9a9aa42e63d1c16ff883beb045623e401c313766f67928dbc",
+        "content_hash": "3fbd4156ad82d9bf0b2720c33fcc0a51bdb485d8c308dfa137b6c9846eca521a",
         "dimensions": {
           "adapter": "verified",
           "assets": "sealed",
@@ -5891,7 +5891,7 @@
           "execution": [
             {
               "evidence_ids": [
-                "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d"
+                "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -5904,7 +5904,7 @@
             },
             {
               "evidence_ids": [
-                "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+                "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781"
               ],
               "platform": {
                 "architecture": "architecture:x86_64",
@@ -5921,11 +5921,11 @@
         },
         "evidence": [
           {
-            "content_hash": "e881d5fc9d0f5f596fe1f41742d27d23bb6c1b35afb8bb1ccb511e7950124cfa",
+            "content_hash": "1d86ba4c6f7bdf775a4f61b108458fac0341b5efe6f30f39e3d902d3df325b0e",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
+            "id": "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -5942,11 +5942,11 @@
             }
           },
           {
-            "content_hash": "2f7d975ae2ca12cc29e271735001fe46b7e13256e1fbe5fd8eb73b074a3b7856",
+            "content_hash": "71797ff840a3d690f0d41bec8f353988a69c36047cea588542a902edbceae1a1",
             "execution_status": "native_verified",
             "format": "world-forge.runtime_evidence",
             "format_version": 1,
-            "id": "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7",
+            "id": "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
             "packaging_status": "verified",
             "passed_check_kinds": [
               "headless",
@@ -5966,8 +5966,8 @@
         "features": [
           {
             "evidence_ids": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "feature_id": "logic:deterministic_actions",
             "reason_codes": [],
@@ -5975,8 +5975,8 @@
           },
           {
             "evidence_ids": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "feature_id": "logic:finite_state",
             "reason_codes": [],
@@ -6008,8 +6008,8 @@
             ],
             "mechanic_id": "restart_mechanic",
             "native_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "presentation_hook_ids": [
               "board_feedback"
@@ -6033,8 +6033,8 @@
             },
             "status": "supported_current",
             "test_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ]
           },
           {
@@ -6057,8 +6057,8 @@
             ],
             "mechanic_id": "swap_mechanic",
             "native_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ],
             "presentation_hook_ids": [
               "board_feedback",
@@ -6084,14 +6084,14 @@
             },
             "status": "supported_current",
             "test_evidence": [
-              "runtime_evidence_e699c70c2eb8fadcc15b8c3cabcb0c5385633d8d",
-              "runtime_evidence_ed5faaf981e04befe97fd4e825e88c1fa4fec3d7"
+              "runtime_evidence_289c7c32af1e7579b2a966aa4a26abad3c14a781",
+              "runtime_evidence_f28414a6ccab4b6e2d271542b7188fbe40b078cc"
             ]
           }
         ],
         "missing_capabilities": [],
         "reason_codes": [],
-        "report_id": "runtime_support_d83a95c835923f07d53e58233f8763094574547f",
+        "report_id": "runtime_support_196e1a15b2e98834a573ea2f6bad1edb95267301",
         "supported": true
       },
       "kind": "generic-runtime-support-report"

@@ -1,5 +1,5 @@
 {
-  "content_hash": "9261e7dda4426d5a5bcd1dba017365b2f15a5500eecce476c2c44f11c30fefcb",
+  "content_hash": "8013adc91cadedb7740f1787aa6305638ef0b1c324de36c03038c46156f769c9",
   "format": "world-forge.persistence_generation",
   "format_version": 1,
   "kind": "replay",
@@ -22,16 +22,16 @@
         "version": "1.0.0"
       },
       "runtime_bundle": {
-        "content_hash": "d9f0f3a6100a30f712c4d6438decd406572161dda0f0184b4d4007e42b2f83af",
+        "content_hash": "40f35127e1dea436d05766f4d77a68766cd096d0db7eb20c7f0c39c5ac838c0f",
         "format": "world-forge.game_runtime_bundle",
         "format_version": 1,
-        "id": "game_runtime_bundle_fb46e4c000e594518f8fab30536eca3b67b2adeada99a496"
+        "id": "game_runtime_bundle_e0567b163d38cc3782b9dc879e07d542e8f283b120ac3aa2"
       },
       "runtime_composition": {
-        "content_hash": "9ae6fa3b0a508b956111b78c3a3ef874c7cb2455d0178a9e1272303483cb2f6d",
+        "content_hash": "d84191936167d3bbae66c75676ec84736d493eb933ebd219fcf1255fd2e90486",
         "format": "world-forge.game_runtime_composition",
         "format_version": 1,
-        "id": "runtime_composition_96a1dccea8112fa62287553685d259b5b77be42e"
+        "id": "runtime_composition_92741f00f242c9c6312486ec9b145f2be2cdd7e2"
       }
     },
     "classification": {
@@ -46,12 +46,12 @@
       "recovery_action_ids": [],
       "terminal": true
     },
-    "content_hash": "0ccc58b8a900e4841a3a92b3e090f90b742530991582541c22973d4f2d60bdf4",
+    "content_hash": "165b08d37295b158cfc015d0673dc704757205fa82e66ef553916b1ecc635bef",
     "final_state_hash": "a91e46da8e98f6b24bc1add282a76463426477e08d5ab7a0cca5d2df27e23a89",
     "format": "world-forge.game_replay",
     "format_version": 1,
     "initial_state_hash": "d36c421fcde1dac5f68bc059902364d5216106f1057e891ab1984aea96204093",
-    "replay_id": "game_replay_57027703b9a0f71dc3644c3a9ffba86ac5b45a0dc0833ade",
+    "replay_id": "game_replay_02c615ae4ecc7222e820cbd50bc09dbcdbad4d232c79f2b2",
     "steps": [
       {
         "action_id": "choose_right",
@@ -66,7 +66,7 @@
     ],
     "trace_hash": "28c6f611d4431b5398ed0ddf9675a37eb24aebc87e37ece4f0ca397545e8bbe3"
   },
-  "payload_hash": "0ccc58b8a900e4841a3a92b3e090f90b742530991582541c22973d4f2d60bdf4",
+  "payload_hash": "165b08d37295b158cfc015d0673dc704757205fa82e66ef553916b1ecc635bef",
   "sequence": 0,
   "slot": "right"
 }

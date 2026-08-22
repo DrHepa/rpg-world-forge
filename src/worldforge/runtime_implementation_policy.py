@@ -8,14 +8,14 @@ TRUSTED_ADAPTER_HASHES = {
 }
 
 TRUSTED_SNAPSHOT_IDENTITY = {
-    "snapshot_id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4",
-    "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
-    "tree_hash": "8592acb2878542b603673545e32aa733cea5be68ce2a112425dd71a6d300702e",
+    "snapshot_id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d",
+    "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
+    "tree_hash": "884173a779c807d15bdce3d1ca6b94c1d9606622e7fc099c76790afca3c5d634",
 }
 
 TRUSTED_PACKAGE_TREE_HASHES = {
     "gamepack_raylib_2d": "38f350652d5cc8e5a42ee462c936ebf0d7e37c3b2148c3d86ac4c0ea3f1ffd78",
-    "gamepack_runtime": "62798f17fcb0e9b07883e4b9632e18bf828725119b658d4d7a0496fbe6edfb9c",
+    "gamepack_runtime": "75f454d6a3a0fdb9df67cd4fc5d1b793180e7bc7e8efc7ee558f2c733b5234c4",
 }
 
 __all__ = [

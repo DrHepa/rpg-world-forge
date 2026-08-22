@@ -11,6 +11,8 @@ import tempfile
 import threading
 import types
 import unittest
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -60,6 +62,391 @@ ROOT = Path(__file__).resolve().parents[1]
 PUZZLE = ROOT / (
     "examples/multigenre-contracts/abstract-puzzle/artifacts/abstract-puzzle.gamepack.json"
 )
+
+
+def _windows_stat(
+    identity: tuple[int, int],
+    *,
+    size: int,
+    directory: bool = False,
+) -> types.SimpleNamespace:
+    mode = (stat.S_IFDIR if directory else stat.S_IFREG) | 0o600
+    return types.SimpleNamespace(
+        st_mode=mode,
+        st_dev=identity[0],
+        st_ino=identity[1],
+        st_nlink=1,
+        st_size=size,
+        st_mtime_ns=1,
+        st_ctime_ns=1,
+        st_file_attributes=0,
+    )
+
+
+class _ShareEnforcingWindowsPersistenceApi:
+    FILE_SHARE_READ = 0x00000001
+    FILE_SHARE_WRITE = 0x00000002
+    FILE_SHARE_DELETE = 0x00000004
+
+    def __init__(self, backing: Path, expected_payload: bytes) -> None:
+        self.backing = backing
+        self.expected_payload = expected_payload
+        self.identity = (41, 42)
+        self.visible_identity = self.identity
+        self.retained_handle = 70
+        self.retained_descriptor = os.open(backing, os.O_RDONLY)
+        self._descriptor_identity = {self.retained_descriptor: self.identity}
+        self._descriptor_size = {self.retained_descriptor: len(expected_payload)}
+        self._open_handles: dict[int, tuple[str, bool]] = {self.retained_handle: ("retained", True)}
+        self._next_handle = 100
+        self.flushes: list[int] = []
+        self.open_existing_file_writable_flags: list[bool] = []
+        self.read_open_count = 0
+        self.fail_flush = False
+        self.retained_share_mode = self.FILE_SHARE_READ
+
+    def close_real_descriptors(self) -> None:
+        for descriptor in list(self._descriptor_identity):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            self._descriptor_identity.pop(descriptor, None)
+            self._descriptor_size.pop(descriptor, None)
+
+    def descriptor_file_stat(self, descriptor: int) -> types.SimpleNamespace:
+        identity = self._descriptor_identity.get(descriptor)
+        if identity is None:
+            return os.fstat(descriptor)
+        return _windows_stat(
+            identity,
+            size=self._descriptor_size[descriptor],
+        )
+
+    def _state(self, handle: int, *, directory: bool, context: str) -> types.SimpleNamespace:
+        del context
+        if directory:
+            return _windows_stat((3, 3), size=0, directory=True)
+        handle_kind = self._open_handles[handle][0]
+        identity = self.identity if handle_kind == "retained" else self.visible_identity
+        return _windows_stat(identity, size=self.backing.stat().st_size)
+
+    def open_existing_entry(self, _parent: int, name: str) -> int:
+        if name != "generation.json" or self.visible_identity is None:
+            raise FileNotFoundError(name)
+        return self._open_path_handle(writable=False)
+
+    def entry_info(self, handle: int, *, context: str) -> types.SimpleNamespace:
+        del context
+        return self._state(handle, directory=False, context="entry")
+
+    def open_existing_file(
+        self,
+        _parent: int,
+        name: str,
+        *,
+        writable: bool = False,
+        share_write: bool = True,
+        share_delete: bool = True,
+    ) -> int:
+        if name != "generation.json" or self.visible_identity is None:
+            raise FileNotFoundError(name)
+        self.open_existing_file_writable_flags.append(writable)
+        if writable:
+            raise PermissionError(32, "sharing violation", name)
+        if not share_write or not share_delete:
+            raise PermissionError(32, "sharing violation", name)
+        self.read_open_count += 1
+        return self._open_path_handle(writable=writable)
+
+    def _open_path_handle(self, *, writable: bool) -> int:
+        handle = self._next_handle
+        self._next_handle += 1
+        self._open_handles[handle] = ("path", writable)
+        return handle
+
+    def duplicate_to_descriptor(self, handle: int, *, writable: bool) -> int:
+        del writable
+        descriptor = os.open(self.backing, os.O_RDONLY)
+        handle_kind = self._open_handles[handle][0]
+        identity = self.identity if handle_kind == "retained" else self.visible_identity
+        self._descriptor_identity[descriptor] = identity
+        self._descriptor_size[descriptor] = self.backing.stat().st_size
+        return descriptor
+
+    def flush_file_buffers(self, handle: object) -> int:
+        value = int(getattr(handle, "value", handle))
+        self.flushes.append(value)
+        return 0 if self.fail_flush else 1
+
+    def flush_relative_directory(
+        self,
+        parent: int,
+        name: str,
+        expected_identity: tuple[int, int],
+        *,
+        context: str,
+    ) -> None:
+        del parent, name, expected_identity, context
+
+    def close(self, handle: int) -> None:
+        self._open_handles.pop(handle, None)
+
+
+def _windows_publication_fixture(
+    persistence_io: object,
+    api: _ShareEnforcingWindowsPersistenceApi,
+) -> tuple[object, object, object]:
+    staging = persistence_io._PinnedOutputParent(  # type: ignore[attr-defined]
+        Path("C:/retained/staging"),
+        ((1, 1), (2, 2), (4, 4)),
+        windows_api=api,
+        windows_handles=(10, 20, 40),
+    )
+    destination = persistence_io._PinnedOutputParent(  # type: ignore[attr-defined]
+        Path("C:/retained/generations"),
+        ((1, 1), (2, 2), (3, 3)),
+        windows_api=api,
+        windows_handles=(10, 20, 30),
+    )
+    temporary_entry = persistence_io._TemporaryEntry(  # type: ignore[attr-defined]
+        descriptor=api.retained_descriptor,
+        identity=api.identity,
+        stage_prefix=".generation.json.stage.",
+        name=".generation.json.stage.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        windows_handle=api.retained_handle,
+        published=True,
+    )
+    return staging, destination, temporary_entry
+
+
+class _WindowsPublicationState:
+    FILE_SHARE_READ = 0x00000001
+
+    def __init__(self, backing: Path) -> None:
+        self.backing = backing
+        self.identity = (41, 42)
+        self.visible_identity: tuple[int, int] | None = None
+        self.retained_handle = 700
+        self.retained_share_mode = self.FILE_SHARE_READ
+        self.temporary_name: str | None = None
+        self.destination_name: str | None = None
+        self.renamed = False
+        self.fail_flush = False
+        self.visible_nlink = 1
+        self.visible_reparse = False
+        self.retained_nlink = 1
+        self.retained_reparse = False
+        self.retained_descriptor_identity = self.identity
+        self.retained_handle_identity = self.identity
+        self.visible_identity_sequence: list[tuple[int, int] | None] = []
+        self._next_handle = 800
+        self._handles: dict[int, str] = {}
+        self._descriptor_kinds: dict[int, str] = {}
+        self.flushes: list[int] = []
+        self.open_existing_file_writable_flags: list[bool] = []
+        self.rename_calls: list[tuple[int, int, str, bool]] = []
+        self.closed_handles: list[int] = []
+        self.deleted_handles: list[int] = []
+
+    def close_real_descriptors(self) -> None:
+        for descriptor in list(self._descriptor_kinds):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+            self._descriptor_kinds.pop(descriptor, None)
+
+    def descriptor_file_stat(self, descriptor: int) -> types.SimpleNamespace:
+        kind = self._descriptor_kinds.get(descriptor)
+        if kind is None:
+            return os.fstat(descriptor)
+        if kind == "retained":
+            return self._stat(
+                self.retained_descriptor_identity,
+                nlink=self.retained_nlink,
+                reparse=self.retained_reparse,
+            )
+        return self._stat(self._visible_identity())
+
+    def _visible_identity(self) -> tuple[int, int] | None:
+        if self.visible_identity_sequence:
+            return self.visible_identity_sequence.pop(0)
+        return self.visible_identity
+
+    def _stat(
+        self,
+        identity: tuple[int, int] | None,
+        *,
+        nlink: int | None = None,
+        reparse: bool | None = None,
+    ) -> types.SimpleNamespace:
+        if identity is None:
+            raise FileNotFoundError("generation.json")
+        attributes = 0x00000400 if (self.visible_reparse if reparse is None else reparse) else 0
+        return types.SimpleNamespace(
+            st_mode=stat.S_IFREG | 0o600,
+            st_dev=identity[0],
+            st_ino=identity[1],
+            st_nlink=self.visible_nlink if nlink is None else nlink,
+            st_size=self.backing.stat().st_size,
+            st_mtime_ns=1,
+            st_ctime_ns=1,
+            st_file_attributes=attributes,
+        )
+
+
+class _WindowsPublicationApiWrapper:
+    def __init__(self, state: _WindowsPublicationState, role: str) -> None:
+        self.state = state
+        self.role = role
+
+    def _state(self, handle: int, *, directory: bool, context: str) -> types.SimpleNamespace:
+        del context
+        if directory:
+            return _windows_stat((3, 3), size=0, directory=True)
+        kind = self.state._handles[handle]
+        if kind == "retained":
+            return self.state._stat(
+                self.state.retained_handle_identity,
+                nlink=self.state.retained_nlink,
+                reparse=self.state.retained_reparse,
+            )
+        return self.state._stat(self.state._visible_identity())
+
+    def create_temporary(self, _parent: int, name: str) -> int:
+        self.state.temporary_name = name
+        self.state.backing.write_bytes(b"")
+        self.state._handles[self.state.retained_handle] = "retained"
+        return self.state.retained_handle
+
+    def open_ancestry(
+        self,
+        path: Path,
+        *,
+        create: bool,
+    ) -> tuple[list[int], tuple[tuple[int, int], ...]]:
+        del create
+        handles = list(range(10, 10 + len(path.parts)))
+        if path.name == "staging":
+            identities = tuple((index, index) for index in range(1, len(path.parts))) + ((4, 4),)
+            return handles, identities
+        identities = tuple((index, index) for index in range(1, len(path.parts))) + ((3, 3),)
+        return handles, identities
+
+    def close_many(self, handles: list[int] | tuple[int, ...]) -> None:
+        del handles
+
+    def open_existing_entry(self, _parent: int, name: str) -> int:
+        if name == self.state.temporary_name and not self.state.renamed:
+            return self._open_handle("retained")
+        if name == self.state.destination_name and self.state.visible_identity is not None:
+            return self._open_handle("path")
+        raise FileNotFoundError(name)
+
+    def entry_info(self, handle: int, *, context: str) -> types.SimpleNamespace:
+        del context
+        return self._state(handle, directory=False, context="entry")
+
+    def open_existing_file(
+        self,
+        _parent: int,
+        name: str,
+        *,
+        writable: bool = False,
+        share_write: bool = True,
+        share_delete: bool = True,
+    ) -> int:
+        if name != self.state.destination_name or self.state.visible_identity is None:
+            raise FileNotFoundError(name)
+        self.state.open_existing_file_writable_flags.append(writable)
+        if writable or not share_write or not share_delete:
+            raise PermissionError(32, "sharing violation", name)
+        return self._open_handle("path")
+
+    def duplicate_to_descriptor(self, handle: int, *, writable: bool) -> int:
+        kind = self.state._handles[handle]
+        flags = os.O_RDWR if writable else os.O_RDONLY
+        descriptor = os.open(self.state.backing, flags)
+        self.state._descriptor_kinds[descriptor] = kind
+        return descriptor
+
+    def rename(
+        self,
+        handle: int,
+        parent_handle: int,
+        destination_name: str,
+        *,
+        replace: bool,
+    ) -> None:
+        self.state.rename_calls.append((handle, parent_handle, destination_name, replace))
+        if not replace and self.state.visible_identity is not None:
+            raise FileExistsError(183, "entry already exists", destination_name)
+        self.state.destination_name = destination_name
+        self.state.visible_identity = self.state.identity
+        self.state.renamed = True
+
+    def flush_file_buffers(self, handle: object) -> int:
+        value = int(getattr(handle, "value", handle))
+        self.state.flushes.append(value)
+        return 0 if self.state.fail_flush else 1
+
+    def flush_relative_directory(
+        self,
+        parent: int,
+        name: str,
+        expected_identity: tuple[int, int],
+        *,
+        context: str,
+    ) -> None:
+        del parent, name, expected_identity, context
+
+    def mark_delete_on_close(self, handle: int) -> None:
+        self.state.deleted_handles.append(handle)
+
+    def close(self, handle: int) -> None:
+        self.state.closed_handles.append(handle)
+        self.state._handles.pop(handle, None)
+
+    def _open_handle(self, kind: str) -> int:
+        handle = self.state._next_handle
+        self.state._next_handle += 1
+        self.state._handles[handle] = kind
+        return handle
+
+
+@contextmanager
+def _fake_windows_publication_parents(
+    persistence_io: object,
+    state: _WindowsPublicationState,
+    path: Path,
+    *,
+    create: bool = True,
+) -> Iterator[object]:
+    del create
+    if path.name == "staging":
+        handles = tuple(range(10, 10 + len(path.parts)))
+        identities = tuple((index, index) for index in range(1, len(path.parts))) + ((4, 4),)
+        yield persistence_io._PinnedOutputParent(  # type: ignore[attr-defined]
+            path,
+            identities,
+            windows_api=_WindowsPublicationApiWrapper(state, "staging"),
+            windows_handles=handles,
+        )
+        return
+    if path.name == "generations":
+        handles = tuple(range(10, 10 + len(path.parts)))
+        identities = tuple((index, index) for index in range(1, len(path.parts))) + ((3, 3),)
+        yield persistence_io._PinnedOutputParent(  # type: ignore[attr-defined]
+            path,
+            identities,
+            windows_api=_WindowsPublicationApiWrapper(state, "destination"),
+            windows_handles=handles,
+        )
+        return
+    raise AssertionError(f"unexpected retained parent path: {path}")
+
+
 NARRATIVE = ROOT / (
     "examples/multigenre-contracts/branching-narrative/artifacts/branching-narrative.gamepack.json"
 )
@@ -384,6 +771,392 @@ class PersistenceLockCleanupTests(unittest.TestCase):
                     actual_close(descriptor)
                 except OSError:
                     pass
+
+
+class WindowsRetainedJsonPublicationTests(unittest.TestCase):
+    def test_publish_json_windows_public_flow_uses_distinct_retained_wrappers(self) -> None:
+        persistence_io = __import__(
+            "gamepack_runtime.persistence_io",
+            fromlist=["publish_json_noreplace"],
+        )
+        with tempfile.TemporaryDirectory(prefix="wf-windows-public-flow-") as temporary:
+            root = Path(temporary)
+            backing = root / "backing.json"
+            state = _WindowsPublicationState(backing)
+            try:
+                with (
+                    mock.patch(
+                        "gamepack_runtime.persistence_io._open_verified_output_parent",
+                        side_effect=lambda path, create=True: _fake_windows_publication_parents(
+                            persistence_io,
+                            state,
+                            path,
+                            create=create,
+                        ),
+                    ),
+                    mock.patch(
+                        "gamepack_runtime.persistence_io.descriptor_file_stat",
+                        side_effect=state.descriptor_file_stat,
+                    ),
+                ):
+                    published = persistence_io.publish_json_noreplace(
+                        root / "staging",
+                        root / "generations",
+                        "generation.json",
+                        {"value": 1},
+                    )
+            finally:
+                state.close_real_descriptors()
+            self.assertEqual(published, root / "generations" / "generation.json")
+            self.assertEqual(backing.read_bytes(), b'{\n  "value": 1\n}\n')
+            self.assertEqual(
+                [(handle, name, replace) for handle, _parent, name, replace in state.rename_calls],
+                [(state.retained_handle, "generation.json", False)],
+            )
+            self.assertEqual(state.flushes, [state.retained_handle])
+            self.assertNotIn(True, state.open_existing_file_writable_flags)
+            self.assertEqual(state.retained_share_mode, state.FILE_SHARE_READ)
+            self.assertIn(state.retained_handle, state.closed_handles)
+
+    def test_windows_fresh_publication_flushes_retained_renamed_handle_without_writable_reopen(
+        self,
+    ) -> None:
+        persistence_io = __import__(
+            "gamepack_runtime.persistence_io",
+            fromlist=[
+                "_PinnedOutputParent",
+                "_TemporaryEntry",
+                "_complete_windows_retained_publication_durability",
+            ],
+        )
+        payload = b'{"value":1}\n'
+        with tempfile.TemporaryDirectory(prefix="wf-windows-retained-flush-") as temporary:
+            backing = Path(temporary) / "generation.json"
+            backing.write_bytes(payload)
+            api = _ShareEnforcingWindowsPersistenceApi(backing, payload)
+            staging = persistence_io._PinnedOutputParent(
+                Path("C:/retained/staging"),
+                ((1, 1), (2, 2), (4, 4)),
+                windows_api=api,
+                windows_handles=(10, 20, 40),
+            )
+            destination = persistence_io._PinnedOutputParent(
+                Path("C:/retained/generations"),
+                ((1, 1), (2, 2), (3, 3)),
+                windows_api=api,
+                windows_handles=(10, 20, 30),
+            )
+            temporary_entry = persistence_io._TemporaryEntry(
+                descriptor=api.retained_descriptor,
+                identity=api.identity,
+                stage_prefix=".generation.json.stage.",
+                name=".generation.json.stage.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                windows_handle=api.retained_handle,
+                published=True,
+            )
+            try:
+                with (
+                    mock.patch.object(
+                        persistence_io._PinnedOutputParent,
+                        "assert_current",
+                        return_value=None,
+                    ),
+                    mock.patch(
+                        "gamepack_runtime.persistence_io.descriptor_file_stat",
+                        side_effect=api.descriptor_file_stat,
+                    ),
+                ):
+                    persistence_io._complete_windows_retained_publication_durability(
+                        staging,
+                        destination,
+                        "generation.json",
+                        payload,
+                        temporary_entry,
+                    )
+            finally:
+                api.close_real_descriptors()
+            self.assertEqual(api.flushes, [api.retained_handle])
+            self.assertNotIn(True, api.open_existing_file_writable_flags)
+            self.assertEqual(api.retained_share_mode, api.FILE_SHARE_READ)
+            self.assertGreaterEqual(api.read_open_count, 2)
+
+    def test_windows_fresh_publication_fails_closed_when_visible_identity_changes(self) -> None:
+        persistence_io = __import__(
+            "gamepack_runtime.persistence_io",
+            fromlist=[
+                "_PinnedOutputParent",
+                "_TemporaryEntry",
+                "_complete_windows_retained_publication_durability",
+            ],
+        )
+        payload = b'{"value":1}\n'
+        for visible_identity in ((99, 100), None):
+            with self.subTest(visible_identity=visible_identity):
+                with tempfile.TemporaryDirectory(
+                    prefix="wf-windows-retained-identity-"
+                ) as temporary:
+                    backing = Path(temporary) / "generation.json"
+                    backing.write_bytes(payload)
+                    api = _ShareEnforcingWindowsPersistenceApi(backing, payload)
+                    api.visible_identity = visible_identity
+                    staging, destination, temporary_entry = _windows_publication_fixture(
+                        persistence_io,
+                        api,
+                    )
+                    try:
+                        with (
+                            mock.patch.object(
+                                persistence_io._PinnedOutputParent,
+                                "assert_current",
+                                return_value=None,
+                            ),
+                            mock.patch(
+                                "gamepack_runtime.persistence_io.descriptor_file_stat",
+                                side_effect=api.descriptor_file_stat,
+                            ),
+                        ):
+                            with self.assertRaises(persistence_io.PersistenceIOError) as raised:
+                                persistence_io._complete_windows_retained_publication_durability(
+                                    staging,
+                                    destination,
+                                    "generation.json",
+                                    payload,
+                                    temporary_entry,
+                                )
+                    finally:
+                        api.close_real_descriptors()
+                    self.assertEqual(
+                        raised.exception.reason_code,
+                        "persistence_windows_retained_identity_indeterminate",
+                    )
+
+    def test_windows_fresh_publication_reports_flush_read_and_parent_failures(self) -> None:
+        persistence_io = __import__(
+            "gamepack_runtime.persistence_io",
+            fromlist=[
+                "PersistenceIOError",
+                "_PinnedOutputParent",
+                "_TemporaryEntry",
+                "_complete_windows_retained_publication_durability",
+            ],
+        )
+        payload = b'{"value":1}\n'
+        cases = (
+            ("flush", "persistence_windows_retained_flush_indeterminate"),
+            ("read", "persistence_windows_retained_read_indeterminate"),
+            ("parent", "persistence_durability_unavailable"),
+        )
+        for failure, reason_code in cases:
+            with self.subTest(failure=failure):
+                with tempfile.TemporaryDirectory(
+                    prefix="wf-windows-retained-failure-"
+                ) as temporary:
+                    backing = Path(temporary) / "generation.json"
+                    backing.write_bytes(payload if failure != "read" else b'{"mutated":true}\n')
+                    api = _ShareEnforcingWindowsPersistenceApi(backing, payload)
+                    api.fail_flush = failure == "flush"
+                    staging, destination, temporary_entry = _windows_publication_fixture(
+                        persistence_io,
+                        api,
+                    )
+                    try:
+                        with (
+                            mock.patch.object(
+                                persistence_io._PinnedOutputParent,
+                                "assert_current",
+                                return_value=None,
+                            ),
+                            mock.patch(
+                                "gamepack_runtime.persistence_io.descriptor_file_stat",
+                                side_effect=api.descriptor_file_stat,
+                            ),
+                            mock.patch(
+                                "gamepack_runtime.persistence_io._fsync_retained_ancestry",
+                                side_effect=(
+                                    persistence_io.PersistenceIOError(
+                                        "injected parent flush failure",
+                                        reason_code="persistence_durability_unavailable",
+                                    )
+                                    if failure == "parent"
+                                    else None
+                                ),
+                            ),
+                        ):
+                            with self.assertRaises(persistence_io.PersistenceIOError) as raised:
+                                persistence_io._complete_windows_retained_publication_durability(
+                                    staging,
+                                    destination,
+                                    "generation.json",
+                                    payload,
+                                    temporary_entry,
+                                )
+                    finally:
+                        api.close_real_descriptors()
+                    self.assertEqual(raised.exception.reason_code, reason_code)
+
+    def test_windows_retained_publication_identity_edges_are_indeterminate(self) -> None:
+        persistence_io = __import__(
+            "gamepack_runtime.persistence_io",
+            fromlist=[
+                "_TemporaryEntry",
+                "_complete_windows_retained_publication_durability",
+            ],
+        )
+        payload = b'{"value":1}\n'
+        cases = (
+            ("hardlink", lambda state: setattr(state, "visible_nlink", 2)),
+            ("reparse", lambda state: setattr(state, "visible_reparse", True)),
+            (
+                "descriptor_mismatch",
+                lambda state: setattr(state, "retained_descriptor_identity", (90, 91)),
+            ),
+            (
+                "handle_mismatch",
+                lambda state: setattr(state, "retained_handle_identity", (92, 93)),
+            ),
+            (
+                "visible_aba",
+                lambda state: setattr(
+                    state,
+                    "visible_identity_sequence",
+                    [state.identity, (94, 95)],
+                ),
+            ),
+        )
+        for name, configure in cases:
+            with self.subTest(name=name):
+                with tempfile.TemporaryDirectory(prefix="wf-windows-identity-edge-") as temporary:
+                    root = Path(temporary)
+                    backing = root / "generation.json"
+                    backing.write_bytes(payload)
+                    state = _WindowsPublicationState(backing)
+                    state.destination_name = "generation.json"
+                    state.visible_identity = state.identity
+                    state.renamed = True
+                    state._handles[state.retained_handle] = "retained"
+                    descriptor = os.open(backing, os.O_RDONLY)
+                    state._descriptor_kinds[descriptor] = "retained"
+                    configure(state)
+                    try:
+                        with (
+                            _fake_windows_publication_parents(
+                                persistence_io,
+                                state,
+                                root / "staging",
+                            ) as staging,
+                            _fake_windows_publication_parents(
+                                persistence_io,
+                                state,
+                                root / "generations",
+                            ) as destination,
+                            mock.patch(
+                                "gamepack_runtime.persistence_io.descriptor_file_stat",
+                                side_effect=state.descriptor_file_stat,
+                            ),
+                        ):
+                            temporary_entry = persistence_io._TemporaryEntry(
+                                descriptor=descriptor,
+                                identity=state.identity,
+                                stage_prefix=".generation.json.stage.",
+                                name=".generation.json.stage.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                                windows_handle=state.retained_handle,
+                                published=True,
+                            )
+                            with self.assertRaises(persistence_io.PersistenceIOError) as raised:
+                                persistence_io._complete_windows_retained_publication_durability(
+                                    staging,
+                                    destination,
+                                    "generation.json",
+                                    payload,
+                                    temporary_entry,
+                                )
+                    finally:
+                        state.close_real_descriptors()
+                    self.assertEqual(
+                        raised.exception.reason_code,
+                        "persistence_windows_retained_identity_indeterminate",
+                    )
+
+    def test_publish_json_windows_public_failure_closes_retained_handle(self) -> None:
+        persistence_io = __import__(
+            "gamepack_runtime.persistence_io",
+            fromlist=["publish_json_noreplace"],
+        )
+        with tempfile.TemporaryDirectory(prefix="wf-windows-public-cleanup-") as temporary:
+            root = Path(temporary)
+            backing = root / "backing.json"
+            state = _WindowsPublicationState(backing)
+            state.visible_nlink = 2
+            try:
+                with (
+                    mock.patch(
+                        "gamepack_runtime.persistence_io._open_verified_output_parent",
+                        side_effect=lambda path, create=True: _fake_windows_publication_parents(
+                            persistence_io,
+                            state,
+                            path,
+                            create=create,
+                        ),
+                    ),
+                    mock.patch(
+                        "gamepack_runtime.persistence_io.descriptor_file_stat",
+                        side_effect=state.descriptor_file_stat,
+                    ),
+                ):
+                    with self.assertRaises(persistence_io.PersistenceIOError) as raised:
+                        persistence_io.publish_json_noreplace(
+                            root / "staging",
+                            root / "generations",
+                            "generation.json",
+                            {"value": 1},
+                        )
+            finally:
+                state.close_real_descriptors()
+            self.assertEqual(
+                raised.exception.reason_code,
+                "persistence_windows_retained_identity_indeterminate",
+            )
+            self.assertIn(state.retained_handle, state.closed_handles)
+
+    def test_windows_published_temporary_close_failure_is_indeterminate(self) -> None:
+        persistence_io = __import__(
+            "gamepack_runtime.persistence_io",
+            fromlist=["_PinnedOutputParent", "_TemporaryEntry", "_close_temporary_entry"],
+        )
+
+        class FailingCloseApi:
+            def close(self, _handle: int) -> None:
+                raise persistence_io.PersistenceIOError("injected close failure")
+
+        with tempfile.TemporaryDirectory(prefix="wf-windows-close-indeterminate-") as temporary:
+            backing = Path(temporary) / "generation.json"
+            backing.write_bytes(b"{}\n")
+            descriptor = os.open(backing, os.O_RDONLY)
+            try:
+                parent = persistence_io._PinnedOutputParent(
+                    Path("C:/retained/staging"),
+                    ((1, 1),),
+                    windows_api=FailingCloseApi(),
+                    windows_handles=(20,),
+                )
+                temporary_entry = persistence_io._TemporaryEntry(
+                    descriptor=descriptor,
+                    identity=(7, 8),
+                    stage_prefix=".generation.json.stage.",
+                    name=".generation.json.stage.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    windows_handle=70,
+                    published=True,
+                )
+                descriptor = -1
+                with self.assertRaises(persistence_io.PersistenceIOError) as raised:
+                    persistence_io._close_temporary_entry(parent, temporary_entry)
+            finally:
+                if descriptor >= 0:
+                    os.close(descriptor)
+            self.assertEqual(
+                raised.exception.reason_code,
+                "persistence_windows_retained_close_indeterminate",
+            )
 
 
 class GamePersistenceContractTests(unittest.TestCase):

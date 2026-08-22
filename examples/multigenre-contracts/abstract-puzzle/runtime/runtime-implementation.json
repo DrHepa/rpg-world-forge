@@ -4,7 +4,7 @@
     "adapter_version": "1.1.0",
     "content_hash": "75d8480ada2c1f773f3c0e1d7f1427773b370beb212fb6a91aaad2875ed290e1"
   },
-  "content_hash": "ab703e480ea477e6d3ab7eeb2a3e86620a339fe18c0bcbd82347ace29323d1ac",
+  "content_hash": "aaa60a2ecf78b68dc243a4b42542944baa2afd5f9182faff53baead9e5fdc59b",
   "entry_points": [
     {
       "module": "gamepack_raylib_2d.app",
@@ -29,7 +29,7 @@
   ],
   "format": "world-forge.runtime_implementation",
   "format_version": 1,
-  "implementation_id": "runtime_implementation_26f1435359f4c6641a7efa7fbdf7ee9e2676de28",
+  "implementation_id": "runtime_implementation_34f98bdbccd5320d5420d1a3f88a5bb5119d09be",
   "materialization_policy": {
     "immutable_runtime": true,
     "runtime_ai": false,
@@ -168,8 +168,8 @@
         },
         {
           "path": "persistence_io.py",
-          "sha256": "45189acb9d0c5cd26b5ba0abb80851825bf95268360f647e5934f49c800fd7d3",
-          "size_bytes": 113482
+          "sha256": "6fb386a8e3ef6944ceba73f94b902d22d97eb3f7bcb5c0a900b4b04a57eee944",
+          "size_bytes": 121575
         },
         {
           "path": "runtime_io.py",
@@ -190,7 +190,7 @@
       "package": "gamepack_runtime",
       "role": "deterministic_kernel",
       "source_prefix": "gamepack_runtime",
-      "tree_hash": "62798f17fcb0e9b07883e4b9632e18bf828725119b658d4d7a0496fbe6edfb9c"
+      "tree_hash": "75f454d6a3a0fdb9df67cd4fc5d1b793180e7bc7e8efc7ee558f2c733b5234c4"
     }
   ],
   "platform_locks": [
@@ -228,8 +228,8 @@
     "version": "1.0.0"
   },
   "snapshot": {
-    "content_hash": "08ce14e290b8eb1c963724d5f1ff0e37199bf2dd80b85439cba7a7ded555fdf4",
-    "snapshot_id": "runtime_snapshot_0df9ce283eaec6a60ae0b8b1f8946f65c32b20e4",
-    "tree_hash": "8592acb2878542b603673545e32aa733cea5be68ce2a112425dd71a6d300702e"
+    "content_hash": "4f7a724f0e4e4e70e982a53d54309a27b91997ae6d37cd51119d992bc4b8a901",
+    "snapshot_id": "runtime_snapshot_03e38f80a858035feffd63fcd79f816261233a3d",
+    "tree_hash": "884173a779c807d15bdce3d1ca6b94c1d9606622e7fc099c76790afca3c5d634"
   }
 }

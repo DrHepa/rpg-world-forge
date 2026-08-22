@@ -2276,7 +2276,15 @@ def _close_temporary_entry(
         try:
             staging.windows_api.close(temporary.windows_handle)
         except BaseException as exc:
-            errors.append(exc)
+            if temporary.published:
+                errors.append(
+                    PersistenceIOError(
+                        f"Could not close retained Windows persistence publication: {exc}",
+                        reason_code="persistence_windows_retained_close_indeterminate",
+                    )
+                )
+            else:
+                errors.append(exc)
     if errors:
         primary = errors[0]
         for secondary in errors[1:]:
@@ -2393,6 +2401,176 @@ def _fsync_owned_entry(
             os.close(descriptor)
         if windows_handle is not None and parent.windows_api is not None:
             parent.windows_api.close(windows_handle)
+
+
+def _raise_windows_retained_identity(message: str) -> None:
+    raise PersistenceIOError(
+        message,
+        reason_code="persistence_windows_retained_identity_indeterminate",
+    )
+
+
+def _windows_retained_last_error() -> int:
+    get_last_error = getattr(ctypes, "get_last_error", None)
+    return int(get_last_error()) if get_last_error is not None else 0
+
+
+def _verify_windows_retained_publication_identity(
+    destination: _PinnedOutputParent,
+    destination_name: str,
+    temporary: _TemporaryEntry,
+    *,
+    retained_info: FileStat,
+) -> tuple[int, int]:
+    source = destination.path / destination_name
+    try:
+        visible = _validated_target_identity(_entry_info(destination, destination_name), source)
+        retained_identity = _entry_identity(retained_info)
+        if (
+            _is_link_or_reparse(retained_info)
+            or not stat.S_ISREG(retained_info.st_mode)
+            or retained_info.st_nlink != 1
+            or retained_identity != temporary.identity
+            or visible != temporary.identity
+        ):
+            _raise_windows_retained_identity(
+                f"Windows retained persistence publication identity changed: {source}"
+            )
+        return retained_identity
+    except PersistenceIOError as exc:
+        if exc.reason_code == "persistence_windows_retained_identity_indeterminate":
+            raise
+        raise PersistenceIOError(
+            f"Windows retained persistence publication identity is indeterminate: {exc.detail}",
+            reason_code="persistence_windows_retained_identity_indeterminate",
+        ) from exc
+    except (OSError, KeyError, ValueError) as exc:
+        raise PersistenceIOError(
+            f"Windows retained persistence publication identity is indeterminate: {exc}",
+            reason_code="persistence_windows_retained_identity_indeterminate",
+        ) from exc
+
+
+def _complete_windows_retained_publication_durability(
+    staging: _PinnedOutputParent,
+    destination: _PinnedOutputParent,
+    destination_name: str,
+    payload: bytes,
+    temporary: _TemporaryEntry,
+) -> None:
+    """Durably finish a Windows rename through its retained ownership handle."""
+
+    if (
+        staging.windows_api is None
+        or destination.windows_api is None
+        or temporary.windows_handle is None
+        or temporary.descriptor < 0
+    ):
+        _raise_windows_retained_identity(
+            "Windows retained persistence publication handle is unavailable"
+        )
+    assert staging.windows_api is not None
+    assert destination.windows_api is not None
+    assert temporary.windows_handle is not None
+    retained_api = staging.windows_api
+    if type(retained_api) is not type(destination.windows_api):
+        _raise_windows_retained_identity(
+            "Windows retained persistence publication APIs are inconsistent"
+        )
+    try:
+        staging.assert_current()
+        destination.assert_current()
+        try:
+            retained = descriptor_file_stat(temporary.descriptor)
+            handle_state = retained_api._state(
+                temporary.windows_handle,
+                directory=False,
+                context=f"retained persistence file {destination.path / destination_name}",
+            )
+        except (OSError, PersistenceIOError, KeyError, ValueError) as exc:
+            raise PersistenceIOError(
+                f"Windows retained persistence publication identity is indeterminate: {exc}",
+                reason_code="persistence_windows_retained_identity_indeterminate",
+            ) from exc
+        _verify_windows_retained_publication_identity(
+            destination,
+            destination_name,
+            temporary,
+            retained_info=retained,
+        )
+        _verify_windows_retained_publication_identity(
+            destination,
+            destination_name,
+            temporary,
+            retained_info=handle_state,
+        )
+        if not retained_api.flush_file_buffers(ctypes.c_void_p(temporary.windows_handle)):
+            error = _windows_retained_last_error()
+            raise PersistenceIOError(
+                "Could not flush retained Windows persistence publication "
+                f"{destination.path / destination_name}: error {error}",
+                reason_code="persistence_windows_retained_flush_indeterminate",
+            )
+        try:
+            retained_after = descriptor_file_stat(temporary.descriptor)
+            handle_after = retained_api._state(
+                temporary.windows_handle,
+                directory=False,
+                context=f"retained persistence file {destination.path / destination_name}",
+            )
+        except (OSError, PersistenceIOError, KeyError, ValueError) as exc:
+            raise PersistenceIOError(
+                f"Windows retained persistence publication identity is indeterminate: {exc}",
+                reason_code="persistence_windows_retained_identity_indeterminate",
+            ) from exc
+        identity = _verify_windows_retained_publication_identity(
+            destination,
+            destination_name,
+            temporary,
+            retained_info=retained_after,
+        )
+        _verify_windows_retained_publication_identity(
+            destination,
+            destination_name,
+            temporary,
+            retained_info=handle_after,
+        )
+        try:
+            _read_exact_published_payload(destination, destination_name, payload)
+        except PersistenceIOError as exc:
+            raise PersistenceIOError(
+                f"Could not reread retained Windows persistence publication: {exc.detail}",
+                reason_code="persistence_windows_retained_read_indeterminate",
+            ) from exc
+        except (OSError, KeyError, ValueError) as exc:
+            raise PersistenceIOError(
+                f"Could not reread retained Windows persistence publication: {exc}",
+                reason_code="persistence_windows_retained_read_indeterminate",
+            ) from exc
+        _fsync_retained_ancestry(destination)
+        _fsync_retained_ancestry(staging)
+        try:
+            _verify_owned_entry(destination, destination_name, identity)
+            _read_exact_published_payload(destination, destination_name, payload)
+        except PersistenceIOError as exc:
+            raise PersistenceIOError(
+                f"Retained Windows persistence publication outcome is indeterminate: {exc.detail}",
+                reason_code="persistence_publication_outcome_indeterminate",
+            ) from exc
+        except (OSError, KeyError, ValueError) as exc:
+            raise PersistenceIOError(
+                f"Retained Windows persistence publication outcome is indeterminate: {exc}",
+                reason_code="persistence_publication_outcome_indeterminate",
+            ) from exc
+        destination.assert_current()
+        staging.assert_current()
+    except PersistenceIOError:
+        raise
+    except (OSError, KeyError, ValueError) as exc:
+        raise PersistenceIOError(
+            f"Retained Windows persistence publication outcome is indeterminate: {exc}",
+            reason_code="persistence_publication_outcome_indeterminate",
+        ) from exc
 
 
 def _read_exact_published_payload(
@@ -2969,13 +3147,26 @@ def publish_json_noreplace(
                     return destination_path / destination_name
 
                 temporary.published = True
-                _complete_publication_durability(
-                    staging,
-                    destination,
-                    destination_name,
-                    payload,
-                    expected_identity=temporary.identity,
-                )
+                if (
+                    staging.windows_api is not None
+                    and temporary.windows_handle is not None
+                    and destination.windows_parent_handle is not None
+                ):
+                    _complete_windows_retained_publication_durability(
+                        staging,
+                        destination,
+                        destination_name,
+                        payload,
+                        temporary,
+                    )
+                else:
+                    _complete_publication_durability(
+                        staging,
+                        destination,
+                        destination_name,
+                        payload,
+                        expected_identity=temporary.identity,
+                    )
                 return destination_path / destination_name
             finally:
                 primary = sys.exception()
